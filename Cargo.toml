@@ -1,0 +1,65 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# The GPUI app needs extra system libraries (see scripts/setup-linux.sh), so plain
+# `cargo build` skips it. Build it with `cargo build -p convt-app`.
+default-members = [
+  "crates/convt-core",
+  "crates/convt-engines",
+  "crates/convt-cli",
+  "crates/convt-license",
+  "crates/convt-server",
+  "crates/convt-worker",
+  "crates/convt-ffi",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "AGPL-3.0-only"
+repository = "https://github.com/opencoredev/convt"
+authors = ["Convt"]
+
+[workspace.dependencies]
+convt-core = { path = "crates/convt-core" }
+convt-engines = { path = "crates/convt-engines" }
+convt-license = { path = "crates/convt-license" }
+
+anyhow = "1.0.104"
+axum = "0.8.9"
+base64 = "0.23.1"
+clap = { version = "4.6.7", features = ["derive"] }
+ctrlc = "3.5.2"
+dirs = "6"
+ed25519-dalek = "3.0.0"
+futures = "0.3.34"
+getrandom = "0.3"
+gpui-kit = "0.7.0" # GPUI + platform + gpui-component, version-matched
+image = "0.25.10"
+keyring = "4.2.0"
+libc = "0.2"
+libloading = "0.8.9"
+pdfium-render = "0.9.4"
+resvg = "0.48.1"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+toml = "0.8.23"
+tokio = { version = "1.53.1", features = ["full"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["cors", "trace"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uniffi = "0.32.2"
+which = "8.0.6"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 2

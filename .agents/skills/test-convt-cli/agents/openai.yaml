@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test convt cli"
+  short_description: "Test convt conversions through the CLI"
+  default_prompt: "Use $test-convt-cli to verify this change."

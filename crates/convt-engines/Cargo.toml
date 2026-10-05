@@ -1,0 +1,34 @@
+[package]
+name = "convt-engines"
+description = "Conversion engines for convt: FFmpeg, images, SVG, PDFium and LibreOffice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["pdfium"]
+pdfium = ["dep:pdfium-render"]
+
+[dependencies]
+convt-core.workspace = true
+dirs.workspace = true
+image.workspace = true
+libloading.workspace = true
+pdfium-render = { workspace = true, optional = true }
+resvg.workspace = true
+tempfile.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+sha2 = "=0.10.9"
+flate2 = "=1.1.10"
+tar = "=0.4.44"
+ureq = { version = "=3.1.4", default-features = false, features = ["rustls"] }
+which.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true

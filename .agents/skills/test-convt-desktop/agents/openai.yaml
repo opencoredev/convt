@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test convt desktop"
+  short_description: "Build and screenshot the GPUI desktop app"
+  default_prompt: "Use $test-convt-desktop to verify this change."

@@ -1,0 +1,89 @@
+[
+  {
+    "name": "ffmpeg.tar.xz",
+    "url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz",
+    "sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67"
+  },
+  {
+    "name": "pdfium.tgz",
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-linux-x64.tgz",
+    "sha256": "d9d67bc40af03aef4fe28a60b19b1086f28ace019c8c9caf19cb7fe3d14ceca3"
+  },
+  {
+    "name": "aom_3.8.2.orig.tar.gz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/aom/aom_3.8.2.orig.tar.gz",
+    "sha256": "08be381e014c3cf508293f9127c8e24cc35262c6e9c805b0a8313cebf99cbcda",
+    "package": "aom",
+    "version": "3.8.2-2ubuntu0.2"
+  },
+  {
+    "name": "aom_3.8.2-2ubuntu0.2.debian.tar.xz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/aom/aom_3.8.2-2ubuntu0.2.debian.tar.xz",
+    "sha256": "d1fb459395296901e6aed6348828c6a5a29e2364d5b0c809a5ba1def73d599e7",
+    "package": "aom",
+    "version": "3.8.2-2ubuntu0.2"
+  },
+  {
+    "name": "libde265_1.0.15.orig.tar.gz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/libd/libde265/libde265_1.0.15.orig.tar.gz",
+    "sha256": "00251986c29d34d3af7117ed05874950c875dd9292d016be29d3b3762666511d",
+    "package": "libde265",
+    "version": "1.0.15-1ubuntu0.1"
+  },
+  {
+    "name": "libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/libd/libde265/libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
+    "sha256": "53277b637f1bfe29e1d249ab1981f947f6425e7f5793430989c54534a265a0ac",
+    "package": "libde265",
+    "version": "1.0.15-1ubuntu0.1"
+  },
+  {
+    "name": "libheif_1.17.6.orig.tar.gz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/libh/libheif/libheif_1.17.6.orig.tar.gz",
+    "sha256": "8390baf4913eda0a183e132cec62b875fb2ef507ced5ddddc98dfd2f17780aee",
+    "package": "libheif",
+    "version": "1.17.6-1ubuntu4.9"
+  },
+  {
+    "name": "libheif_1.17.6-1ubuntu4.9.debian.tar.xz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/libh/libheif/libheif_1.17.6-1ubuntu4.9.debian.tar.xz",
+    "sha256": "20e6cd77fbd37e52340b46b4ee079ab1f7da786580e5c734b566751cb9d1aae2",
+    "package": "libheif",
+    "version": "1.17.6-1ubuntu4.9"
+  },
+  {
+    "name": "x265_3.5.orig.tar.gz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x265/x265_3.5.orig.tar.gz",
+    "sha256": "e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8",
+    "package": "x265",
+    "version": "3.5-2build1"
+  },
+  {
+    "name": "x265_3.5-2build1.debian.tar.xz",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x265/x265_3.5-2build1.debian.tar.xz",
+    "sha256": "f97d5320970e64e2c17b37397b6bb68a736d360a7c0b0d6e966469af7f5b5a09",
+    "package": "x265",
+    "version": "3.5-2build1"
+  },
+  {
+    "name": "libstdcxx-15.2.0-h934c35e_20.conda",
+    "url": "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-15.2.0-h934c35e_20.conda",
+    "sha256": "b5eadda8fb0df262f0d424c4a0c8c1c8d65d904ce622f07936c793ea1b8a39d9",
+    "package": "libstdcxx",
+    "version": "15.2.0 build 20"
+  },
+  {
+    "name": "libgcc-15.2.0-he0feb66_20.conda",
+    "url": "https://conda.anaconda.org/conda-forge/linux-64/libgcc-15.2.0-he0feb66_20.conda",
+    "sha256": "e3b7bb287d1685b15781a6d9e3408d6ddaff23f5a1d0d6c0140619dd3950fe72",
+    "package": "libgcc",
+    "version": "15.2.0 build 20"
+  },
+  {
+    "name": "gcc-15.2.0.tar.gz",
+    "url": "https://mirrors.ocf.berkeley.edu/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.gz",
+    "sha256": "7294d65cc1a0558cb815af0ca8c7763d86f7a31199794ede3f630c0d1b0a5723",
+    "package": "gcc-source-notices",
+    "version": "15.2.0"
+  }
+]

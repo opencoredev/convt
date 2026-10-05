@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test convt server"
+  short_description: "Run and check the cloud API and worker"
+  default_prompt: "Use $test-convt-server to verify this change."

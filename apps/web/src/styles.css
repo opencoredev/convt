@@ -1,0 +1,221 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* Dark mode follows the `dark` class on <html>, set from the user's choice or the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Palette from the Paper file "convt". Light is the default; `.dark` swaps every
+ * semantic color, so components use these names and never raw hex values.
+ */
+:root {
+  --page: #ffffff;
+  --raised: #ffffff;
+  --sunken: #f7f8f7;
+  --hover: #f3f4f3;
+  --line: #e6e8e7;
+  --line-strong: #d5d9d7;
+  --ink: #0a0a0a;
+  --ink-2: #6b6f6d;
+  --ink-3: #8a8f8c;
+  --green: #1a9a5b;
+  --green-tint: #eef7f2;
+  --error: #b3261e;
+  color-scheme: light;
+}
+
+.dark {
+  --page: #0a0b0b;
+  --raised: #111312;
+  --sunken: #161918;
+  --hover: #1c201e;
+  --line: #232726;
+  --line-strong: #2e3331;
+  --ink: #edefee;
+  --ink-2: #a1a6a3;
+  --ink-3: #868b88;
+  --green: #3fcb84;
+  --green-tint: #12261b;
+  --error: #f2786d;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+
+  --color-page: var(--page);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-green: var(--green);
+  --color-green-tint: var(--green-tint);
+  --color-error: var(--error);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* app tokens */
+/*
+ * Extra values the dashboard and account screens use. Light values come from the
+ * light artboards, dark values from the "· Dark" copies.
+ */
+:root {
+  --ink-nav: #4a4a4a;
+  --separator: #d0d3d1;
+  --divider: #eef0ef;
+  --chip: #f5f7f6;
+  --chip-line: #e0e3e1;
+  --bar: #dce9e1;
+  --green-line: #cfe6d9;
+  --error-line: #f0d4d1;
+  --error-ring: rgb(179 38 30 / 25%);
+  --code: #0f1211;
+  --code-ink: #e6e8e7;
+  --code-ring: transparent;
+  --panel: #f7faf8;
+  --shadow-button:
+    rgb(0 0 0 / 4%) 0 -1px 0 inset, rgb(0 0 0 / 8%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 1px 2px;
+  --shadow-input: var(--line-strong) 0 0 0 1px, rgb(0 0 0 / 4%) 0 1px 2px;
+  --shadow-float: rgb(10 60 35 / 10%) 0 0 0 1px, rgb(10 60 35 / 12%) 0 4px 14px;
+  --shadow-note: rgb(0 0 0 / 6%) 0 0 0 1px, rgb(10 30 20 / 15%) 0 8px 24px;
+  --avatar-ring: rgb(0 0 0 / 10%);
+}
+
+.dark {
+  --ink-nav: #a1a6a3;
+  --separator: #2e3331;
+  --divider: #232726;
+  --chip: #161918;
+  --chip-line: #2e3331;
+  --bar: #3a5446;
+  --green-line: rgb(63 203 132 / 20%);
+  --error-line: rgb(242 120 109 / 20%);
+  --error-ring: rgb(242 120 109 / 30%);
+  --code: #0f1211;
+  --code-ink: #e6e8e7;
+  --code-ring: #232726;
+  --panel: #111312;
+  --shadow-button:
+    rgb(255 255 255 / 6%) 0 1px 0 inset, #2e3331 0 0 0 1px, rgb(0 0 0 / 40%) 0 1px 2px;
+  --shadow-input: #2e3331 0 0 0 1px;
+  --shadow-float:
+    rgb(255 255 255 / 8%) 0 0 0 1px, rgb(0 0 0 / 60%) 0 24px 60px, rgb(0 0 0 / 40%) 0 4px 12px;
+  --shadow-note: var(--shadow-float);
+  --avatar-ring: rgb(255 255 255 / 10%);
+}
+
+@theme inline {
+  --color-ink-nav: var(--ink-nav);
+  --color-separator: var(--separator);
+  --color-divider: var(--divider);
+  --color-chip: var(--chip);
+  --color-chip-line: var(--chip-line);
+  --color-bar: var(--bar);
+  --color-green-line: var(--green-line);
+  --color-error-line: var(--error-line);
+  --color-error-ring: var(--error-ring);
+  --color-code: var(--code);
+  --color-code-ink: var(--code-ink);
+  --color-code-ring: var(--code-ring);
+  --color-panel: var(--panel);
+  --shadow-button: var(--shadow-button);
+  --shadow-input: var(--shadow-input);
+  --shadow-float: var(--shadow-float);
+  --shadow-note: var(--shadow-note);
+}
+
+/*
+ * Primary green button, same in both themes. The white label on this gradient is
+ * about 3:1 contrast; Leo has not picked the fix yet (darker gradient or dark label).
+ */
+.btn-primary {
+  background-image: linear-gradient(
+    in oklab 180deg,
+    oklab(68.8% -0.14 0.06) 0%,
+    oklab(60.6% -0.129 0.06) 100%
+  );
+  box-shadow:
+    rgb(255 255 255 / 28%) 0 1px 0 inset,
+    #157f4a 0 0 0 1px,
+    rgb(10 60 35 / 25%) 0 1px 2px,
+    rgb(10 60 35 / 12%) 0 2px 6px;
+  color: #ffffff;
+}
+.btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.dither {
+  image-rendering: pixelated;
+  background-image: url("./components/app/assets/dither-light.png");
+  background-position: 50% bottom;
+  background-size: cover;
+}
+.dark .dither {
+  background-image: url("./components/app/assets/dither-dark.png");
+}
+/* landing tokens */
+/*
+ * The landing page is dark only, so these are fixed values from the Paper
+ * "convt Landing" artboard rather than light/dark pairs. They cover the extra
+ * greys, the code colors and the green button that the shared palette lacks.
+ */
+@theme {
+  --color-land-muted: #6f7571;
+  --color-land-label: #5e6662;
+  --color-land-mono: #d6ddd9;
+  --color-land-well: #0b0d0c;
+  --color-land-code: #0f1211;
+  --color-land-accent: #4cc283;
+  --color-land-soft: #c4c9c6;
+
+  --shadow-land-card: 0 0 0 1px #232726, 0 1px 2px #00000066;
+  --shadow-land-float: 0 0 0 1px #ffffff14, 0 24px 60px #00000099, 0 4px 12px #00000066;
+  --shadow-land-secondary: inset 0 1px 0 #ffffff0f, 0 0 0 1px #2e3331, 0 1px 2px #00000066;
+  --shadow-land-primary:
+    inset 0 1px 0 #ffffff47, 0 0 0 1px #157f4a, 0 1px 2px #0a3c2340, 0 4px 12px #0a3c2324;
+}
+
+/*
+ * Primary green button fill. The white label on this gradient is only about 3:1;
+ * Leo has not picked a fix yet (darker gradient or dark label), so it matches the design.
+ */
+@utility bg-land-green {
+  background-color: #22a867;
+  background-image: linear-gradient(
+    in oklab 180deg,
+    oklab(68.8% -0.14 0.06) 0%,
+    oklab(60.6% -0.129 0.06) 100%
+  );
+}
+
+/* Dithered green glow behind the hero, engines and closing panels. */
+@utility bg-land-glow {
+  background-color: #0a0b0b;
+  background-image: url("/landing/dither-glow.png");
+  background-size: cover;
+  image-rendering: pixelated;
+}

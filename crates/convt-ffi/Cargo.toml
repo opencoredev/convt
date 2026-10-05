@@ -1,0 +1,22 @@
+[package]
+name = "convt-ffi"
+description = "Bindings that let the Finder, Explorer and Linux integrations call into convt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+convt-core.workspace = true
+convt-engines.workspace = true
+convt-license = { workspace = true, features = ["client"] }
+thiserror.workspace = true
+uniffi = { workspace = true, features = ["cli"] }
+
+[dev-dependencies]
+ed25519-dalek.workspace = true
+image.workspace = true
+tempfile.workspace = true

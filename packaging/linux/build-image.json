@@ -1,0 +1,5 @@
+{
+  "image": "quay.io/pypa/manylinux_2_28_x86_64@sha256:39df0042d5cc900b085aa25a0659368b42a0006c54c474299b785b44c1b4ff82",
+  "baseline": "AlmaLinux 8, glibc 2.28",
+  "rust": "1.95.0"
+}

@@ -1,0 +1,39 @@
+--- a/libheif/init.cc
++++ b/libheif/init.cc
+@@ -102,7 +102,7 @@
+ }
+ 
+ 
+-struct heif_error heif_init(struct heif_init_params*)
++static struct heif_error heif_init_impl(bool automatic_plugins)
+ {
+ #if ENABLE_MULTITHREADING_SUPPORT
+   std::lock_guard<std::recursive_mutex> lock(heif_init_mutex());
+@@ -120,7 +120,7 @@
+ 
+ #if ENABLE_PLUGIN_LOADING
+     struct heif_error err{};
+-    std::vector<std::string> plugin_paths = get_plugin_paths();
++    std::vector<std::string> plugin_paths = automatic_plugins ? get_plugin_paths() : std::vector<std::string>{};
+ 
+     for (const auto& dir : plugin_paths) {
+       err = heif_load_plugins(dir.c_str(), nullptr, nullptr, 0);
+@@ -138,6 +138,18 @@
+   return {heif_error_Ok, heif_suberror_Unspecified, Error::kSuccess};
+ }
+ 
++
++struct heif_error heif_init(struct heif_init_params*)
++{
++  return heif_init_impl(true);
++}
++
++// convt initializes without consulting environment or compiled plugin paths.
++// Once initialized, later lazy initialization cannot reopen those paths.
++extern "C" LIBHEIF_API struct heif_error heif_convt_init_no_plugins(void)
++{
++  return heif_init_impl(false);
++}
+ 
+ void heif_deinit()
+ {

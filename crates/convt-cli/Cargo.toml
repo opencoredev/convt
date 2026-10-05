@@ -1,0 +1,27 @@
+[package]
+name = "convt-cli"
+description = "Command-line interface for convt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "convt"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+convt-core.workspace = true
+convt-engines.workspace = true
+convt-license = { workspace = true, features = ["client"] }
+ctrlc.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+which.workspace = true
+libc.workspace = true
+ed25519-dalek.workspace = true
+image.workspace = true
+tempfile.workspace = true

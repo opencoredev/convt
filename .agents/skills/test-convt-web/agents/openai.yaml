@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test convt web"
+  short_description: "Run and check the convt.app website"
+  default_prompt: "Use $test-convt-web to verify this change."

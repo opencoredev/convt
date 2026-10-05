@@ -1,0 +1,15 @@
+[package]
+name = "convt-worker"
+description = "Conversion worker for the convt cloud"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+convt-core.workspace = true
+convt-engines.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

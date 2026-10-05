@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "license": {
+        "email": "test@example.com",
+        "id": "lic_test_desktop",
+        "issued": "2026-10-02",
+        "plan": "desktop",
+        "updates_until": "2027-10-02"
+      },
+      "name": "desktop",
+      "token": "eyJpZCI6ImxpY190ZXN0X2Rlc2t0b3AiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJwbGFuIjoiZGVza3RvcCIsImlzc3VlZCI6IjIwMjYtMTAtMDIiLCJ1cGRhdGVzX3VudGlsIjoiMjAyNy0xMC0wMiJ9.PT8_G-meE3jhtES77sXn6i-77zYaGYSLiCpKrD8flmYPlLV6rHPQa852LlAiU1w34Kd7xvvmvysv6Y1xTFCvBQ"
+    },
+    {
+      "license": {
+        "email": "pro@example.com",
+        "id": "lic_test_pro",
+        "issued": "2026-10-02",
+        "plan": "pro",
+        "updates_until": "2026-11-02"
+      },
+      "name": "pro",
+      "token": "eyJpZCI6ImxpY190ZXN0X3BybyIsImVtYWlsIjoicHJvQGV4YW1wbGUuY29tIiwicGxhbiI6InBybyIsImlzc3VlZCI6IjIwMjYtMTAtMDIiLCJ1cGRhdGVzX3VudGlsIjoiMjAyNi0xMS0wMiJ9.nWndfvIrdWYgGSd559TLnhAtT111pgOdkNnOJDxnS8ebOqy4cN-Vp4qEpBBpevivLX2VzXFRIkvjFte8xKYgAw"
+    },
+    {
+      "license": {
+        "email": "zoë@example.com",
+        "id": "lic_test_unicode",
+        "issued": "2026-01-31",
+        "plan": "desktop",
+        "updates_until": "2027-01-31"
+      },
+      "name": "unicode_email",
+      "token": "eyJpZCI6ImxpY190ZXN0X3VuaWNvZGUiLCJlbWFpbCI6Inpvw6tAZXhhbXBsZS5jb20iLCJwbGFuIjoiZGVza3RvcCIsImlzc3VlZCI6IjIwMjYtMDEtMzEiLCJ1cGRhdGVzX3VudGlsIjoiMjAyNy0wMS0zMSJ9.9Lg-LVwQQFXuvdY-4kn6DWHLHLX3E5VqRfJxyzAGk-u_EmKrpPk2dKD92mprRONWpT4TfJwGfOTyKZSPLeY9AQ"
+    }
+  ],
+  "comment": "Public test vectors. The seed is [7; 32] and must never be used to sign real licenses. Tokens are base64url(JSON payload) + '.' + base64url(Ed25519 signature over the payload string bytes).",
+  "public_key_b64url": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+  "seed_hex": "0707070707070707070707070707070707070707070707070707070707070707"
+}

@@ -1,0 +1,39 @@
+{
+  "name": "convt",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@convt/web",
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "check": "oxlint && oxfmt --check",
+    "rs:build": "cargo build",
+    "rs:test": "cargo test",
+    "rs:check": "cargo fmt --all --check && cargo clippy --all-targets -- -D warnings",
+    "app": "cargo run -p convt-app",
+    "cli": "cargo run -p convt-cli --",
+    "server": "cargo run -p convt-server",
+    "setup": "bash scripts/setup.sh",
+    "test:matrix": "bash scripts/test-engines.sh --test matrix full_matrix -- --ignored --nocapture",
+    "bundle:linux": "bash packaging/linux/build.sh",
+    "bundle:appimage": "bash packaging/linux/appimage.sh",
+    "package:deb": "bash packaging/linux/package.sh deb",
+    "package:rpm": "bash packaging/linux/package.sh rpm",
+    "package:linux": "bash packaging/linux/package.sh",
+    "test:packages": "bash packaging/linux/test-packages.sh"
+  },
+  "devDependencies": {
+    "oxfmt": "latest",
+    "oxlint": "latest",
+    "turbo": "latest",
+    "typescript": "^6.0.2"
+  },
+  "packageManager": "bun@1.4.2"
+}

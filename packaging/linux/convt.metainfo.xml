@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.convt.convt</id>
+  <name>convt</name>
+  <summary>Convert files on your computer</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <description>
+    <p>Convert images, audio, video and PDF files locally with convt. Document conversions use an optional document pack or an installed LibreOffice.</p>
+    <p>Open files from your file manager to choose a format, see progress and cancel a conversion.</p>
+  </description>
+  <launchable type="desktop-id">convt-app.desktop</launchable>
+  <url type="homepage">https://convt.app</url>
+  <url type="vcs-browser">https://github.com/opencoredev/convt</url>
+  <provides><binary>convt</binary><binary>convt-app</binary></provides>
+  <categories><category>Utility</category></categories>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="0.1.0" date="2026-10-04"/></releases>
+</component>

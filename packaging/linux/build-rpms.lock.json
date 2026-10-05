@@ -1,0 +1,207 @@
+[
+  {
+    "name": "alsa-lib-1.2.10-2.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/alsa-lib-1.2.10-2.el8.x86_64.rpm",
+    "sha256": "5446005ab999b7e2dd8c8f4e5191ce65e1801f9666520c90d12e265184d2753a"
+  },
+  {
+    "name": "alsa-lib-devel-1.2.10-2.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/alsa-lib-devel-1.2.10-2.el8.x86_64.rpm",
+    "sha256": "db7e8956728b69f356d7c5194f32171f72475d2d6c2a4be9ea771d9017ff6571"
+  },
+  {
+    "name": "cmake-filesystem-3.26.5-2.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/cmake-filesystem-3.26.5-2.el8.x86_64.rpm",
+    "sha256": "f7acef1b2a2cfbe7718751a5f0683b54c11eca9c015c4dcb90d094b844238e73"
+  },
+  {
+    "name": "libwayland-cursor-1.21.0-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/libwayland-cursor-1.21.0-1.el8.x86_64.rpm",
+    "sha256": "c96e1cbd48628deac27c0ae52e5288d0ae743b7a06fb6ce564bea285cae81230"
+  },
+  {
+    "name": "libwayland-egl-1.21.0-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/libwayland-egl-1.21.0-1.el8.x86_64.rpm",
+    "sha256": "230408ce9857f17041530db92cfc9056830c4dce72a388b908abf17b5f881fb5"
+  },
+  {
+    "name": "libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+    "sha256": "9ba313c55750dc3c0faee5f706dd0d051ffd06d1a544544b425ddb7c8c33f905"
+  },
+  {
+    "name": "libxkbcommon-devel-0.9.1-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/libxkbcommon-devel-0.9.1-1.el8.x86_64.rpm",
+    "sha256": "73a1aa357f26dd1dfc91dfef298a0296d80070c13dc23be6cc21e45ce5a5c53a"
+  },
+  {
+    "name": "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+    "sha256": "3573869075b9a6b5146b78e789476aa7c2bcc3b06124743979730e52d2b6f1a8"
+  },
+  {
+    "name": "llvm-compat-libs-17.0.6-3.module_el8.10.0+4172+b6b13d75.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/llvm-compat-libs-17.0.6-3.module_el8.10.0+4172+b6b13d75.x86_64.rpm",
+    "sha256": "711afcebc59fa2dd3e84bbfac58d208d6500cb73db0d8b2702f694b0e8d9ed6f"
+  },
+  {
+    "name": "mesa-vulkan-drivers-23.1.4-4.el8_10.alma.1.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/mesa-vulkan-drivers-23.1.4-4.el8_10.alma.1.x86_64.rpm",
+    "sha256": "3955d87de8222fd577da67c8f30faea99f804ac0f193eaaf2ea9764b23510ad3"
+  },
+  {
+    "name": "vim-filesystem-8.0.1763-31.el8_10.7.noarch.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/vim-filesystem-8.0.1763-31.el8_10.7.noarch.rpm",
+    "sha256": "f95ad60312f86cfac94f9f8fe3576c5df61eee015830f0588d09def52844b946"
+  },
+  {
+    "name": "vulkan-headers-1.3.283.0-1.el8_10.noarch.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/vulkan-headers-1.3.283.0-1.el8_10.noarch.rpm",
+    "sha256": "0d819f3bcd32838c6e1b3e98deb8255d003e52d9ad878acf0dae1c93d16e63b6"
+  },
+  {
+    "name": "vulkan-loader-1.3.283.0-1.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/vulkan-loader-1.3.283.0-1.el8_10.x86_64.rpm",
+    "sha256": "aa73f4fd045d12402bddfed12611a87a0f0180750bf2b1af0467af2c621594f6"
+  },
+  {
+    "name": "vulkan-loader-devel-1.3.283.0-1.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/vulkan-loader-devel-1.3.283.0-1.el8_10.x86_64.rpm",
+    "sha256": "45ba1d8d02bcd11247967603c00e196a2db97a73747fa7f70a698680719efc3d"
+  },
+  {
+    "name": "wayland-devel-1.21.0-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/wayland-devel-1.21.0-1.el8.x86_64.rpm",
+    "sha256": "3bee4e328e08d81a043b5f2758a9dae4f080337772986129238a656c6c6d24a8"
+  },
+  {
+    "name": "xkeyboard-config-2.28-1.el8.noarch.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/xkeyboard-config-2.28-1.el8.noarch.rpm",
+    "sha256": "2edac590f6135f09829c5f2e64c91b3cf06dd44e9cb8564277bcbebc48fcce14"
+  },
+  {
+    "name": "bzip2-devel-1.0.6-28.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/bzip2-devel-1.0.6-28.el8_10.x86_64.rpm",
+    "sha256": "35e101b8f8eb7e185a5f932a287f639739c2758f612776f89e3400ac3a2ec0ec"
+  },
+  {
+    "name": "fontconfig-devel-2.13.1-4.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/fontconfig-devel-2.13.1-4.el8.x86_64.rpm",
+    "sha256": "635d6baa3caed80cf1091808e292e80895af2eb0856a0f8d42ac928d820777de"
+  },
+  {
+    "name": "freetype-devel-2.9.1-10.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/freetype-devel-2.9.1-10.el8_10.x86_64.rpm",
+    "sha256": "c3810f814e8f969e506cb012daaee79a92943204a4d04cf71d8fdca64b072f30"
+  },
+  {
+    "name": "gettext-0.19.8.1-17.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/gettext-0.19.8.1-17.el8.x86_64.rpm",
+    "sha256": "16a1355d775fef0abc0b17686e6bdac402c3325d8868e8d20c39a285ebe37d89"
+  },
+  {
+    "name": "gettext-libs-0.19.8.1-17.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/gettext-libs-0.19.8.1-17.el8.x86_64.rpm",
+    "sha256": "0becbf905324c1a9dca477970a0c2961c8dbb07f086beb2c20722af916bf8dbe"
+  },
+  {
+    "name": "keyutils-libs-devel-1.5.10-9.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/keyutils-libs-devel-1.5.10-9.el8.x86_64.rpm",
+    "sha256": "3f93f367585372586461a11c28d4ca76a0f76a35155d157bdd1bdda787913ded"
+  },
+  {
+    "name": "krb5-devel-1.18.2-34.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/krb5-devel-1.18.2-34.el8_10.x86_64.rpm",
+    "sha256": "07e2e5dcf818fe7ea0615b75e26610f688ab5ce5672cfdb5a02727d75caee486"
+  },
+  {
+    "name": "libcom_err-devel-1.45.6-7.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libcom_err-devel-1.45.6-7.el8_10.x86_64.rpm",
+    "sha256": "4a77b8c442cd3a27a8b51d8e68722e862e28e5f2d635313cbbd4f5b6e1bd9ab1"
+  },
+  {
+    "name": "libcroco-0.6.12-4.el8_2.1.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libcroco-0.6.12-4.el8_2.1.x86_64.rpm",
+    "sha256": "001cfab74ef07ad7944258d39716828ca1dd0ed9f0bff30bbb34e05b6100fd2e"
+  },
+  {
+    "name": "libffi-devel-3.1-24.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libffi-devel-3.1-24.el8.x86_64.rpm",
+    "sha256": "8f5458bc961d226a0383575823f04d89989d801d11b1eeece2fe5498df49f186"
+  },
+  {
+    "name": "libkadm5-1.18.2-34.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libkadm5-1.18.2-34.el8_10.x86_64.rpm",
+    "sha256": "a9515c7ef3d8cbcdfd3656e434bca0880f0dc325cf32192ba777860028595fc2"
+  },
+  {
+    "name": "libpng-devel-1.6.34-11.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libpng-devel-1.6.34-11.el8_10.x86_64.rpm",
+    "sha256": "a2485de7bf04a25b9c0e47e66d5b4b098a74665b70986a823679284aaceae64a"
+  },
+  {
+    "name": "libselinux-devel-2.9-11.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libselinux-devel-2.9-11.el8_10.x86_64.rpm",
+    "sha256": "d9a772b1a2bbe83b41ffd27c19946e675abc096df6950d3540f00baf7dae1e84"
+  },
+  {
+    "name": "libsepol-devel-2.9-3.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libsepol-devel-2.9-3.el8.x86_64.rpm",
+    "sha256": "bf7296b0ec33968e01014c1b5097b51c085bf393e11574b85d194c0f5555c292"
+  },
+  {
+    "name": "libuuid-devel-2.32.1-48.el8_10.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libuuid-devel-2.32.1-48.el8_10.x86_64.rpm",
+    "sha256": "166deaa151cf185e2bed117306ffea1c5e2e55e8e67fc010f7c4917c339cc36f"
+  },
+  {
+    "name": "libverto-devel-0.3.2-2.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libverto-devel-0.3.2-2.el8.x86_64.rpm",
+    "sha256": "53a6f78a2992d63291f25d1a4dc99722473b98fc3017dc4918d2393131a760c4"
+  },
+  {
+    "name": "numactl-devel-2.0.16-4.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/numactl-devel-2.0.16-4.el8.x86_64.rpm",
+    "sha256": "030f502a039e59fe600c5fed252d7918ce89751044dd7fdf3ad7b15f9007b168"
+  },
+  {
+    "name": "numactl-libs-2.0.16-4.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/numactl-libs-2.0.16-4.el8.x86_64.rpm",
+    "sha256": "604547c90c93156a501f1c032cbabefa417da4084640cfb20005c06b320121fd"
+  },
+  {
+    "name": "openssl-devel-1.1.1k-17.el8_6.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/openssl-devel-1.1.1k-17.el8_6.x86_64.rpm",
+    "sha256": "f1fa1c41a0acba5e31de12a3d2d346d1bbe7a1932004ffdfce6efb13e89e8f22"
+  },
+  {
+    "name": "pcre2-devel-10.32-3.el8_6.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/pcre2-devel-10.32-3.el8_6.x86_64.rpm",
+    "sha256": "db13e26fe825c8beabc9d55e9529fb4c85873c8cfe4aa84962317787bd24cc6a"
+  },
+  {
+    "name": "pcre2-utf16-10.32-3.el8_6.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/pcre2-utf16-10.32-3.el8_6.x86_64.rpm",
+    "sha256": "8a133f2707f58134ba3fcc3bf10c820a01a49d84c9f560f61af813714fb37a43"
+  },
+  {
+    "name": "pcre2-utf32-10.32-3.el8_6.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/pcre2-utf32-10.32-3.el8_6.x86_64.rpm",
+    "sha256": "0578bd7c9611f59cab3a936556d923c060889173253fa5a5b5cc27d258fdcdb8"
+  },
+  {
+    "name": "libxkbcommon-x11-devel-0.9.1-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/PowerTools/x86_64/os/Packages/libxkbcommon-x11-devel-0.9.1-1.el8.x86_64.rpm",
+    "sha256": "97b93d87163f6255b8748e7c05ff5bdb352f9357a6425697f1dab0b09f5fdbc7"
+  },
+  {
+    "name": "nasm-2.15.03-3.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/PowerTools/x86_64/os/Packages/nasm-2.15.03-3.el8.x86_64.rpm",
+    "sha256": "1b5f671b935571795ebb917ec1bc8c1477a348bb85fb6a9a606a4fd622537b43"
+  },
+  {
+    "name": "ninja-build-1.8.2-1.el8.x86_64.rpm",
+    "url": "https://repo.almalinux.org/almalinux/8.10/PowerTools/x86_64/os/Packages/ninja-build-1.8.2-1.el8.x86_64.rpm",
+    "sha256": "319201f36c0f99628078e2375024ff156eea13c64a102b11f76caab105b0c90d"
+  }
+]

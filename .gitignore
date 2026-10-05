@@ -1,0 +1,23 @@
+# Rust
+/target
+# JS
+node_modules
+dist
+.output
+.turbo
+.wrangler
+.tanstack
+*.tsbuildinfo
+# Env
+# Development license keys (cargo run -p convt-license --example dev-keys)
+/.convt-dev
+.env
+.env.*
+!.env.example
+# Downloaded native libraries (scripts/fetch-pdfium.sh)
+/vendor/*
+!/vendor/README.md
+# Bench and test output
+/tmp
+*.log
+.DS_Store

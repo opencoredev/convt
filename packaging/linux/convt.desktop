@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=convt
+Exec=convt-app open %F
+Type=Application
+Icon=convt
+Categories=Utility;
