@@ -9,24 +9,33 @@ fn main() -> windows::core::Result<()> {
         UI::Shell::*,
     };
     use windows::core::*;
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let mut args: Vec<_> = std::env::args_os().skip(1).collect();
+    let registered = args.first().is_some_and(|arg| arg == "--registered");
+    if registered {
+        args.remove(0);
+    }
     assert!(args.len() >= 2, "explorer-probe <installed-DLL> <files...>");
     let paths: Vec<_> = args[1..].iter().map(PathBuf::from).collect();
     unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
-        let module = LoadLibraryW(&HSTRING::from(&args[0]))?;
-        let proc = GetProcAddress(module, s!("DllGetClassObject")).expect("COM export");
-        let get: unsafe extern "system" fn(*const GUID, *const GUID, *mut *mut c_void) -> HRESULT =
-            std::mem::transmute(proc);
-        let mut raw = std::ptr::null_mut();
-        get(
-            &GUID::from_u128(0x710fb9a8_c47e_4b39_9cfa_e273ab1b78f8),
-            &IClassFactory::IID,
-            &mut raw,
-        )
-        .ok()?;
-        let factory = IClassFactory::from_raw(raw);
-        let root: IExplorerCommand = factory.CreateInstance(None)?;
+        let class = GUID::from_u128(0x710fb9a8_c47e_4b39_9cfa_e273ab1b78f8);
+        let root: IExplorerCommand = if registered {
+            // LOCAL_SERVER specifically tests the sparse packaged COM surrogate,
+            // rather than the classic HKCU in-process registration.
+            CoCreateInstance(&class, None, CLSCTX_LOCAL_SERVER)?
+        } else {
+            let module = LoadLibraryW(&HSTRING::from(&args[0]))?;
+            let proc = GetProcAddress(module, s!("DllGetClassObject")).expect("COM export");
+            let get: unsafe extern "system" fn(
+                *const GUID,
+                *const GUID,
+                *mut *mut c_void,
+            ) -> HRESULT = std::mem::transmute(proc);
+            let mut raw = std::ptr::null_mut();
+            get(&class, &IClassFactory::IID, &mut raw).ok()?;
+            let factory = IClassFactory::from_raw(raw);
+            factory.CreateInstance(None)?
+        };
         let mut pidls = Vec::new();
         for path in &paths {
             let mut pidl = std::ptr::null_mut();
