@@ -444,6 +444,8 @@ No Paper artboard is known for these (the file was unreachable). They are built 
 
 None are needed to build and verify P7 through step 9.
 
+Done on 2026-10-06: both "convt" Polar organizations (production `6098e410-4ea7-48fd-b677-7b261b8e0f7c`, sandbox `c9b2ccbd-28a8-4f07-984b-66b59c06a410`) have the four products and the `api_conversion` meter, and their ids are in `catalog.ts`. The products carry no license-key benefit. Production is still in Polar's account review.
+
 | What                                                                                                                                                      | Where it goes                                                                                                                                                     |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Polar organizations for production and sandbox                                                                                                            | Payout and tax details in Polar.                                                                                                                                  |

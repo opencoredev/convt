@@ -31,8 +31,26 @@ describe("catalog", () => {
     expect(c.switchPolicy).toEqual({ pro_month: "invoice", pro_year: "invoice" });
   });
 
-  test("sandbox and production ids are placeholders until Leo fills them in", () => {
-    expect(validateCatalog(loadCatalog("production")).join()).toMatch(/placeholders/);
+  test("sandbox and production have real, distinct ids and the same prices as local", () => {
+    const local = loadCatalog("local");
+    for (const env of ["sandbox", "production"] as const) {
+      const c = loadCatalog(env);
+      expect(validateCatalog(c)).toEqual([]);
+      const ids = Object.values(c.products).flatMap((e) => [e.productId, e.priceId]);
+      expect(new Set(ids).size).toBe(ids.length);
+      for (const [name, e] of Object.entries(c.products)) {
+        const { productId: _p, priceId: _q, ...terms } = e;
+        const {
+          productId: _lp,
+          priceId: _lq,
+          ...localTerms
+        } = local.products[name as keyof typeof local.products];
+        expect(terms).toEqual(localTerms);
+      }
+    }
+    expect(loadCatalog("sandbox").products.desktop.productId).not.toBe(
+      loadCatalog("production").products.desktop.productId,
+    );
   });
 
   test("updates_until is the same day a year later; 29 February becomes 28 February", () => {
