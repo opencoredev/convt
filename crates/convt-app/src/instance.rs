@@ -224,7 +224,10 @@ pub fn claim(dir: &std::path::Path, req: &Request) -> std::io::Result<Role> {
     use windows_sys::Win32::System::Threading::{CloseHandle, CreateMutexW};
 
     std::fs::create_dir_all(dir)?;
-    let name: Vec<u16> = std::ffi::OsStr::new("Global\\convt-instance")
+    // The Local namespace is scoped to the interactive user's session. A
+    // machine-wide mutex would make one user's launch suppress another user's
+    // independent app and request inbox.
+    let name: Vec<u16> = std::ffi::OsStr::new("Local\\convt-instance")
         .encode_wide()
         .chain(Some(0))
         .collect();
