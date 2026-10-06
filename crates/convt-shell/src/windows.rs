@@ -366,8 +366,14 @@ impl IEnumExplorerCommand_Impl for Enumerator_Impl {
     }
     fn Skip(&self, count: u32) -> Result<()> {
         let mut cursor = self.cursor.lock().map_err(|_| error())?;
-        *cursor = (*cursor + count as usize).min(self.commands.len());
-        Ok(())
+        let remaining = self.commands.len() - *cursor;
+        *cursor += (count as usize).min(remaining);
+        if count as usize > remaining {
+            // The projection uses Result even though COM permits S_FALSE here.
+            Err(Error::from_hresult(S_FALSE))
+        } else {
+            Ok(())
+        }
     }
     fn Reset(&self) -> Result<()> {
         *self.cursor.lock().map_err(|_| error())? = 0;

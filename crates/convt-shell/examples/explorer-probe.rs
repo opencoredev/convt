@@ -93,6 +93,21 @@ fn main() -> windows::core::Result<()> {
             lists.push(targets);
         }
         let expected = convt_shell::common_targets(&lists);
+        let enumerator = root.EnumSubCommands()?;
+        let status = (Interface::vtable(&enumerator).Skip)(
+            Interface::as_raw(&enumerator),
+            actual.len() as u32 + 1,
+        );
+        assert_eq!(status, HRESULT(1), "Skip past the end returns S_FALSE");
+        enumerator.Reset()?;
+        let clone = enumerator.Clone()?;
+        let mut fetched = 0;
+        let mut batch = vec![None; actual.len() + 1];
+        assert_eq!(clone.Next(&mut batch, Some(&mut fetched)), HRESULT(1));
+        assert_eq!(fetched as usize, actual.len());
+        drop(batch);
+        drop(clone);
+        drop(enumerator);
         assert_eq!(actual, expected);
         assert_eq!(before_state, expected);
         assert_eq!(
