@@ -1246,17 +1246,18 @@ mod tests {
         let mut tar = tar::Builder::new(gzip);
         let mut header = tar::Header::new_gnu();
         let payload = b"#!/bin/sh\nexit 0\n";
+        let launcher = executable(Path::new(""));
         header.set_mode(0o755);
         if link {
             header.set_entry_type(tar::EntryType::Symlink);
             header.set_size(0);
             header.set_link_name("/tmp/escape").unwrap();
             header.set_cksum();
-            tar.append_data(&mut header, "soffice", &b""[..]).unwrap();
+            tar.append_data(&mut header, &launcher, &b""[..]).unwrap();
         } else {
             header.set_size(payload.len() as u64);
             header.set_cksum();
-            tar.append_data(&mut header, "soffice", &payload[..])
+            tar.append_data(&mut header, &launcher, &payload[..])
                 .unwrap();
         }
         tar.into_inner().unwrap().finish().unwrap();
