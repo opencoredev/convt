@@ -85,6 +85,7 @@ struct TrustedSids {
     system: Vec<u32>,
     admins: Vec<u32>,
     installer: Vec<u32>,
+    creator_owner: Vec<u32>,
 }
 
 fn trusted_sids() -> anyhow::Result<&'static TrustedSids> {
@@ -98,6 +99,7 @@ fn load_trusted_sids() -> anyhow::Result<TrustedSids> {
     let user = current_sid()?;
     let system = system_sid(WinLocalSystemSid)?;
     let admins = system_sid(WinBuiltinAdministratorsSid)?;
+    let creator_owner = system_sid(WinCreatorOwnerSid)?;
     // The drive root is normally owned by Windows Modules Installer.
     let installer_name: Vec<u16> = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
         .encode_utf16()
@@ -122,6 +124,7 @@ fn load_trusted_sids() -> anyhow::Result<TrustedSids> {
         system,
         admins,
         installer: installer_sid,
+        creator_owner,
     })
 }
 
@@ -233,13 +236,25 @@ pub(crate) fn trusted(path: &Path, ancestor: bool) -> anyhow::Result<()> {
                 return Err(std::io::Error::last_os_error().into());
             }
             let header = &*ace.cast::<ACE_HEADER>();
-            if u32::from(header.AceFlags) & INHERIT_ONLY_ACE != 0 {
+            let flags = u32::from(header.AceFlags);
+            let inherit_only = flags & INHERIT_ONLY_ACE != 0;
+            if inherit_only
+                && (ancestor || flags & (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE) == 0)
+            {
                 continue;
             }
             match header.AceType {
                 0 => {
                     let allow = &*ace.cast::<ACCESS_ALLOWED_ACE>();
                     let sid = ptr::addr_of!(allow.SidStart).cast_mut().cast();
+                    // Inherit-only grants do not affect this object, but pack
+                    // directories must not give new staging/extracted children
+                    // unsafe permissions before their contents are verified.
+                    // CREATOR OWNER becomes the trusted creating user on each
+                    // child; its effective ACL is still checked individually.
+                    if inherit_only && same(sid, &sids.creator_owner) {
+                        continue;
+                    }
                     if allow.Mask & writes != 0 && !privileged(sid) {
                         bail!(
                             "document-pack path is writable by another principal: {}",
@@ -320,6 +335,19 @@ mod tests {
             .unwrap();
         assert!(result.status.success(), "{result:?}");
         assert!(trusted(&child, false).is_err());
+    }
+
+    #[test]
+    fn inherit_only_other_users_cannot_make_new_pack_children_writable() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = Command::new("icacls")
+            .arg(temp.path())
+            .args(["/grant", "*S-1-1-0:(OI)(CI)(IO)(F)"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+        trusted(temp.path(), true).unwrap();
+        assert!(trusted(temp.path(), false).is_err());
     }
 
     #[test]
