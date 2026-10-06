@@ -1,10 +1,113 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "distribution_ready": false,
   "blockers": [
-    "Pin and verify x86_64 FFmpeg, PDFium and patched libheif with plugins",
-    "Supply exact matching component sources, build scripts and notices",
-    "Verify native engine discovery and conversions on Windows"
+    "Corresponding-source closure for the prebuilt FFmpeg and PDFium archives has not been collected; verification artifacts only.",
+    "Public document-pack hosting and code signing remain release gates."
   ],
-  "files": []
+  "files": [
+    {
+      "name": "x265_3.5.orig.tar.gz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x265/x265_3.5.orig.tar.gz",
+      "sha256": "e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8",
+      "package": "x265",
+      "version": "3.5-2build1",
+      "kind": "source"
+    },
+    {
+      "name": "x265_3.5-2build1.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x265/x265_3.5-2build1.debian.tar.xz",
+      "sha256": "f97d5320970e64e2c17b37397b6bb68a736d360a7c0b0d6e966469af7f5b5a09",
+      "package": "x265",
+      "version": "3.5-2build1",
+      "kind": "patches"
+    },
+    {
+      "name": "libde265_1.0.15.orig.tar.gz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libd/libde265/libde265_1.0.15.orig.tar.gz",
+      "sha256": "00251986c29d34d3af7117ed05874950c875dd9292d016be29d3b3762666511d",
+      "package": "libde265",
+      "version": "1.0.15-1ubuntu0.1",
+      "kind": "source"
+    },
+    {
+      "name": "libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libd/libde265/libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
+      "sha256": "53277b637f1bfe29e1d249ab1981f947f6425e7f5793430989c54534a265a0ac",
+      "package": "libde265",
+      "version": "1.0.15-1ubuntu0.1",
+      "kind": "patches"
+    },
+    {
+      "name": "aom_3.8.2.orig.tar.gz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/aom/aom_3.8.2.orig.tar.gz",
+      "sha256": "08be381e014c3cf508293f9127c8e24cc35262c6e9c805b0a8313cebf99cbcda",
+      "package": "aom",
+      "version": "3.8.2-2ubuntu0.2",
+      "kind": "source"
+    },
+    {
+      "name": "aom_3.8.2-2ubuntu0.2.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/aom/aom_3.8.2-2ubuntu0.2.debian.tar.xz",
+      "sha256": "d1fb459395296901e6aed6348828c6a5a29e2364d5b0c809a5ba1def73d599e7",
+      "package": "aom",
+      "version": "3.8.2-2ubuntu0.2",
+      "kind": "patches"
+    },
+    {
+      "name": "libheif_1.17.6.orig.tar.gz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libh/libheif/libheif_1.17.6.orig.tar.gz",
+      "sha256": "8390baf4913eda0a183e132cec62b875fb2ef507ced5ddddc98dfd2f17780aee",
+      "package": "libheif",
+      "version": "1.17.6-1ubuntu4.9",
+      "kind": "source"
+    },
+    {
+      "name": "libheif_1.17.6-1ubuntu4.9.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libh/libheif/libheif_1.17.6-1ubuntu4.9.debian.tar.xz",
+      "sha256": "20e6cd77fbd37e52340b46b4ee079ab1f7da786580e5c734b566751cb9d1aae2",
+      "package": "libheif",
+      "version": "1.17.6-1ubuntu4.9",
+      "kind": "patches"
+    },
+    {
+      "name": "ffmpeg.zip",
+      "kind": "ffmpeg",
+      "version": "8.1.2 essentials GPLv3",
+      "url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+      "sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+      "provenance": "https://www.gyan.dev/ffmpeg/builds/",
+      "source": "https://git.ffmpeg.org/ffmpeg.git",
+      "recipe": "https://github.com/gyan-dev/ffmpeg-build-script",
+      "package": ""
+    },
+    {
+      "name": "pdfium.tgz",
+      "kind": "pdfium",
+      "version": "chromium/8076",
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8076/pdfium-win-x64.tgz",
+      "sha256": "808d36da9bc5a3104315fb307c80998121f565ee53953633bf33e80d7429e5ac",
+      "source": "https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8076",
+      "recipe": "https://github.com/bblanchon/pdfium-binaries",
+      "package": ""
+    },
+    {
+      "name": "libreoffice.msi",
+      "kind": "documents",
+      "version": "25.8.7",
+      "url": "https://download.documentfoundation.org/libreoffice/stable/25.8.7/win/x86_64/LibreOffice_25.8.7_Win_x86-64.msi",
+      "sha256": "ecdb65e76f5e91dc198b8c8dce5b5d6e1eb12fea6023553e52b591afd10b619d",
+      "source": "https://download.documentfoundation.org/libreoffice/src/25.8.7/",
+      "recipe": "packaging/windows/build-document-pack.py",
+      "package": ""
+    },
+    {
+      "name": "lessmsi.zip",
+      "kind": "tool",
+      "version": "2.12.9",
+      "url": "https://github.com/activescott/lessmsi/releases/download/v2.12.9/lessmsi-v2.12.9.zip",
+      "sha256": "5b4e187e74b184ad3a63ccf06c3d17dae2b8c4b6c298a996dbd51a9f6db29d21",
+      "package": ""
+    }
+  ]
 }
