@@ -81,6 +81,8 @@ export async function runCron(service: BillingService, cron: string) {
 
 async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Response> {
   const url = new URL(request.url);
+  if (url.pathname === "/__billing/scheduled" && raw.ENV !== "development")
+    return text(404, "not found");
   let s: ReturnType<typeof setup>;
   try {
     s = setup(raw);
@@ -111,7 +113,7 @@ async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Respon
   }
   // Local development only: run a cron by name (Wrangler's /__scheduled is not
   // reachable for an auxiliary Worker under the Vite plugin).
-  if (url.pathname === "/__billing/scheduled" && s.env.env !== "production") {
+  if (url.pathname === "/__billing/scheduled" && s.env.env === "development") {
     const cron = url.searchParams.get("cron") ?? "* * * * *";
     return Response.json(await runCron(s.service, cron));
   }
