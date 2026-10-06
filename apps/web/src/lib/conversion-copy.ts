@@ -24,6 +24,8 @@ export const pageDescription = (c: Conversion) =>
 export const hubTitle = "Convert files on your computer, without uploading · convt";
 export const hubDescription = `Image, video, audio and document conversions that run on your own computer: HEIC to JPG, MOV to MP4, PDF to JPG, DOCX to PDF and more. ${registry.formats.length} formats, nothing uploaded.`;
 
+const registryNames = new Map(registry.formats.map((f) => [f.id, f.name]));
+
 export const urlOf = (c: Conversion) => `${SITE_ORIGIN}/convert/${slugOf(c)}`;
 
 /** Pair-specific questions first, then the ones every page answers. */
@@ -35,7 +37,7 @@ export function faqFor(c: Conversion): { q: string; a: string }[] {
     ...(c.faq ?? []),
     {
       q: `Does convt upload my ${from} files?`,
-      a: `No. convt converts ${from} to ${to} on your own computer with ${engines[c.engine].name}. Your files never leave it, and it works offline.`,
+      a: `No. convt converts ${from} to ${to} on your own computer. Your files never leave it, and it works offline.`,
     },
     {
       q: `Can I convert many ${from} files at once?`,
@@ -56,9 +58,13 @@ export function faqFor(c: Conversion): { q: string; a: string }[] {
 export function stepsFor(c: Conversion) {
   const from = formats[c.from].label;
   const to = formats[c.to].label;
+  // The menus list formats by their registry name ("JPEG"), not the page label ("JPG").
+  const menuName = registryNames.get(c.to) ?? to;
   return [
     `Right-click a ${from} file, or several, in Finder or your file manager.`,
-    `Choose Convert, then ${to}.`,
+    c.menu === false
+      ? `Choose Convert with convt, then More options…, and pick ${menuName} in Quick convert.`
+      : `Choose Convert with convt, then ${menuName}.`,
     `The ${to} file appears next to the original. The ${from} stays untouched.`,
   ];
 }

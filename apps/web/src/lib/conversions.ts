@@ -168,9 +168,9 @@ export const engines: Record<EngineId, { name: string; about: string }> = {
     about: "SVG files are drawn by resvg, a Rust SVG renderer built into convt.",
   },
   libheif: {
-    name: "libheif",
+    name: "macOS or libheif",
     about:
-      "HEIC and AVIF are read with libheif, the open source HEIF library, bundled with convt. On a Mac, convt can also use the system's own decoder.",
+      "On a Mac, convt reads HEIC and AVIF with the system's own image decoder. On Windows and Linux it uses libheif, the open source HEIF library, which ships with convt.",
   },
   ffmpeg: {
     name: "FFmpeg",
@@ -185,7 +185,7 @@ export const engines: Record<EngineId, { name: string; about: string }> = {
   libreoffice: {
     name: "LibreOffice",
     about:
-      "Office documents are opened and saved by LibreOffice running in the background. convt uses the copy already on your computer, or installs its own document pack once with `convt pack install`.",
+      "Office documents are opened and saved by LibreOffice running in the background. convt uses the copy already on your computer, or installs its own document pack once with `convt pack install documents`.",
   },
 };
 
@@ -196,6 +196,12 @@ export type Conversion = {
   engine: EngineId;
   /** Why someone would make this conversion: the opening of the page. */
   why: string;
+  /**
+   * False when the target is not in the right-click menu's shortlist for this source
+   * (Registry::menu_targets in crates/convt-core/src/registry.rs), so the steps point
+   * to More options… instead.
+   */
+  menu?: false;
   /** Things worth knowing, specific to this pair. */
   notes: string[];
   /** Options that matter for this pair, as `convt` flags. */
@@ -337,6 +343,7 @@ export const conversions: Conversion[] = [
     to: "ico",
     category: "images",
     engine: "image",
+    menu: false,
     why: "Websites still need a favicon.ico, and Windows shortcuts and apps use ICO icons. Turn a PNG logo into one in a single step.",
     notes: [
       "Start from a square image. convt scales larger images to fit 256 pixels and keeps the proportions.",

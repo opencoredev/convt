@@ -25,7 +25,7 @@
         {
           "type": "header",
           "key": "accept",
-          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+          "value": ".*text/markdown(\\s*;\\s*[^,;=]+=[^,;]*)*\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?(\\s*;[^,]*)?\\s*(,.*)?"
         }
       ],
       "dest": "/index.md",
@@ -47,7 +47,7 @@
         {
           "type": "header",
           "key": "accept",
-          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+          "value": ".*text/markdown(\\s*;\\s*[^,;=]+=[^,;]*)*\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?(\\s*;[^,]*)?\\s*(,.*)?"
         }
       ],
       "dest": "/$1.md",
@@ -97,7 +97,7 @@
         {
           "type": "header",
           "key": "accept",
-          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+          "value": ".*text/markdown(\\s*;\\s*[^,;=]+=[^,;]*)*\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?(\\s*;[^,]*)?\\s*(,.*)?"
         }
       ],
       "dest": "/convert.md",
@@ -119,7 +119,7 @@
         {
           "type": "header",
           "key": "accept",
-          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+          "value": ".*text/markdown(\\s*;\\s*[^,;=]+=[^,;]*)*\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?(\\s*;[^,]*)?\\s*(,.*)?"
         }
       ],
       "dest": "/convert/$1.md",
@@ -181,7 +181,7 @@
         {
           "type": "header",
           "key": "accept",
-          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+          "value": ".*text/markdown(\\s*;\\s*[^,;=]+=[^,;]*)*\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?(\\s*;[^,]*)?\\s*(,.*)?"
         }
       ],
       "dest": "/404.md",
