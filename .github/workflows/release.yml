@@ -49,7 +49,12 @@ jobs:
               echo 'Cannot compare the initial branch push; use a reviewed manual release.' >&2
               exit 1
             fi
-            previous=$(git show "$BEFORE:apps/desktop/package.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+            if git cat-file -e "$BEFORE:apps/desktop/package.json" 2>/dev/null; then
+              previous=$(git show "$BEFORE:apps/desktop/package.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+            else
+              # The first Changesets rollout introduces the desktop package metadata.
+              previous=$(git show "$BEFORE:Cargo.toml" | python3 -c 'import tomllib,sys; print(tomllib.loads(sys.stdin.read())["workspace"]["package"]["version"])')
+            fi
             if [ "$previous" = "$version" ]; then
               echo publish=false >> "$GITHUB_OUTPUT"
               exit 0
