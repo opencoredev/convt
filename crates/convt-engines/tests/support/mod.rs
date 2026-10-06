@@ -22,7 +22,11 @@ pub fn tool(name: &str) -> Option<PathBuf> {
     std::env::var_os(env)
         .map(PathBuf::from)
         .or_else(|| which::which(name).ok())
-        .or_else(|| (name == "python3").then(|| which::which("python").ok()).flatten())
+        .or_else(|| {
+            (name == "python3")
+                .then(|| which::which("python").ok())
+                .flatten()
+        })
 }
 
 pub fn command(cmd: &mut Command) -> Check<ProcessOutput> {
