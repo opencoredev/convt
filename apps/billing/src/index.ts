@@ -73,6 +73,7 @@ const text = (status: number, body: string) =>
   });
 
 export async function runCron(service: BillingService, cron: string) {
+  if (cron === "*/10 * * * *") return { cleanup: await service.cleanupAuth() };
   if (cron === "*/15 * * * *") return { reconcile: await service.reconcileFrequent() };
   if (cron === "17 3 * * *") return { daily: await service.reconcileDaily() };
   return { outbox: await service.drainOutbox(), deletions: await service.runDeletions() };

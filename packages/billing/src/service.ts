@@ -7,6 +7,7 @@ import type { MailTransport } from "@convt/mail";
 
 import * as actions from "./actions";
 import type { Catalog, CatalogProduct } from "./catalog";
+import { cleanupAuth } from "./cleanup";
 import { checkoutResult, createCheckout } from "./checkout";
 import type { BillingConfig, BillingContext, FaultPoint } from "./context";
 import { advanceDeletion, deletionStatus, requestDeletion, runDeletions } from "./deletion";
@@ -56,6 +57,7 @@ export function createBillingService(deps: ServiceDeps) {
       withCtx((c) => resolveOutbox(c, id, decision)),
     reconcileFrequent: () => withCtx((c) => reconcileFrequent(c)),
     reconcileDaily: () => withCtx((c) => reconcileDaily(c)),
+    cleanupAuth: () => withCtx((c) => cleanupAuth(c)),
     runDeletions: () => withCtx((c) => runDeletions(c)),
 
     createCheckout: (input: {

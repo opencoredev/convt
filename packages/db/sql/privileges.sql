@@ -207,3 +207,7 @@ grant insert, update on api_keys to convt_web;
 grant insert, update on otp_send_limits to convt_server;
 --> statement-breakpoint
 grant update (updated_at) on subscriptions to convt_server, convt_web;
+
+--> statement-breakpoint
+-- Billing owns sign-in housekeeping before the cloud server is deployed.
+grant select, delete on verifications, rate_limits, otp_send_limits to convt_billing;

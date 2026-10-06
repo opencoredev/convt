@@ -30,6 +30,6 @@
   "triggers": {
     // Outbox drain and deletions every minute; the reconciler every 15 minutes;
     // the daily check at 03:17 UTC.
-    "crons": ["* * * * *", "*/15 * * * *", "17 3 * * *"],
+    "crons": ["* * * * *", "*/10 * * * *", "*/15 * * * *", "17 3 * * *"],
   },
 }
