@@ -83,9 +83,8 @@ pub(crate) fn apply_background(
 }
 
 /// Applies a chosen background color to the PNG at `path` in place, for
-/// engines that hand PNG to or from an outside tool (macOS `sips`). Anything
+/// engines that get PNG from an outside tool (FFmpeg, macOS `sips`). Anything
 /// but a color leaves the file alone, since PNG keeps transparency.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
     if !matches!(options.background, Some(Background::Color(_))) {
         return Ok(());

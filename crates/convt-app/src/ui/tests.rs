@@ -1713,6 +1713,39 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
         click(cx, window, "to-jpeg");
         assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
     }
+    // A preset's color doesn't follow the movie into GIF, where nothing could clear it.
+    save_preset(
+        &f,
+        cx,
+        "white",
+        Preset {
+            to: None,
+            options: Options {
+                background: Some(Background::WHITE),
+                ..Options::default()
+            },
+        },
+    );
+    let clip = f.dir.path().join("clip2.mov");
+    std::fs::write(&clip, "not really a movie").unwrap();
+    let (window, view) = f.quick(cli(vec![clip], None, Some("white")), cx);
+    click(cx, window, "to-gif");
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options().background, None));
+
+    // A PDF renders on white while a PNG keeps its transparency: Automatic.
+    let pdf = f.dir.path().join("mixed.pdf");
+    let png = f.dir.path().join("mixed.png");
+    std::fs::write(&pdf, "not really a pdf").unwrap();
+    image::RgbaImage::new(2, 2).save(&png).unwrap();
+    let (window, view) = f.quick(cli(vec![pdf, png], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if targets.iter().any(|t| t.id == "webp") {
+        click(cx, window, "to-webp");
+        assert_eq!(
+            label(cx, window, "background").as_deref(),
+            Some("Automatic")
+        );
+    }
 }
 
 #[gpui_kit::test]

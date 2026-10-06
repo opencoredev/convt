@@ -265,18 +265,19 @@ impl Engine for FfmpegEngine {
                 "a background color isn't supported for video to GIF yet".into(),
             ));
         }
-        // A still frame goes through the image encoder like any other image,
-        // so it gets the same quality, size and background handling (FFmpeg's
-        // JPEG encoder dropped alpha to black).
-        let still = matches!(to, "png" | "jpeg");
+        // A JPEG frame is written as PNG and encoded by the image engine, so
+        // transparency gets the same background handling as any other image
+        // (FFmpeg's JPEG encoder dropped it to black). A PNG frame keeps
+        // FFmpeg's file, with its color and pixel-aspect tags.
+        let via_png = to == "jpeg";
         let frame = out_dir.join("frame.png");
-        let written = if still { &frame } else { &output };
+        let written = if via_png { &frame } else { &output };
         let mut cmd = Command::new(ffmpeg);
         cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
             .args(LOCAL_INPUT_ARGS)
             .args(["-progress", "pipe:1", "-nostats", "-i"])
             .arg(local_path(input))
-            .args(output_args(if still { "png" } else { to }, ctx.options))
+            .args(output_args(if via_png { "png" } else { to }, ctx.options))
             .arg(written);
         crate::run_tool("ffmpeg", cmd, ctx, |line| {
             let us = line
@@ -286,13 +287,15 @@ impl Engine for FfmpegEngine {
                 ctx.progress((us / total) as f32);
             }
         })?;
-        if still {
+        if via_png {
             let img = image::open(&frame).map_err(|e| Error::EngineFailed {
                 engine: "ffmpeg",
                 message: e.to_string(),
             })?;
             let _ = std::fs::remove_file(&frame);
             crate::image::encode(img, to, ctx.options, &output)?;
+        } else if to == "png" {
+            crate::image::background_png(&output, ctx.options)?;
         }
         Ok(vec![output])
     }

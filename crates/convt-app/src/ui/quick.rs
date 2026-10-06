@@ -6,7 +6,9 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use convt_core::{Background, Category, Format, Options, Output, VideoCodec};
+use convt_core::{
+    Background, Category, Format, Options, Output, Registry, VideoCodec, format_by_id,
+};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
@@ -296,9 +298,13 @@ impl QuickView {
         if audio_applies(to) {
             options.strip_audio = self.strip_audio;
         }
-        if background_applies(to, &self.files) {
-            options.background = shown_background(to, self.background);
-        }
+        // Where the control is hidden (video to GIF), a preset's color would
+        // only make the conversion fail, with nothing in the window to clear it.
+        options.background = if background_applies(to, &self.files) {
+            shown_background(to, self.background)
+        } else {
+            None
+        };
         options
     }
 
@@ -710,12 +716,14 @@ impl QuickView {
             if let Some(custom) = current.filter(|c| !choices.contains(c)) {
                 choices.push(custom);
             }
-            let default = default_background(to, &self.files);
+            let default = default_background(&self.app.read(cx).registry, to, &self.files);
             row_label(
                 "Background",
                 theme::select(
                     "background",
-                    current.unwrap_or(default).name(),
+                    current
+                        .or(default)
+                        .map_or_else(|| "Automatic".into(), Background::name),
                     180.,
                     false,
                     self.open == Some(Open::Background),
@@ -997,10 +1005,22 @@ fn background_applies(to: &Format, files: &[PathBuf]) -> bool {
 }
 
 /// What the Background control shows with nothing picked: what the engines
-/// do by default. Formats without transparency get white, and so do PDF
-/// pages, which render on white like a PDF viewer shows them.
-fn default_background(to: &Format, files: &[PathBuf]) -> Background {
-    if !to.keeps_transparency() || sources(files).any(|f| f.id == "pdf") {
+/// do by default, or `None` (Automatic) when the files would differ.
+fn default_background(registry: &Registry, to: &Format, files: &[PathBuf]) -> Option<Background> {
+    let mut defaults = sources(files).map(|from| route_default(registry, from, to));
+    let first = defaults.next()?;
+    defaults.all(|d| d == first).then_some(first)
+}
+
+/// The default background for one route: white for formats without
+/// transparency and for anything rendered from PDF (documents go through
+/// PDF too), which renders on white like a PDF viewer; otherwise kept.
+fn route_default(registry: &Registry, from: &'static Format, to: &Format) -> Background {
+    let via_pdf = from.id == "pdf"
+        || format_by_id(to.id)
+            .and_then(|to| registry.plan(from, to).ok())
+            .is_some_and(|plan| plan.hops.iter().any(|(_, step)| step.from.id == "pdf"));
+    if !to.keeps_transparency() || via_pdf {
         Background::WHITE
     } else {
         Background::Transparent
