@@ -56,9 +56,12 @@ impl Owned {
                 && let Some(pid) = child.id()
             {
                 // Only IDs returned by our spawn; no name-based process killing.
+                #[cfg(unix)]
                 unsafe {
                     libc::kill(pid as i32, libc::SIGTERM);
                 }
+                #[cfg(not(unix))]
+                let _ = pid;
             }
         }
         let deadline = Instant::now() + Duration::from_secs(20);
@@ -660,6 +663,7 @@ async fn cancellation(
 #[tokio::main]
 async fn main() -> Result<()> {
     ensure!(cfg!(target_os = "linux"), "acceptance requires Linux");
+    #[cfg(unix)]
     ensure!(
         unsafe { libc::geteuid() } == 0,
         "acceptance must run as root inside the supplied container"

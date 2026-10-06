@@ -53,6 +53,7 @@ pub async fn remove(name: &str) -> anyhow::Result<()> {
     unreachable!()
 }
 /// Register once and retain the receivers even while database calls await.
+#[cfg(unix)]
 pub fn shutdown_listener() -> std::io::Result<tokio::sync::watch::Receiver<bool>> {
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -62,6 +63,16 @@ pub fn shutdown_listener() -> std::io::Result<tokio::sync::watch::Receiver<bool>
             _ = interrupt.recv() => {},
             _ = terminate.recv() => {},
         }
+        let _ = sender.send(true);
+    });
+    Ok(receiver)
+}
+/// The worker deploys on Linux; elsewhere (a Windows dev build) Ctrl+C is the only signal.
+#[cfg(not(unix))]
+pub fn shutdown_listener() -> std::io::Result<tokio::sync::watch::Receiver<bool>> {
+    let (sender, receiver) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
         let _ = sender.send(true);
     });
     Ok(receiver)
