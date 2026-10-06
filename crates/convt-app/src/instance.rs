@@ -6,7 +6,6 @@
 
 use std::path::PathBuf;
 
-#[cfg(not(unix))]
 use crate::request::Request;
 
 /// Requests larger than this are dropped. A request is a list of paths.
@@ -17,7 +16,7 @@ pub enum Role {
     /// This process is the app. Call [`Primary::listen`] once the UI can
     /// take requests.
     Primary(Primary),
-    /// The running app took the request. Only the Unix socket path forwards today.
+    /// The running app took the request.
     #[cfg_attr(not(unix), allow(dead_code))]
     Forwarded,
 }
@@ -178,19 +177,88 @@ mod unix {
     }
 }
 
-/// Without a Unix socket every launch opens its own app. Windows gets a
-/// named pipe later.
-#[cfg(not(unix))]
-pub struct Primary;
-
-#[cfg(not(unix))]
-impl Primary {
-    pub fn listen(self, _on_request: impl Fn(Request) + Send + 'static) {}
+#[cfg(windows)]
+pub struct Primary {
+    mutex: windows_sys::Win32::Foundation::HANDLE,
 }
 
-#[cfg(not(unix))]
-pub fn claim(_dir: &std::path::Path, _req: &Request) -> std::io::Result<Role> {
-    Ok(Role::Primary(Primary))
+#[cfg(windows)]
+impl Primary {
+    pub fn listen(self, on_request: impl Fn(Request) + Send + 'static) {
+        std::thread::Builder::new()
+            .name("convt-instance".into())
+            .spawn(move || loop {
+                let dir = runtime_dir();
+                let Ok(entries) = std::fs::read_dir(&dir) else {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    continue;
+                };
+                let mut requests: Vec<_> = entries
+                    .flatten()
+                    .map(|entry| entry.path())
+                    .filter(|path| {
+                        path.file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| name.starts_with("request-") && name.ends_with(".json"))
+                    })
+                    .collect();
+                requests.sort();
+                for path in requests {
+                    let bytes = std::fs::read(&path);
+                    let _ = std::fs::remove_file(&path);
+                    match bytes.and_then(|bytes| serde_json::from_slice(&bytes).map_err(std::io::Error::other)) {
+                        Ok(request) => on_request(request),
+                        Err(error) => tracing::warn!(error = %error, path = %path.display(), "bad instance request"),
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            })
+            .expect("spawn instance listener");
+    }
+}
+
+#[cfg(windows)]
+pub fn claim(dir: &std::path::Path, req: &Request) -> std::io::Result<Role> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE};
+    use windows_sys::Win32::System::Threading::{CloseHandle, CreateMutexW};
+
+    std::fs::create_dir_all(dir)?;
+    let name: Vec<u16> = std::ffi::OsStr::new("Global\\convt-instance")
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    // SAFETY: the name is a valid NUL-terminated string and no initial owner
+    // is requested; the handle is retained until the primary exits.
+    let mutex = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+    if mutex == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        unsafe { CloseHandle(mutex) };
+        let bytes = serde_json::to_vec(req).map_err(std::io::Error::other)?;
+        let id = format!(
+            "{}-{}",
+            std::process::id(),
+            REQUEST_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        let temp = dir.join(format!("request-{id}.tmp"));
+        let path = dir.join(format!("request-{id}.json"));
+        std::fs::write(&temp, bytes)?;
+        std::fs::rename(temp, path)?;
+        return Ok(Role::Forwarded);
+    }
+    Ok(Role::Primary(Primary { mutex }))
+}
+
+#[cfg(windows)]
+static REQUEST_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(windows)]
+impl Drop for Primary {
+    fn drop(&mut self) {
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.mutex) };
+    }
 }
 
 #[cfg(all(test, unix))]

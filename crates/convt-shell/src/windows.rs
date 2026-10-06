@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::collections::HashMap;
 use std::ffi::{OsString, c_void};
 use std::io::Read;
@@ -98,7 +99,9 @@ fn targets(path: &Path) -> Vec<String> {
     {
         return result.clone();
     }
-    let result = probe(path).unwrap_or_default();
+    let Some(result) = probe(path) else {
+        return vec![];
+    };
     if let Ok(mut cache) = cache.lock() {
         if cache.len() >= 256 {
             cache.clear();
@@ -106,6 +109,49 @@ fn targets(path: &Path) -> Vec<String> {
         cache.insert(extension, (Instant::now(), result.clone()));
     }
     result
+}
+
+#[derive(Serialize)]
+struct ExplorerRequest<'a> {
+    files: &'a [PathBuf],
+    show_progress: bool,
+    to: Option<&'a str>,
+    preset: Option<&'a str>,
+    source: &'static str,
+    license: Option<&'static str>,
+    auth: Option<()>,
+}
+
+fn request_dir() -> PathBuf {
+    std::env::var_os("CONVT_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("convt"))
+}
+
+fn handoff(paths: &[PathBuf], target: &str) -> Result<()> {
+    static REQUEST_ID: AtomicUsize = AtomicUsize::new(0);
+    let dir = request_dir();
+    std::fs::create_dir_all(&dir).map_err(|_| error())?;
+    let id = format!(
+        "{}-{}",
+        std::process::id(),
+        REQUEST_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let request = ExplorerRequest {
+        files: paths,
+        show_progress: true,
+        to: Some(target),
+        preset: None,
+        source: "Cli",
+        license: None,
+        auth: None,
+    };
+    let bytes = serde_json::to_vec(&request).map_err(|_| error())?;
+    let temp = dir.join(format!("request-{id}.tmp"));
+    let path = dir.join(format!("request-{id}.json"));
+    std::fs::write(&temp, bytes).map_err(|_| error())?;
+    std::fs::rename(temp, path).map_err(|_| error())?;
+    Ok(())
 }
 fn probe(path: &Path) -> Option<Vec<String>> {
     let mut child = Command::new(install_dir().ok()?.join("convt.exe"))
@@ -280,9 +326,8 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
         if paths.is_empty() {
             return Err(error());
         }
+        handoff(&paths, target)?;
         Command::new(install_dir()?.join("convt-app.exe"))
-            .args(["open", "--show-progress", "--to", target, "--"])
-            .args(paths)
             .creation_flags(CREATE_NO_WINDOW.0)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
