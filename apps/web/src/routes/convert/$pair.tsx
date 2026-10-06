@@ -3,6 +3,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { ConversionPage } from "#/components/convert/conversion-page";
 import { conversionStructuredData, pageDescription, pageTitle } from "#/lib/conversion-copy";
 import { conversionBySlug, slugOf } from "#/lib/conversions";
+import { fontPreloads } from "#/lib/font-preloads";
 import { seo } from "#/lib/site";
 
 // /convert/heic-to-jpg and the rest. The pages come from src/lib/conversions.ts; any
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/convert/$pair")({
     return {
       ...tags,
       meta: [...tags.meta, { name: "theme-color", content: "#0a0b0b" }],
+      links: [...tags.links, ...fontPreloads],
       scripts: [
         { type: "application/ld+json", children: JSON.stringify(conversionStructuredData(c)) },
       ],

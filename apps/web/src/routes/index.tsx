@@ -1,9 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import geistMonoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url";
-import geistUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
-
 import { LandingPage } from "#/components/landing/landing-page";
+import { fontPreloads } from "#/lib/font-preloads";
 import { SITE_NAME, SITE_ORIGIN, seo } from "#/lib/site";
 
 const title = "convt: convert any file with a right-click";
@@ -49,21 +47,7 @@ export const Route = createFileRoute("/")({
         // The glow behind the hero is the largest paint, but CSS hides it from the preload
         // scanner, so ask for it up front.
         { rel: "preload", as: "image", href: "/landing/dither-glow.png", fetchPriority: "high" },
-        // Both fonts are in the first paint; without these they load only after the CSS.
-        {
-          rel: "preload",
-          as: "font",
-          type: "font/woff2",
-          href: geistUrl,
-          crossOrigin: "anonymous",
-        },
-        {
-          rel: "preload",
-          as: "font",
-          type: "font/woff2",
-          href: geistMonoUrl,
-          crossOrigin: "anonymous",
-        },
+        ...fontPreloads,
       ],
       scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
     };

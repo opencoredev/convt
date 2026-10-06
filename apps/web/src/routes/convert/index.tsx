@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { HubPage } from "#/components/convert/hub-page";
 import { hubDescription, hubStructuredData, hubTitle } from "#/lib/conversion-copy";
+import { fontPreloads } from "#/lib/font-preloads";
 import { seo } from "#/lib/site";
 
 export const Route = createFileRoute("/convert/")({
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/convert/")({
     return {
       ...tags,
       meta: [...tags.meta, { name: "theme-color", content: "#0a0b0b" }],
+      links: [...tags.links, ...fontPreloads],
       scripts: [{ type: "application/ld+json", children: JSON.stringify(hubStructuredData()) }],
     };
   },
