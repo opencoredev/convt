@@ -1904,7 +1904,11 @@ fn retry_keeps_the_options_and_folder_a_conversion_asked_for(cx: &mut TestAppCon
     let Outcome::Done(outputs) = &retried.outcome else {
         panic!("the retry failed: {:?}", retried.outcome);
     };
-    assert_eq!(outputs[0].parent(), Some(out.as_path()));
+    // Compare canonical paths: on macOS the temp dir is /var, a symlink to /private/var.
+    assert_eq!(
+        outputs[0].parent().map(|p| p.canonicalize().unwrap()),
+        Some(out.canonicalize().unwrap())
+    );
     let (w, h) = image::image_dimensions(&outputs[0]).unwrap();
     assert_eq!((w, h), (2, 2), "the size option was dropped");
 }
