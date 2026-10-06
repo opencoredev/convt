@@ -55,7 +55,7 @@ if (-not $Office) { throw 'LibreOffice executable missing' }
 $RuntimeDlls = Get-ChildItem "$Out/*" -Include 'msvcp*.dll','vcruntime*.dll','concrt*.dll','vccorlib*.dll'
 if (-not $RuntimeDlls) { throw 'Document pack CRT closure missing' }
 $RuntimeDlls | Copy-Item -Destination $Office.Directory.FullName
-rustc --edition=2024 -C opt-level=2 -C link-arg=/Brepro "$PSScriptRoot/document-launcher.rs" -o "$Work/soffice.exe"
+rustc --edition=2024 -C opt-level=2 -C target-feature=+crt-static -C link-arg=/Brepro "$PSScriptRoot/document-launcher.rs" -o "$Work/soffice.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Document launcher build failed' }
 $Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" "$Out/documents.tar.gz"
 if ($LASTEXITCODE -ne 0 -or $Hash -notmatch '^[a-f0-9]{64}$') { throw 'Document archive creation failed' }
