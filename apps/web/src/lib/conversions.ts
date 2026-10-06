@@ -260,10 +260,13 @@ export const conversions: Conversion[] = [
     engine: "image",
     why: "Saved a WebP from a website and need it somewhere that only takes JPG? Converting gives you a photo every app and form accepts.",
     notes: [
-      "JPG has no transparency. If the WebP has see-through areas, convert to PNG instead.",
+      "JPG has no transparency, so see-through areas become white. Pick another color with `--background`, or convert to PNG to keep them.",
       "Set the JPG quality with `-q`.",
     ],
-    options: [{ flag: "-q 85", does: "JPG quality from 1 to 100" }],
+    options: [
+      { flag: "-q 85", does: "JPG quality from 1 to 100" },
+      { flag: "--background black", does: "Color for see-through areas: white, black or #rrggbb" },
+    ],
   },
   {
     from: "png",
@@ -272,12 +275,16 @@ export const conversions: Conversion[] = [
     engine: "image",
     why: "Screenshots and exports often come out as PNG, which makes big files for anything photographic. JPG is a fraction of the size and fine for sharing or uploading.",
     notes: [
-      "JPG has no transparency. Keep PNG or use WebP if you need see-through areas.",
+      "JPG has no transparency, so see-through areas become white. Pick another color with `--background`, or keep PNG or WebP if you need them.",
       "Shrink large images in the same step with `--max-size`.",
     ],
     options: [
       { flag: "-q 85", does: "JPG quality from 1 to 100" },
       { flag: "--max-size 2000", does: "Longest edge in pixels" },
+      {
+        flag: '--background "#ff8800"',
+        does: "Color for see-through areas: white, black or #rrggbb",
+      },
     ],
   },
   {
@@ -334,9 +341,12 @@ export const conversions: Conversion[] = [
     why: "Logos and icons often come as SVG, but slide decks, documents, social sites and many apps need a pixel image. PNG keeps the transparent background.",
     notes: [
       "By default the PNG is the size the SVG declares. Render it larger with `--dpi`: 96 is the SVG's own size, so 192 doubles it.",
-      "Transparent areas stay transparent.",
+      "Transparent areas stay transparent, or fill them with a color using `--background`.",
     ],
-    options: [{ flag: "--dpi 384", does: "Render at four times the SVG's own size" }],
+    options: [
+      { flag: "--dpi 384", does: "Render at four times the SVG's own size" },
+      { flag: "--background white", does: "Fill see-through areas with a color" },
+    ],
   },
   {
     from: "png",
