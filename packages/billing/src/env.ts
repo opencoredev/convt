@@ -124,7 +124,7 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
     mail,
     siteUrl,
     alertEmail: str(raw, "ALERT_EMAIL") ?? null,
-    downloadUrl: str(raw, "DOWNLOAD_URL") ?? `${siteUrl}/download/mac`,
+    downloadUrl: str(raw, "DOWNLOAD_URL") ?? `${siteUrl}/download`,
     signingSeed: need("LICENSE_SIGNING_KEY"),
     licensePublicKey: str(raw, "LICENSE_PUBLIC_KEY") ?? null,
     devPublicKeys: (str(raw, "DEV_LICENSE_PUBKEYS") ?? "")

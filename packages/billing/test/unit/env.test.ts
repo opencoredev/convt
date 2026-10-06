@@ -109,3 +109,10 @@ test("staging uses sandbox with public URLs and a separate non-dev signing key",
     ),
   ).rejects.toThrow(/dev signing key/);
 });
+
+test("license mail defaults to the site's download page and allows an override", () => {
+  expect(readBillingEnv(prod).downloadUrl).toBe("https://convt.app/download");
+  expect(
+    readBillingEnv({ ...prod, DOWNLOAD_URL: "https://downloads.convt.app/release" }).downloadUrl,
+  ).toBe("https://downloads.convt.app/release");
+});
