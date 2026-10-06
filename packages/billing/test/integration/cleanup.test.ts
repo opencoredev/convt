@@ -21,8 +21,8 @@ test("billing cleans expired auth rows in bounded batches, retaining live rows a
     ('old_code', 'sign-in:old', 'x', ${expired}), ('live_code', 'sign-in:live', 'x', ${live})`);
   await h.owner.execute(sql`
     insert into rate_limits (id, key, count, last_request) values
-    ('old_rate', 'old', 1, ${now.getTime() - 86400001}),
-    ('live_rate', 'live', 1, ${now.getTime() - 86400000})`);
+    ('old_rate', 'old', 1, ${now.getTime() - 90000000}),
+    ('live_rate', 'live', 1, ${now.getTime() - 82800000})`);
   await h.owner.execute(sql`
     insert into otp_send_limits (key, window_start, count, expires_at) values
     ('old', ${expired}, 1, ${expired}), ('live', ${now}, 1, ${live})`);

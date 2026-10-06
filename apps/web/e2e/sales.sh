@@ -6,7 +6,8 @@ sign_in_code new@convt.test
 before=$(owner_sql 'select count(*) from checkouts')
 status=$(curl -sS -o /dev/null -w '%{http_code}' "$E2E_URL/checkout/pro?interval=month")
 [[ $status == 403 ]] && pass 'direct guest Pro checkout refused' || fail "Pro returned $status"
-ab eval 'fetch("/checkout/pro?interval=year").then(async r => ({status:r.status, body:await r.text()}))' | tee "$E2E_SHOTS/pro-refusal.json"
+response=$(ab eval 'fetch("/checkout/pro?interval=year").then(async r => ({status:r.status, body:await r.text()}))')
+[[ $response == *'"status": 403'* && $response == *'Pro is coming soon'* ]] && pass 'direct authenticated Pro checkout refused' || fail "$response"
 response=$(ab eval 'import("/src/server/billing-fns.ts").then(m => m.enrollApi({data:{cap:"20"}}))')
 [[ $response == *'API billing is coming soon.'* ]] && pass 'direct authenticated API enrollment refused' || fail "$response"
 [[ $(owner_sql 'select count(*) from checkouts') == "$before" ]] && pass 'refused requests created no checkouts' || fail 'cloud checkout was created'
