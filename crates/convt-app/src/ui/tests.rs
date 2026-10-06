@@ -1771,6 +1771,8 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
     }
 }
 
+// Unix permission bits make the folder unreadable; Windows has no equivalent here.
+#[cfg(unix)]
 #[test]
 fn an_unreadable_folder_does_not_hide_the_others() {
     use std::os::unix::fs::PermissionsExt;
