@@ -53,6 +53,9 @@
         padding-bottom: 24px;
       }
       header a {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         color: #edefee;
         font-weight: 600;
         font-size: 17px;
@@ -125,7 +128,30 @@
     </style>
   </head>
   <body>
-    <header><a href="/">convt</a></header>
+    <header>
+      <a href="/"
+        ><svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+          <defs>
+            <clipPath id="mark-source"><rect x="2" y="2" width="19" height="19" rx="5" /></clipPath>
+            <linearGradient id="mark-green" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#46d08b" />
+              <stop offset="1" stop-color="#1fa463" />
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="19" height="19" rx="5" fill="#edefee" />
+          <rect x="11" y="11" width="19" height="19" rx="5" fill="url(#mark-green)" />
+          <rect
+            x="11"
+            y="11"
+            width="19"
+            height="19"
+            rx="5"
+            fill="#a6f0c8"
+            clip-path="url(#mark-source)"
+          /></svg
+        >convt</a
+      >
+    </header>
     <main>{{content}}</main>
     <footer>
       <span>© 2026 convt</span><a href="/about">About</a><a href="/privacy">Privacy</a
