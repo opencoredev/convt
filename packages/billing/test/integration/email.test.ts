@@ -2,9 +2,10 @@
 // skipped rows, the 23-hour ambiguity rule, error redaction and retention.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { sequenzyTransport } from "@convt/mail";
 import { sql } from "drizzle-orm";
 
-import { outboxRetention, resolveOutbox, safeError } from "../../src/outbox";
+import { drainOutbox, outboxRetention, resolveOutbox, safeError } from "../../src/outbox";
 import { trialEndingScan } from "../../src/reconcile";
 import { createHarness, type Harness } from "../../src/testing";
 
@@ -231,4 +232,44 @@ describe("outbox", () => {
     await h.service.withCtx((c) => outboxRetention(c));
     expect((await row("retention@convt.test")).payload).toBeNull();
   });
+});
+
+test("Sequenzy outbox honors Retry-After and sends frozen HTML with the row key", async () => {
+  await desktopEmail("sequenzy@convt.test");
+  const before = await row("sequenzy@convt.test");
+  const requests: string[] = [];
+  const mail = sequenzyTransport({
+    apiKey: "sq_fake",
+    fetch: Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        expect(new Headers(init?.headers).get("idempotency-key")).toBe(before.id);
+        requests.push(String(init?.body));
+        if (requests.length === 1)
+          return Response.json(
+            { success: false, retryable: true },
+            { status: 429, headers: { "Retry-After": "180" } },
+          );
+        return Response.json({ success: true, emailSendId: "seq_send_1", jobId: "seq_job_1" });
+      },
+      { preconnect: fetch.preconnect },
+    ),
+  });
+  const drain = () => h.service.withCtx((c) => drainOutbox({ ...c, mail }));
+  expect((await drain()).retried).toBe(1);
+  const pending = await row("sequenzy@convt.test");
+  expect(pending.status).toBe("pending");
+  const [stored] = await h.q<{ delay: number; unknown_outcome_at: Date | null }>(
+    sql`select extract(epoch from (next_attempt_at - last_attempt_at))::int as delay, unknown_outcome_at from email_outbox where id = ${before.id}`,
+  );
+  expect(stored.delay).toBe(180);
+  expect(stored.unknown_outcome_at).toBeNull();
+  h.mock.advance(179000);
+  expect((await drain()).claimed).toBe(0);
+  h.mock.advance(2000);
+  expect((await drain()).sent).toBe(1);
+  expect(requests[0]).toBe(requests[1]);
+  const [sent] = await h.q<{ status: string; provider_message_id: string }>(
+    sql`select status, provider_message_id from email_outbox where id = ${before.id}`,
+  );
+  expect(sent).toEqual({ status: "sent", provider_message_id: "seq_send_1" });
 });

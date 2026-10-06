@@ -5,14 +5,14 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/index.ts",
   // Production values. Secrets (POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET,
-  // RESEND_API_KEY, LICENSE_SIGNING_KEY) are set with `wrangler secret put` on this
+  // SEQUENZY_API_KEY, LICENSE_SIGNING_KEY) are set with `wrangler secret put` on this
   // Worker only; the site Worker never holds them. Local development overrides
   // these from apps/billing/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",
     "SITE_URL": "https://convt.app",
     "BILLING_CATALOG": "production",
-    "MAIL_TRANSPORT": "resend",
+    "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
     // PLACEHOLDER: Leo's address for the daily billing digest.
     "ALERT_EMAIL": "",
@@ -42,7 +42,7 @@
         "BILLING_CATALOG": "sandbox",
         // PLACEHOLDER: the staging web Worker's origin.
         "SITE_URL": "https://convt-web-staging.<subdomain>.workers.dev",
-        "MAIL_TRANSPORT": "resend",
+        "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
         "ALERT_EMAIL": "",
         // PLACEHOLDER: staging's public signing key, separate from production.

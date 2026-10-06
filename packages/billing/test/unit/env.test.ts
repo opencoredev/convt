@@ -116,3 +116,14 @@ test("license mail defaults to the site's download page and allows an override",
     readBillingEnv({ ...prod, DOWNLOAD_URL: "https://downloads.convt.app/release" }).downloadUrl,
   ).toBe("https://downloads.convt.app/release");
 });
+
+test("Sequenzy requires its own key in production and staging, leaving Resend optional", () => {
+  for (const ENV of ["production", "staging"]) {
+    const raw = { ...prod, ENV, MAIL_TRANSPORT: "sequenzy" };
+    expect(() => readBillingEnv(raw)).toThrow(/SEQUENZY_API_KEY/);
+    expect(() => readBillingEnv({ ...raw, SEQUENZY_API_KEY: "  " })).toThrow(/SEQUENZY_API_KEY/);
+    expect(
+      readBillingEnv({ ...raw, RESEND_API_KEY: undefined, SEQUENZY_API_KEY: "sq_test" }).mail,
+    ).toEqual({ transport: "sequenzy", apiKey: "sq_test", from: "convt <hello@convt.app>" });
+  }
+});

@@ -11,6 +11,7 @@ export type AppEnv = {
   mail:
     | { transport: "mailpit"; url: string; from: string }
     | { transport: "log"; from: string }
+    | { transport: "sequenzy"; apiKey: string; from: string }
     | { transport: "resend"; apiKey: string; from: string };
   oauthMock: { url: string; publicUrl: string } | null;
   github: { clientId: string; clientSecret: string } | null;
@@ -58,6 +59,10 @@ export function readEnv(raw: RawEnv): AppEnv {
   let mail: AppEnv["mail"];
   if (transport === "resend") {
     mail = { transport, apiKey: str(raw, "RESEND_API_KEY") ?? "", from };
+  } else if (transport === "sequenzy") {
+    const apiKey = str(raw, "SEQUENZY_API_KEY");
+    if (!apiKey) throw new Error("SEQUENZY_API_KEY is not set");
+    mail = { transport, apiKey, from };
   } else if (transport === "mailpit" || transport === "log") {
     if (production) throw new Error(`MAIL_TRANSPORT=${transport} is refused in production`);
     if (transport === "mailpit") {

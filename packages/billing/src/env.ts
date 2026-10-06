@@ -11,6 +11,7 @@ export type BillingEnv = {
   catalogEnv: CatalogEnv;
   polar: { accessToken: string; apiUrl: string; webhookSecret: string; portalOrigin: string };
   mail:
+    | { transport: "sequenzy"; apiKey: string; from: string }
     | { transport: "resend"; apiKey: string; apiUrl: string; from: string }
     | { transport: "log"; from: string };
   siteUrl: string;
@@ -82,6 +83,8 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
       apiUrl: str(raw, "RESEND_API_URL") ?? "https://api.resend.com",
       from,
     };
+  } else if (transport === "sequenzy") {
+    mail = { transport, apiKey: need("SEQUENZY_API_KEY"), from };
   } else if (transport === "log") {
     if (production) throw new ConfigError("MAIL_TRANSPORT=log is refused in production");
     mail = { transport, from };

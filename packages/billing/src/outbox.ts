@@ -263,9 +263,14 @@ async function sendOne(ctx: BillingContext, row: Row): Promise<keyof Omit<DrainR
   }
   const unknownAt = sent.unknown ? done : row.unknown_outcome_at;
   const next = new Date(
-    done.getTime() + backoffMinutes[Math.min(attempts - 1, backoffMinutes.length - 1)] * 60_000,
+    done.getTime() +
+      Math.max(
+        backoffMinutes[Math.min(attempts - 1, backoffMinutes.length - 1)] * 60_000,
+        sent.retryAfterMs ?? 0,
+      ),
   );
-  // Resend keeps a key 24 hours. Once a retry would land past 23 hours after the
+  // Keep the conservative 23-hour cutoff for both providers (Resend keeps keys
+  // 24 hours, Sequenzy 14 days). Once a retry would land past 23 hours after the
   // first attempt and an earlier attempt might have been accepted, a retry could
   // send a second copy, so the row stops and waits for Leo.
   if (unknownAt && next.getTime() - firstAttempt.getTime() > ambiguousAfterMs) {

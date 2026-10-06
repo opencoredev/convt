@@ -5,13 +5,13 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   // Production values. Secrets (BETTER_AUTH_SECRET, GITHUB_CLIENT_SECRET,
-  // GOOGLE_CLIENT_SECRET, RESEND_API_KEY) are set with `wrangler secret put`.
+  // GOOGLE_CLIENT_SECRET, SEQUENZY_API_KEY) are set with `wrangler secret put`.
   // Local development overrides these from apps/web/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",
     "SALES": "desktop",
     "BETTER_AUTH_URL": "https://convt.app",
-    "MAIL_TRANSPORT": "resend",
+    "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
   },
   // PLACEHOLDER id: Leo creates the Hyperdrive config (caching disabled) for the
@@ -31,7 +31,7 @@
         "SALES": "desktop",
         // PLACEHOLDER: fill the account's workers.dev subdomain before deploying.
         "BETTER_AUTH_URL": "https://convt-web-staging.<subdomain>.workers.dev",
-        "MAIL_TRANSPORT": "resend",
+        "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
       },
       // PLACEHOLDER: staging convt_web Hyperdrive, caching disabled.

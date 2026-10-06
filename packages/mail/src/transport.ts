@@ -19,14 +19,16 @@ export type SendResult =
       ok: false;
       /** `retry`: safe to try again with the same key. `dead`: never retry. */
       outcome: "retry" | "dead";
-      /** True when Resend may have accepted the message (timeout, network error, 5xx). */
+      /** True when the provider may have accepted the message (timeout, network error, 5xx). */
       unknown: boolean;
+      /** Minimum delay requested by the provider, in milliseconds. */
+      retryAfterMs?: number;
       status: number | null;
       code: string;
     };
 
 export type MailTransport = {
-  name: "resend" | "mailpit" | "log";
+  name: "sequenzy" | "resend" | "mailpit" | "log";
   send(email: OutgoingEmail, idempotencyKey: string): Promise<SendResult>;
 };
 

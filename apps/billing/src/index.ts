@@ -19,7 +19,7 @@ import {
   validateCatalog,
 } from "@convt/billing";
 import { createDb } from "@convt/db";
-import { logTransport, resendTransport } from "@convt/mail";
+import { logTransport, resendTransport, sequenzyTransport } from "@convt/mail";
 import pg from "pg";
 
 type Env = Record<string, unknown> & { HYPERDRIVE_BILLING: { connectionString: string } };
@@ -51,7 +51,9 @@ function setup(raw: Env) {
     mail:
       env.mail.transport === "resend"
         ? resendTransport({ apiKey: env.mail.apiKey, baseUrl: env.mail.apiUrl })
-        : logTransport(),
+        : env.mail.transport === "sequenzy"
+          ? sequenzyTransport({ apiKey: env.mail.apiKey })
+          : logTransport(),
     signingKey: () => key,
     config: {
       siteUrl: env.siteUrl,
