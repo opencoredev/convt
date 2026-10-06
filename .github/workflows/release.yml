@@ -149,7 +149,7 @@ jobs:
           trap 'rm -f "$key"' EXIT
           printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
           if [ -n "$HISTORY_URL" ]; then
-            curl --proto '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
+            curl --location --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
             bun run release:manifest unpack-history "$RUNNER_TEMP/history-signed.json" "$RUNNER_TEMP/history.json"
             export CONVT_RELEASE_HISTORY="$RUNNER_TEMP/history.json"
           fi

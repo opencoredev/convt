@@ -95,7 +95,7 @@ jobs:
         run: |
           if [ -n "$HISTORY_URL" ]; then
             case "$HISTORY_URL" in https://*) ;; *) exit 2 ;; esac
-            curl --proto '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
+            curl --location --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
             bun run release:manifest unpack-history "$RUNNER_TEMP/history-signed.json" "$RUNNER_TEMP/history.json"
             echo "CONVT_RELEASE_HISTORY=$RUNNER_TEMP/history.json" >> "$GITHUB_ENV"
           elif [ "$DRY_RUN" = false ] && [ "$INITIAL_RELEASE" != true ]; then
