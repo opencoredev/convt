@@ -4,9 +4,9 @@ import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
 const links = [
-  { label: "Formats", href: "#formats" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "API", href: "#api" },
+  { label: "Formats", href: "/#formats" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "API", href: "/#api" },
   // The repo is private until launch.
   ...(LAUNCHED ? [{ label: "GitHub", href: GITHUB_URL }] : []),
 ];

@@ -25,11 +25,11 @@ const config = defineConfig({
     // Sec-Fetch-Site: same-origin, server functions included.
     tanstackStart({
       serverFns: { disableCsrfMiddlewareWarning: true },
-      // `bun run build:landing` prerenders only the home page to static HTML for the
+      // `bun run build:landing` prerenders the home and brand pages to static HTML for the
       // coming-soon deploy on Vercel (see LAUNCHED in src/lib/site.ts).
       ...(landingOnly && {
         prerender: { enabled: true, autoStaticPathsDiscovery: false, crawlLinks: false },
-        pages: [{ path: "/" }],
+        pages: [{ path: "/" }, { path: "/brand" }],
       }),
     }),
     viteReact(),

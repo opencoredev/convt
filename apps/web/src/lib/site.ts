@@ -54,6 +54,7 @@ export const routes = {
   privacy: "/privacy",
   terms: "/terms",
   contact: "/contact",
+  brand: "/brand",
   signIn: "/sign-in",
 } as const;
 
@@ -70,6 +71,7 @@ export const sitemapPaths = [
   routes.changelog,
   routes.apiDocs,
   routes.contact,
+  routes.brand,
   routes.privacy,
   routes.terms,
 ] as const;

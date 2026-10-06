@@ -108,7 +108,18 @@ export function Footer() {
           )}
         </div>
         <div className="flex flex-col gap-2 border-t border-line pt-6 sm:flex-row sm:justify-between">
-          <p className="text-[13px]/[16px] text-land-muted">© 2026 convt</p>
+          <p className="flex gap-4 text-[13px]/[16px] text-land-muted">
+            © 2026 convt
+            {/* The brand page ships with the coming-soon site, so it is linked before launch too. */}
+            {!LAUNCHED && (
+              <a
+                href={routes.brand}
+                className={cx("rounded-sm transition-colors hover:text-ink", focusRing)}
+              >
+                Brand kit
+              </a>
+            )}
+          </p>
           <p className="font-mono text-[12px]/[16px] text-land-muted">Built with Rust and GPUI</p>
         </div>
       </Container>

@@ -2,7 +2,7 @@
 
 Copies landing-static/ (vercel.json, llms.txt, robots.txt and the Markdown pages),
 renders about, privacy and 404 to HTML with page.html, inlines the home page CSS,
-and writes sitemap.xml.
+moves the prerendered brand page to brand.html, and writes sitemap.xml.
 The Markdown files stay in the output: Vercel serves them to agents that send
 Accept: text/markdown (see the routes in vercel.json).
 """
@@ -18,7 +18,7 @@ src = Path(__file__).resolve().parent.parent / "landing-static"
 out = Path(sys.argv[1])
 origin = "https://convt.app"
 
-for name in ["vercel.json", "robots.txt", "llms.txt", "index.md", "about.md", "privacy.md", "404.md"]:
+for name in ["vercel.json", "robots.txt", "llms.txt", "index.md", "about.md", "privacy.md", "brand.md", "404.md"]:
     shutil.copy(src / name, out / name)
 
 
@@ -100,9 +100,12 @@ loader = (
 page = page.replace(entry[0], loader, 1)
 index.write_text(page)
 
+# The prerender writes /brand as brand/index.html; serve it as brand.html like the other pages.
+(out / "brand" / "index.html").rename(out / "brand.html")
+
 today = datetime.date.today().isoformat()
 urls = "".join(
-    f"  <url><loc>{origin}{path}</loc><lastmod>{today}</lastmod></url>\n" for path in ["/", "/about", "/privacy"]
+    f"  <url><loc>{origin}{path}</loc><lastmod>{today}</lastmod></url>\n" for path in ["/", "/about", "/privacy", "/brand"]
 )
 (out / "sitemap.xml").write_text(
     '<?xml version="1.0" encoding="UTF-8"?>\n'

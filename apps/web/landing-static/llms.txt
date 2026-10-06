@@ -30,3 +30,4 @@ Right-click a file, pick a format, and the converted file is written next to the
 - [Home](https://convt.app/index.md): what convt does, the 40 supported formats, engines and pricing
 - [About](https://convt.app/about.md): why convt exists and how it is built
 - [Privacy](https://convt.app/privacy.md): what this website collects (nothing on purpose)
+- [Brand kit](https://convt.app/brand.md): the logo, wordmark, colors and type, with links to every SVG and PNG

@@ -1,0 +1,26 @@
+{
+  "zipBytes": 163717,
+  "assets": {
+    "convt-mark": {
+      "png": [1024, 1024]
+    },
+    "convt-mark-black": {
+      "png": [1024, 1024]
+    },
+    "convt-mark-white": {
+      "png": [1024, 1024]
+    },
+    "convt-wordmark-black": {
+      "png": [1600, 424]
+    },
+    "convt-wordmark-white": {
+      "png": [1600, 424]
+    },
+    "convt-lockup-black": {
+      "png": [2000, 552]
+    },
+    "convt-lockup-white": {
+      "png": [2000, 552]
+    }
+  }
+}
