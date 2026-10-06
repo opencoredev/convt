@@ -43,9 +43,10 @@ Copy-Item "$Work/pdfium/bin/pdfium.dll" $Out
 Copy-Item "$Work/pdfium/LICENSE" "$Out/licenses/pdfium-LICENSE.txt"
 if (Test-Path "$Work/pdfium/licenses") { Copy-Item "$Work/pdfium/licenses" "$Out/licenses/pdfium" -Recurse }
 & "$PSScriptRoot/build-native.ps1" -Cache $Cache -Work "$Work/codecs" -Out $Out -Lock $Lock
+# lessmsi needs native backslashes in its MSI path, including cabinet lookup.
 # Windows PowerShell 5.1 needs a doubled trailing slash in native arguments.
 Expand-Archive "$Cache/lessmsi.zip" "$Work/lessmsi" -Force
-& "$Work/lessmsi/lessmsi.exe" x "$Cache/libreoffice.msi" "$Work\office\\" | Out-File "$Work/office-extraction.log" -Encoding utf8
+& "$Work/lessmsi/lessmsi.exe" x (Join-Path $Cache 'libreoffice.msi') "$Work\office\\" | Out-File "$Work/office-extraction.log" -Encoding utf8
 if ($LASTEXITCODE -ne 0) { throw 'LibreOffice MSI extraction failed' }
 $Office = Get-ChildItem "$Work/office" -Recurse -Filter soffice.com | Select-Object -First 1
 if (-not $Office) { throw 'LibreOffice executable missing' }
