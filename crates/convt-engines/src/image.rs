@@ -75,9 +75,7 @@ pub(crate) fn apply_background(
     match (options.background, keeps) {
         (Some(Background::Color(color)), _) => Ok(flatten(img, color)),
         (Some(Background::Transparent), true) | (None, true) => Ok(img),
-        (Some(Background::Transparent), false) if img.color().has_alpha() => {
-            Err(Error::InvalidOption(no_transparency(to)))
-        }
+        (Some(Background::Transparent), false) => Err(Error::InvalidOption(no_transparency(to))),
         (_, false) => Ok(flatten(img, [255, 255, 255])),
     }
 }
@@ -89,8 +87,54 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
     if !matches!(options.background, Some(Background::Color(_))) {
         return Ok(());
     }
-    let img = image::open(path).map_err(failed)?;
-    encode(img, "png", options, path)
+    let reader = png::Decoder::new(std::io::BufReader::new(File::open(path)?))
+        .read_info()
+        .map_err(failed)?;
+    let source = reader.info();
+    let img = apply_background(image::open(path).map_err(failed)?, "png", options)?;
+    let mut info = png::Info::with_size(img.width(), img.height());
+    info.pixel_dims = source.pixel_dims;
+    info.source_gamma = source.gamma();
+    info.source_chromaticities = source.chromaticities();
+    info.srgb = source.srgb;
+    info.icc_profile = source.icc_profile.clone();
+    info.color_type = png::ColorType::Rgb;
+    let bytes = match img {
+        DynamicImage::ImageRgb16(rgb) => {
+            info.bit_depth = png::BitDepth::Sixteen;
+            rgb.into_raw()
+                .into_iter()
+                .flat_map(u16::to_be_bytes)
+                .collect()
+        }
+        _ => {
+            info.bit_depth = png::BitDepth::Eight;
+            img.to_rgb8().into_raw()
+        }
+    };
+    let mut out = BufWriter::new(File::create(path)?);
+    let mut writer = png::Encoder::with_info(&mut out, info)
+        .map_err(failed)?
+        .write_header()
+        .map_err(failed)?;
+    // png 0.18 decodes cICP, but its encoder does not emit it from Info.
+    if let Some(cicp) = source.coding_independent_code_points {
+        writer
+            .write_chunk(
+                png::chunk::cICP,
+                &[
+                    cicp.color_primaries,
+                    cicp.transfer_function,
+                    cicp.matrix_coefficients,
+                    u8::from(cicp.is_video_full_range_image),
+                ],
+            )
+            .map_err(failed)?;
+    }
+    writer.write_image_data(&bytes).map_err(failed)?;
+    writer.finish().map_err(failed)?;
+    std::io::Write::flush(&mut out)?;
+    Ok(())
 }
 
 /// The error for asking a format without transparency to keep it.

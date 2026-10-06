@@ -354,3 +354,140 @@ fn scaled_jpeg_frames_keep_ratios_larger_than_jfif_density_fields() {
         "display ratio: {display_ratio}"
     );
 }
+
+#[test]
+fn opaque_images_reject_transparent_jpeg_and_ppm() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("opaque.png");
+    image::RgbImage::from_pixel(8, 8, image::Rgb([255, 0, 0]))
+        .save(&src)
+        .unwrap();
+    for to in ["jpeg", "ppm"] {
+        let error = convert(&src, to, Some(Background::Transparent)).unwrap_err();
+        assert!(
+            error.to_string().contains("can't store transparency"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn colored_png_video_frames_keep_the_pixel_aspect_ratio() {
+    let Some(ffmpeg) = convt_engines::ffmpeg::ffmpeg_path() else {
+        eprintln!("SKIP PNG pixel aspect ratio: FFmpeg missing");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("anamorphic.mov");
+    assert!(
+        std::process::Command::new(ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=red@0:s=720x576:d=0.1,format=rgba,setsar=16/15",
+                "-c:v",
+                "qtrle"
+            ])
+            .arg(&input)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let plain = convert(&input, "png", None).unwrap();
+    let colored = convert(&input, "png", Some(Background::BLACK)).unwrap();
+    fn phys(path: &Path) -> Vec<u8> {
+        let bytes = std::fs::read(path).unwrap();
+        let pos = bytes
+            .windows(4)
+            .position(|w| w == b"pHYs")
+            .expect("PNG pixel density");
+        bytes[pos + 4..pos + 13].to_vec()
+    }
+    assert_eq!(phys(&colored[0]), phys(&plain[0]));
+    assert_eq!(pixel(&colored[0], 1, 1), [0, 0, 0, 255]);
+}
+
+#[test]
+fn tagged_video_frames_keep_png_color_metadata_and_jpeg_colors() {
+    let Some(ffmpeg) = convt_engines::ffmpeg::ffmpeg_path() else {
+        eprintln!("SKIP tagged video colors: FFmpeg missing");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("tagged.mp4");
+    assert!(
+        std::process::Command::new(&ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=red:s=128x96:d=0.1,drawbox=x=32:y=0:w=32:h=96:color=green:t=fill,drawbox=x=64:y=0:w=32:h=96:color=blue:t=fill,drawbox=x=96:y=0:w=32:h=96:color=white:t=fill,scale=in_color_matrix=bt601:out_color_matrix=bt709",
+                "-c:v",
+                "libx264",
+                "-colorspace",
+                "bt709",
+                "-color_primaries",
+                "bt709",
+                "-color_trc",
+                "bt709"
+            ])
+            .arg(&input)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let plain = convert(&input, "png", None).unwrap();
+    let colored = convert(&input, "png", Some(Background::BLACK)).unwrap();
+    let info = |path: &Path| {
+        png::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).unwrap()))
+            .read_info()
+            .unwrap()
+            .info()
+            .clone()
+    };
+    let before = info(&plain[0]);
+    let after = info(&colored[0]);
+    if before.gamma().is_none() {
+        eprintln!("FFmpeg did not emit PNG transfer metadata; comparing available tags only");
+    }
+    assert_eq!(after.gamma(), before.gamma());
+    assert_eq!(after.chromaticities(), before.chromaticities());
+    assert_eq!(
+        after.coding_independent_code_points,
+        before.coding_independent_code_points
+    );
+    // JPEG viewers decode YCbCr as BT.601. Make the reference conversion
+    // honor the input BT.709 matrix explicitly, rather than mistagging its
+    // YCbCr samples as JPEG. Compare solid interiors to avoid chroma edges.
+    let reference = dir.path().join("reference.jpg");
+    assert!(
+        std::process::Command::new(ffmpeg)
+            .args(["-v", "error", "-y", "-i"])
+            .arg(&input)
+            .args(["-vf", "scale=in_color_matrix=bt709:out_color_matrix=bt601:in_range=limited:out_range=full", "-pix_fmt", "yuvj444p", "-frames:v", "1"])
+            .arg(&reference)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let jpeg = convert(&input, "jpeg", None).unwrap();
+    let want = image::open(reference).unwrap().to_rgb8();
+    let got = image::open(&jpeg[0]).unwrap().to_rgb8();
+    assert_eq!(got.dimensions(), want.dimensions());
+    // Avoid chroma boundaries and compression noise: solid patch interiors.
+    for (x, y) in [(16, 48), (48, 48), (80, 48), (112, 48)] {
+        let a = got.get_pixel(x, y).0;
+        let b = want.get_pixel(x, y).0;
+        assert!(
+            a.iter().zip(b).all(|(&a, b)| a.abs_diff(b) <= 10),
+            "tagged frame at ({x},{y}): PNG-to-JPEG {a:?}, direct JPEG {b:?}"
+        );
+    }
+}

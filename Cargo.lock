@@ -1551,6 +1551,7 @@ dependencies = [
  "libc",
  "libloading 0.8.9",
  "pdfium-render",
+ "png 0.18.1",
  "resvg 0.48.1",
  "serde_json",
  "sha2 0.10.9",

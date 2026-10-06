@@ -1678,6 +1678,24 @@ fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, "background").as_deref(), Some("#FF8800"));
     click(cx, window, "background");
     assert!(shown(cx, window, "background-#ff8800"));
+    click(cx, window, "background-white");
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-#ff8800"));
+    click(cx, window, "background-#ff8800");
+    click(cx, window, "quality-smaller");
+    let before = cx.read(|cx| view.read(cx).conversion_options());
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-automatic"));
+    click(cx, window, "background-automatic");
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options(),
+            Options {
+                background: None,
+                ..before
+            }
+        )
+    });
 }
 
 #[gpui_kit::test]

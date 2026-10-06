@@ -713,8 +713,13 @@ impl QuickView {
                 .filter(|b| *b != Background::Transparent || to.keeps_transparency())
                 .collect();
             // A color a preset set stays pickable.
-            if let Some(custom) = current.filter(|c| !choices.contains(c)) {
-                choices.push(custom);
+            for custom in [current, shown_background(to, self.options.background)]
+                .into_iter()
+                .flatten()
+            {
+                if !choices.contains(&custom) {
+                    choices.push(custom);
+                }
             }
             let default = default_background(&self.app.read(cx).registry, to, &self.files);
             row_label(
@@ -727,9 +732,8 @@ impl QuickView {
                     180.,
                     false,
                     self.open == Some(Open::Background),
-                    choices
-                        .iter()
-                        .map(|b| Choice::new(b.id(), b.name()))
+                    std::iter::once(Choice::new("automatic", "Automatic"))
+                        .chain(choices.iter().map(|b| Choice::new(b.id(), b.name())))
                         .collect(),
                     p,
                     move |_, cx| {
