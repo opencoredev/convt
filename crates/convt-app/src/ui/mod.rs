@@ -107,6 +107,9 @@ pub fn route(request: Request, cx: &mut App) {
         // Silent conversions never download: a document that needs the pack
         // fails here and opens Quick convert, which offers it.
         app.update(cx, |s, cx| s.refresh_pack(cx));
+        if request.show_progress {
+            open_main(cx);
+        }
         let silent = app.update(cx, |s, cx| s.convert_silently(&request, cx));
         if let Err(e) = silent {
             tracing::info!(reason = %e, "opening Quick convert instead of converting in place");

@@ -20,6 +20,9 @@ pub enum Source {
 pub struct Request {
     #[serde(with = "wire_paths")]
     pub files: Vec<PathBuf>,
+    /// Explorer asks for the existing Activity window while the job runs.
+    #[serde(default)]
+    pub show_progress: bool,
     pub to: Option<String>,
     pub preset: Option<String>,
     pub source: Option<Source>,
@@ -107,6 +110,8 @@ pub fn parse_args(args: Vec<OsString>, cwd: &Path) -> Result<Command, String> {
         };
         match flag {
             Some("--") => only_files = true,
+            #[cfg(windows)]
+            Some("--show-progress") => req.show_progress = true,
             Some("--to") => req.to = Some(value("--to")?),
             Some("--preset") => req.preset = Some(value("--preset")?),
             Some(f) if f.starts_with("--to=") => req.to = Some(f[5..].into()),

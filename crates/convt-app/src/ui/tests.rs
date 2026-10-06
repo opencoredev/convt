@@ -642,6 +642,25 @@ fn type_key(
 }
 
 #[gpui_kit::test]
+fn explorer_request_opens_activity_and_converts_beside_the_input(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("explorer selection.png");
+    let mut request = cli(vec![png], Some("jpeg"), None);
+    request.show_progress = true;
+    cx.update(|cx| super::route(request, cx));
+    assert!(window_of::<MainView>(cx).is_some());
+    cx.read(|cx| assert!(!f.app.read(cx).quit_when_idle));
+    let job = f.last_job(cx);
+    wait_until(cx, "Explorer job", |cx| {
+        f.app
+            .read(cx)
+            .entry(job)
+            .is_some_and(|e| e.status.is_finished())
+    });
+    assert!(is_jpeg(&f.dir.path().join("explorer selection.jpg")));
+}
+
+#[gpui_kit::test]
 fn a_cli_request_with_a_target_converts_in_place_without_a_window(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let png = f.png("red dot.png");
