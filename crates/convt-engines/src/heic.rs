@@ -1,6 +1,8 @@
 //! HEIC and AVIF decoding and encoding through HEIF containers. On macOS the system's ImageIO (through `sips`)
 //! handles it; elsewhere libheif is loaded at runtime from
-//! `$CONVT_LIBHEIF_DIR`, next to the executable, or the system library path.
+//! an absolute `$CONVT_LIBHEIF_DIR`, next to the executable, or fixed bundle directories.
+//! Unix also searches system library names. Windows does not search PATH or the
+//! working directory; dependencies must be beside the library or in System32.
 //! Decoders produce PNG; encoders accept PNG when the matching plugin is available.
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
