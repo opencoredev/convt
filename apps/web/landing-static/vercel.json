@@ -6,7 +6,7 @@
   "outputDirectory": ".",
   "routes": [
     {
-      "src": "/(about|privacy)/",
+      "src": "/(about|privacy|brand)/",
       "status": 308,
       "headers": {
         "Location": "/$1"
@@ -35,7 +35,7 @@
       }
     },
     {
-      "src": "/(about|privacy)",
+      "src": "/(about|privacy|brand)",
       "has": [
         {
           "type": "header",
@@ -57,14 +57,14 @@
       }
     },
     {
-      "src": "/(about|privacy)",
+      "src": "/(about|privacy|brand)",
       "dest": "/$1.html",
       "headers": {
         "Vary": "Accept"
       }
     },
     {
-      "src": "/(about|privacy)\\.html",
+      "src": "/(about|privacy|brand)\\.html",
       "status": 308,
       "headers": {
         "Location": "/$1"

@@ -25,6 +25,7 @@ export const footerColumns = [
       { label: "Privacy", href: routes.privacy },
       { label: "Terms", href: routes.terms },
       { label: "Contact", href: routes.contact },
+      { label: "Brand", href: routes.brand },
     ],
   },
 ];

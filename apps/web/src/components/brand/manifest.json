@@ -1,0 +1,32 @@
+{
+  "zipBytes": 207134,
+  "assets": {
+    "convt-mark-on-dark": {
+      "png": [1024, 1024]
+    },
+    "convt-mark-on-light": {
+      "png": [1024, 1024]
+    },
+    "convt-mark-white": {
+      "png": [1024, 1024]
+    },
+    "convt-mark-black": {
+      "png": [1024, 1024]
+    },
+    "convt-app-icon": {
+      "png": [1024, 1024]
+    },
+    "convt-wordmark-on-dark": {
+      "png": [1600, 418]
+    },
+    "convt-wordmark-on-light": {
+      "png": [1600, 418]
+    },
+    "convt-lockup-on-dark": {
+      "png": [2400, 596]
+    },
+    "convt-lockup-on-light": {
+      "png": [2400, 596]
+    }
+  }
+}
