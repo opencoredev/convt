@@ -10,22 +10,22 @@ const rateLimitKeepMs = 86_400_000;
 export async function cleanupAuth(c: BillingContext) {
   const now = c.clock();
   const markers = await c.db.execute(sql`
-    delete from verifications where id in (
+    delete from verifications where expires_at < ${now} and id in (
       select id from verifications where identifier like 'otp-issued:%' and expires_at < ${now}
       order by expires_at, id limit ${batchSize}
     )`);
   const codes = await c.db.execute(sql`
-    delete from verifications where id in (
+    delete from verifications where expires_at < ${now} and id in (
       select id from verifications where identifier not like 'otp-issued:%' and expires_at < ${now}
       order by expires_at, id limit ${batchSize}
     )`);
   const rates = await c.db.execute(sql`
-    delete from rate_limits where id in (
+    delete from rate_limits where last_request < ${now.getTime() - rateLimitKeepMs} and id in (
       select id from rate_limits where last_request < ${now.getTime() - rateLimitKeepMs}
       order by last_request, id limit ${batchSize}
     )`);
   const sends = await c.db.execute(sql`
-    delete from otp_send_limits where key in (
+    delete from otp_send_limits where expires_at < ${now} and key in (
       select key from otp_send_limits where expires_at < ${now}
       order by expires_at, key limit ${batchSize}
     )`);

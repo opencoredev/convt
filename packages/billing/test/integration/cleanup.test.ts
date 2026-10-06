@@ -45,3 +45,68 @@ test("billing cleans expired auth rows in bounded batches, retaining live rows a
   expect(await h.q(sql`select id from rate_limits`)).toEqual([{ id: "live_rate" }]);
   expect(await h.q(sql`select key from otp_send_limits`)).toEqual([{ key: "live" }]);
 });
+
+test("cleanup retains rows refreshed while it waits for their transaction", async () => {
+  const lock = await h.tdb.open("owner");
+  const cases = [
+    {
+      table: "verifications",
+      id: "refresh-marker",
+      insert: sql`insert into verifications (id, identifier, value, expires_at) values ('refresh-marker', 'otp-issued:refresh', 'x', now() - interval '1 hour')`,
+      refresh: sql`update verifications set expires_at = now() + interval '1 hour' where id = 'refresh-marker'`,
+    },
+    {
+      table: "verifications",
+      id: "refresh-code",
+      insert: sql`insert into verifications (id, identifier, value, expires_at) values ('refresh-code', 'sign-in:refresh', 'x', now() - interval '1 hour')`,
+      refresh: sql`update verifications set expires_at = now() + interval '1 hour' where id = 'refresh-code'`,
+    },
+    {
+      table: "rate_limits",
+      id: "refresh-rate",
+      insert: sql`insert into rate_limits (id, key, count, last_request) values ('refresh-rate', 'refresh', 1, 0)`,
+      refresh: sql`update rate_limits set last_request = ${Date.now()} where id = 'refresh-rate'`,
+    },
+    {
+      table: "otp_send_limits",
+      id: "refresh-send",
+      insert: sql`insert into otp_send_limits (key, window_start, count, expires_at) values ('refresh-send', now(), 1, now() - interval '1 hour')`,
+      refresh: sql`update otp_send_limits set expires_at = now() + interval '1 hour' where key = 'refresh-send'`,
+    },
+  ];
+  for (const c of cases) {
+    await h.owner.execute(c.insert);
+    await lock.client.query("begin");
+    let pending: ReturnType<typeof h.service.cleanupAuth> | undefined;
+    try {
+      await lock.db.execute(c.refresh);
+      pending = h.service.cleanupAuth();
+      const deadline = Date.now() + 5000;
+      let waiting = false;
+      while (Date.now() < deadline) {
+        const [r] = await h.q<{ waiting: boolean }>(sql`
+          select exists (
+            select 1 from pg_locks l join pg_stat_activity a on a.pid = l.pid
+            where a.datname = current_database() and not l.granted
+          ) as waiting`);
+        if (r.waiting) {
+          waiting = true;
+          break;
+        }
+        await Bun.sleep(10);
+      }
+      expect(waiting).toBe(true);
+      await lock.client.query("commit");
+      await pending;
+      const id = c.table === "otp_send_limits" ? "key" : "id";
+      expect(
+        await h.q(
+          sql`select 1 from ${sql.identifier(c.table)} where ${sql.identifier(id)} = ${c.id}`,
+        ),
+      ).toHaveLength(1);
+    } finally {
+      await lock.client.query("rollback");
+      await pending;
+    }
+  }
+}, 30000);

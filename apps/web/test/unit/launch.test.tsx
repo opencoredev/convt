@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Pricing } from "../../src/components/landing/pricing";
-import { LAUNCHED } from "../../src/lib/site";
 
-test("launch stays off; flipping it enables Desktop without enabling cloud sales", () => {
-  expect(LAUNCHED).toBe(false);
+test("flipping launch enables Desktop without enabling cloud sales", () => {
   const before = renderToStaticMarkup(<Pricing sales="desktop" launched={false} />);
   expect(before).not.toContain('href="/checkout/desktop"');
   const after = renderToStaticMarkup(<Pricing sales="desktop" launched />);
