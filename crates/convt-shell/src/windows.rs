@@ -153,6 +153,23 @@ fn handoff(paths: &[PathBuf], target: &str) -> Result<()> {
     std::fs::rename(temp, path).map_err(|_| error())?;
     Ok(())
 }
+
+fn app_running() -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{MUTEX_QUERY_STATE, OpenMutexW};
+    let name: Vec<u16> = std::ffi::OsStr::new("Local\\convt-instance")
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    // SAFETY: valid NUL-terminated mutex name; the handle is closed below.
+    let Ok(handle) = (unsafe { OpenMutexW(MUTEX_QUERY_STATE, false, PCWSTR(name.as_ptr())) })
+    else {
+        return false;
+    };
+    unsafe { CloseHandle(handle) };
+    true
+}
 fn probe(path: &Path) -> Option<Vec<String>> {
     let mut child = Command::new(install_dir().ok()?.join("convt.exe"))
         .arg("targets")
@@ -327,13 +344,15 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
             return Err(error());
         }
         handoff(&paths, target)?;
-        Command::new(install_dir()?.join("convt-app.exe"))
-            .creation_flags(CREATE_NO_WINDOW.0)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| error())?;
+        if !app_running() {
+            Command::new(install_dir()?.join("convt-app.exe"))
+                .creation_flags(CREATE_NO_WINDOW.0)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|_| error())?;
+        }
         Ok(())
     }
     fn GetFlags(&self) -> Result<u32> {
