@@ -5,6 +5,7 @@
 
 export type AppEnv = {
   env: "production" | "development" | "test";
+  sales: "desktop" | "all";
   authUrl: string;
   authSecret: string;
   mail:
@@ -37,6 +38,8 @@ export function readEnv(raw: RawEnv): AppEnv {
   if (envName !== "production" && envName !== "development" && envName !== "test")
     throw new Error(`ENV must be production, development or test, not ${envName}`);
   const production = envName === "production";
+  const sales = str(raw, "SALES") ?? (production ? "desktop" : "all");
+  if (sales !== "desktop" && sales !== "all") throw new Error("SALES must be desktop or all");
   const authUrl = str(raw, "BETTER_AUTH_URL");
   const authSecret = str(raw, "BETTER_AUTH_SECRET");
   if (!authUrl) throw new Error("BETTER_AUTH_URL is not set");
@@ -80,6 +83,7 @@ export function readEnv(raw: RawEnv): AppEnv {
   };
   return {
     env: envName,
+    sales,
     authUrl: authUrl.replace(/\/$/, ""),
     authSecret,
     mail,

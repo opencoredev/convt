@@ -75,6 +75,7 @@ umask 077
 cat >apps/web/.dev.vars <<VARS
 # Written by scripts/dev-web.sh from .convt-dev/services.env. Never commit.
 ENV=development
+SALES=${SALES:-all}
 BETTER_AUTH_URL=$origin
 BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
 MAIL_TRANSPORT=mailpit

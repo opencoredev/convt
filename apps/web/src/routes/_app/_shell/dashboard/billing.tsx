@@ -194,9 +194,13 @@ function BillingPage() {
               ) : (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   {plan.status === "canceled" ? (
-                    <SecondaryLink href={`/checkout/pro?interval=${plan.interval}`}>
-                      Restart Pro
-                    </SecondaryLink>
+                    billing.sales === "all" ? (
+                      <SecondaryLink href={`/checkout/pro?interval=${plan.interval}`}>
+                        Restart Pro
+                      </SecondaryLink>
+                    ) : (
+                      <span className="text-[13px]/4 text-ink-2">Pro is coming soon.</span>
+                    )
                   ) : plan.status === "past_due" ? (
                     <PrimaryButton disabled={portal.busy} onClick={portal.open}>
                       Update card
@@ -242,9 +246,13 @@ function BillingPage() {
                   : "Pro is $12 a month or $96 a year, with a 7-day free trial. Desktop is $29 once and shows up under invoices."}
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <SecondaryLink href="/checkout/pro?interval=month">
-                  {billing.hadPro ? "Start Pro" : "Start free trial"}
-                </SecondaryLink>
+                {billing.sales === "all" ? (
+                  <SecondaryLink href="/checkout/pro?interval=month">
+                    {billing.hadPro ? "Start Pro" : "Start free trial"}
+                  </SecondaryLink>
+                ) : (
+                  <span className="text-[13px]/4 text-ink-2">Pro is coming soon.</span>
+                )}
                 <TextButton tone="muted" onClick={() => window.location.assign(links.pricing)}>
                   See pricing
                 </TextButton>

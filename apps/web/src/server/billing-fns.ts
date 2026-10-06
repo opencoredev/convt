@@ -107,6 +107,8 @@ export const enrollApi = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data, context: { userId, user, appEnv } }) => {
+    if (appEnv.sales !== "all")
+      return { ok: false as const, message: "API billing is coming soon." };
     const cents = parseCapDollars(data.cap);
     if (cents === null) return { ok: false as const, message: messages.bad_cap };
     const created = await billing().createCheckout({

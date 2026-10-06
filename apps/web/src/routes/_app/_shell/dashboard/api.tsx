@@ -87,7 +87,7 @@ function ApiPage() {
             </span>
           </SecondaryLink>
           <PrimaryButton
-            disabled={busy || api.enrollment.state !== "enrolled"}
+            disabled={busy || api.sales !== "all" || api.enrollment.state !== "enrolled"}
             title={
               api.enrollment.state !== "enrolled" ? "Add a card under API billing first" : undefined
             }
@@ -96,14 +96,18 @@ function ApiPage() {
               setShownKey(null);
             }}
           >
-            Create key
+            {api.sales === "all" ? "Create key" : "Coming soon"}
           </PrimaryButton>
         </div>
       </div>
 
-      <SecondaryLink href="/dashboard/api/convert" className="self-start">
-        Convert in your browser
-      </SecondaryLink>
+      {api.sales === "all" ? (
+        <SecondaryLink href="/dashboard/api/convert" className="self-start">
+          Convert in your browser
+        </SecondaryLink>
+      ) : (
+        <p className="text-sm text-ink-2">Cloud conversions are coming soon.</p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-error">
           {error}
@@ -165,7 +169,11 @@ function ApiPage() {
           </p>
         )}
       </Card>
-      <ApiEnrollmentCard enrollment={api.enrollment} blocked={api.enrollBlocked} />
+      <ApiEnrollmentCard
+        enrollment={api.enrollment}
+        blocked={api.enrollBlocked}
+        available={api.sales === "all"}
+      />
 
       <Card className="flex flex-col md:flex-row">
         <dl className="grid grid-cols-3 gap-5.5 border-b border-line p-6 md:flex md:w-[260px] md:shrink-0 md:flex-col md:border-r md:border-b-0">

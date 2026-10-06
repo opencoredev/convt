@@ -7,7 +7,7 @@ import { Pricing } from "./pricing";
 import { focusRing } from "./ui";
 
 /** convt.app home page. Always dark; the route sets `dark` on <html>. */
-export function LandingPage() {
+export function LandingPage({ sales }: { sales: "desktop" | "all" }) {
   return (
     <div className="min-h-screen overflow-x-clip bg-page text-ink">
       <a
@@ -21,7 +21,7 @@ export function LandingPage() {
         <Hero />
         <Formats />
         <Engines />
-        <Pricing />
+        <Pricing sales={sales} />
         <CallToAction />
       </main>
       <Footer />

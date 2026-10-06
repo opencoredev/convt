@@ -54,9 +54,11 @@ function CapInput({
 export function ApiEnrollmentCard({
   enrollment,
   blocked,
+  available,
 }: {
   enrollment: ApiEnrollment;
   blocked: boolean;
+  available: boolean;
 }) {
   const router = useRouter();
   const notice = useNotice();
@@ -137,7 +139,9 @@ export function ApiEnrollmentCard({
         ) : null}
       </div>
 
-      {canEnroll && blocked ? (
+      {canEnroll && !available ? (
+        <p className="text-[13px]/5 text-ink-2">API billing is coming soon.</p>
+      ) : canEnroll && blocked ? (
         <p className="text-[13px]/5 text-ink-2">
           API billing can't start yet: our payment provider has to allow a second subscription on an
           account before an account with Pro can add the API. Nothing is charged. Check back soon.

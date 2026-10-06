@@ -9,6 +9,7 @@
   // Local development overrides these from apps/web/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",
+    "SALES": "desktop",
     "BETTER_AUTH_URL": "https://convt.app",
     "MAIL_TRANSPORT": "resend",
     "MAIL_FROM": "convt <hello@convt.app>",

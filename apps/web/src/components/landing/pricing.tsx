@@ -4,7 +4,7 @@ import { BUY_DESKTOP_URL, LAUNCHED, buyProUrl, routes } from "#/lib/site";
 
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
-export function Pricing() {
+export function Pricing({ sales }: { sales: "desktop" | "all" }) {
   return (
     <Container
       id="pricing"
@@ -18,9 +18,9 @@ export function Pricing() {
       </div>
       <div className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
         <DesktopPlan />
-        <ProPlan />
+        <ProPlan available={sales === "all"} />
       </div>
-      <ApiCard />
+      <ApiCard available={sales === "all"} />
     </Container>
   );
 }
@@ -102,7 +102,7 @@ function DesktopPlan() {
   );
 }
 
-function ProPlan() {
+function ProPlan({ available }: { available: boolean }) {
   const [yearly, setYearly] = useState(false);
   return (
     <div className={cx(planCard, "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]")}>
@@ -138,7 +138,7 @@ function ProPlan() {
           "Every future update included",
         ]}
       />
-      {LAUNCHED ? (
+      {LAUNCHED && available ? (
         <ButtonLink
           variant="primary"
           href={buyProUrl(yearly ? "year" : "month")}
@@ -239,7 +239,7 @@ const code: Token[][] = [
   ],
 ];
 
-function ApiCard() {
+function ApiCard({ available }: { available: boolean }) {
   return (
     <div
       id="api"
@@ -255,7 +255,7 @@ function ApiCard() {
           </p>
         </div>
         <div className="flex">
-          {LAUNCHED ? (
+          {LAUNCHED && available ? (
             <ButtonLink
               variant="secondary"
               href={routes.apiDocs}

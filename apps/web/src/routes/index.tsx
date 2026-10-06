@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import geistMonoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url";
 import geistUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
 
+import { getPublicConfig } from "#/server/public-config";
+
 import { LandingPage } from "#/components/landing/landing-page";
 import { SITE_NAME, SITE_ORIGIN, seo } from "#/lib/site";
 
@@ -68,5 +70,6 @@ export const Route = createFileRoute("/")({
       scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
     };
   },
-  component: LandingPage,
+  loader: () => getPublicConfig(),
+  component: () => <LandingPage sales={Route.useLoaderData().sales} />,
 });
