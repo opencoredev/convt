@@ -25,6 +25,9 @@ pub struct Options {
     pub dpi: Option<u32>,
     /// Video encoder for MP4, MOV and MKV output. Unset means H.264.
     pub video_codec: Option<VideoCodec>,
+    /// What transparent areas of an image become. Unset keeps transparency
+    /// where the output format can store it and uses white where it can't.
+    pub background: Option<Background>,
     /// Leave the audio out of video output.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub strip_audio: bool,
@@ -111,8 +114,102 @@ impl Options {
             pages: self.pages.or(base.pages),
             dpi: self.dpi.or(base.dpi),
             video_codec: self.video_codec.or(base.video_codec),
+            background: self.background.or(base.background),
             strip_audio: self.strip_audio || base.strip_audio,
         }
+    }
+}
+
+/// What transparent areas of an image become: kept transparent, or flattened
+/// onto a solid color. Written `transparent`, `white`, `black` or `#rrggbb`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Background {
+    Transparent,
+    Color([u8; 3]),
+}
+
+impl Background {
+    pub const WHITE: Background = Background::Color([255, 255, 255]);
+    pub const BLACK: Background = Background::Color([0, 0, 0]);
+    /// The choices the app offers; any other color works from the CLI and presets.
+    pub const CHOICES: [Background; 3] = [
+        Background::Transparent,
+        Background::WHITE,
+        Background::BLACK,
+    ];
+
+    /// The id presets and the CLI use: `transparent`, `white`, `black` or `#rrggbb`.
+    pub fn id(self) -> String {
+        match self {
+            Background::Transparent => "transparent".into(),
+            Background::WHITE => "white".into(),
+            Background::BLACK => "black".into(),
+            Background::Color([r, g, b]) => format!("#{r:02x}{g:02x}{b:02x}"),
+        }
+    }
+
+    /// The name people see: `Transparent`, `White`, `Black` or `#RRGGBB`.
+    pub fn name(self) -> String {
+        match self {
+            Background::Transparent => "Transparent".into(),
+            Background::WHITE => "White".into(),
+            Background::BLACK => "Black".into(),
+            Background::Color(_) => self.id().to_ascii_uppercase(),
+        }
+    }
+}
+
+impl std::str::FromStr for Background {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let bad = || {
+            Error::InvalidOption(format!(
+                "background {s:?}; use transparent, white, black or a color like #ff8800"
+            ))
+        };
+        let lower = s.trim().to_ascii_lowercase();
+        match lower.as_str() {
+            "transparent" => return Ok(Background::Transparent),
+            "white" => return Ok(Background::WHITE),
+            "black" => return Ok(Background::BLACK),
+            _ => {}
+        }
+        let hex = lower.strip_prefix('#').unwrap_or(&lower);
+        let digits: Vec<u8> = hex
+            .chars()
+            .map(|c| c.to_digit(16).map(|d| d as u8))
+            .collect::<Option<_>>()
+            .ok_or_else(bad)?;
+        match digits[..] {
+            // #rgb is shorthand for #rrggbb.
+            [r, g, b] => Ok(Background::Color([r * 17, g * 17, b * 17])),
+            [r1, r2, g1, g2, b1, b2] => Ok(Background::Color([
+                r1 * 16 + r2,
+                g1 * 16 + g2,
+                b1 * 16 + b2,
+            ])),
+            _ => Err(bad()),
+        }
+    }
+}
+
+impl std::fmt::Display for Background {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.id())
+    }
+}
+
+impl Serialize for Background {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        s.serialize_str(&self.id())
+    }
+}
+
+impl<'de> Deserialize<'de> for Background {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
@@ -328,6 +425,47 @@ mod tests {
         assert_eq!(merged.video_codec, Some(VideoCodec::Hevc));
         assert!(merged.strip_audio);
         assert!(merged.validate().is_ok());
+    }
+
+    #[test]
+    fn backgrounds() {
+        for (text, want) in [
+            ("transparent", Background::Transparent),
+            ("White", Background::WHITE),
+            ("BLACK", Background::BLACK),
+            ("#ff8800", Background::Color([255, 136, 0])),
+            ("FF8800", Background::Color([255, 136, 0])),
+            ("#08f", Background::Color([0, 136, 255])),
+        ] {
+            assert_eq!(text.parse::<Background>().unwrap(), want, "{text}");
+        }
+        for bad in ["", "#12", "#1234567", "#gggggg", "grey", "#"] {
+            assert!(bad.parse::<Background>().is_err(), "{bad}");
+        }
+        // Ids round-trip, and named colors keep their names.
+        for b in [
+            Background::Transparent,
+            Background::WHITE,
+            Background::BLACK,
+            Background::Color([1, 2, 255]),
+        ] {
+            assert_eq!(b.id().parse::<Background>().unwrap(), b);
+        }
+        assert_eq!(Background::Color([255, 255, 255]).id(), "white");
+        assert_eq!(Background::Color([1, 2, 255]).name(), "#0102FF");
+
+        let p = Preset::parse("to = \"jpeg\"\nbackground = \"black\"").unwrap();
+        assert_eq!(p.options.background, Some(Background::BLACK));
+        assert_eq!(Preset::parse(&p.to_toml()).unwrap(), p);
+        assert!(Preset::parse("background = \"grey\"").is_err());
+        assert!(
+            !Preset::parse("quality = 50")
+                .unwrap()
+                .to_toml()
+                .contains("background")
+        );
+        let merged = Options::default().or(&p.options);
+        assert_eq!(merged.background, Some(Background::BLACK));
     }
 
     #[test]

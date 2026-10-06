@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use convt_core::{Ctx, Engine, Error, Result, Step};
+use convt_core::{Background, Ctx, Engine, Error, Result, Step};
 use pdfium_render::prelude::*;
 
 /// Renders PDF pages with PDFium, loaded from `$CONVT_PDFIUM_DIR`, next to
@@ -128,6 +128,23 @@ impl Engine for PdfiumEngine {
                 .set_target_width(2000)
                 .set_maximum_height(4000),
         };
+        // Pages render onto the chosen background. Transparent keeps the page
+        // background clear where the output can store it; everything else,
+        // and the default, is white, which is what PDF viewers show.
+        config = match ctx.options.background {
+            Some(Background::Color([r, g, b])) => {
+                config.set_clear_color(PdfColor::new(r, g, b, 255))
+            }
+            Some(Background::Transparent) if ctx.step.to.keeps_transparency() => {
+                config.set_clear_color(PdfColor::new(255, 255, 255, 0))
+            }
+            Some(Background::Transparent) => {
+                return Err(Error::InvalidOption(crate::image::no_transparency(
+                    ctx.step.to.id,
+                )));
+            }
+            None => config,
+        };
         if let Some(max) = ctx.options.max_size {
             let max = max.min(i32::MAX as u32) as i32;
             config = config.set_maximum_width(max).set_maximum_height(max);
@@ -141,11 +158,6 @@ impl Engine for PdfiumEngine {
                 .map_err(failed)?
                 .as_image()
                 .map_err(failed)?;
-            let img = if ctx.step.to.id == "jpeg" {
-                image::DynamicImage::ImageRgb8(img.to_rgb8())
-            } else {
-                img
-            };
             // Named by page number, so the registry can name outputs after
             // the pages they came from when --pages skips some.
             let target = ctx.artifact(out_dir, i as usize);

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use convt_core::{Ctx, Engine, Options, Preset, Registry, VideoCodec, format_by_id};
+use convt_core::{Background, Ctx, Engine, Options, Preset, Registry, VideoCodec, format_by_id};
 use convt_license::account::{Api, ApiError, Session, challenge_of};
 use convt_license::client::{self, KeyStore};
 use convt_license::{License, Plan};
@@ -1615,6 +1615,69 @@ fn the_popover_copies_every_drop_even_past_the_listed_few(cx: &mut TestAppContex
         !shown(cx, window, &format!("copied-{}", jobs[0])),
         "only three are listed"
     );
+}
+
+#[gpui_kit::test]
+fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let logo = f.dir.path().join("logo.png");
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([0, 0, 0, 0]))
+        .save(&logo)
+        .unwrap();
+    save_preset(
+        &f,
+        cx,
+        "orange",
+        Preset {
+            to: Some("jpeg".into()),
+            options: Options {
+                background: Some("#ff8800".parse().unwrap()),
+                ..Options::default()
+            },
+        },
+    );
+    let (window, view) = f.quick(cli(vec![logo], None, None), cx);
+
+    // JPEG can't be transparent: White by default, and no Transparent choice.
+    click(cx, window, "to-jpeg");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options(), Options::default()));
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-white") && shown(cx, window, "background-black"));
+    assert!(!shown(cx, window, "background-transparent"));
+    click(cx, window, "background-black");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("Black"));
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options().background,
+            Some(Background::BLACK)
+        )
+    });
+
+    // WebP keeps transparency, so Transparent is offered.
+    click(cx, window, "to-webp");
+    click(cx, window, "background");
+    click(cx, window, "background-transparent");
+    assert_eq!(
+        label(cx, window, "background").as_deref(),
+        Some("Transparent")
+    );
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options().background,
+            Some(Background::Transparent)
+        )
+    });
+    // Back to JPEG, the Transparent pick falls back to White instead of failing.
+    click(cx, window, "to-jpeg");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options().background, None));
+
+    // A preset's own color shows and stays pickable.
+    click(cx, window, "preset-orange");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("#FF8800"));
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-#ff8800"));
 }
 
 #[gpui_kit::test]

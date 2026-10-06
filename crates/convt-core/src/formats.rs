@@ -30,6 +30,26 @@ impl Format {
     pub fn extension(&self) -> &'static str {
         self.extensions[0]
     }
+
+    /// Whether image output in this format can store transparency. Images
+    /// going to a format that can't (JPEG, PPM) are flattened onto a
+    /// background color; see [`crate::Background`].
+    pub fn keeps_transparency(&self) -> bool {
+        matches!(
+            self.id,
+            "png"
+                | "webp"
+                | "avif"
+                | "gif"
+                | "tiff"
+                | "bmp"
+                | "ico"
+                | "tga"
+                | "qoi"
+                | "exr"
+                | "heic"
+        )
+    }
 }
 
 macro_rules! formats {

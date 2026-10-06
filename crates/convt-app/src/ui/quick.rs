@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use convt_core::{Category, Format, Options, Output, VideoCodec};
+use convt_core::{Background, Category, Format, Options, Output, VideoCodec};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
@@ -43,6 +43,7 @@ fn quality_key(quality: Option<u8>) -> &'static str {
 enum Open {
     Size,
     Codec,
+    Background,
 }
 
 pub struct QuickView {
@@ -63,6 +64,9 @@ pub struct QuickView {
     pub(super) video_codec: Option<VideoCodec>,
     /// The Keep audio checkbox, unchecked.
     pub(super) strip_audio: bool,
+    /// The Background control for image targets. `None` shows the engine's
+    /// default: Transparent where the format keeps it, White where it can't.
+    pub(super) background: Option<Background>,
     open: Option<Open>,
     /// Where the files go. `None` is next to each file.
     pub(super) save_dir: Option<PathBuf>,
@@ -140,6 +144,7 @@ impl QuickView {
             size: None,
             video_codec: None,
             strip_audio: false,
+            background: None,
             open: None,
             save_dir,
             file_name,
@@ -194,6 +199,7 @@ impl QuickView {
         self.quality = o.quality;
         self.video_codec = o.video_codec;
         self.strip_audio = o.strip_audio;
+        self.background = o.background;
         self.size = self.preset_size();
     }
 
@@ -289,6 +295,9 @@ impl QuickView {
         }
         if audio_applies(to) {
             options.strip_audio = self.strip_audio;
+        }
+        if background_applies(to) {
+            options.background = shown_background(to, self.background);
         }
         options
     }
@@ -689,6 +698,51 @@ impl QuickView {
                 p,
             )
         });
+        let background = background_applies(to).then(|| {
+            let toggle = cx.entity().downgrade();
+            let pick = cx.entity().downgrade();
+            let current = shown_background(to, self.background);
+            let mut choices: Vec<Background> = Background::CHOICES
+                .into_iter()
+                .filter(|b| *b != Background::Transparent || to.keeps_transparency())
+                .collect();
+            // A color a preset set stays pickable.
+            if let Some(custom) = current.filter(|c| !choices.contains(c)) {
+                choices.push(custom);
+            }
+            let default = if to.keeps_transparency() {
+                Background::Transparent
+            } else {
+                Background::WHITE
+            };
+            row_label(
+                "Background",
+                theme::select(
+                    "background",
+                    current.unwrap_or(default).name(),
+                    180.,
+                    false,
+                    self.open == Some(Open::Background),
+                    choices
+                        .iter()
+                        .map(|b| Choice::new(b.id(), b.name()))
+                        .collect(),
+                    p,
+                    move |_, cx| {
+                        let _ = toggle.update(cx, |this, cx| this.toggle(Open::Background, cx));
+                    },
+                    move |id, _, cx| {
+                        let background = id.parse().ok();
+                        let _ = pick.update(cx, |this, cx| {
+                            this.background = background;
+                            this.open = None;
+                            cx.notify();
+                        });
+                    },
+                ),
+                p,
+            )
+        });
         let audio = audio_applies(to).then(|| {
             div().flex().pl(px(110.)).child(
                 theme::checkbox("keep-audio", "Keep audio", !self.strip_audio, p).on_click(
@@ -699,7 +753,12 @@ impl QuickView {
                 ),
             )
         });
-        if quality.is_none() && size.is_none() && codec.is_none() && audio.is_none() {
+        if quality.is_none()
+            && size.is_none()
+            && codec.is_none()
+            && background.is_none()
+            && audio.is_none()
+        {
             return None;
         }
         Some(
@@ -708,6 +767,7 @@ impl QuickView {
                 .children(quality)
                 .children(size)
                 .children(codec)
+                .children(background)
                 .children(audio),
         )
     }
@@ -924,6 +984,21 @@ fn row_label(label: &'static str, control: impl IntoElement, p: &Palette) -> Div
 /// Whether the Codec control does anything for `to`.
 fn codec_applies(to: &Format) -> bool {
     matches!(to.id, "mp4" | "mov" | "mkv")
+}
+
+/// Whether `to` is an image, for the Background control.
+fn background_applies(to: &Format) -> bool {
+    to.category == Category::Image
+}
+
+/// The background to convert with: Transparent picked for a format that
+/// keeps it, then a switch to one that can't (JPEG), falls back to the
+/// default white instead of failing.
+fn shown_background(to: &Format, picked: Option<Background>) -> Option<Background> {
+    match picked {
+        Some(Background::Transparent) if !to.keeps_transparency() => None,
+        other => other,
+    }
 }
 
 /// Whether `to` is video that can carry audio, for Keep audio.

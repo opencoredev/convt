@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
-use convt_core::{Ctx, Engine, Error, Options, Result, Step};
+use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, format_by_id};
 use image::codecs::avif::AvifEncoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
@@ -62,9 +62,85 @@ pub(crate) fn fit(img: DynamicImage, max: Option<u32>) -> DynamicImage {
     }
 }
 
-/// Encodes `img` as `to` into `output`. The writer is flushed explicitly: dropping a `BufWriter` swallows write errors, which would let a
+/// Applies `options.background` for output in `to`: a chosen color flattens
+/// transparency onto it, `transparent` keeps it, and with nothing chosen a
+/// format that can't store transparency (JPEG, PPM) gets white. Without
+/// this, dropping the alpha channel left fully transparent pixels black.
+pub(crate) fn apply_background(
+    img: DynamicImage,
+    to: &str,
+    options: &Options,
+) -> Result<DynamicImage> {
+    let keeps = format_by_id(to).is_some_and(|f| f.keeps_transparency());
+    match (options.background, keeps) {
+        (Some(Background::Color(color)), _) => Ok(flatten(img, color)),
+        (Some(Background::Transparent), true) | (None, true) => Ok(img),
+        (Some(Background::Transparent), false) if img.color().has_alpha() => {
+            Err(Error::InvalidOption(no_transparency(to)))
+        }
+        (_, false) => Ok(flatten(img, [255, 255, 255])),
+    }
+}
+
+/// The error for asking a format without transparency to keep it.
+pub(crate) fn no_transparency(to: &str) -> String {
+    let name = format_by_id(to).map_or(to, |f| f.name);
+    format!("{name} can't store transparency; choose a background color such as white or black")
+}
+
+/// Composites `img` over an opaque `color`. Images without an alpha channel
+/// pass through untouched; 16-bit and float images keep their precision.
+pub(crate) fn flatten(img: DynamicImage, color: [u8; 3]) -> DynamicImage {
+    if !img.color().has_alpha() {
+        return img;
+    }
+    match img {
+        DynamicImage::ImageLumaA8(_) | DynamicImage::ImageRgba8(_) => {
+            let mut rgba = img.to_rgba8();
+            let out = image::RgbImage::from_fn(rgba.width(), rgba.height(), |x, y| {
+                let p = rgba.get_pixel_mut(x, y).0;
+                let a = p[3] as u32;
+                image::Rgb(std::array::from_fn(|i| {
+                    ((p[i] as u32 * a + color[i] as u32 * (255 - a) + 127) / 255) as u8
+                }))
+            });
+            DynamicImage::ImageRgb8(out)
+        }
+        DynamicImage::ImageLumaA16(_) | DynamicImage::ImageRgba16(_) => {
+            let rgba = img.to_rgba16();
+            let bg = color.map(|c| c as u32 * 257);
+            DynamicImage::ImageRgb16(image::ImageBuffer::from_fn(
+                rgba.width(),
+                rgba.height(),
+                |x, y| {
+                    let p = rgba.get_pixel(x, y).0;
+                    let a = p[3] as u32;
+                    image::Rgb(std::array::from_fn(|i| {
+                        ((p[i] as u32 * a + bg[i] * (65535 - a) + 32767) / 65535) as u16
+                    }))
+                },
+            ))
+        }
+        _ => {
+            let rgba = img.to_rgba32f();
+            let bg = color.map(|c| c as f32 / 255.0);
+            DynamicImage::ImageRgb32F(image::ImageBuffer::from_fn(
+                rgba.width(),
+                rgba.height(),
+                |x, y| {
+                    let p = rgba.get_pixel(x, y).0;
+                    let a = p[3].clamp(0.0, 1.0);
+                    image::Rgb(std::array::from_fn(|i| p[i] * a + bg[i] * (1.0 - a)))
+                },
+            ))
+        }
+    }
+}
+
+/// Encodes `img` as `to` into `output`, after [`apply_background`]. The writer is flushed explicitly: dropping a `BufWriter` swallows write errors, which would let a
 /// truncated file through to publishing.
 pub(crate) fn encode(img: DynamicImage, to: &str, options: &Options, output: &Path) -> Result<()> {
+    let img = apply_background(img, to, options)?;
     // These encoders accept only 8-bit pixels. ICO requires RGBA PNG data,
     // even when its source is RGB. Keep higher precision for PNG and TIFF.
     let img = match to {
@@ -123,6 +199,26 @@ mod tests {
         let files = ImageEngine.convert(&ctx, src, out.path()).unwrap();
         assert_eq!(files.len(), 1);
         image::open(&files[0]).unwrap()
+    }
+
+    #[test]
+    fn flattening_keeps_precision_and_blends_by_alpha() {
+        let half = image::Rgba([65535u16, 0, 0, 32768]);
+        let deep = DynamicImage::ImageRgba16(image::ImageBuffer::from_pixel(2, 2, half));
+        let flat = flatten(deep, [255, 255, 255]);
+        let DynamicImage::ImageRgb16(px) = &flat else {
+            panic!("16-bit input stayed 16-bit, got {:?}", flat.color());
+        };
+        let [r, g, b] = px.get_pixel(0, 0).0;
+        assert_eq!(r, 65535);
+        assert!(g.abs_diff(32767) <= 1 && g == b, "{g} {b}");
+
+        // Opaque images pass through untouched.
+        let opaque = DynamicImage::ImageRgb8(image::RgbImage::new(1, 1));
+        assert!(matches!(
+            flatten(opaque, [9, 9, 9]),
+            DynamicImage::ImageRgb8(_)
+        ));
     }
 
     #[test]

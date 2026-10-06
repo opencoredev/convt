@@ -659,6 +659,8 @@ fn encode_depth(
                 | image::ColorType::Rgba32F
         );
     let pixels = crate::image::fit(pixels, ctx.options.max_size);
+    // HEIC and AVIF keep transparency, so only a chosen color changes anything.
+    let pixels = crate::image::apply_background(pixels, ctx.step.to.id, ctx.options)?;
     let (width, height) = (pixels.width(), pixels.height());
     let bytes = if deep {
         pixels

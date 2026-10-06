@@ -246,6 +246,9 @@ fn describe(preset: &Preset) -> String {
     if o.strip_audio {
         parts.push("no audio".into());
     }
+    if let Some(background) = o.background {
+        parts.push(format!("{} background", background.name().to_lowercase()));
+    }
     parts.join(", ")
 }
 
