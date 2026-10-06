@@ -4,7 +4,7 @@
 // its server-side URL is loopback.
 
 export type AppEnv = {
-  env: "production" | "development" | "test";
+  env: "production" | "staging" | "development" | "test";
   sales: "desktop" | "all";
   authUrl: string;
   authSecret: string;
@@ -35,9 +35,14 @@ const str = (raw: RawEnv, key: string) => {
 
 export function readEnv(raw: RawEnv): AppEnv {
   const envName = str(raw, "ENV") ?? "production";
-  if (envName !== "production" && envName !== "development" && envName !== "test")
-    throw new Error(`ENV must be production, development or test, not ${envName}`);
-  const production = envName === "production";
+  if (
+    envName !== "production" &&
+    envName !== "staging" &&
+    envName !== "development" &&
+    envName !== "test"
+  )
+    throw new Error(`ENV must be production, staging, development or test, not ${envName}`);
+  const production = envName === "production" || envName === "staging";
   const sales = str(raw, "SALES") ?? (production ? "desktop" : "all");
   if (sales !== "desktop" && sales !== "all") throw new Error("SALES must be desktop or all");
   const authUrl = str(raw, "BETTER_AUTH_URL");

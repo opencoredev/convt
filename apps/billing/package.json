@@ -6,7 +6,7 @@
     "dev": "wrangler dev",
     "test": "bun test test",
     "check-types": "tsc --noEmit",
-    "deploy": "test -s ../../.convt-dev/license.pub || { echo 'deploy: .convt-dev/license.pub is missing; the dev-key guard needs it' >&2; exit 1; } && wrangler deploy --var DEV_LICENSE_PUBKEYS:$(cat ../../.convt-dev/license.pub)"
+    "deploy": "bash ../../scripts/deploy-worker.sh billing"
   },
   "dependencies": {
     "@convt/billing": "workspace:*",

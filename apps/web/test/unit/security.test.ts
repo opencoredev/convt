@@ -181,3 +181,15 @@ describe("readEnv", () => {
     expect(() => readEnv({ ...base, BETTER_AUTH_SECRET: "short" })).toThrow(/SECRET/);
   });
 });
+
+test("staging has production auth guards and Desktop-only sales", () => {
+  const base = {
+    ENV: "staging",
+    BETTER_AUTH_URL: "https://staging.convt.test",
+    BETTER_AUTH_SECRET: "x".repeat(64),
+  };
+  expect(readEnv(base).sales).toBe("desktop");
+  expect(readEnv(base).mail.transport).toBe("resend");
+  expect(() => readEnv({ ...base, BETTER_AUTH_URL: "http://staging.convt.test" })).toThrow(/https/);
+  expect(() => readEnv({ ...base, OAUTH_MOCK_URL: "http://localhost:4100" })).toThrow(/refused/);
+});

@@ -13,3 +13,7 @@ test("development forwards local cron and webhooks", () => {
   expect(billingForwarding("production", "/webhooks/polar")).toBe("deny");
   expect(billingForwarding("development", "/dashboard")).toBeNull();
 });
+
+test("staging refuses the web manual cron endpoint", () => {
+  expect(billingForwarding("staging", "/__billing/scheduled")).toBe("deny");
+});

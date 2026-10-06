@@ -45,6 +45,7 @@
     "test:load": "bun tools/loadtest/src/main.ts"
   },
   "devDependencies": {
+    "jsonc-parser": "3.3.1",
     "oxfmt": "latest",
     "oxlint": "latest",
     "turbo": "latest",

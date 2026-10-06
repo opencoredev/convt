@@ -59,7 +59,10 @@ function setup(raw: Env) {
       alertEmail: env.alertEmail,
       downloadUrl: env.downloadUrl,
       budgetMs: 5000,
-      checkoutCookie: env.env === "production" ? "__Host-convt_checkout" : "convt_checkout",
+      checkoutCookie:
+        env.env === "production" || env.env === "staging"
+          ? "__Host-convt_checkout"
+          : "convt_checkout",
     },
   });
   cached = { env, key, service };

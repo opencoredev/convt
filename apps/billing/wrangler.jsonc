@@ -32,4 +32,25 @@
     // the daily check at 03:17 UTC.
     "crons": ["* * * * *", "*/10 * * * *", "*/15 * * * *", "17 3 * * *"],
   },
+  "env": {
+    "staging": {
+      "name": "convt-billing-staging",
+      "workers_dev": true,
+      "routes": [],
+      "vars": {
+        "ENV": "staging",
+        "BILLING_CATALOG": "sandbox",
+        // PLACEHOLDER: the staging web Worker's origin.
+        "SITE_URL": "https://convt-web-staging.<subdomain>.workers.dev",
+        "MAIL_TRANSPORT": "resend",
+        "MAIL_FROM": "convt <hello@convt.app>",
+        "ALERT_EMAIL": "",
+        // PLACEHOLDER: staging's public signing key, separate from production.
+        "LICENSE_PUBLIC_KEY": "",
+      },
+      // PLACEHOLDER: staging convt_billing Hyperdrive, caching disabled.
+      "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "00000000000000000000000000000003" }],
+      "triggers": { "crons": ["* * * * *", "*/10 * * * *", "*/15 * * * *", "17 3 * * *"] },
+    },
+  },
 }

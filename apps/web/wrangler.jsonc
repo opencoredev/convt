@@ -21,4 +21,24 @@
   // convt-billing's RPC entrypoint: checkout, results, plan changes, the portal,
   // the spend cap and deletion. The site holds no billing secret.
   "services": [{ "binding": "BILLING", "service": "convt-billing", "entrypoint": "BillingRpc" }],
+  "env": {
+    "staging": {
+      "name": "convt-web-staging",
+      "workers_dev": true,
+      "routes": [],
+      "vars": {
+        "ENV": "staging",
+        "SALES": "desktop",
+        // PLACEHOLDER: fill the account's workers.dev subdomain before deploying.
+        "BETTER_AUTH_URL": "https://convt-web-staging.<subdomain>.workers.dev",
+        "MAIL_TRANSPORT": "resend",
+        "MAIL_FROM": "convt <hello@convt.app>",
+      },
+      // PLACEHOLDER: staging convt_web Hyperdrive, caching disabled.
+      "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "00000000000000000000000000000002" }],
+      "services": [
+        { "binding": "BILLING", "service": "convt-billing-staging", "entrypoint": "BillingRpc" },
+      ],
+    },
+  },
 }
