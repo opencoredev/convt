@@ -34,15 +34,16 @@ repo = web.parent.parent
 out = web / "public" / "brand"
 manifest_path = web / "src" / "components" / "brand" / "manifest.json"
 
-GREEN_TOP = "#2fbf78"
-GREEN_BOTTOM = "#1f9a5c"
-INK = "#0a0b0b"
-WHITE = "#ffffff"
+# The mark's colors, from design-assets/brand/README.md and the --mark-* tokens in styles.css.
+ON_DARK = {"ink": "#edefee", "top": "#46d08b", "bottom": "#1fa463", "overlap": "#a6f0c8"}
+ON_LIGHT = {"ink": "#0a0a0a", "top": "#1fb36c", "bottom": "#127a47", "overlap": "#0b5c34"}
 
-# The mark: the favicon's 32-unit rounded square with the two convert arrows.
-ARROWS = "M8 12.5h14M18.5 9l3.5 3.5-3.5 3.5M24 19.5H10M13.5 16 10 19.5l3.5 3.5"
-ARROW_STROKE = 'fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"'
-
+# The mark: two 19-unit rounded squares on a 32-unit grid, the source file at (2, 2) and the
+# converted file at (11, 11). Same geometry as src/components/logo.tsx. The files crop the
+# 2-unit margin, so the mark fills a 28-unit box.
+SOURCE = '<rect x="2" y="2" width="19" height="19" rx="5"'
+RESULT = '<rect x="11" y="11" width="19" height="19" rx="5"'
+REPO_ICON = "packaging/linux/convt.svg"
 
 def find_font() -> Path:
     pattern = "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"
@@ -56,7 +57,7 @@ def find_font() -> Path:
     raise SystemExit("Geist not found; run `bun install` first")
 
 
-def wordmark_path(text: str = "convt", weight: int = 600, tracking: float = -0.03):
+def wordmark_path(text: str = "convt", weight: int = 600, tracking: float = -0.02):
     """Outline `text` in Geist at `weight`. Returns (svg path d, (xmin, ymin, xmax, ymax)) in font units, y down."""
     font_path = find_font()
     font = instantiateVariableFont(TTFont(font_path), {"wght": weight})
@@ -88,31 +89,37 @@ def wordmark_path(text: str = "convt", weight: int = 600, tracking: float = -0.0
 
 
 def fmt(n: float) -> str:
-    return f"{n:.2f}".rstrip("0").rstrip(".")
+    return f"{n:.4f}".rstrip("0").rstrip(".")
 
 
-def mark_group(variant: str, x: float = 0, y: float = 0, scale: float = 1) -> tuple[str, str]:
-    """(defs, body) for the mark at (x, y). variant: color, black or white."""
-    place = f'transform="translate({fmt(x)} {fmt(y)}) scale({fmt(scale)})"'
-    if variant == "color":
+def mark_group(variant: str, x: float = 0, y: float = 0, size: float = 28) -> tuple[str, str]:
+    """(defs, body) for the mark filling a `size` box at (x, y).
+
+    variant: "dark" or "light" (full color, for that background), or "white" or "black"
+    (one color, with the overlap cut out, as the Finder menu icon does).
+    """
+    scale = size / 28
+    place = f'transform="translate({fmt(x - 2 * scale)} {fmt(y - 2 * scale)}) scale({fmt(scale)})"'
+    if variant in ("dark", "light"):
+        c = ON_DARK if variant == "dark" else ON_LIGHT
         defs = (
-            f'<linearGradient id="convt-g" x1="0" y1="0" x2="0" y2="1">'
-            f'<stop offset="0" stop-color="{GREEN_TOP}"/><stop offset="1" stop-color="{GREEN_BOTTOM}"/>'
+            f'<clipPath id="convt-source-{variant}">{SOURCE}/></clipPath>'
+            f'<linearGradient id="convt-green-{variant}" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="0" stop-color="{c["top"]}"/><stop offset="1" stop-color="{c["bottom"]}"/>'
             f"</linearGradient>"
         )
         body = (
-            f'<g {place}><rect width="32" height="32" rx="8" fill="url(#convt-g)"/>'
-            f'<path d="{ARROWS}" stroke="{WHITE}" {ARROW_STROKE}/></g>'
+            f'<g {place}>{SOURCE} fill="{c["ink"]}"/>{RESULT} fill="url(#convt-green-{variant})"/>'
+            f'{RESULT} fill="{c["overlap"]}" clip-path="url(#convt-source-{variant})"/></g>'
         )
         return defs, body
-    # One color: the square in that color with the arrows cut out, so it works on any background.
-    fill = INK if variant == "black" else WHITE
+    fill = ON_DARK["ink"] if variant == "white" else ON_LIGHT["ink"]
     defs = (
-        f'<mask id="convt-m-{variant}" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">'
-        f'<rect width="32" height="32" rx="8" fill="#fff"/>'
-        f'<path d="{ARROWS}" stroke="#000" {ARROW_STROKE}/></mask>'
+        f'<clipPath id="convt-source-{variant}">{SOURCE}/></clipPath>'
+        f'<mask id="convt-cut-{variant}" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">'
+        f'<rect width="32" height="32" fill="#fff"/>{RESULT} fill="#000" clip-path="url(#convt-source-{variant})"/></mask>'
     )
-    body = f'<g {place}><rect width="32" height="32" rx="8" fill="{fill}" mask="url(#convt-m-{variant})"/></g>'
+    body = f'<g {place}><g mask="url(#convt-cut-{variant})" fill="{fill}">{SOURCE}/>{RESULT}/></g></g>'
     return defs, body
 
 
@@ -131,37 +138,41 @@ def build_svgs() -> dict[str, tuple[str, int]]:
     """File stem -> (svg text, PNG longest edge)."""
     files: dict[str, tuple[str, int]] = {}
 
-    for variant in ["color", "black", "white"]:
-        defs, body = mark_group(variant, scale=16)
-        stem = "convt-mark" if variant == "color" else f"convt-mark-{variant}"
-        files[stem] = (svg(512, 512, defs, body, "convt"), 1024)
+    for variant in ["dark", "light"]:
+        defs, body = mark_group(variant, size=512)
+        files[f"convt-mark-on-{variant}"] = (svg(512, 512, defs, body, "convt"), 1024)
+    for variant in ["white", "black"]:
+        defs, body = mark_group(variant, size=512)
+        files[f"convt-mark-{variant}"] = (svg(512, 512, defs, body, "convt"), 1024)
+
+    # The app icon is the packaging source, unchanged.
+    files["convt-app-icon"] = ((repo / REPO_ICON).read_text(), 1024)
 
     d, (xmin, ymin, xmax, ymax) = wordmark_path()
-    # Wordmark: 1000-unit glyphs scaled to a 96 px tall box (ascender of "t" to baseline).
-    pad = 0
+    # Wordmark: scaled so the "t" (its tallest glyph) to the baseline is 96 px.
     s = 96 / (ymax - ymin)
-    ww, wh = (xmax - xmin) * s + 2 * pad, (ymax - ymin) * s + 2 * pad
-    word = f'transform="translate({fmt(pad - xmin * s)} {fmt(pad - ymin * s)}) scale({fmt(s)})"'
-    for variant, fill in [("black", INK), ("white", WHITE)]:
-        body = f'<path {word} fill="{fill}" d="{d}"/>'
-        files[f"convt-wordmark-{variant}"] = (svg(ww, wh, "", body, "convt"), 1600)
+    ww, wh = (xmax - xmin) * s, (ymax - ymin) * s
+    word = f'transform="translate({fmt(-xmin * s)} {fmt(-ymin * s)}) scale({fmt(s)})"'
+    for variant, c in [("dark", ON_DARK), ("light", ON_LIGHT)]:
+        body = f'<path {word} fill="{c["ink"]}" d="{d}"/>'
+        files[f"convt-wordmark-on-{variant}"] = (svg(ww, wh, "", body, "convt"), 1600)
 
-    # Lockup: the mark beside the wordmark. The wordmark's x-height is centered on the mark
-    # and the gap is a quarter of the mark.
-    mark = 128
-    x_height = 534  # Geist OS/2 sxHeight
-    ls = mark * 0.5 / x_height  # wordmark x-height = half the mark
-    gap = mark * 0.25
-    baseline = mark / 2 + x_height * ls / 2
-    lw = mark + gap + (xmax - xmin) * ls
-    word = f'transform="translate({fmt(mark + gap - xmin * ls)} {fmt(baseline)}) scale({fmt(ls)})"'
-    # The "t" rises above the mark only if the type is set large; keep the canvas the mark's height.
+    # Lockup, measured from design-assets/brand/lockup-on-dark.png (2400 x 595, mark 595 px):
+    # the text starts 943 px in, its baseline is at 539 px and its x-height is 302 px.
+    mark = 160
+    unit = mark / 595
+    x_height = 534  # Geist OS/2 sxHeight, in font units
+    ls = 302 * unit / x_height
+    baseline = 539 * unit
+    left = 943 * unit
     top = min(0, baseline + ymin * ls)
+    lw = left + (xmax - xmin) * ls
     lh = mark - top
-    for variant, fill in [("black", INK), ("white", WHITE)]:
-        defs, body = mark_group("color", 0, -top, mark / 32)
-        text = f'<g transform="translate(0 {fmt(-top)})"><path {word} fill="{fill}" d="{d}"/></g>'
-        files[f"convt-lockup-{variant}"] = (svg(lw, lh, defs, body + text, "convt"), 2000)
+    word = f'transform="translate({fmt(left - xmin * ls)} {fmt(baseline - top)}) scale({fmt(ls)})"'
+    for variant, c in [("dark", ON_DARK), ("light", ON_LIGHT)]:
+        defs, body = mark_group(variant, 0, -top, mark)
+        text = f'<path {word} fill="{c["ink"]}" d="{d}"/>'
+        files[f"convt-lockup-on-{variant}"] = (svg(lw, lh, defs, body + text, "convt"), 2400)
     return files
 
 

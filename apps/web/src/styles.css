@@ -240,3 +240,119 @@ body {
     transform: translateX(300%);
   }
 }
+
+/* brand page motion */
+/*
+ * /brand (components/brand/brand-page.tsx). Curves: a strong ease-out for things arriving,
+ * a strong ease-in-out for things moving on screen. Reduced motion turns all of it off.
+ */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@keyframes brand-rise {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+@keyframes brand-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* The two squares slide in from opposite corners and meet; the overlap lights up last. */
+@keyframes brand-source-in {
+  from {
+    opacity: 0;
+    transform: translate(-48px, -48px);
+  }
+}
+@keyframes brand-result-in {
+  from {
+    opacity: 0;
+    transform: translate(48px, 48px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .brand-rise {
+    animation: brand-rise 800ms var(--ease-out) var(--d, 0ms) both;
+  }
+  .brand-grid {
+    animation: brand-fade 900ms var(--ease-out) 200ms both;
+  }
+  .brand-source {
+    animation: brand-source-in 1000ms var(--ease-out) 350ms both;
+  }
+  .brand-result {
+    animation: brand-result-in 1000ms var(--ease-out) 450ms both;
+  }
+  .brand-overlap {
+    animation: brand-fade 600ms var(--ease-out) 950ms both;
+  }
+  .brand-note {
+    animation: brand-fade 500ms var(--ease-out) var(--d, 0ms) both;
+  }
+
+  /* Scroll reveal; brand-page.tsx sets data-reveal only below the fold. */
+  .brand-reveal {
+    transition:
+      opacity 700ms var(--ease-out) var(--reveal-delay, 0ms),
+      translate 700ms var(--ease-out) var(--reveal-delay, 0ms);
+  }
+  .brand-reveal[data-reveal="hidden"] {
+    opacity: 0;
+    translate: 0 24px;
+  }
+
+  .brand-thumb {
+    transition:
+      translate 280ms var(--ease-in-out),
+      background-color 280ms ease,
+      box-shadow 280ms ease;
+  }
+
+  /* Copy feedback: the old icon or label blurs out as the new one scales in. */
+  .brand-swap {
+    transition:
+      opacity 200ms var(--ease-out),
+      scale 200ms var(--ease-out),
+      filter 200ms var(--ease-out);
+  }
+
+  .brand-dont {
+    transition:
+      transform 900ms var(--ease-in-out) calc(var(--reveal-delay, 0ms) + 450ms),
+      filter 900ms var(--ease-in-out) calc(var(--reveal-delay, 0ms) + 450ms);
+  }
+}
+
+.brand-swap-out {
+  opacity: 0;
+  scale: 0.6;
+  filter: blur(2px);
+}
+
+/* The "don't" examples show the mistake; while hidden they wait as the real mark. */
+.brand-dont {
+  transform: var(--dont-transform);
+  filter: var(--dont-filter);
+}
+[data-reveal="hidden"] .brand-dont {
+  transform: none;
+  filter: none;
+}
+
+/* Print everything, whether or not it has scrolled into view yet. */
+@media print {
+  .brand-reveal[data-reveal] {
+    opacity: 1;
+    translate: none;
+  }
+  .brand-reveal[data-reveal] .brand-dont {
+    transform: var(--dont-transform);
+    filter: var(--dont-filter);
+  }
+}

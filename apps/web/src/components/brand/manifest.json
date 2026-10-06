@@ -1,26 +1,32 @@
 {
-  "zipBytes": 163717,
+  "zipBytes": 207134,
   "assets": {
-    "convt-mark": {
+    "convt-mark-on-dark": {
       "png": [1024, 1024]
     },
-    "convt-mark-black": {
+    "convt-mark-on-light": {
       "png": [1024, 1024]
     },
     "convt-mark-white": {
       "png": [1024, 1024]
     },
-    "convt-wordmark-black": {
-      "png": [1600, 424]
+    "convt-mark-black": {
+      "png": [1024, 1024]
     },
-    "convt-wordmark-white": {
-      "png": [1600, 424]
+    "convt-app-icon": {
+      "png": [1024, 1024]
     },
-    "convt-lockup-black": {
-      "png": [2000, 552]
+    "convt-wordmark-on-dark": {
+      "png": [1600, 418]
     },
-    "convt-lockup-white": {
-      "png": [2000, 552]
+    "convt-wordmark-on-light": {
+      "png": [1600, 418]
+    },
+    "convt-lockup-on-dark": {
+      "png": [2400, 596]
+    },
+    "convt-lockup-on-light": {
+      "png": [2400, 596]
     }
   }
 }
