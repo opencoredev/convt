@@ -87,6 +87,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * No rubber-band overscroll on trackpads and mice: pulling past the top or bottom
+ * dragged the whole page away from the window edge. Touch screens keep it, along with
+ * pull-to-refresh.
+ */
+@media (hover: hover) and (pointer: fine) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
 /* app tokens */
 /*
  * Extra values the dashboard and account screens use. Light values come from the
