@@ -544,6 +544,7 @@ function BackgroundSwitch({
             className={cx(
               "relative h-7 w-12 rounded-md text-[12px]/[16px] font-medium capitalize transition-colors duration-200 ease-out",
               focusRing,
+              !onDark && focusOnLight,
               onDark
                 ? selected
                   ? "text-white"
@@ -588,6 +589,9 @@ function ButtonGroup({
     </div>
   );
 }
+
+/** The focus outline on white surfaces, where the light green is too faint. */
+const focusOnLight = "focus-visible:outline-[#127a47]!";
 
 const pressable =
   "transition-[background-color,color,scale] duration-150 ease-out motion-safe:active:scale-[0.96]";
@@ -664,6 +668,13 @@ const announcements: Record<CopyState, string> = {
   idle: "",
   copied: "Copied",
   failed: "This browser blocked the copy. Use Save instead.",
+};
+
+// Colors have no download to fall back on, so their message stops at the failure.
+const colorAnnouncements: Record<CopyState, string> = {
+  idle: "",
+  copied: "Copied",
+  failed: "This browser blocked the copy.",
 };
 
 /** Icons or labels stacked in one grid cell; only the one for the current state shows. */
@@ -890,13 +901,16 @@ function CopyRow({
 }) {
   const { state, run } = useCopy();
   const copied = (
-    <Swap
-      show={state === "copied"}
-      className={cx("inline-flex items-center gap-1", dark ? "text-green" : "text-[#127a47]")}
-    >
-      <CheckGlyph />
-      {copiedLabel}
-    </Swap>
+    <>
+      <Swap
+        show={state === "copied"}
+        className={cx("inline-flex items-center gap-1", dark ? "text-green" : "text-[#127a47]")}
+      >
+        <CheckGlyph />
+        {copiedLabel}
+      </Swap>
+      <CopyFailed show={state === "failed"} dark={dark} />
+    </>
   );
   return (
     <button
@@ -906,6 +920,7 @@ function CopyRow({
       className={cx(
         "group flex w-full items-center gap-3.5 text-left transition-[background-color,scale] duration-150 ease-out motion-safe:active:scale-[0.99]",
         focusRing,
+        !dark && focusOnLight,
         className,
       )}
     >
@@ -920,22 +935,46 @@ function CopyRow({
               dark ? "text-ink-2" : "text-[#3d413f]",
             )}
           >
-            <Swap show={state !== "copied"}>{trailing}</Swap>
+            <Swap show={state === "idle"}>{trailing}</Swap>
             {copied}
           </span>
         </>
       ) : (
         <span aria-hidden="true" className="grid min-w-0 flex-1 font-mono text-[12px]/[16px]">
-          <Swap show={state !== "copied"} className="flex min-w-0">
+          <Swap show={state === "idle"} className="flex min-w-0">
             {children}
           </Swap>
           {copied}
         </span>
       )}
       <span className="sr-only" aria-live="polite">
-        {state === "copied" ? "Copied" : ""}
+        {colorAnnouncements[state]}
       </span>
     </button>
+  );
+}
+
+/** Shown in place of a value when the browser refuses the copy. */
+function CopyFailed({
+  show,
+  dark,
+  className,
+}: {
+  show: boolean;
+  dark: boolean;
+  className?: string;
+}) {
+  return (
+    <Swap
+      show={show}
+      className={cx(
+        "inline-flex items-center gap-1",
+        dark ? "text-[#f2786d]" : "text-[#b3261e]",
+        className,
+      )}
+    >
+      Couldn't copy
+    </Swap>
   );
 }
 
@@ -963,12 +1002,14 @@ function CopyText({
         "grid rounded-sm transition-colors duration-150 ease-out",
         dark ? "hover:text-ink" : "hover:text-[#0a0a0a]",
         focusRing,
+        !dark && focusOnLight,
         className,
       )}
     >
-      <Swap show={state !== "copied"} className="justify-self-end">
+      <Swap show={state === "idle"} className="justify-self-end">
         {children}
       </Swap>
+      <CopyFailed show={state === "failed"} dark={dark} className="justify-self-end" />
       <Swap
         show={state === "copied"}
         className={cx("justify-self-end", dark ? "text-green" : "text-[#127a47]")}
@@ -976,7 +1017,7 @@ function CopyText({
         Copied
       </Swap>
       <span className="sr-only" aria-live="polite">
-        {state === "copied" ? "Copied" : ""}
+        {colorAnnouncements[state]}
       </span>
     </button>
   );

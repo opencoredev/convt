@@ -345,6 +345,13 @@ body {
   filter: none;
 }
 
+/* Keyboard focus can reach a card before it scrolls in; show it at once. */
+.brand-reveal[data-reveal="hidden"]:focus-within {
+  opacity: 1;
+  translate: none;
+  transition: none;
+}
+
 /* Print everything, whether or not it has scrolled into view yet. */
 @media print {
   .brand-reveal[data-reveal] {

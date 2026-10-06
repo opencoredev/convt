@@ -184,40 +184,46 @@ def convt_bin() -> str:
 
 
 def main():
-    out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("convt-*"):
-        old.unlink()
-
     files = build_svgs()
     convt = convt_bin()
+    # Build the whole kit in a staging folder and swap it in only when every step worked,
+    # so a missing tool or a failed render leaves the committed kit untouched.
     with tempfile.TemporaryDirectory() as tmp:
+        stage = Path(tmp) / "brand"
+        stage.mkdir()
         for stem, (text, edge) in files.items():
-            (out / f"{stem}.svg").write_text(text)
-            src = Path(tmp) / f"{stem}.svg"
+            src = stage / f"{stem}.svg"
             src.write_text(text)
             # resvg renders at 96 dpi by default; scale up so the longest edge is `edge` px.
-            subprocess.run(
-                [convt, str(src), "--to", "png", "--out-dir", str(out), "--dpi", "960", "--max-size", str(edge)],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+            result = subprocess.run(
+                [convt, str(src), "--to", "png", "--out-dir", str(stage), "--dpi", "960", "--max-size", str(edge)],
+                capture_output=True,
+                text=True,
             )
+            if result.returncode != 0:
+                raise SystemExit(f"convt could not render {stem}.png:\n{result.stderr or result.stdout}")
 
-    with zipfile.ZipFile(out / "convt-brand.zip", "w", zipfile.ZIP_DEFLATED) as z:
-        for stem in files:
-            for ext in ["svg", "png"]:
-                z.write(out / f"{stem}.{ext}", f"convt-brand/{ext}/{stem}.{ext}")
+        with zipfile.ZipFile(stage / "convt-brand.zip", "w", zipfile.ZIP_DEFLATED) as z:
+            for stem in files:
+                for ext in ["svg", "png"]:
+                    z.write(stage / f"{stem}.{ext}", f"convt-brand/{ext}/{stem}.{ext}")
 
-    # Sizes for the page's download labels.
-    def png_size(path: Path) -> list[int]:
-        head = path.read_bytes()[16:24]
-        return [int.from_bytes(head[:4], "big"), int.from_bytes(head[4:], "big")]
+        # Sizes for the page's download labels.
+        def png_size(path: Path) -> list[int]:
+            head = path.read_bytes()[16:24]
+            return [int.from_bytes(head[:4], "big"), int.from_bytes(head[4:], "big")]
 
-    manifest = {
-        "zipBytes": (out / "convt-brand.zip").stat().st_size,
-        "assets": {stem: {"png": png_size(out / f"{stem}.png")} for stem in files},
-    }
-    text = json.dumps(manifest, indent=2)
+        manifest = {
+            "zipBytes": (stage / "convt-brand.zip").stat().st_size,
+            "assets": {stem: {"png": png_size(stage / f"{stem}.png")} for stem in files},
+        }
+        text = json.dumps(manifest, indent=2)
+
+        out.mkdir(parents=True, exist_ok=True)
+        for old in out.glob("convt-*"):
+            old.unlink()
+        for new in stage.iterdir():
+            shutil.copy2(new, out / new.name)
     # Keep [width, height] on one line, as oxfmt formats it.
     manifest_path.write_text(re.sub(r"\[\s+(\d+),\s+(\d+)\s+\]", r"[\1, \2]", text) + "\n")
     print(f"Wrote {len(files)} assets and convt-brand.zip to {out}")
