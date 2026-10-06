@@ -4,7 +4,13 @@ import { BUY_DESKTOP_URL, LAUNCHED, buyProUrl, routes } from "#/lib/site";
 
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
-export function Pricing({ sales }: { sales: "desktop" | "all" }) {
+export function Pricing({
+  sales,
+  launched = LAUNCHED,
+}: {
+  sales: "desktop" | "all";
+  launched?: boolean;
+}) {
   return (
     <Container
       id="pricing"
@@ -17,10 +23,10 @@ export function Pricing({ sales }: { sales: "desktop" | "all" }) {
         <p className="text-[17px]/[26px] text-ink-2">Both plans start with a 7-day free trial.</p>
       </div>
       <div className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
-        <DesktopPlan />
-        <ProPlan available={sales === "all"} />
+        <DesktopPlan launched={launched} />
+        <ProPlan available={sales === "all"} launched={launched} />
       </div>
-      <ApiCard available={sales === "all"} />
+      <ApiCard available={sales === "all"} launched={launched} />
     </Container>
   );
 }
@@ -60,7 +66,7 @@ function Features({ items, mark = "✓ " }: { items: string[]; mark?: string }) 
 
 const planCard = "flex flex-col gap-6 rounded-2xl bg-raised p-7";
 
-function DesktopPlan() {
+function DesktopPlan({ launched }: { launched: boolean }) {
   return (
     <div
       className={cx(
@@ -87,7 +93,7 @@ function DesktopPlan() {
           "Batch folders and presets",
         ]}
       />
-      {LAUNCHED ? (
+      {launched ? (
         <ButtonLink
           variant="secondary"
           href={BUY_DESKTOP_URL}
@@ -102,7 +108,7 @@ function DesktopPlan() {
   );
 }
 
-function ProPlan({ available }: { available: boolean }) {
+function ProPlan({ available, launched }: { available: boolean; launched: boolean }) {
   const [yearly, setYearly] = useState(false);
   return (
     <div className={cx(planCard, "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]")}>
@@ -138,7 +144,7 @@ function ProPlan({ available }: { available: boolean }) {
           "Every future update included",
         ]}
       />
-      {LAUNCHED && available ? (
+      {launched && available ? (
         <ButtonLink
           variant="primary"
           href={buyProUrl(yearly ? "year" : "month")}
@@ -239,7 +245,7 @@ const code: Token[][] = [
   ],
 ];
 
-function ApiCard({ available }: { available: boolean }) {
+function ApiCard({ available, launched }: { available: boolean; launched: boolean }) {
   return (
     <div
       id="api"
@@ -255,7 +261,7 @@ function ApiCard({ available }: { available: boolean }) {
           </p>
         </div>
         <div className="flex">
-          {LAUNCHED && available ? (
+          {launched && available ? (
             <ButtonLink
               variant="secondary"
               href={routes.apiDocs}
