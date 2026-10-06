@@ -58,7 +58,9 @@ def to_html(markdown: str) -> str:
     return "\n".join(blocks)
 
 
-template = (src / "page.html").read_text()
+# The Markdown pages use the same Geist file the home page ships (its name is hashed).
+geist = next((out / "assets").glob("geist-latin-wght-normal-*.woff2")).name
+template = (src / "page.html").read_text().replace("{{geist}}", f"/assets/{geist}")
 pages = {
     "about": ("About convt", "Why convt exists and how it converts files on your own computer.", "/about"),
     "privacy": ("Privacy · convt", "What the convt.app website collects: nothing on purpose.", "/privacy"),

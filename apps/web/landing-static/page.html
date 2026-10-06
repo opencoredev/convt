@@ -18,9 +18,11 @@
 <meta property="og:image" content="https://convt.app/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0a0b0b">
+<link rel="preload" href="{{geist}}" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face { font-family: Geist; src: url("{{geist}}") format("woff2"); font-weight: 100 900; font-display: swap; }
   :root { color-scheme: dark; }
-  body { margin: 0; background: #0a0b0b; color: #c4c9c6; font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  body { margin: 0; background: #0a0b0b; color: #c4c9c6; font: 16px/1.65 Geist, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
   header, main, footer { max-width: 680px; margin: 0 auto; padding: 0 20px; }
   header { padding-top: 24px; padding-bottom: 24px; }
   header a { color: #edefee; font-weight: 600; font-size: 17px; letter-spacing: -0.02em; text-decoration: none; }

@@ -6,7 +6,7 @@ convt is coming soon to macOS, Windows and Linux. There is no download, account 
 
 ## How it works
 
-Right-click a file (or a folder) in Finder, Explorer or your Linux file manager, pick a format, and convt writes the converted file next to the original. The same conversions run from the `convt` command line tool and the desktop app.
+Right-click a file in Finder or your Linux file manager, pick a format, and convt writes the converted file next to the original. Explorer on Windows is to follow. The same conversions run from the `convt` command line tool, which also converts whole folders, and the desktop app.
 
 ## Formats
 

@@ -50,7 +50,7 @@ export function ComingSoon({
   return (
     <span
       className={cx(
-        "inline-flex shrink-0 cursor-default items-center justify-center gap-2 font-medium whitespace-nowrap bg-sunken text-ink-2 shadow-land-secondary select-none",
+        "inline-flex max-w-full cursor-default items-center justify-center gap-2 text-center font-medium text-balance bg-sunken text-ink-2 shadow-land-secondary select-none",
         className,
       )}
     >
