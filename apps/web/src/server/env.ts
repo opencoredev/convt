@@ -97,3 +97,9 @@ export function readEnv(raw: RawEnv): AppEnv {
     google: pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
   };
 }
+
+/** Matches createAuth's real providers and its all-or-nothing local OAuth mock. */
+export function availableProviders(env: AppEnv) {
+  const mock = env.oauthMock !== null && env.github === null && env.google === null;
+  return { github: env.github !== null || mock, google: env.google !== null || mock };
+}

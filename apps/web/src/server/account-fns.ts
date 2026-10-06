@@ -22,6 +22,7 @@ import {
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 
+import { availableProviders } from "./env";
 import { billing } from "./billing";
 import { signedInUser } from "./context";
 import { authed } from "./session";
@@ -134,9 +135,9 @@ export const fetchApiOverview = createServerFn({ method: "GET" })
 
 export const fetchAccountSettings = createServerFn({ method: "GET" })
   .middleware([authed])
-  .handler(async ({ context: { db, userId, sessionId } }) => {
+  .handler(async ({ context: { db, userId, sessionId, appEnv } }) => {
     const now = new Date();
-    return settingsView({
+    const settings = settingsView({
       user: await signedInUser(db, userId),
       accounts: await userAccounts(db, userId),
       sessions: await userSessions(db, userId, now),
@@ -145,6 +146,13 @@ export const fetchAccountSettings = createServerFn({ method: "GET" })
       deletion: await openDeletion(db, userId),
       now,
     });
+    const providers = availableProviders(appEnv);
+    return {
+      ...settings,
+      methods: settings.methods.filter(
+        (m) => (m.id !== "github" && m.id !== "google") || providers[m.id],
+      ),
+    };
   });
 
 export const saveName = createServerFn({ method: "POST" })
@@ -169,7 +177,7 @@ export const endSession = createServerFn({ method: "POST" })
       throw new Error("bad session");
     return data;
   })
-  .handler(async ({ data, context: { db, userId, sessionId } }) => {
+  .handler(async ({ data, context: { db, userId, sessionId, appEnv } }) => {
     if (data.type === "web") {
       if (data.id === sessionId) throw new Error("Use Sign out to end this browser's session.");
       return { ok: await revokeSessionRow(db, userId, data.id) };
