@@ -177,7 +177,7 @@ export const endSession = createServerFn({ method: "POST" })
       throw new Error("bad session");
     return data;
   })
-  .handler(async ({ data, context: { db, userId, sessionId, appEnv } }) => {
+  .handler(async ({ data, context: { db, userId, sessionId } }) => {
     if (data.type === "web") {
       if (data.id === sessionId) throw new Error("Use Sign out to end this browser's session.");
       return { ok: await revokeSessionRow(db, userId, data.id) };
