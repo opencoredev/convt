@@ -1,5 +1,6 @@
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
+import { ProductHuntBadge } from "./product-hunt-badge";
 import { ButtonLink, ComingSoon, Container, DownloadIcon, MisoPhoto } from "./ui";
 
 export function Hero() {
@@ -22,6 +23,7 @@ export function Hero() {
             </ComingSoon>
           )}
         </div>
+        <ProductHuntBadge />
       </div>
       <ConvertPanel />
     </Container>
