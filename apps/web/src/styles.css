@@ -240,3 +240,151 @@ body {
     transform: translateX(300%);
   }
 }
+
+/*
+ * Landing page motion. Everything here animates transform, opacity, clip-path or an SVG
+ * stroke offset, plays once, and is skipped under prefers-reduced-motion except for the
+ * price swap's fade. Curves are the strong ease-out and ease-in-out from the motion skill.
+ */
+@theme {
+  --ease-land-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-land-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* The scan line only exists while it animates. */
+.hero-scan {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /*
+   * Hero: once the WebP card is in view (on phones it starts below the fold), the arrow is
+   * pressed, the card is scanned in, then its smaller size lands. Before that the card
+   * waits empty; without the reveal script it simply shows its final state.
+   */
+  [data-reveal] .hero-done:not([data-shown]) .hero-reveal {
+    clip-path: inset(0 100% 0 0);
+  }
+  [data-reveal] .hero-done:not([data-shown]) .hero-size {
+    opacity: 0;
+  }
+  [data-reveal] figure:has(.hero-done[data-shown]) .hero-arrow {
+    animation: hero-press 360ms var(--ease-land-out) 100ms both;
+  }
+  [data-reveal] .hero-done[data-shown] .hero-reveal {
+    animation: hero-reveal 900ms var(--ease-land-in-out) 300ms both;
+  }
+  [data-reveal] .hero-done[data-shown] .hero-scan {
+    animation: hero-scan 900ms var(--ease-land-in-out) 300ms both;
+  }
+  [data-reveal] .hero-done[data-shown] .hero-size {
+    animation: rise-in 320ms var(--ease-land-out) 1150ms both;
+  }
+
+  /*
+   * Groups marked data-reveal-group rise in, staggered, the first time they scroll into
+   * view. The inline script in landing-page.tsx sets data-reveal on <html> and data-shown
+   * on each group; without it nothing is hidden.
+   */
+  [data-reveal] [data-reveal-group]:not([data-shown]) > * {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  [data-reveal] [data-reveal-group] > * {
+    transition:
+      opacity 600ms var(--ease-land-out),
+      transform 600ms var(--ease-land-out);
+  }
+  [data-reveal] [data-reveal-group] > :nth-child(2) {
+    transition-delay: 70ms;
+  }
+  [data-reveal] [data-reveal-group] > :nth-child(3) {
+    transition-delay: 140ms;
+  }
+  [data-reveal] [data-reveal-group] > :nth-child(4) {
+    transition-delay: 210ms;
+  }
+
+  /* Engines: the wires draw from "convt picks the engine", the dots land, then the cards. */
+  [data-reveal] .engine-wire {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 700ms var(--ease-land-in-out);
+  }
+  [data-reveal] .engine-dot {
+    opacity: 0;
+    transform: scale(0.5);
+    transform-box: fill-box;
+    transform-origin: center;
+    transition:
+      opacity 240ms var(--ease-land-out) 620ms,
+      transform 240ms var(--ease-land-out) 620ms;
+  }
+  [data-reveal] [data-shown] .engine-wire {
+    stroke-dashoffset: 0;
+  }
+  [data-reveal] [data-shown] .engine-dot {
+    opacity: 1;
+    transform: none;
+  }
+  @media (min-width: 1120px) {
+    /* Same specificity as the nth-child stagger above, and later, so this wins. */
+    [data-reveal] [data-reveal-group].engine-cards > * {
+      transition-delay: calc(var(--i) * 70ms + 700ms);
+    }
+  }
+
+  /* Pricing: the period switch slides its highlight (Tailwind's translate-x sets `translate`). */
+  .period-indicator {
+    transition: translate 240ms var(--ease-land-in-out);
+  }
+}
+
+/* The new price fades in when the period changes; it only moves with motion allowed. */
+.price-swap {
+  animation: fade-in 200ms var(--ease-land-out) both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .price-swap {
+    animation-name: rise-in;
+  }
+}
+
+@keyframes hero-press {
+  50% {
+    transform: scale(0.9);
+  }
+}
+@keyframes hero-reveal {
+  /* Both ends explicit: inset() cannot interpolate to the implicit none. */
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes hero-scan {
+  from {
+    transform: translateX(-100%);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 0;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}

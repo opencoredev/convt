@@ -1,6 +1,6 @@
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
-import { ButtonLink, ComingSoon, Container, DownloadIcon, MisoPhoto } from "./ui";
+import { ButtonLink, ComingSoon, Container, DownloadIcon, MisoPhoto, cx } from "./ui";
 
 export function Hero() {
   return (
@@ -56,7 +56,7 @@ function ConvertPanel() {
       <figcaption className="sr-only">A 4.8 MB HEIC photo converted to a 612 KB WebP.</figcaption>
       <div className="flex w-full min-w-0 flex-col items-center gap-7 lg:w-auto lg:flex-row">
         <FileCard name="miso.heic" size="4.8 MB" alt="A cat photo saved as miso.heic" />
-        <div className="bg-land-green flex size-12 shrink-0 rotate-90 items-center justify-center rounded-full shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_4px_12px_#0a3c2340] lg:rotate-0">
+        <div className="hero-arrow bg-land-green flex size-12 shrink-0 rotate-90 items-center justify-center rounded-full shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_4px_12px_#0a3c2340] lg:rotate-0">
           <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="M5 12h14M13 6l6 6-6 6"
@@ -86,19 +86,33 @@ function FileCard({
   done?: boolean;
 }) {
   return (
-    <div className="flex w-[320px] max-w-full flex-col gap-3 rounded-[14px] bg-raised px-2.5 pt-2.5 pb-3.5 shadow-land-float">
-      <MisoPhoto
-        alt={alt}
-        width={300}
-        height={220}
-        className="aspect-[300/220] w-full rounded-lg object-cover"
-      />
+    <div
+      data-reveal-watch={done ? "" : undefined}
+      className={cx(
+        "flex w-[320px] max-w-full flex-col gap-3 rounded-[14px] bg-raised px-2.5 pt-2.5 pb-3.5 shadow-land-float",
+        done && "hero-done",
+      )}
+    >
+      {/* The converted card is revealed behind a scan line once on load (styles.css). */}
+      <div className="relative overflow-clip rounded-lg bg-sunken">
+        <MisoPhoto
+          alt={alt}
+          width={300}
+          height={220}
+          className={cx("block aspect-[300/220] w-full object-cover", done && "hero-reveal")}
+        />
+        {done && (
+          <span aria-hidden="true" className="hero-scan pointer-events-none absolute inset-0">
+            <span className="absolute inset-y-0 right-0 w-0.5 bg-land-accent shadow-[0_0_12px_#4cc283]" />
+          </span>
+        )}
+      </div>
       <div className="flex items-center justify-between px-1">
         <span className="text-[14px]/[18px] font-medium text-ink">{name}</span>
         <span
           className={
             done
-              ? "font-mono text-[12px]/[16px] text-green"
+              ? "hero-size font-mono text-[12px]/[16px] text-green"
               : "font-mono text-[12px]/[16px] text-land-muted"
           }
         >

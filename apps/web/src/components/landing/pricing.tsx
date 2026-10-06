@@ -16,7 +16,7 @@ export function Pricing() {
         </h2>
         <p className="text-[17px]/[26px] text-ink-2">Both plans start with a 7-day free trial.</p>
       </div>
-      <div className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
+      <div data-reveal-group className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
         <DesktopPlan />
         <ProPlan />
       </div>
@@ -114,8 +114,16 @@ function ProPlan() {
         <div
           role="group"
           aria-label="Billing period"
-          className="absolute -top-0.5 right-0 flex items-center gap-0.5 rounded-lg bg-sunken p-0.5"
+          className="absolute -top-0.5 right-0 grid grid-cols-2 rounded-lg bg-sunken p-0.5"
         >
+          {/* One highlight that slides between the two equal-width buttons. */}
+          <span
+            aria-hidden="true"
+            className={cx(
+              "period-indicator absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-hover shadow-[inset_0_1px_0_#ffffff0f,0_0_0_1px_#2e3331,0_1px_1px_#00000066]",
+              yearly && "translate-x-full",
+            )}
+          />
           <PeriodButton active={!yearly} onClick={() => setYearly(false)}>
             Monthly
           </PeriodButton>
@@ -124,11 +132,14 @@ function ProPlan() {
           </PeriodButton>
         </div>
       </div>
-      {yearly ? (
-        <Price amount="$8" unit="per month" note="Billed yearly. Save 33% over monthly." />
-      ) : (
-        <Price amount="$12" unit="per month" note="$8 a month if you pay yearly. Save 33%." />
-      )}
+      {/* Keyed so the new price mounts and fades in (price-swap in styles.css). */}
+      <div key={yearly ? "year" : "month"} className="price-swap">
+        {yearly ? (
+          <Price amount="$8" unit="per month" note="Billed yearly. Save 33% over monthly." />
+        ) : (
+          <Price amount="$12" unit="per month" note="$8 a month if you pay yearly. Save 33%." />
+        )}
+      </div>
       <Features
         mark="✓  "
         items={[
@@ -168,10 +179,8 @@ function PeriodButton({
       aria-pressed={active}
       onClick={onClick}
       className={cx(
-        "flex h-6 cursor-pointer items-center rounded-md px-2.5 text-[12px]/[16px] font-medium transition-colors",
-        active
-          ? "bg-hover text-ink shadow-[inset_0_1px_0_#ffffff0f,0_0_0_1px_#2e3331,0_1px_1px_#00000066]"
-          : "text-land-muted hover:text-ink-2",
+        "relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2.5 text-[12px]/[16px] font-medium transition-colors",
+        active ? "text-ink" : "text-land-muted hover:text-ink-2",
         focusRing,
       )}
     >

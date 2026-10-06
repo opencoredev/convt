@@ -66,7 +66,7 @@ export function Formats() {
           Images, video, audio and documents. Right-click a file, pick what you want, done.
         </p>
       </div>
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ul data-reveal-group className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {groups.map((group) => (
           <FormatCard key={group.name} {...group} />
         ))}

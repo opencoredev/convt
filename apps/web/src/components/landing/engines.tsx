@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import { Mark } from "#/components/logo";
 
 import { Container } from "./ui";
@@ -65,9 +67,12 @@ export function Engines() {
               <span className="font-mono text-[12px]/[16px] text-land-muted">picks the engine</span>
             </div>
             <Connectors />
-            <ul className="mt-6 grid w-full gap-4 sm:grid-cols-2 min-[1120px]:mt-0 min-[1120px]:flex min-[1120px]:w-[1056px]">
-              {engines.map((engine) => (
-                <EngineCard key={engine.name} {...engine} />
+            <ul
+              data-reveal-group
+              className="engine-cards mt-6 grid w-full gap-4 sm:grid-cols-2 min-[1120px]:mt-0 min-[1120px]:flex min-[1120px]:w-[1056px]"
+            >
+              {engines.map((engine, i) => (
+                <EngineCard key={engine.name} index={i} {...engine} />
               ))}
             </ul>
           </div>
@@ -85,42 +90,63 @@ function Connectors() {
       height="56"
       viewBox="0 0 1056 56"
       aria-hidden="true"
+      data-reveal-watch
       className="hidden shrink-0 min-[1120px]:block"
     >
       <path
         d="M528 0v20a8 8 0 0 1-8 8H134a8 8 0 0 0-8 8v20"
+        className="engine-wire"
+        pathLength={1}
         fill="none"
         stroke={stroke}
         strokeWidth="1.5"
       />
       <path
         d="M528 0v20a8 8 0 0 1-8 8H402a8 8 0 0 0-8 8v20"
+        className="engine-wire"
+        pathLength={1}
         fill="none"
         stroke={stroke}
         strokeWidth="1.5"
       />
       <path
         d="M528 0v20a8 8 0 0 0 8 8h118a8 8 0 0 1 8 8v20"
+        className="engine-wire"
+        pathLength={1}
         fill="none"
         stroke={stroke}
         strokeWidth="1.5"
       />
       <path
         d="M528 0v20a8 8 0 0 0 8 8h386a8 8 0 0 1 8 8v20"
+        className="engine-wire"
+        pathLength={1}
         fill="none"
         stroke={stroke}
         strokeWidth="1.5"
       />
       {[126, 394, 662, 930].map((cx) => (
-        <circle key={cx} cx={cx} cy="53" r="3" fill="#4cc283" />
+        <circle key={cx} className="engine-dot" cx={cx} cy="53" r="3" fill="#4cc283" />
       ))}
     </svg>
   );
 }
 
-function EngineCard({ name, from, to, description, kind, formats }: (typeof engines)[number]) {
+function EngineCard({
+  index,
+  name,
+  from,
+  to,
+  description,
+  kind,
+  formats,
+}: (typeof engines)[number] & { index: number }) {
   return (
-    <li className="flex flex-col justify-between gap-7 rounded-[14px] bg-[#0b0d0cdb] p-6 shadow-[0_0_0_1px_#ffffff14,0_24px_48px_#00000066] min-[1120px]:w-[252px] min-[1120px]:shrink-0">
+    <li
+      // --i staggers the cards after the wires draw (styles.css).
+      style={{ "--i": index } as CSSProperties}
+      className="flex flex-col justify-between gap-7 rounded-[14px] bg-[#0b0d0cdb] p-6 shadow-[0_0_0_1px_#ffffff14,0_24px_48px_#00000066] min-[1120px]:w-[252px] min-[1120px]:shrink-0"
+    >
       <div className="flex flex-col gap-5">
         <p className="flex items-center gap-2 font-mono text-[12px]/[16px] text-land-mono">
           {from}
