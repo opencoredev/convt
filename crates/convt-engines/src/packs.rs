@@ -1289,6 +1289,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).unwrap(), "keep");
     }
 
+    #[cfg(unix)]
     #[test]
     fn followup_removal_cleans_crash_orphans() {
         let temp = test_tempdir();
@@ -1345,6 +1346,7 @@ mod tests {
         assert!(!orphan.exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn removal_holds_lock_before_cleaning_orphans() {
         let temp = test_tempdir();
@@ -1366,6 +1368,27 @@ mod tests {
         assert!(!orphan.exists());
     }
 
+    #[cfg(not(unix))]
+    #[test]
+    fn unsupported_ownership_rejects_pack_operations_before_download() {
+        let temp = test_tempdir();
+        let root = temp.path().join("installed");
+        private_root(&root);
+        let source = Source {
+            url: "https://unreachable.invalid/pack".into(),
+            sha256: "a".repeat(64),
+            version: "test".into(),
+        };
+        for error in [
+            install_at(&root, &source, &|_| panic!("must not download")).unwrap_err(),
+            remove_at(&root).unwrap_err(),
+        ] {
+            assert_eq!(failure_kind(&error), FailureKind::Rejected);
+            assert!(format!("{error:#}").contains("isn't safe"), "{error:#}");
+        }
+        assert!(!root.join("install.lock").exists());
+    }
+
     #[test]
     fn rejects_forged_pack_discovery() {
         let temp = test_tempdir();
@@ -1380,15 +1403,6 @@ mod tests {
             installed_in(&root).is_err(),
             "arbitrary receipt was trusted"
         );
-    }
-
-    #[test]
-    fn completed_operation_releases_lock() {
-        let temp = test_tempdir();
-        let path = temp.path().join("install.lock");
-        let operation = PackLock::acquire(&path).unwrap();
-        drop(operation);
-        assert!(PackLock::acquire(&path).is_ok());
     }
 
     #[cfg(unix)]
@@ -1407,6 +1421,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn reinstall_rebuilds_tampered_launcher_from_verified_archive() {
         let temp = test_tempdir();
@@ -1418,6 +1433,7 @@ mod tests {
         assert_eq!(fs::read(&exe).unwrap(), b"#!/bin/sh\nexit 0\n");
     }
 
+    #[cfg(unix)]
     #[test]
     fn discovery_requires_the_expected_pin_and_receipt() {
         let temp = test_tempdir();
@@ -1519,6 +1535,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn reinstall_does_not_publish_a_forged_receipt_without_an_archive() {
         let temp = test_tempdir();
@@ -1533,6 +1550,7 @@ mod tests {
         assert_eq!(fs::read_to_string(exe).unwrap(), "forged launcher");
     }
 
+    #[cfg(unix)]
     #[test]
     fn cancelled_download_keeps_its_partial_and_resumes() {
         use std::cell::Cell;
@@ -1580,6 +1598,7 @@ mod tests {
     }
 
     /// Reads one HTTP request head from `stream`.
+    #[cfg(unix)]
     fn read_request(stream: &mut std::net::TcpStream) -> String {
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))
@@ -1639,6 +1658,7 @@ mod tests {
         assert_eq!(failure_kind(&error), FailureKind::DiskFull, "{error:#}");
     }
 
+    #[cfg(unix)]
     #[test]
     fn failures_say_what_kind_they_are() {
         use std::net::TcpListener;
@@ -1686,6 +1706,7 @@ mod tests {
         drop(lock);
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_stalled_download_cancels_within_moments_and_lets_go() {
         use std::net::TcpListener;
@@ -1754,6 +1775,7 @@ mod tests {
         assert_eq!(fs::metadata(partial).unwrap().len(), 1024);
     }
 
+    #[cfg(unix)]
     #[test]
     fn verifying_a_cached_archive_can_be_cancelled() {
         use std::cell::Cell;
@@ -1845,6 +1867,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn verifies_resumes_and_publishes_without_running_code() {
         let temp = test_tempdir();
@@ -1866,6 +1889,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn complete_download_and_interrupted_publication_recover_offline() {
         let temp = test_tempdir();
@@ -1884,6 +1908,7 @@ mod tests {
         assert_eq!(installed_with_pin(&root, &source.sha256).unwrap(), exe);
     }
 
+    #[cfg(unix)]
     #[test]
     fn resumes_http_from_the_requested_byte_offset() {
         use std::net::TcpListener;
@@ -1927,6 +1952,7 @@ mod tests {
         assert!(installed_with_pin(&root, &source.sha256).is_ok());
     }
 
+    #[cfg(unix)]
     #[test]
     fn corrupt_full_partial_restarts_after_http_416() {
         use std::net::TcpListener;
@@ -1980,6 +2006,7 @@ mod tests {
         assert!(installed_with_pin(&root, &source.sha256).is_ok());
     }
 
+    #[cfg(unix)]
     #[test]
     fn rejects_wrong_hash_and_links_before_publication() {
         let temp = test_tempdir();

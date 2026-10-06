@@ -41,8 +41,9 @@ jobs:
       - name: Install media fixture tools (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install ffmpeg
-          echo "CONVT_MATRIX_AV1_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+          echo "CONVT_MATRIX_AV1_FFMPEG=$(brew --prefix ffmpeg-full)/bin/ffmpeg" >> "$GITHUB_ENV"
       - name: Install media fixture tools (Windows)
         if: runner.os == 'Windows'
         run: choco install ffmpeg --no-progress -y
