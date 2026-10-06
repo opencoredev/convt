@@ -453,14 +453,22 @@ pub fn image_magic(path: &Path, id: &str) -> Check<()> {
     Ok(())
 }
 
-pub fn check_pattern(img: &DynamicImage, alpha: bool) -> Check<()> {
+/// Checks the four-quadrant test pattern. The bottom-right quadrant is
+/// half transparent: `alpha` expects that kept, and `on_white` expects it
+/// composited over white, as convt does for outputs without transparency.
+pub fn check_pattern(img: &DynamicImage, alpha: bool, on_white: bool) -> Check<()> {
     let rgba = img.to_rgba8();
     let (w, h) = rgba.dimensions();
+    let half = if on_white {
+        [240, 240, 140]
+    } else {
+        [224, 224, 24]
+    };
     for (x, y, expected) in [
         (w / 4, h / 4, [240, 24, 24]),
         (3 * w / 4, h / 4, [24, 224, 24]),
         (w / 4, 3 * h / 4, [24, 24, 240]),
-        (3 * w / 4, 3 * h / 4, [224, 224, 24]),
+        (3 * w / 4, 3 * h / 4, half),
     ] {
         let p = rgba.get_pixel(x, y).0;
         if p[..3]
@@ -687,9 +695,11 @@ pub fn validate(
                             (img.width(), img.height())
                         ));
                     }
-                    // AVIF/GIF can quantize alpha; GIF is binary, JPEG and PPM drop it.
+                    // AVIF/GIF can quantize alpha; GIF is binary. JPEG and PPM
+                    // can't store it, so convt flattens it onto white.
                     let alpha = fixture.alpha && !matches!(to.id, "jpeg" | "ppm" | "gif");
-                    check_pattern(&img, alpha)?;
+                    let on_white = fixture.alpha && matches!(to.id, "jpeg" | "ppm");
+                    check_pattern(&img, alpha, on_white)?;
                 }
                 if to.id == "gif" && fixture.format.category == Category::Video {
                     validate_media(fixture, to, path, options)?;
@@ -791,7 +801,7 @@ fn validate_media(fixture: &Fixture, to: &Format, path: &Path, options: &Options
                 image::RgbaImage::from_raw(width, height, bytes.to_vec())
                     .ok_or("invalid frame dimensions")?,
             );
-            check_pattern(&if flipped { img.fliph() } else { img }, false)
+            check_pattern(&if flipped { img.fliph() } else { img }, false, false)
                 .map_err(|e| format!("{name} video frame: {e}"))?;
         }
         if video["codec_name"] != expected_codec {

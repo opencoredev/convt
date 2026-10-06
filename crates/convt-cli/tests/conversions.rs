@@ -149,7 +149,7 @@ fn recursive_parallel_json_presets_and_existing_names() {
         outdir.join("nested/sample.webp"),
     ] {
         support::image_magic(&path, "webp").unwrap();
-        support::check_pattern(&support::decode(&path, "webp").unwrap(), true).unwrap();
+        support::check_pattern(&support::decode(&path, "webp").unwrap(), true, false).unwrap();
     }
     assert!(!outdir.join("already.webp").exists());
     assert!(!outdir.join("unsupported.webp").exists());
@@ -198,7 +198,8 @@ fn recursive_parallel_json_presets_and_existing_names() {
     support::image_magic(&jpg, "jpeg").unwrap();
     let img = support::decode(&jpg, "jpeg").unwrap();
     assert_eq!((img.width(), img.height()), (32, 24));
-    support::check_pattern(&img, false).unwrap();
+    // The sample is transparent in one quadrant, which JPEG puts on white.
+    support::check_pattern(&img, false, true).unwrap();
 }
 
 #[test]

@@ -659,6 +659,8 @@ fn encode_depth(
                 | image::ColorType::Rgba32F
         );
     let pixels = crate::image::fit(pixels, ctx.options.max_size);
+    // HEIC and AVIF keep transparency, so only a chosen color changes anything.
+    let pixels = crate::image::apply_background(pixels, ctx.step.to.id, ctx.options)?;
     let (width, height) = (pixels.width(), pixels.height());
     let bytes = if deep {
         pixels
@@ -944,6 +946,20 @@ impl Engine for ImageIoEngine {
         ctx.indeterminate();
         let output = ctx.artifact(out_dir, 0);
         let format = ctx.step.to.id;
+        // sips knows nothing of a chosen background color: flatten the PNG
+        // before it encodes HEIC, and the PNG it decodes afterwards.
+        let flattened = out_dir.join("flattened.png");
+        let input: &Path = if format == "heic"
+            && matches!(
+                ctx.options.background,
+                Some(convt_core::Background::Color(_))
+            ) {
+            std::fs::copy(input, &flattened)?;
+            crate::image::background_png(&flattened, ctx.options)?;
+            &flattened
+        } else {
+            input
+        };
         let mut cmd = std::process::Command::new(sips);
         cmd.args(["-s", "format", format]);
         if matches!(format, "jpeg" | "heic") {
@@ -954,7 +970,12 @@ impl Engine for ImageIoEngine {
             cmd.args(["-Z", &max.to_string()]);
         }
         cmd.arg(input).arg("--out").arg(&output);
-        crate::run_tool("imageio", cmd, ctx, |_| {})?;
+        let ran = crate::run_tool("imageio", cmd, ctx, |_| {});
+        let _ = std::fs::remove_file(&flattened);
+        ran?;
+        if format == "png" {
+            crate::image::background_png(&output, ctx.options)?;
+        }
         Ok(vec![output])
     }
 }

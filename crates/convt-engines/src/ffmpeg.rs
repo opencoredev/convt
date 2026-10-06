@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use convt_core::{Ctx, Engine, Error, Options, Result, Step, VideoCodec};
+use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, VideoCodec};
 
 const VIDEO_IN: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
 const VIDEO_OUT: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
@@ -86,6 +86,54 @@ impl FfmpegEngine {
             Err(Error::Cancelled) => Err(Error::Cancelled),
             Err(_) => Ok(None),
             Ok(()) => Ok(secs.map(|s| s * 1_000_000.0)),
+        }
+    }
+}
+
+/// FFmpeg writes the extracted frame's (possibly scaled) pixel ratio in pHYs.
+/// Read that generated PNG before decoding discards its metadata; this also
+/// follows FFmpeg's chosen stream without running another subprocess.
+fn png_pixel_aspect(path: &Path) -> Option<(u16, u16)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut signature = [0; 8];
+    file.read_exact(&mut signature).ok()?;
+    if signature != *b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    loop {
+        let mut header = [0; 8];
+        file.read_exact(&mut header).ok()?;
+        let len = u32::from_be_bytes(header[..4].try_into().ok()?);
+        match &header[4..] {
+            b"pHYs" if len == 9 => {
+                let mut data = [0; 9];
+                file.read_exact(&mut data).ok()?;
+                let num = u32::from_be_bytes(data[..4].try_into().ok()?);
+                let den = u32::from_be_bytes(data[4..8].try_into().ok()?);
+                if num == 0 || den == 0 {
+                    return None;
+                }
+                let (mut a, mut b) = (num, den);
+                while b != 0 {
+                    (a, b) = (b, a % b);
+                }
+                let (num, den) = (num / a, den / a);
+                // JFIF has only 16-bit density fields. Scaled frames can need
+                // larger ratios; retain their proportions to the nearest
+                // representable density instead of falling back to 1:1.
+                let scale = f64::from(num.max(den)).max(f64::from(u16::MAX));
+                let fit = |value| {
+                    (f64::from(value) * f64::from(u16::MAX) / scale)
+                        .round()
+                        .max(1.) as u16
+                };
+                return Some((fit(num), fit(den)));
+            }
+            b"IDAT" | b"IEND" => return None,
+            _ => {
+                file.seek(SeekFrom::Current(i64::from(len) + 4)).ok()?;
+            }
         }
     }
 }
@@ -185,12 +233,10 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
             push(&["-vf", &vf, "-an"]);
             return args;
         }
-        "png" | "jpeg" => {
+        // Still frames are always written as PNG, keeping any alpha; convert()
+        // then encodes the target through the image engine.
+        "png" => {
             push(&["-frames:v", "1", "-update", "1"]);
-            if to == "jpeg" {
-                let qv = q.map_or(2, |q| 2 + (100 - u32::from(q)) * 29 / 99);
-                push(&["-q:v", &qv.to_string()]);
-            }
             if let Some(m) = o.max_size {
                 let vf = format!(
                     "scale='min(iw,{m})':'min(ih,{m})':force_original_aspect_ratio=decrease"
@@ -261,13 +307,26 @@ impl Engine for FfmpegEngine {
             ctx.indeterminate();
         }
         let output = ctx.artifact(out_dir, 0);
+        let to = ctx.step.to.id;
+        if to == "gif" && matches!(ctx.options.background, Some(Background::Color(_))) {
+            return Err(Error::InvalidOption(
+                "a background color isn't supported for video to GIF yet".into(),
+            ));
+        }
+        // A JPEG frame is written as PNG and encoded by the image engine, so
+        // transparency gets the same background handling as any other image
+        // (FFmpeg's JPEG encoder dropped it to black). A PNG frame keeps
+        // FFmpeg's file, with its color and pixel-aspect tags.
+        let via_png = to == "jpeg";
+        let frame = out_dir.join("frame.png");
+        let written = if via_png { &frame } else { &output };
         let mut cmd = Command::new(ffmpeg);
         cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
             .args(LOCAL_INPUT_ARGS)
             .args(["-progress", "pipe:1", "-nostats", "-i"])
             .arg(local_path(input))
-            .args(output_args(ctx.step.to.id, ctx.options))
-            .arg(&output);
+            .args(output_args(if via_png { "png" } else { to }, ctx.options))
+            .arg(written);
         crate::run_tool("ffmpeg", cmd, ctx, |line| {
             let us = line
                 .strip_prefix("out_time_us=")
@@ -276,6 +335,17 @@ impl Engine for FfmpegEngine {
                 ctx.progress((us / total) as f32);
             }
         })?;
+        if via_png {
+            let img = image::open(&frame).map_err(|e| Error::EngineFailed {
+                engine: "ffmpeg",
+                message: e.to_string(),
+            })?;
+            let pixel_aspect = png_pixel_aspect(&frame);
+            let _ = std::fs::remove_file(&frame);
+            crate::image::encode_with_pixel_aspect(img, to, ctx.options, &output, pixel_aspect)?;
+        } else if to == "png" {
+            crate::image::background_png(&output, ctx.options)?;
+        }
         Ok(vec![output])
     }
 }
@@ -303,14 +373,6 @@ mod tests {
         let mp3 = output_args("mp3", &o).join(" ");
         assert!(mp3.contains("-b:a 96k") && !mp3.contains("-q:a"), "{mp3}");
         assert!(!output_args("png", &o).join(" ").contains("scale"));
-        let best = output_args(
-            "jpeg",
-            &Options {
-                quality: Some(100),
-                ..Options::default()
-            },
-        );
-        assert!(best.join(" ").contains("-q:v 2"));
     }
 
     #[test]

@@ -5,8 +5,8 @@ use std::sync::Mutex;
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use convt_core::{
-    Cancel, Event, FORMATS, Job, Options, Output, PageRange, Preset, VideoCodec, expand_inputs,
-    format_by_extension, format_by_id, run_batch,
+    Background, Cancel, Category, Event, FORMATS, Job, Options, Output, PageRange, Preset,
+    VideoCodec, expand_inputs, format_by_extension, format_by_id, run_batch,
 };
 use convt_license::client::{Config, Licensing};
 use serde_json::json;
@@ -57,6 +57,9 @@ struct Cli {
     /// Leave the audio out of video output
     #[arg(long)]
     no_audio: bool,
+    /// What transparent areas become: white (default for JPG), black, transparent, or a color like #ff8800
+    #[arg(long, value_name = "COLOR")]
+    background: Option<Background>,
     /// How many files to convert at once (default: CPU count; video runs one at a time)
     #[arg(short, long)]
     jobs: Option<usize>,
@@ -336,9 +339,19 @@ fn convert(cli: Cli, registry: &convt_core::Registry) -> anyhow::Result<()> {
         dpi: cli.dpi,
         video_codec: cli.video_codec,
         strip_audio: cli.no_audio,
+        background: cli.background,
     }
     .or(&preset.map(|p| p.options).unwrap_or_default());
     options.validate()?;
+    if options.background == Some(Background::Transparent)
+        && to.category == Category::Image
+        && !to.keeps_transparency()
+    {
+        bail!(
+            "{} can't store transparency; choose a background color such as white or black",
+            to.name
+        );
+    }
 
     // Files found in a folder are skipped quietly when they can't become `to`;
     // files named directly are always attempted, so their errors show.

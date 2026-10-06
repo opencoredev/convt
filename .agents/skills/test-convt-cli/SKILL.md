@@ -51,6 +51,9 @@ Options, presets and batches:
 
 ```sh
 $c "$work/in/sample.png" --to jpeg -q 60 --max-size 64 -o "$work/out"
+# Transparent areas: white by default for JPEG and PPM, or --background black,
+# "#ff8800" or transparent (refused for formats that can't store it).
+$c "$work/in/sample.png" --to jpeg --background black -o "$work/out"
 $c "$work/in/sample.pdf" --to webp --pages 2- --dpi 72 -o "$work/out"   # named by page: sample-2.webp, ...
 $c "$work/in/sample.mp4" --to mp4 --video-height 120 -o "$work/out"
 export CONVT_CONFIG_DIR="$work/cfg"                  # never the user's real presets

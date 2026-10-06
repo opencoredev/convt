@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use convt_core::{Ctx, Engine, Error, Result, Step};
+use convt_core::{Background, Ctx, Engine, Error, Result, Step};
 use resvg::{tiny_skia, usvg};
 
 /// Renders SVG to PNG with resvg. Other raster targets go through the image
@@ -42,6 +42,12 @@ impl Engine for SvgEngine {
             (size.height() * scale).ceil() as u32,
         );
         let mut pixmap = tiny_skia::Pixmap::new(w, h).ok_or_else(|| failed("SVG has no size"))?;
+        // A chosen background color goes under the drawing; otherwise the
+        // canvas stays transparent, and a later step to a format without
+        // transparency flattens it (white unless chosen).
+        if let Some(Background::Color([r, g, b])) = ctx.options.background {
+            pixmap.fill(tiny_skia::Color::from_rgba8(r, g, b, 255));
+        }
         resvg::render(
             &tree,
             tiny_skia::Transform::from_scale(scale, scale),

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use convt_core::{Ctx, Engine, Options, Preset, Registry, VideoCodec, format_by_id};
+use convt_core::{Background, Ctx, Engine, Options, Preset, Registry, VideoCodec, format_by_id};
 use convt_license::account::{Api, ApiError, Session, challenge_of};
 use convt_license::client::{self, KeyStore};
 use convt_license::{License, Plan};
@@ -1615,6 +1615,155 @@ fn the_popover_copies_every_drop_even_past_the_listed_few(cx: &mut TestAppContex
         !shown(cx, window, &format!("copied-{}", jobs[0])),
         "only three are listed"
     );
+}
+
+#[gpui_kit::test]
+fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let logo = f.dir.path().join("logo.png");
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([0, 0, 0, 0]))
+        .save(&logo)
+        .unwrap();
+    save_preset(
+        &f,
+        cx,
+        "orange",
+        Preset {
+            to: Some("jpeg".into()),
+            options: Options {
+                background: Some("#ff8800".parse().unwrap()),
+                ..Options::default()
+            },
+        },
+    );
+    let (window, view) = f.quick(cli(vec![logo], None, None), cx);
+
+    // JPEG can't be transparent: White by default, and no Transparent choice.
+    click(cx, window, "to-jpeg");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options(), Options::default()));
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-white") && shown(cx, window, "background-black"));
+    assert!(!shown(cx, window, "background-transparent"));
+    click(cx, window, "background-black");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("Black"));
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options().background,
+            Some(Background::BLACK)
+        )
+    });
+
+    // WebP keeps transparency, so Transparent is offered.
+    click(cx, window, "to-webp");
+    click(cx, window, "background");
+    click(cx, window, "background-transparent");
+    assert_eq!(
+        label(cx, window, "background").as_deref(),
+        Some("Transparent")
+    );
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options().background,
+            Some(Background::Transparent)
+        )
+    });
+    // Back to JPEG, the Transparent pick falls back to White instead of failing.
+    click(cx, window, "to-jpeg");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options().background, None));
+
+    // A preset's own color shows and stays pickable.
+    click(cx, window, "preset-orange");
+    assert_eq!(label(cx, window, "background").as_deref(), Some("#FF8800"));
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-#ff8800"));
+    click(cx, window, "background-white");
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-#ff8800"));
+    click(cx, window, "background-#ff8800");
+    click(cx, window, "quality-smaller");
+    let before = cx.read(|cx| view.read(cx).conversion_options());
+    click(cx, window, "background");
+    assert!(shown(cx, window, "background-automatic"));
+    click(cx, window, "background-automatic");
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options(),
+            Options {
+                background: None,
+                ..before
+            }
+        )
+    });
+}
+
+#[gpui_kit::test]
+fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    // Targets come from the extension, so the contents don't matter here.
+    let pdf = f.dir.path().join("page.pdf");
+    std::fs::write(&pdf, "not really a pdf").unwrap();
+    let (window, view) = f.quick(cli(vec![pdf], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if targets.iter().any(|t| t.id == "png") {
+        // PDF pages render on white unless Transparent is picked.
+        click(cx, window, "to-png");
+        assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+        click(cx, window, "background");
+        assert!(shown(cx, window, "background-transparent"));
+    } else {
+        eprintln!("skipping PDF: PDFium missing");
+    }
+
+    let clip = f.dir.path().join("clip.mov");
+    std::fs::write(&clip, "not really a movie").unwrap();
+    let (window, view) = f.quick(cli(vec![clip], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if !targets.iter().any(|t| t.id == "gif") {
+        eprintln!("skipping video: FFmpeg missing");
+        return;
+    }
+    // GIF from video takes no background color; a still frame does.
+    click(cx, window, "to-gif");
+    assert!(!shown(cx, window, "background"));
+    if targets.iter().any(|t| t.id == "jpeg") {
+        click(cx, window, "to-jpeg");
+        assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+    }
+    // A preset's color doesn't follow the movie into GIF, where nothing could clear it.
+    save_preset(
+        &f,
+        cx,
+        "white",
+        Preset {
+            to: None,
+            options: Options {
+                background: Some(Background::WHITE),
+                ..Options::default()
+            },
+        },
+    );
+    let clip = f.dir.path().join("clip2.mov");
+    std::fs::write(&clip, "not really a movie").unwrap();
+    let (window, view) = f.quick(cli(vec![clip], None, Some("white")), cx);
+    click(cx, window, "to-gif");
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options().background, None));
+
+    // A PDF renders on white while a PNG keeps its transparency: Automatic.
+    let pdf = f.dir.path().join("mixed.pdf");
+    let png = f.dir.path().join("mixed.png");
+    std::fs::write(&pdf, "not really a pdf").unwrap();
+    image::RgbaImage::new(2, 2).save(&png).unwrap();
+    let (window, view) = f.quick(cli(vec![pdf, png], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if targets.iter().any(|t| t.id == "webp") {
+        click(cx, window, "to-webp");
+        assert_eq!(
+            label(cx, window, "background").as_deref(),
+            Some("Automatic")
+        );
+    }
 }
 
 #[gpui_kit::test]
