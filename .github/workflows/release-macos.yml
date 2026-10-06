@@ -1,7 +1,22 @@
-name: Release macOS (manual, universal)
+name: Build release macos
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      source_date_epoch:
+        required: true
+        type: string
+      dry_run:
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
+      version:
+        description: Synced release version (must match this commit)
+        required: true
+        type: string
       source_date_epoch:
         description: Release UTC Unix timestamp
         required: true
@@ -14,7 +29,7 @@ permissions:
   contents: read
 jobs:
   macos:
-    runs-on: macos-15
+    runs-on: tenki-macos-26-medium
     timeout-minutes: 90
     env:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
@@ -23,6 +38,16 @@ jobs:
       CONVT_LICENSE_STORE: file
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check requested version and trusted branch
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -71,7 +96,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-release-review
-          path: packaging/out/
+          path: packaging/out/convt-macos-universal.dmg
+          if-no-files-found: error
       - name: Remove certificate and keychain
         if: always()
         run: |

@@ -1,0 +1,71 @@
+name: Version packages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+concurrency:
+  group: version-packages
+  cancel-in-progress: false
+jobs:
+  version:
+    runs-on: tenki-standard-medium-4c-8g
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Version packages
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bun run release:version
+          if [ -n "$(git status --porcelain)" ]; then
+            echo changed=true >> "$GITHUB_OUTPUT"
+          fi
+      # Look up by head.ref, as in akeru-bot, rather than the API's head filter.
+      - name: Update version PR
+        id: pr
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: changeset-release/main
+        run: |
+          python3 scripts/release/notes.py version-pr > "$RUNNER_TEMP/version-pr.md"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$RELEASE_BRANCH"
+          git add -A
+          git commit -m 'chore(release): version packages' -m 'Refs CNV-13'
+          git push --force-with-lease origin "HEAD:$RELEASE_BRANCH"
+          pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&per_page=100" \
+            --jq ".[] | select(.head.ref == \"$RELEASE_BRANCH\" and .head.repo.full_name == \"$GITHUB_REPOSITORY\") | .number" | head -n 1)
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title 'chore(release): version packages' --body-file "$RUNNER_TEMP/version-pr.md"
+          else
+            url=$(gh pr create --base main --head "$RELEASE_BRANCH" --title 'chore(release): version packages' --body-file "$RUNNER_TEMP/version-pr.md")
+            pr=${url##*/}
+          fi
+          echo "number=$pr" >> "$GITHUB_OUTPUT"
+      - name: Run CI on the version PR
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          head_ref=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.ref)
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)
+          head_repo=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.repo.full_name)
+          test "$head_ref" = changeset-release/main
+          test "$head_repo" = "$GITHUB_REPOSITORY"
+          gh workflow run ci.yml --ref "$head_ref" -f expected_sha="$head_sha"

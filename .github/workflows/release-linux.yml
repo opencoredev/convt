@@ -1,7 +1,28 @@
-name: Release Linux (manual, private artifacts)
+name: Build release linux
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      source_date_epoch:
+        required: true
+        type: string
+      dry_run:
+        default: false
+        type: boolean
+      history_url:
+        default: ""
+        type: string
+      initial_release:
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
+      version:
+        description: Synced release version (must match this commit)
+        required: true
+        type: string
       source_date_epoch:
         description: Release UTC Unix timestamp
         required: true
@@ -25,7 +46,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   linux:
-    runs-on: ubuntu-24.04
+    runs-on: tenki-standard-large-8c-16g
     timeout-minutes: 90
     env:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
@@ -34,6 +55,16 @@ jobs:
       CONVT_LICENSE_STORE: file
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check requested version and trusted branch
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: oven-sh/setup-bun@v2
         with:
@@ -50,6 +81,7 @@ jobs:
           if [ "$DRY_RUN" = true ]; then
             rm "$key"
             bun run update:keygen "$key"
+            echo "CONVT_UPDATE_PUBKEY=$(bun run release:manifest public-key "$key")" >> "$GITHUB_ENV"
           else
             test -n "$UPDATE_SIGNING_KEY"
             printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
@@ -86,33 +118,13 @@ jobs:
           python3 scripts/release/compare.py "packaging/out/ci-a/$version" "packaging/out/ci-b/$version"
           bash scripts/release/rebuild-cli.sh "packaging/out/ci-a/$version/convt-$version-source.tar.gz"
           rm -rf "$frozen"
-      - name: Sign copies and regenerate manifests
-        if: ${{ !inputs.dry_run }}
-        env:
-          REPO_KEY: ${{ secrets.CONVT_REPO_SIGNING_KEY }}
-          CONVT_REPO_SIGNING_KEY_ID: ${{ vars.CONVT_REPO_SIGNING_KEY_ID }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y debsigs rpm
-          export GNUPGHOME
-          GNUPGHOME=$(mktemp -d)
-          chmod 700 "$GNUPGHOME"
-          trap 'rm -rf "$GNUPGHOME"' EXIT
-          printf '%s' "$REPO_KEY" | gpg --batch --import
-          version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')
-          date=$(date -u -d "@$SOURCE_DATE_EPOCH" +%F)
-          bash scripts/release/sign-linux.sh "packaging/out/ci-a/$version" "packaging/out/signed/$version"
-          bun run release:manifest generate "packaging/out/signed/$version" "$version" "$date" https://downloads.convt.app ${CONVT_RELEASE_HISTORY:+"$CONVT_RELEASE_HISTORY"}
-          bun run release:manifest sign "packaging/out/signed/$version/release-manifest.json" "$CONVT_UPDATE_SIGNING_KEY" "packaging/out/signed/$version/update-manifest.json"
-          python3 scripts/release/templates.py "packaging/out/signed/$version/release-manifest.json" "packaging/out/signed/$version/repositories"
       - uses: actions/upload-artifact@v4
         with:
           name: linux-release-review
-          path: packaging/out/
+          path: packaging/out/ci-a/${{ inputs.version }}/
+          if-no-files-found: error
           retention-days: 7
       - name: Remove update seed
         if: always()
         run: |
           if [ -n "${CONVT_UPDATE_SIGNING_KEY:-}" ]; then rm -f "$CONVT_UPDATE_SIGNING_KEY"; fi
-# Upload remains a separate Leo-authorized operation after all platform
-# artifacts are merged into the same signed manifest and source gates pass.

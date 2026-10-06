@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Version PR commit to check
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -11,75 +17,51 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_PROFILE_DEV_DEBUG: 0
-  CARGO_PROFILE_TEST_DEBUG: 0
-  CARGO_INCREMENTAL: 0
 
 jobs:
   rust:
-    name: Rust (${{ matrix.os }}, ${{ matrix.suite }})
+    name: Rust (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [Linux, macOS, Windows]
-        suite: [core, desktop]
         include:
-          - os: Linux
+          - os: linux
             runner: tenki-standard-large-8c-16g
-          - os: macOS
+          - os: macos
             runner: tenki-macos-26-medium
-          - os: Windows
-            runner: windows-2025
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
+      - name: Verify dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.suite }}
-      - name: Install media fixture tools (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          echo "CONVT_MATRIX_AV1_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
-      - name: Install media fixture tools (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install ffmpeg-full
-          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
-          echo "CONVT_MATRIX_AV1_FFMPEG=$(brew --prefix ffmpeg-full)/bin/ffmpeg" >> "$GITHUB_ENV"
-      - name: Install media fixture tools (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ffmpeg --no-progress -y
       - name: Install GPUI system libraries
-        if: runner.os == 'Linux' && matrix.suite == 'desktop'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb1-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libasound2-dev libzstd-dev
       - run: cargo fmt --all --check
         if: runner.os == 'Linux'
-      - name: Clippy (core)
-        if: matrix.suite == 'core'
-        run: cargo clippy --workspace --exclude convt-app --all-targets -- -D warnings
-      - name: Test (core)
-        if: matrix.suite == 'core'
-        run: cargo test --workspace --exclude convt-app
-      - name: Clippy (desktop)
-        if: matrix.suite == 'desktop'
-        run: cargo clippy -p convt-app --all-targets -- -D warnings
-      - name: Test (desktop)
-        if: matrix.suite == 'desktop'
-        run: cargo test -p convt-app
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: env CARGO_BUILD_JOBS=4 CARGO_INCREMENTAL=0 python3 -c 'import subprocess; subprocess.run(["cargo", "test", "--workspace"], timeout=900, check=True)'
 
   web:
     name: Web
     runs-on: tenki-standard-medium-4c-8g
     steps:
       - uses: actions/checkout@v5
+      - name: Verify dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2

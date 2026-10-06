@@ -132,12 +132,16 @@ if (cmd === "keygen") {
     throw Error("set SOURCE_DATE_EPOCH and a positive CONVT_MANIFEST_SEQUENCE");
   const expires = Number(process.env.CONVT_MANIFEST_EXPIRES ?? issued + 90 * 86400);
   if (!Number.isSafeInteger(expires) || expires <= issued) throw Error("invalid manifest expiry");
+  // GitHub releases use v-prefixed tags; the standalone download host uses bare versions.
+  const urlVersion = process.env.CONVT_RELEASE_URL_VERSION ?? version;
+  if (urlVersion !== version && urlVersion !== `v${version}`)
+    throw Error("CONVT_RELEASE_URL_VERSION must equal VERSION or vVERSION");
   const names = readdirSync(dir).sort();
   function artifact(name: string, platform: string, kind: string) {
     return {
       platform,
       kind,
-      url: `${base.replace(/\/$/, "")}/${encodeURIComponent(version)}/${encodeURIComponent(name)}`,
+      url: `${base.replace(/\/$/, "")}/${encodeURIComponent(urlVersion)}/${encodeURIComponent(name)}`,
       size: statSync(resolve(dir, name)).size,
       sha256: hash(resolve(dir, name)),
     };
