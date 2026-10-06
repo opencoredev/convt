@@ -256,7 +256,7 @@ body {
   opacity: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+@media screen and (prefers-reduced-motion: no-preference) {
   /*
    * Hero: once the WebP card is in view (on phones it starts below the fold), the arrow is
    * pressed, the card is scanned in, then its smaller size lands. Before that the card
@@ -340,13 +340,25 @@ body {
   }
 }
 
-/* The new price fades in when the period changes; it only moves with motion allowed. */
+/*
+ * Both prices share one grid cell and crossfade. Transitions, not a keyed remount, so
+ * toggling again mid-fade picks up from the current opacity instead of flashing. The
+ * outgoing price only moves when motion is allowed.
+ */
 .price-swap {
-  animation: fade-in 200ms var(--ease-land-out) both;
+  transition: opacity 200ms var(--ease-land-out);
+}
+.price-swap[aria-hidden="true"] {
+  opacity: 0;
 }
 @media (prefers-reduced-motion: no-preference) {
   .price-swap {
-    animation-name: rise-in;
+    transition:
+      opacity 200ms var(--ease-land-out),
+      translate 200ms var(--ease-land-out);
+  }
+  .price-swap[aria-hidden="true"] {
+    translate: 0 6px;
   }
 }
 
@@ -381,10 +393,5 @@ body {
   from {
     opacity: 0;
     transform: translateY(6px);
-  }
-}
-@keyframes fade-in {
-  from {
-    opacity: 0;
   }
 }

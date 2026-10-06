@@ -132,13 +132,14 @@ function ProPlan() {
           </PeriodButton>
         </div>
       </div>
-      {/* Keyed so the new price mounts and fades in (price-swap in styles.css). */}
-      <div key={yearly ? "year" : "month"} className="price-swap">
-        {yearly ? (
-          <Price amount="$8" unit="per month" note="Billed yearly. Save 33% over monthly." />
-        ) : (
+      {/* Both prices stay mounted in one grid cell and crossfade (price-swap in styles.css). */}
+      <div className="grid">
+        <div aria-hidden={yearly} className="price-swap [grid-area:1/1]">
           <Price amount="$12" unit="per month" note="$8 a month if you pay yearly. Save 33%." />
-        )}
+        </div>
+        <div aria-hidden={!yearly} className="price-swap [grid-area:1/1]">
+          <Price amount="$8" unit="per month" note="Billed yearly. Save 33% over monthly." />
+        </div>
       </div>
       <Features
         mark="✓  "
