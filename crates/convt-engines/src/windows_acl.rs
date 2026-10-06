@@ -21,7 +21,10 @@ use windows_sys::Win32::{
         FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_DATA, FILE_WRITE_EA,
         READ_CONTROL, WRITE_DAC, WRITE_OWNER,
     },
-    System::Threading::{GetCurrentProcess, OpenProcessToken},
+    System::{
+        SystemServices::{SECURITY_MANDATORY_MEDIUM_RID, SYSTEM_MANDATORY_LABEL_ACE_TYPE},
+        Threading::{GetCurrentProcess, OpenProcessToken},
+    },
 };
 
 struct Descriptor(PSECURITY_DESCRIPTOR);
@@ -92,17 +95,19 @@ pub(crate) fn trusted(path: &Path, ancestor: bool) -> anyhow::Result<()> {
     }
     let mut owner = ptr::null_mut();
     let mut acl = ptr::null_mut();
+    let mut label = ptr::null_mut();
     let mut descriptor = ptr::null_mut();
-    // SAFETY: live object handle and valid out-pointers; descriptor owns returned SID/ACL.
+    // SAFETY: live object handle and valid out-pointers; descriptor owns returned SID/ACLs.
+    // READ_CONTROL is enough to read the mandatory label.
     let error = unsafe {
         GetSecurityInfo(
             file.as_raw_handle(),
             SE_FILE_OBJECT,
-            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION,
             &mut owner,
             ptr::null_mut(),
             &mut acl,
-            ptr::null_mut(),
+            &mut label,
             &mut descriptor,
         )
     };
@@ -115,6 +120,38 @@ pub(crate) fn trusted(path: &Path, ancestor: bool) -> anyhow::Result<()> {
             "document-pack path has no restrictive ACL: {}",
             path.display()
         );
+    }
+    // A process running at low integrity can write to an object labelled low
+    // even when its DACL names only our user, so anything below medium is out.
+    if !label.is_null() {
+        // SAFETY: GetAce returns each ACE inside the live SACL; the label ACE
+        // layout is checked by type before its SID is read.
+        unsafe {
+            for index in 0..u32::from((*label).AceCount) {
+                let mut ace: *mut c_void = ptr::null_mut();
+                if GetAce(label, index, &mut ace) == 0 {
+                    return Err(std::io::Error::last_os_error().into());
+                }
+                if u32::from((*ace.cast::<ACE_HEADER>()).AceType) != SYSTEM_MANDATORY_LABEL_ACE_TYPE
+                {
+                    continue;
+                }
+                let entry = &*ace.cast::<SYSTEM_MANDATORY_LABEL_ACE>();
+                let sid: PSID = ptr::addr_of!(entry.SidStart).cast_mut().cast();
+                let count = *GetSidSubAuthorityCount(sid);
+                let rid = if count == 0 {
+                    0
+                } else {
+                    *GetSidSubAuthority(sid, u32::from(count) - 1)
+                };
+                if rid < SECURITY_MANDATORY_MEDIUM_RID as u32 {
+                    bail!(
+                        "document-pack path has a low integrity label: {}",
+                        path.display()
+                    );
+                }
+            }
+        }
     }
     let user = current_sid()?;
     let system = system_sid(WinLocalSystemSid)?;
@@ -226,6 +263,22 @@ mod tests {
             .unwrap();
         assert!(result.status.success(), "{result:?}");
         assert!(trusted(temp.path(), true).is_err());
+    }
+
+    #[test]
+    fn low_integrity_label_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("soffice.exe");
+        std::fs::write(&file, b"not executable").unwrap();
+        trusted(&file, false).unwrap();
+        let result = Command::new("icacls")
+            .arg(&file)
+            .args(["/setintegritylevel", "low"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+        assert!(trusted(&file, false).is_err());
+        assert!(trusted(&file, true).is_err());
     }
 
     #[test]
