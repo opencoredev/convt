@@ -1185,6 +1185,13 @@ fn remove_at(root: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
+    fn test_tempdir() -> tempfile::TempDir {
+        // macOS temp paths start with /var, a system symlink to /private/var.
+        // Keep production roots strict; only resolve the test fixture parent.
+        let parent = std::env::temp_dir().canonicalize().unwrap();
+        private_tempdir(&parent, ".convt-pack-test-").unwrap()
+    }
+
     fn private_root(root: &Path) {
         fs::create_dir(root).unwrap();
         #[cfg(unix)]
@@ -1238,7 +1245,7 @@ mod tests {
     #[test]
     fn followup_rejects_writable_ancestors() {
         use std::os::unix::fs::PermissionsExt;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let data = temp.path().join("data");
         private_root(&data);
         let root = data.join("packs/documents");
@@ -1258,7 +1265,7 @@ mod tests {
     #[test]
     fn followup_removal_rejects_symlinked_root_and_lock() {
         use std::os::unix::fs::symlink;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let outside = temp.path().join("outside");
         private_root(&outside);
         let hash = "a".repeat(64);
@@ -1284,7 +1291,7 @@ mod tests {
 
     #[test]
     fn followup_removal_cleans_crash_orphans() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         for name in [".install-interrupted", ".previous-interrupted"] {
@@ -1306,7 +1313,7 @@ mod tests {
     #[test]
     fn removal_rejects_unsafe_orphans_without_following_links() {
         use std::os::unix::fs::{PermissionsExt, symlink};
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let outside = temp.path().join("outside");
@@ -1340,7 +1347,7 @@ mod tests {
 
     #[test]
     fn removal_holds_lock_before_cleaning_orphans() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let orphan = root.join(".previous-interrupted");
@@ -1361,7 +1368,7 @@ mod tests {
 
     #[test]
     fn rejects_forged_pack_discovery() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let hash = "a".repeat(64);
         let dir = root.join(&hash);
@@ -1376,8 +1383,18 @@ mod tests {
     }
 
     #[test]
+    fn completed_operation_releases_lock() {
+        let temp = test_tempdir();
+        let path = temp.path().join("install.lock");
+        let operation = PackLock::acquire(&path).unwrap();
+        drop(operation);
+        assert!(PackLock::acquire(&path).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn completed_operation_releases_lock_even_with_duplicated_descriptor() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let path = temp.path().join("install.lock");
         let operation = PackLock::acquire(&path).unwrap();
         let inherited = operation.0.try_clone().unwrap();
@@ -1392,7 +1409,7 @@ mod tests {
 
     #[test]
     fn reinstall_rebuilds_tampered_launcher_from_verified_archive() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let source = archive(temp.path(), false);
         let exe = install_at(&root, &source, &|_| {}).unwrap();
@@ -1403,7 +1420,7 @@ mod tests {
 
     #[test]
     fn discovery_requires_the_expected_pin_and_receipt() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let source = archive(temp.path(), false);
         install_at(&root, &source, &|_| {}).unwrap();
@@ -1436,7 +1453,7 @@ mod tests {
     #[test]
     fn discovery_rejects_writable_paths_and_symlinks() {
         use std::os::unix::fs::{PermissionsExt, symlink};
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let source = archive(temp.path(), false);
         let exe = install_at(&root, &source, &|_| {}).unwrap();
@@ -1504,7 +1521,7 @@ mod tests {
 
     #[test]
     fn reinstall_does_not_publish_a_forged_receipt_without_an_archive() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let mut source = archive(temp.path(), false);
         let exe = install_at(&root, &source, &|_| {}).unwrap();
@@ -1519,7 +1536,7 @@ mod tests {
     #[test]
     fn cancelled_download_keeps_its_partial_and_resumes() {
         use std::cell::Cell;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1590,7 +1607,7 @@ mod tests {
         if !not_root() {
             return;
         }
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         write_private(root.join("install.lock"), "").unwrap();
@@ -1625,7 +1642,7 @@ mod tests {
     #[test]
     fn failures_say_what_kind_they_are() {
         use std::net::TcpListener;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1673,7 +1690,7 @@ mod tests {
     fn a_stalled_download_cancels_within_moments_and_lets_go() {
         use std::net::TcpListener;
         use std::sync::atomic::AtomicU64;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1740,7 +1757,7 @@ mod tests {
     #[test]
     fn verifying_a_cached_archive_can_be_cancelled() {
         use std::cell::Cell;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1761,7 +1778,7 @@ mod tests {
     #[test]
     fn the_data_folder_is_made_private_only_behind_safe_folders() {
         use std::os::unix::fs::{PermissionsExt, symlink};
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let mode = |p: &Path| fs::symlink_metadata(p).unwrap().permissions().mode() & 0o7777;
         let set = |p: &Path, m| fs::set_permissions(p, fs::Permissions::from_mode(m)).unwrap();
 
@@ -1801,7 +1818,7 @@ mod tests {
     #[test]
     fn loopback_test_download_does_not_follow_redirects() {
         use std::net::TcpListener;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let mut source = archive(temp.path(), false);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         source.url = format!("http://{}/pack", listener.local_addr().unwrap());
@@ -1830,7 +1847,7 @@ mod tests {
 
     #[test]
     fn verifies_resumes_and_publishes_without_running_code() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let source = archive(temp.path(), false);
@@ -1851,7 +1868,7 @@ mod tests {
 
     #[test]
     fn complete_download_and_interrupted_publication_recover_offline() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1870,7 +1887,7 @@ mod tests {
     #[test]
     fn resumes_http_from_the_requested_byte_offset() {
         use std::net::TcpListener;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1913,7 +1930,7 @@ mod tests {
     #[test]
     fn corrupt_full_partial_restarts_after_http_416() {
         use std::net::TcpListener;
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         private_root(&root);
         let mut source = archive(temp.path(), false);
@@ -1965,7 +1982,7 @@ mod tests {
 
     #[test]
     fn rejects_wrong_hash_and_links_before_publication() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let mut source = archive(temp.path(), false);
         source.sha256 = "0".repeat(64);
@@ -1989,7 +2006,7 @@ mod tests {
 
     #[test]
     fn unconfigured_source_and_corrupt_pointer_are_offline() {
-        let temp = private_tempdir(&std::env::temp_dir(), ".convt-pack-test-").unwrap();
+        let temp = test_tempdir();
         let root = temp.path().join("installed");
         let source = Source {
             url: "https://unreachable.invalid".into(),
