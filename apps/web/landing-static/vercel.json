@@ -71,6 +71,80 @@
       }
     },
     {
+      "src": "/convert/",
+      "status": 308,
+      "headers": {
+        "Location": "/convert"
+      }
+    },
+    {
+      "src": "/convert/([a-z0-9-]+)/",
+      "status": 308,
+      "headers": {
+        "Location": "/convert/$1"
+      }
+    },
+    {
+      "src": "/convert",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
+      "missing": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+        }
+      ],
+      "dest": "/convert.md",
+      "headers": {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Vary": "Accept"
+      }
+    },
+    {
+      "src": "/convert/([a-z0-9-]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
+      "missing": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown\\s*;\\s*q\\s*=\\s*0(\\.0{0,3})?\\s*(,.*)?"
+        }
+      ],
+      "dest": "/convert/$1.md",
+      "headers": {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Vary": "Accept"
+      },
+      "check": true
+    },
+    {
+      "src": "/convert",
+      "dest": "/convert/index.html",
+      "headers": {
+        "Vary": "Accept"
+      }
+    },
+    {
+      "src": "/convert/([a-z0-9-]+)",
+      "dest": "/convert/$1/index.html",
+      "headers": {
+        "Vary": "Accept"
+      },
+      "check": true
+    },
+    {
       "src": "/(index\\.html)?",
       "headers": {
         "Vary": "Accept"

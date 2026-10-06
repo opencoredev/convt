@@ -1,13 +1,13 @@
 """Finish the static coming-soon build in dist/client for Vercel.
 
 Copies landing-static/ (vercel.json, llms.txt, robots.txt and the Markdown pages),
-renders about, privacy and 404 to HTML with page.html, inlines the home page CSS,
-and writes sitemap.xml.
+renders about, privacy and 404 to HTML with page.html, and post-processes the
+prerendered pages (inline CSS, late hydration). scripts/landing-pages.ts then writes
+the Markdown for the /convert pages, sitemap.xml and the conversions in llms.txt.
 The Markdown files stay in the output: Vercel serves them to agents that send
 Accept: text/markdown (see the routes in vercel.json).
 """
 
-import datetime
 import html
 import re
 import shutil
@@ -78,34 +78,31 @@ for name, (title, description, path) in pages.items():
         page = page.replace("{{" + key + "}}", value)
     (out / f"{name}.html").write_text(page)
 
-# Inline the stylesheet into the prerendered home page. Its URLs are absolute (/assets/...),
-# and on a slow phone the separate request cost a full round trip before first paint.
-index = out / "index.html"
-page = index.read_text()
-link = re.search(r'<link rel="stylesheet" href="(/assets/styles-[^"]+\.css)"[^>]*/>', page)
-assert link, "stylesheet link not found in index.html"
-css = (out / link[1].lstrip("/")).read_text()
-page = page.replace(link[0], f"<style>{css}</style>", 1)
-# The modulepreload hints fetch the hydration JavaScript at high priority, where it
-# competes with the fonts and images of the first paint on a slow phone.
-page = re.sub(r'<link rel="modulepreload"[^>]*/>', "", page)
-# Start hydration once the page has loaded and the browser is idle. Without JavaScript
-# the page is complete; hydration only wires up the Monthly/Yearly switch.
-entry = re.search(r'<script type="module" async="" src="(/assets/index-[^"]+\.js)"></script>', page)
-assert entry, "entry script not found in index.html"
-loader = (
-    "<script>addEventListener('load',function(){var go=function(){import('%s')};"
-    "'requestIdleCallback' in window?requestIdleCallback(go,{timeout:2000}):setTimeout(go,200)})</script>"
-) % entry[1]
-page = page.replace(entry[0], loader, 1)
-index.write_text(page)
+# Post-process every prerendered page (the home page and the /convert pages); the
+# About, Privacy and 404 pages above are plain HTML and are skipped.
+ours = {"about.html", "privacy.html", "404.html"}
+prerendered = [p for p in out.rglob("*.html") if p.relative_to(out).as_posix() not in ours]
+assert prerendered, "no prerendered pages in dist/client"
+for path in prerendered:
+    page = path.read_text()
+    # Inline the stylesheet. Its URLs are absolute (/assets/...), and on a slow phone the
+    # separate request cost a full round trip before first paint.
+    link = re.search(r'<link rel="stylesheet" href="(/assets/styles-[^"]+\.css)"[^>]*/>', page)
+    assert link, f"stylesheet link not found in {path}"
+    css = (out / link[1].lstrip("/")).read_text()
+    page = page.replace(link[0], f"<style>{css}</style>", 1)
+    # The modulepreload hints fetch the hydration JavaScript at high priority, where it
+    # competes with the fonts and images of the first paint on a slow phone.
+    page = re.sub(r'<link rel="modulepreload"[^>]*/>', "", page)
+    # Start hydration once the page has loaded and the browser is idle. Without JavaScript
+    # the pages are complete; hydration only wires up the Monthly/Yearly switch.
+    entry = re.search(r'<script type="module" async="" src="(/assets/index-[^"]+\.js)"></script>', page)
+    assert entry, f"entry script not found in {path}"
+    loader = (
+        "<script>addEventListener('load',function(){var go=function(){import('%s')};"
+        "'requestIdleCallback' in window?requestIdleCallback(go,{timeout:2000}):setTimeout(go,200)})</script>"
+    ) % entry[1]
+    page = page.replace(entry[0], loader, 1)
+    path.write_text(page)
 
-today = datetime.date.today().isoformat()
-urls = "".join(
-    f"  <url><loc>{origin}{path}</loc><lastmod>{today}</lastmod></url>\n" for path in ["/", "/about", "/privacy"]
-)
-(out / "sitemap.xml").write_text(
-    '<?xml version="1.0" encoding="UTF-8"?>\n'
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + urls + "</urlset>\n"
-)
 print(f"Static extras written to {out}")

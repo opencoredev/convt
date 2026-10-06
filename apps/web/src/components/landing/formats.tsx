@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Container, MisoPhoto } from "./ui";
+import { popularConversions } from "../site/links";
+import { Container, MisoPhoto, cx, focusRing } from "./ui";
 
 const groups = [
   {
@@ -71,6 +72,33 @@ export function Formats() {
           <FormatCard key={group.name} {...group} />
         ))}
       </ul>
+      <nav
+        aria-label="Popular conversions"
+        className="mt-8 flex flex-wrap items-center justify-center gap-2"
+      >
+        <span className="mr-1 font-mono text-[12px]/[16px] text-land-muted">Popular</span>
+        {popularConversions.map((link) => (
+          <a
+            key={link.href}
+            href={link.href}
+            className={cx(
+              "rounded-lg bg-sunken px-3 py-1.5 text-[13px]/[18px] text-ink-2 shadow-land-secondary transition-colors hover:text-ink",
+              focusRing,
+            )}
+          >
+            {link.label}
+          </a>
+        ))}
+        <a
+          href="/convert"
+          className={cx(
+            "rounded-sm px-2 py-1.5 text-[13px]/[18px] text-ink underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-land-accent",
+            focusRing,
+          )}
+        >
+          All conversions
+        </a>
+      </nav>
     </Container>
   );
 }

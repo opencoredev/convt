@@ -7,6 +7,8 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 
+import { conversionPaths } from "./src/lib/conversions";
+
 const landingOnly = process.env.CONVT_LANDING_ONLY === "1";
 
 const config = defineConfig({
@@ -29,7 +31,7 @@ const config = defineConfig({
       // coming-soon deploy on Vercel (see LAUNCHED in src/lib/site.ts).
       ...(landingOnly && {
         prerender: { enabled: true, autoStaticPathsDiscovery: false, crawlLinks: false },
-        pages: [{ path: "/" }],
+        pages: ["/", ...conversionPaths].map((path) => ({ path })),
       }),
     }),
     viteReact(),

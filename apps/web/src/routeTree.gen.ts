@@ -25,6 +25,8 @@ import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as CheckoutDesktopRouteImport } from './routes/checkout/desktop'
 import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
+import { Route as ConvertIndexRouteImport } from './routes/convert/index'
+import { Route as ConvertPairRouteImport } from './routes/convert/$pair'
 import { Route as AppShellAccountRouteImport } from './routes/_app/_shell/account'
 import { Route as AppCheckoutSuccessRouteImport } from './routes/_app/checkout/success'
 import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
@@ -117,6 +119,16 @@ const CheckoutDesktopRoute = CheckoutDesktopRouteImport.update({
 const CheckoutProRoute = CheckoutProRouteImport.update({
   id: '/checkout/pro',
   path: '/checkout/pro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConvertIndexRoute = ConvertIndexRouteImport.update({
+  id: '/convert/',
+  path: '/convert/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConvertPairRoute = ConvertPairRouteImport.update({
+  id: '/convert/$pair',
+  path: '/convert/$pair',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppShellAccountRoute = AppShellAccountRouteImport.update({
@@ -217,6 +229,8 @@ export interface FileRoutesByFullPath {
   '/terms': typeof SiteTermsRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
+  '/convert/$pair': typeof ConvertPairRoute
+  '/convert/': typeof ConvertIndexRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
@@ -248,6 +262,8 @@ export interface FileRoutesByTo {
   '/terms': typeof SiteTermsRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
+  '/convert/$pair': typeof ConvertPairRoute
+  '/convert': typeof ConvertIndexRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
@@ -283,6 +299,8 @@ export interface FileRoutesById {
   '/_site/terms': typeof SiteTermsRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
+  '/convert/$pair': typeof ConvertPairRoute
+  '/convert/': typeof ConvertIndexRoute
   '/_app/_shell/account': typeof AppShellAccountRoute
   '/_app/checkout/success': typeof AppCheckoutSuccessRoute
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
@@ -316,6 +334,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/checkout/desktop'
     | '/checkout/pro'
+    | '/convert/$pair'
+    | '/convert/'
     | '/account'
     | '/checkout/success'
     | '/sign-in/check-email'
@@ -347,6 +367,8 @@ export interface FileRouteTypes {
     | '/terms'
     | '/checkout/desktop'
     | '/checkout/pro'
+    | '/convert/$pair'
+    | '/convert'
     | '/account'
     | '/checkout/success'
     | '/sign-in/check-email'
@@ -381,6 +403,8 @@ export interface FileRouteTypes {
     | '/_site/terms'
     | '/checkout/desktop'
     | '/checkout/pro'
+    | '/convert/$pair'
+    | '/convert/'
     | '/_app/_shell/account'
     | '/_app/checkout/success'
     | '/_app/sign-in/check-email'
@@ -408,6 +432,8 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   CheckoutDesktopRoute: typeof CheckoutDesktopRoute
   CheckoutProRoute: typeof CheckoutProRoute
+  ConvertPairRoute: typeof ConvertPairRoute
+  ConvertIndexRoute: typeof ConvertIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDeviceLicenseRoute: typeof ApiDeviceLicenseRoute
   ApiDeviceSignOutRoute: typeof ApiDeviceSignOutRoute
@@ -526,6 +552,20 @@ declare module '@tanstack/react-router' {
       path: '/checkout/pro'
       fullPath: '/checkout/pro'
       preLoaderRoute: typeof CheckoutProRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/convert/': {
+      id: '/convert/'
+      path: '/convert'
+      fullPath: '/convert/'
+      preLoaderRoute: typeof ConvertIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/convert/$pair': {
+      id: '/convert/$pair'
+      path: '/convert/$pair'
+      fullPath: '/convert/$pair'
+      preLoaderRoute: typeof ConvertPairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/_shell/account': {
@@ -718,6 +758,8 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   CheckoutDesktopRoute: CheckoutDesktopRoute,
   CheckoutProRoute: CheckoutProRoute,
+  ConvertPairRoute: ConvertPairRoute,
+  ConvertIndexRoute: ConvertIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDeviceLicenseRoute: ApiDeviceLicenseRoute,
   ApiDeviceSignOutRoute: ApiDeviceSignOutRoute,

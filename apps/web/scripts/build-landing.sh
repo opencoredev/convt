@@ -33,4 +33,5 @@ find dist -name '.dev.vars*' -delete
 
 test -f dist/client/index.html
 python3 scripts/landing-static.py dist/client
+bun scripts/landing-pages.ts dist/client
 echo "Static landing page: $(pwd)/dist/client"
