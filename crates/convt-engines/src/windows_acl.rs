@@ -8,6 +8,7 @@ use std::{
     },
     path::Path,
     ptr,
+    sync::OnceLock,
 };
 use windows_sys::Win32::{
     Foundation::{CloseHandle, LocalFree},
@@ -77,6 +78,51 @@ fn system_sid(kind: WELL_KNOWN_SID_TYPE) -> anyhow::Result<Vec<u32>> {
         return Err(std::io::Error::last_os_error().into());
     }
     Ok(sid)
+}
+
+struct TrustedSids {
+    user: Vec<u32>,
+    system: Vec<u32>,
+    admins: Vec<u32>,
+    installer: Vec<u32>,
+}
+
+fn trusted_sids() -> anyhow::Result<&'static TrustedSids> {
+    static SIDS: OnceLock<Result<TrustedSids, String>> = OnceLock::new();
+    SIDS.get_or_init(|| load_trusted_sids().map_err(|error| error.to_string()))
+        .as_ref()
+        .map_err(|error| anyhow::anyhow!("cannot obtain trusted Windows SIDs: {error}"))
+}
+
+fn load_trusted_sids() -> anyhow::Result<TrustedSids> {
+    let user = current_sid()?;
+    let system = system_sid(WinLocalSystemSid)?;
+    let admins = system_sid(WinBuiltinAdministratorsSid)?;
+    // The drive root is normally owned by Windows Modules Installer.
+    let installer_name: Vec<u16> = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+    let mut installer = ptr::null_mut();
+    // SAFETY: valid NUL-terminated SID string and output pointer; LocalFree below.
+    if unsafe { ConvertStringSidToSidW(installer_name.as_ptr(), &mut installer) } == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let descriptor = Descriptor(installer);
+    // SAFETY: the Windows-allocated SID is valid until descriptor is dropped.
+    let length = unsafe { GetLengthSid(installer) };
+    let mut installer_sid = vec![0u32; (length as usize).div_ceil(4)];
+    // SAFETY: destination holds the entire SID, and source is still live.
+    if unsafe { CopySid(length, installer_sid.as_mut_ptr().cast(), installer) } == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    drop(descriptor);
+    Ok(TrustedSids {
+        user,
+        system,
+        admins,
+        installer: installer_sid,
+    })
 }
 
 /// Ancestors may be system-owned and allow users to create siblings, but may
@@ -153,27 +199,15 @@ pub(crate) fn trusted(path: &Path, ancestor: bool) -> anyhow::Result<()> {
             }
         }
     }
-    let user = current_sid()?;
-    let system = system_sid(WinLocalSystemSid)?;
-    let admins = system_sid(WinBuiltinAdministratorsSid)?;
-    // The drive root is normally owned by Windows Modules Installer.
-    let installer_name: Vec<u16> = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
-        .encode_utf16()
-        .chain(Some(0))
-        .collect();
-    let mut installer = ptr::null_mut();
-    // SAFETY: valid NUL-terminated SID string and output pointer; LocalFree below.
-    if unsafe { ConvertStringSidToSidW(installer_name.as_ptr(), &mut installer) } == 0 {
-        return Err(std::io::Error::last_os_error().into());
-    }
-    let _installer = Descriptor(installer);
+    let sids = trusted_sids()?;
 
     let same = |a: PSID, b: &[u32]| {
         // SAFETY: all SID pointers are supplied by Windows security APIs.
         unsafe { EqualSid(a, b.as_ptr().cast_mut().cast()) != 0 }
     };
-    let privileged = |sid| same(sid, &user) || same(sid, &system) || same(sid, &admins);
-    if !privileged(owner) && !(ancestor && unsafe { EqualSid(owner, installer) != 0 }) {
+    let privileged =
+        |sid| same(sid, &sids.user) || same(sid, &sids.system) || same(sid, &sids.admins);
+    if !privileged(owner) && !(ancestor && same(owner, &sids.installer)) {
         bail!(
             "document-pack path has an untrusted owner: {}",
             path.display()
@@ -263,6 +297,29 @@ mod tests {
             .unwrap();
         assert!(result.status.success(), "{result:?}");
         assert!(trusted(temp.path(), true).is_err());
+    }
+
+    #[test]
+    fn inherit_only_creator_owner_does_not_grant_access_to_pack_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = Command::new("icacls")
+            .arg(temp.path())
+            .args(["/grant", "*S-1-3-0:(OI)(CI)(IO)(F)"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+        trusted(temp.path(), false).unwrap();
+        trusted(temp.path(), true).unwrap();
+        let child = temp.path().join("child");
+        std::fs::create_dir(&child).unwrap();
+        trusted(&child, false).unwrap();
+        let result = Command::new("icacls")
+            .arg(&child)
+            .args(["/grant", "*S-1-1-0:(M)"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+        assert!(trusted(&child, false).is_err());
     }
 
     #[test]
