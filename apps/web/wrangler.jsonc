@@ -18,6 +18,12 @@
   // Railway's certificate verified. Locally, Wrangler and the Vite plugin read
   // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "cdd19f8f1a364892a7eb643fc91724e7" }],
+  // convt.app and www.convt.app are Worker custom domains (proxied). Billing's own
+  // route, convt.app/webhooks/*, wins for that path.
+  "routes": [
+    { "pattern": "convt.app", "custom_domain": true },
+    { "pattern": "www.convt.app", "custom_domain": true },
+  ],
   // convt-billing's RPC entrypoint: checkout, results, plan changes, the portal,
   // the spend cap and deletion. The site holds no billing secret.
   "services": [{ "binding": "BILLING", "service": "convt-billing", "entrypoint": "BillingRpc" }],
