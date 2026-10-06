@@ -59,6 +59,21 @@ export function ComingSoon({
   );
 }
 
+/**
+ * The cat photo used across the landing page: a 6 KB AVIF with a 640px JPEG fallback.
+ * Not lazy-loaded: it is one cached file, and lazy loading made the cards pop in
+ * while scrolling.
+ */
+export function MisoPhoto({ className, ...props }: ComponentProps<"img">) {
+  return (
+    // display: contents keeps the img sized by its container, as before.
+    <picture className="contents">
+      <source srcSet="/landing/miso.avif" type="image/avif" />
+      <img src="/landing/miso.jpg" decoding="async" className={className} {...props} />
+    </picture>
+  );
+}
+
 export function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">

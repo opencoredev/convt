@@ -1,6 +1,6 @@
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
-import { ButtonLink, ComingSoon, Container, DownloadIcon } from "./ui";
+import { ButtonLink, ComingSoon, Container, DownloadIcon, MisoPhoto } from "./ui";
 
 export function Hero() {
   return (
@@ -87,8 +87,7 @@ function FileCard({
 }) {
   return (
     <div className="flex w-[320px] max-w-full flex-col gap-3 rounded-[14px] bg-raised px-2.5 pt-2.5 pb-3.5 shadow-land-float">
-      <img
-        src="/landing/miso.jpg"
+      <MisoPhoto
         alt={alt}
         width={300}
         height={220}

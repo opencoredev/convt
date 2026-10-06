@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Container } from "./ui";
+import { Container, MisoPhoto } from "./ui";
 
 const groups = [
   {
@@ -112,12 +112,10 @@ function FormatCard({
 
 function ImagePreview() {
   return (
-    <img
-      src="/landing/miso.jpg"
+    <MisoPhoto
       alt=""
-      width={800}
-      height={550}
-      loading="lazy"
+      width={640}
+      height={440}
       className="size-full object-cover object-[50%_40%]"
     />
   );
@@ -130,10 +128,10 @@ function VideoPreview() {
       className="flex size-full flex-col items-center justify-center gap-3 bg-land-well px-6"
     >
       <div className="relative flex h-[124px] w-full items-center justify-center overflow-clip rounded-lg">
-        <img
-          src="/landing/miso.jpg"
+        <MisoPhoto
           alt=""
-          loading="lazy"
+          width={640}
+          height={440}
           className="absolute inset-0 size-full object-cover object-[50%_75%]"
         />
         <div className="absolute inset-0 bg-[#00000047]" />

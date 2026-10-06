@@ -64,6 +64,14 @@ export const sitemapPaths = [
   routes.terms,
 ] as const;
 
+/** Share card for every public page: the landing hero at 1200x630 (public/og.png). */
+const OG_IMAGE = {
+  url: `${SITE_ORIGIN}/og.png`,
+  width: 1200,
+  height: 630,
+  alt: "convt: convert any file with a right-click.",
+};
+
 /** Head tags for a public page: title, description, canonical URL and Open Graph. */
 export function seo({
   title,
@@ -84,9 +92,14 @@ export function seo({
       { property: "og:type", content: "website" },
       { property: "og:url", content: url },
       { property: "og:site_name", content: SITE_NAME },
-      { name: "twitter:card", content: "summary" },
+      { property: "og:image", content: OG_IMAGE.url },
+      { property: "og:image:width", content: String(OG_IMAGE.width) },
+      { property: "og:image:height", content: String(OG_IMAGE.height) },
+      { property: "og:image:alt", content: OG_IMAGE.alt },
+      { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
+      { name: "twitter:image", content: OG_IMAGE.url },
     ],
     links: [{ rel: "canonical", href: url }],
   };

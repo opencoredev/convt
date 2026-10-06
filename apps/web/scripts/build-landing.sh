@@ -4,7 +4,8 @@
 # Prerenders only "/" (CONVT_LANDING_ONLY in vite.config.ts) and leaves the result in
 # dist/client. The prerender boots the Worker locally, which insists on its bindings and
 # auth settings even though "/" uses none of them, so this passes throwaway development
-# values. None of them end up in the output.
+# values. None of them end up in the output. scripts/landing-static.py then adds the
+# agent files, the About, Privacy and 404 pages, and vercel.json.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -26,4 +27,5 @@ export MAILPIT_URL=http://127.0.0.1:8025
 bun run build
 
 test -f dist/client/index.html
+python3 scripts/landing-static.py dist/client
 echo "Static landing page: $(pwd)/dist/client"

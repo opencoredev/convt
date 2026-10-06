@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "",
+  "outputDirectory": ".",
+  "routes": [
+    { "src": "/(index\\.html)?", "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }], "dest": "/index.md", "headers": { "Content-Type": "text/markdown; charset=utf-8", "Vary": "Accept" } },
+    { "src": "/(about|privacy)", "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }], "dest": "/$1.md", "headers": { "Content-Type": "text/markdown; charset=utf-8", "Vary": "Accept" } },
+    { "src": "/(about|privacy)", "dest": "/$1.html", "headers": { "Vary": "Accept" } },
+    { "src": "/(about|privacy)\\.html", "status": 308, "headers": { "Location": "/$1" } },
+    { "src": "/(index\\.html)?", "headers": { "Vary": "Accept" }, "continue": true },
+    { "src": "/.*\\.md", "headers": { "Content-Type": "text/markdown; charset=utf-8" }, "continue": true },
+    { "src": "/assets/.*", "headers": { "Cache-Control": "public, max-age=31536000, immutable" }, "continue": true },
+    { "handle": "filesystem" },
+    { "src": "/.*", "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }], "dest": "/404.md", "status": 404, "headers": { "Content-Type": "text/markdown; charset=utf-8", "Vary": "Accept" } },
+    { "src": "/.*", "dest": "/404.html", "status": 404, "headers": { "Vary": "Accept" } }
+  ]
+}

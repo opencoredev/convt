@@ -187,8 +187,9 @@ body {
  * greys, the code colors and the green button that the shared palette lacks.
  */
 @theme {
-  --color-land-muted: #6f7571;
-  --color-land-label: #5e6662;
+  /* Lightened from the Paper values (#6f7571, #5e6662) to reach 4.5:1 on every landing surface. */
+  --color-land-muted: #838985;
+  --color-land-label: #848c88;
   --color-land-mono: #d6ddd9;
   --color-land-well: #0b0d0c;
   --color-land-code: #0f1211;
