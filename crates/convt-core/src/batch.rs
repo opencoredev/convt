@@ -145,7 +145,12 @@ mod tests {
             items
                 .into_iter()
                 .map(|i| {
-                    let rel = i.input.strip_prefix(d).unwrap().to_string_lossy();
+                    let rel = i
+                        .input
+                        .strip_prefix(d)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
                     format!("{rel}{}", if i.explicit { "!" } else { "" })
                 })
                 .collect()

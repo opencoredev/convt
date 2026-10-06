@@ -775,7 +775,21 @@ mod local_playlist_tests {
             tools.push(bundle);
         }
         for tool in tools {
+            let demuxers = Command::new(&tool)
+                .args(["-hide_banner", "-demuxers"])
+                .output()
+                .unwrap();
+            assert!(demuxers.status.success(), "{tool:?}: cannot list demuxers");
+            let demuxers = String::from_utf8_lossy(&demuxers.stdout);
             for (n, manifest) in manifests.iter().enumerate() {
+                let demuxer = ["hls", "concat", "dash"][n];
+                if !demuxers
+                    .lines()
+                    .any(|line| line.split_whitespace().nth(1) == Some(demuxer))
+                {
+                    eprintln!("SKIP {tool:?}: {demuxer} demuxer unavailable");
+                    continue;
+                }
                 let input = dir
                     .path()
                     .join(["playlist.m3u8", "playlist.ffconcat", "playlist.mpd"][n]);
