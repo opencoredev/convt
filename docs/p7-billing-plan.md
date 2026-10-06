@@ -176,7 +176,7 @@ A fetched fact can correct any mutable field: statuses, periods, cancel flags, a
 
 ### Checks against our records
 
-- Product and price ids in the catalog for this environment; currency `usd`; no discount.
+- Product and price ids in the catalog for this environment; currency `usd`; no discount except a code listed in the catalog's `discounts` for that product (the `PRODUCTHUNT` launch offer: 30% off Desktop and Pro monthly), whose amount must be its percentage of the subtotal, within a cent.
 - Desktop and Pro `subscription_create` and `subscription_cycle` orders: each full-period coverage item equals the catalog price.
 - Pro `subscription_update` orders: every item uses a catalog Pro price, and each item's absolute amount is at most the yearly price.
 - A Desktop order or a new subscription names a `checkouts` row we created for that product; if the row names a user, the customer's `external_id` is that user.
@@ -384,7 +384,7 @@ Seed changes: `trial@` loses its trial key; new fixtures `refunded@convt.test` (
 Integration tests in Bun against the P6 disposable Postgres, as the real roles, with the mock in process and an injected clock:
 
 - **Forged signatures:** wrong secret; one body byte changed; a valid signature for another `webhook-id`; timestamps 6 minutes old and ahead; missing headers; garbage signature header; one bad and one good signature (accepted); both key schemes accepted; oversized body. Every forgery leaves all tables unchanged.
-- **Business checks:** unknown product or price, wrong amount, a discount, EUR, a checkout we did not create, another user's checkout, a changed customer id. Each `rejected`, no license.
+- **Business checks:** unknown product or price, wrong amount, an unknown discount, a listed discount with the wrong amount, EUR, a checkout we did not create, another user's checkout, a changed customer id. Each `rejected`, no license.
 - **Trials:** a trialing subscription and its $0 paid order issue nothing; conversion with a paid order issues one key; a trial cancelled before its end issues nothing; a returning customer's checkout has `allow_trial` false.
 - **Pro coverage:** one key per paid period; switch to yearly with payment success (key with the later end), payment failure (nothing changes, nothing issued), zero charge (nothing issued), credit-funded downgrade (nothing until monthly coverage passes the yearly date, then one key, including a period paid wholly from the credit); `next_period` through the interface.
 - **Duplicates:** one delivery 5 times; one order through `order.created`, `order.paid` and `order.updated` with distinct event ids: one order, one license, one outbox row.

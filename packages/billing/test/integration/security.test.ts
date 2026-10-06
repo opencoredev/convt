@@ -194,6 +194,33 @@ describe("business checks", () => {
     }
   });
 
+  test("the PRODUCTHUNT code on Desktop issues a license; other discounts do not", async () => {
+    const code = (d: Record<string, unknown>, cents: number, id: string | null) => {
+      d.discount_id = id;
+      d.discount_amount = cents;
+      d.net_amount = 2900 - cents;
+      d.total_amount = 2900 - cents;
+    };
+    const ok = await deliverOrder((d) => code(d, 870, "disc_local_producthunt"));
+    expect({ event: ok.event.status, licenses: ok.licenses }).toEqual({
+      event: "processed",
+      licenses: 1,
+    });
+    const bad: Array<[number, string | null, RegExp]> = [
+      [1450, "disc_local_producthunt", /PRODUCTHUNT on 2900 is 870/],
+      [870, "disc_other", /unknown discount/],
+      [870, null, /without a code/],
+    ];
+    for (const [cents, id, reason] of bad) {
+      const r = await deliverOrder((d) => code(d, cents, id));
+      expect({ event: r.event.status, licenses: r.licenses }).toEqual({
+        event: "rejected",
+        licenses: 0,
+      });
+      expect(r.event.reason).toMatch(reason);
+    }
+  });
+
   test("another user's checkout and a changed customer id are rejected", async () => {
     const alice = await h.user("alice@convt.test");
     const mallory = await h.user("mallory@convt.test");
