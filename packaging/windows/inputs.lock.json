@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "distribution_ready": false,
+  "blockers": [
+    "Pin and verify x86_64 FFmpeg, PDFium and patched libheif with plugins",
+    "Supply exact matching component sources, build scripts and notices",
+    "Verify native engine discovery and conversions on Windows"
+  ],
+  "files": []
+}

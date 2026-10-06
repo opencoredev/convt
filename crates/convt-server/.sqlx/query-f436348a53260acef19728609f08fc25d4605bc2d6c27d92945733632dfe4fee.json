@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set status=case when status='succeeded' then status else 'failed' end,reservation=case when reservation='open' then 'released' else reservation end,lease_expires_at=null,error_code=case when reservation='open' then 'expired' else error_code end where expires_at<=now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f436348a53260acef19728609f08fc25d4605bc2d6c27d92945733632dfe4fee"
+}

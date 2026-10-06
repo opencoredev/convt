@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into usage_events (id,user_id,subscription_id,api_key_id,job_id,kind,quantity,amount_cents,occurred_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (job_id,kind) where corrects is null do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "556989179d38f411c59d7220403b8974404157f9041369c207dadd1c64844cdd"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set status='failed',reservation='released',error_code='expired_or_exhausted',lease_expires_at=null,finished_at=now() where reservation='open' and (expires_at<=now() or (status='running' and lease_expires_at<=now() and attempt>=max_attempts))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "32e4140faa35a120bb91de60f1f4978414af7aced668e2e71bcf293b7b476b0a"
+}

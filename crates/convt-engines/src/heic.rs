@@ -65,15 +65,25 @@ pub struct LibheifEngine {
     lib: std::result::Result<Library, String>,
 }
 
+fn absolute_override(name: &str) -> Option<PathBuf> {
+    let dir = PathBuf::from(std::env::var_os(name)?);
+    if dir.is_absolute() {
+        Some(dir)
+    } else {
+        eprintln!(
+            "convt: ignoring {name}={dir:?}: native library overrides must be absolute paths"
+        );
+        None
+    }
+}
+
 fn plugin_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<_> = crate::paths::bundle_dirs()
         .into_iter()
         .filter(|p| p.is_absolute())
         .map(|p| p.join("libheif/plugins"))
         .collect();
-    if let Some(dir) = std::env::var_os("CONVT_LIBHEIF_PLUGIN_DIR").map(PathBuf::from)
-        && dir.is_absolute()
-    {
+    if let Some(dir) = absolute_override("CONVT_LIBHEIF_PLUGIN_DIR") {
         dirs.push(dir);
     }
     dirs
@@ -164,8 +174,8 @@ impl Default for LibheifEngine {
 
 fn load() -> std::result::Result<Library, String> {
     let mut dirs = Vec::new();
-    if let Some(d) = std::env::var_os("CONVT_LIBHEIF_DIR") {
-        dirs.push(PathBuf::from(d));
+    if let Some(d) = absolute_override("CONVT_LIBHEIF_DIR") {
+        dirs.push(d);
     }
     if let Some(d) = std::env::current_exe()
         .ok()
@@ -876,7 +886,12 @@ impl Engine for LibheifEngine {
     }
 }
 
-/// Converts HEIC with macOS's own decoder through `sips`.
+/// Converts HEIC with macOS's own codecs through `sips`, and decodes AVIF,
+/// which libheif would otherwise need on macOS. PNG is the only format on
+/// the other side: sips flattens alpha onto black when it writes JPEG, and
+/// reads float TIFF (what the `image` engine writes for EXR) as linear light,
+/// so routes through either would change the picture. The `image` engine
+/// converts between PNG and everything else.
 #[cfg(target_os = "macos")]
 pub struct ImageIoEngine {
     sips: Option<PathBuf>,
@@ -916,8 +931,8 @@ impl Engine for ImageIoEngine {
     }
 
     fn steps(&self) -> Vec<Step> {
-        crate::steps(&["heic"], &["png", "jpeg"])
-            .chain(crate::steps(&["png", "jpeg", "tiff"], &["heic"]))
+        crate::steps(&["heic", "avif"], &["png"])
+            .chain(crate::steps(&["png"], &["heic"]))
             .collect()
     }
 
@@ -1323,6 +1338,162 @@ mod tests {
     #[ignore]
     fn worker_entry() {
         let _ = LibheifEngine::new();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn relative_overrides_never_run_library_constructor() {
+        let dir = tempfile::tempdir().unwrap();
+        let relative = dir.path().join("relative");
+        std::fs::create_dir(&relative).unwrap();
+        let source = dir.path().join("sentinel.c");
+        let marker = dir.path().join("loaded");
+        std::fs::write(
+            &source,
+            r#"#include <stdio.h>
+#include <stdlib.h>
+__attribute__((constructor)) static void loaded(void) {
+  FILE *f = fopen(getenv("CONVT_TEST_NATIVE_MARKER"), "w");
+  if (f) { fputs("loaded", f); fclose(f); }
+}
+"#,
+        )
+        .unwrap();
+        assert!(
+            std::process::Command::new("cc")
+                .args(["-shared", "-fPIC"])
+                .arg(&source)
+                .arg("-o")
+                .arg(dir.path().join("libheif.so.1"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        std::fs::copy(
+            dir.path().join("libheif.so.1"),
+            relative.join("libheif.so.1"),
+        )
+        .unwrap();
+        for value in ["", ".", "relative"] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "heic::tests::worker_entry",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .current_dir(dir.path())
+                .env("CONVT_LIBHEIF_DIR", value)
+                .env("CONVT_LIBHEIF_PLUGIN_DIR", value)
+                .env("CONVT_TEST_NATIVE_MARKER", &marker)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            assert!(
+                !marker.exists(),
+                "relative libheif override ran native code: {value:?}"
+            );
+            assert!(String::from_utf8_lossy(&output.stderr).contains("CONVT_LIBHEIF_DIR"));
+            assert!(String::from_utf8_lossy(&output.stderr).contains("must be absolute"));
+        }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "heic::tests::worker_entry",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("CONVT_LIBHEIF_DIR", dir.path())
+            .env("CONVT_TEST_NATIVE_MARKER", &marker)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(marker.exists(), "absolute libheif override was not loaded");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn relative_plugin_override_never_runs_constructor() {
+        let dir = tempfile::tempdir().unwrap();
+        let relative = dir.path().join("relative");
+        std::fs::create_dir(&relative).unwrap();
+        let source = dir.path().join("plugin.c");
+        let marker = dir.path().join("loaded");
+        std::fs::write(
+            &source,
+            r#"#include <stdio.h>
+#include <stdlib.h>
+__attribute__((constructor)) static void loaded(void) {
+  FILE *f = fopen(getenv("CONVT_TEST_NATIVE_MARKER"), "w");
+  if (f) { fputs("loaded", f); fclose(f); }
+}
+"#,
+        )
+        .unwrap();
+        assert!(
+            std::process::Command::new("cc")
+                .args(["-shared", "-fPIC"])
+                .arg(&source)
+                .arg("-o")
+                .arg(dir.path().join("sentinel.so"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        std::fs::copy(dir.path().join("sentinel.so"), relative.join("sentinel.so")).unwrap();
+        let library_source = dir.path().join("secure.c");
+        std::fs::write(
+            &library_source,
+            r#"#include <dlfcn.h>
+#include <stdio.h>
+struct error { int code, subcode; const char *message; };
+struct error heif_convt_init_no_plugins(void) { return (struct error){0, 0, "ok"}; }
+struct error heif_load_plugins(const char *path, void **plugins, int *count, int size) {
+  char file[4096]; snprintf(file, sizeof(file), "%s/sentinel.so", path);
+  dlopen(file, RTLD_NOW);
+  return (struct error){0, 0, "ok"};
+}
+"#,
+        )
+        .unwrap();
+        assert!(
+            std::process::Command::new("cc")
+                .args(["-shared", "-fPIC"])
+                .arg(&library_source)
+                .args(["-ldl", "-o"])
+                .arg(dir.path().join("libheif.so.1"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        for value in [
+            std::ffi::OsStr::new(""),
+            std::ffi::OsStr::new("."),
+            std::ffi::OsStr::new("relative"),
+            dir.path().as_os_str(),
+        ] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "heic::tests::worker_entry",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .current_dir(dir.path())
+                .env("CONVT_LIBHEIF_DIR", dir.path())
+                .env("CONVT_LIBHEIF_PLUGIN_DIR", value)
+                .env("CONVT_TEST_NATIVE_MARKER", &marker)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let absolute = Path::new(value).is_absolute();
+            assert_eq!(marker.exists(), absolute, "plugin override: {value:?}");
+            if !absolute {
+                let warnings = String::from_utf8_lossy(&output.stderr);
+                assert!(warnings.contains("CONVT_LIBHEIF_PLUGIN_DIR"));
+                assert!(warnings.contains("must be absolute"));
+            }
+        }
     }
 
     #[test]

@@ -1,0 +1,21 @@
+# Use the offline update verifier in P8
+
+`convt-update` has no transport or download code. Add the workspace dependency to the app when wiring the consumer. Packaged builds embed the separate `CONVT_UPDATE_PUBKEY`; source builds can have no key. Do not reuse a license key or trust a key advertised by downloaded metadata.
+
+After an opt-in check fetches the envelope bytes, call:
+
+```rust
+let trusted = convt_update::public_key().ok_or("update key is not configured")?;
+let verified = convt_update::verify(&bytes, &trusted, now_unix_seconds, highest_sequence)?;
+let choice = verified.select(
+    env!("CARGO_PKG_VERSION"),
+    convt_license::BUILD_DATE,
+    &license.updates_until,
+    "linux-x86_64",
+    "AppImage",
+)?;
+```
+
+Persist `verified.manifest().sequence` as the highest accepted metadata revision. Invalid, expired, future-issued, rolled-back or verification-only manifests produce errors before selection. The API rejects unknown JSON fields and malformed dates, versions, HTTPS links, sizes and hashes. Selection never decreases the running version or build date, including same-day versions. `covered` and `covered_artifact` identify the newest update within the license window. `uncovered` and `purchase_url` supply the purchase state when a newer release is outside coverage. An equal running build produces no update. Choose the installed platform and artifact kind; unsupported platforms return no matching update.
+
+The app owns the update setting, at-most-daily request policy, timeout, byte limit, persisted sequence and error presentation. Verify before showing URLs. On explicit download, check the received byte count and SHA-256 against the selected artifact before offering installation. Update discovery must not install or download document packs. About should link to the selected build's matching `source.url`. This note supplies the API contract and does not change app code or claim that its HTTP integration has been tested.

@@ -4,51 +4,51 @@ import { apiBaseUrl } from "#/lib/config";
 
 import { cx } from "./ui";
 
-// PLACEHOLDER: the API is not built (plan P9). The cURL sample is the one in the
-// design; the others show the same request. Update all four when the real endpoint
-// and `@convt/sdk` exist.
+// Each example follows the jobs API. The SDK handles upload and polling.
 const samples = [
-  {
-    id: "curl",
-    label: "cURL",
-    code: `curl ${apiBaseUrl}/v1/convert \\
-  -H "Authorization: Bearer $CONVT_KEY" \\
-  -F file=@interview.mov \\
-  -F to=mp4 \\
-  -o interview.mp4`,
-  },
   {
     id: "node",
     label: "Node",
     code: `import { Convt } from "@convt/sdk";
 
+// Set CONVT_API_KEY in your environment.
 const convt = new Convt();
-const out = await convt.convert("interview.mov", {
-  to: "mp4",
+const out = await convt.convert("report.docx", {
+  to: "pdf",
 });
-await out.save("interview.mp4");`,
+await out.save("report.pdf");`,
   },
   {
-    id: "python",
-    label: "Python",
-    code: `import os, requests
+    id: "curl",
+    label: "cURL",
+    code: `# Create a reservation for a 104-byte SVG.
+job=$(curl -fsS ${apiBaseUrl}/v1/jobs \\
+  -H "Authorization: Bearer $CONVT_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"input_format":"svg","target_format":"png","input_bytes":104}')
+# PUT your file to upload_url, then POST /v1/jobs/{id}/start.
+# Poll GET /v1/jobs/{id}; on success, GET its /download URLs.
+# The SDK performs each of these steps for you.`,
+  },
+  {
+    id: "browser",
+    label: "Browser",
+    code: `import { Convt } from "@convt/sdk";
 
-with open("interview.mov", "rb") as f:
-    r = requests.post(
-        "${apiBaseUrl}/v1/convert",
-        headers={"Authorization": f"Bearer {os.environ['CONVT_KEY']}"},
-        files={"file": f},
-        data={"to": "mp4"},
-    )
-r.raise_for_status()
-open("interview.mp4", "wb").write(r.content)`,
+// Use a short-lived token issued by your server.
+const convt = new Convt({
+  token: () => fetchToken(),
+  baseUrl: "${apiBaseUrl}",
+});
+const out = await convt.convert(file, { to: "pdf" });
+const blob = await out.blob();`,
   },
   {
     id: "cli",
     label: "CLI",
-    code: `# The convt CLI converts on your machine.
+    code: `# The desktop CLI converts on your machine.
 # It needs no API key and uploads nothing.
-convt interview.mov --to mp4`,
+convt report.docx --to pdf`,
   },
 ] as const;
 
@@ -56,7 +56,7 @@ type SampleId = (typeof samples)[number]["id"];
 
 export function CodeSample() {
   const base = useId();
-  const [active, setActive] = useState<SampleId>("curl");
+  const [active, setActive] = useState<SampleId>("node");
   const [copied, setCopied] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const current = samples.find((s) => s.id === active) ?? samples[0];

@@ -1,0 +1,1001 @@
+{
+  "engines": [
+    "image",
+    "svg",
+    "libheif",
+    "ffmpeg",
+    "pdfium",
+    "libreoffice"
+  ],
+  "formats": [
+    {
+      "id": "jpeg",
+      "name": "JPEG",
+      "category": "image",
+      "extensions": [
+        "jpg",
+        "jpeg",
+        "jfif"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "png",
+      "name": "PNG",
+      "category": "image",
+      "extensions": [
+        "png"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "webp",
+      "name": "WebP",
+      "category": "image",
+      "extensions": [
+        "webp"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff"
+      ]
+    },
+    {
+      "id": "heic",
+      "name": "HEIC",
+      "category": "image",
+      "extensions": [
+        "heic",
+        "heif"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "avif",
+      "name": "AVIF",
+      "category": "image",
+      "extensions": [
+        "avif"
+      ],
+      "targets": [
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "gif",
+      "name": "GIF",
+      "category": "image",
+      "extensions": [
+        "gif"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "avi",
+        "mkv",
+        "mov",
+        "mp4",
+        "webm"
+      ]
+    },
+    {
+      "id": "tiff",
+      "name": "TIFF",
+      "category": "image",
+      "extensions": [
+        "tiff",
+        "tif"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "webp"
+      ]
+    },
+    {
+      "id": "bmp",
+      "name": "BMP",
+      "category": "image",
+      "extensions": [
+        "bmp"
+      ],
+      "targets": [
+        "avif",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "ico",
+      "name": "ICO",
+      "category": "image",
+      "extensions": [
+        "ico"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "tga",
+      "name": "TGA",
+      "category": "image",
+      "extensions": [
+        "tga"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "ppm",
+      "name": "PPM",
+      "category": "image",
+      "extensions": [
+        "ppm",
+        "pgm",
+        "pbm",
+        "pnm"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "qoi",
+      "name": "QOI",
+      "category": "image",
+      "extensions": [
+        "qoi"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "exr",
+      "name": "OpenEXR",
+      "category": "image",
+      "extensions": [
+        "exr"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "svg",
+      "name": "SVG",
+      "category": "vector",
+      "extensions": [
+        "svg"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "mp4",
+      "name": "MP4",
+      "category": "video",
+      "extensions": [
+        "mp4",
+        "m4v"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "avi",
+        "mkv",
+        "mov",
+        "webm",
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "mov",
+      "name": "MOV",
+      "category": "video",
+      "extensions": [
+        "mov"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "avi",
+        "mkv",
+        "mp4",
+        "webm",
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "webm",
+      "name": "WebM",
+      "category": "video",
+      "extensions": [
+        "webm"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "avi",
+        "mkv",
+        "mov",
+        "mp4",
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "mkv",
+      "name": "MKV",
+      "category": "video",
+      "extensions": [
+        "mkv"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "avi",
+        "mov",
+        "mp4",
+        "webm",
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "avi",
+      "name": "AVI",
+      "category": "video",
+      "extensions": [
+        "avi"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "mkv",
+        "mov",
+        "mp4",
+        "webm",
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "mp3",
+      "name": "MP3",
+      "category": "audio",
+      "extensions": [
+        "mp3"
+      ],
+      "targets": [
+        "aac",
+        "flac",
+        "m4a",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "wav",
+      "name": "WAV",
+      "category": "audio",
+      "extensions": [
+        "wav"
+      ],
+      "targets": [
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus"
+      ]
+    },
+    {
+      "id": "flac",
+      "name": "FLAC",
+      "category": "audio",
+      "extensions": [
+        "flac"
+      ],
+      "targets": [
+        "aac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "aac",
+      "name": "AAC",
+      "category": "audio",
+      "extensions": [
+        "aac"
+      ],
+      "targets": [
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "m4a",
+      "name": "M4A",
+      "category": "audio",
+      "extensions": [
+        "m4a"
+      ],
+      "targets": [
+        "aac",
+        "flac",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "ogg",
+      "name": "OGG",
+      "category": "audio",
+      "extensions": [
+        "ogg",
+        "oga"
+      ],
+      "targets": [
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "opus",
+      "name": "Opus",
+      "category": "audio",
+      "extensions": [
+        "opus"
+      ],
+      "targets": [
+        "aac",
+        "flac",
+        "m4a",
+        "mp3",
+        "ogg",
+        "wav"
+      ]
+    },
+    {
+      "id": "pdf",
+      "name": "PDF",
+      "category": "pdf",
+      "extensions": [
+        "pdf"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp"
+      ]
+    },
+    {
+      "id": "docx",
+      "name": "DOCX",
+      "category": "document",
+      "extensions": [
+        "docx"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "doc",
+        "html",
+        "odt",
+        "txt",
+        "rtf"
+      ]
+    },
+    {
+      "id": "doc",
+      "name": "DOC",
+      "category": "document",
+      "extensions": [
+        "doc"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "docx",
+        "html",
+        "odt",
+        "txt",
+        "rtf"
+      ]
+    },
+    {
+      "id": "odt",
+      "name": "ODT",
+      "category": "document",
+      "extensions": [
+        "odt"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "txt",
+        "rtf"
+      ]
+    },
+    {
+      "id": "rtf",
+      "name": "RTF",
+      "category": "document",
+      "extensions": [
+        "rtf"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "odt",
+        "txt"
+      ]
+    },
+    {
+      "id": "txt",
+      "name": "Plain text",
+      "category": "document",
+      "extensions": [
+        "txt"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "odt",
+        "rtf"
+      ]
+    },
+    {
+      "id": "html",
+      "name": "HTML",
+      "category": "document",
+      "extensions": [
+        "html",
+        "htm"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "doc",
+        "docx",
+        "odt",
+        "txt",
+        "rtf"
+      ]
+    },
+    {
+      "id": "pptx",
+      "name": "PPTX",
+      "category": "presentation",
+      "extensions": [
+        "pptx"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "odp",
+        "ppt"
+      ]
+    },
+    {
+      "id": "ppt",
+      "name": "PPT",
+      "category": "presentation",
+      "extensions": [
+        "ppt"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "odp",
+        "pptx"
+      ]
+    },
+    {
+      "id": "odp",
+      "name": "ODP",
+      "category": "presentation",
+      "extensions": [
+        "odp"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "ppt",
+        "pptx"
+      ]
+    },
+    {
+      "id": "xlsx",
+      "name": "XLSX",
+      "category": "spreadsheet",
+      "extensions": [
+        "xlsx"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "csv",
+        "ods",
+        "xls"
+      ]
+    },
+    {
+      "id": "xls",
+      "name": "XLS",
+      "category": "spreadsheet",
+      "extensions": [
+        "xls"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "csv",
+        "ods",
+        "xlsx"
+      ]
+    },
+    {
+      "id": "ods",
+      "name": "ODS",
+      "category": "spreadsheet",
+      "extensions": [
+        "ods"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "csv",
+        "xls",
+        "xlsx"
+      ]
+    },
+    {
+      "id": "csv",
+      "name": "CSV",
+      "category": "spreadsheet",
+      "extensions": [
+        "csv"
+      ],
+      "targets": [
+        "avif",
+        "bmp",
+        "gif",
+        "heic",
+        "ico",
+        "jpeg",
+        "exr",
+        "png",
+        "ppm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+        "pdf",
+        "ods",
+        "xls",
+        "xlsx"
+      ]
+    }
+  ]
+}

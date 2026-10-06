@@ -1,10 +1,12 @@
 //! The license check every client shares: the desktop app, the CLI and the OS
-//! menu integrations. Nothing here touches the network.
+//! menu integrations. Nothing here touches the network; renewal fetches keys
+//! through [`crate::account`] and hands them to [`Licensing::offer_key`].
 //!
 //! Without a license, the first conversion starts a 7-day trial whose start
 //! date is a file in the data directory. Keys live in the OS credential store
 //! (Keychain, Windows Credential Manager, Secret Service), or in a file in the
-//! config directory when no credential store runs.
+//! config directory when no credential store runs. The convt.app sign-in of
+//! a desktop app, when there is one, is kept the same way next to the key.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -12,7 +14,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::VerifyingKey;
 
-use crate::{License, date};
+use crate::account::Session;
+use crate::{License, Plan, date};
 
 pub const TRIAL_DAYS: i64 = 7;
 /// Where Buy sends people.
@@ -21,7 +24,6 @@ pub const BUY_URL: &str = "https://convt.app/pricing";
 pub const DOWNLOAD_URL: &str = "https://convt.app/download";
 
 const KEYRING_SERVICE: &str = "convt";
-const KEYRING_USER: &str = "license";
 /// What the key file holds after a removal the credential store didn't
 /// confirm, so a key still in the store can't come back.
 const REMOVED: &str = "removed";
@@ -104,6 +106,25 @@ pub enum ActivateError {
     Store(String),
 }
 
+/// One secret in a [`KeyStore`]: its credential store entry, and its file
+/// next to the license file.
+#[derive(Debug, Clone, Copy)]
+struct Slot {
+    user: &'static str,
+    /// `None` is the store's own file.
+    file: Option<&'static str>,
+}
+
+const LICENSE: Slot = Slot {
+    user: "license",
+    file: None,
+};
+/// The device token from desktop sign-in, with the account's email.
+const ACCOUNT: Slot = Slot {
+    user: "account",
+    file: Some("account.json"),
+};
+
 /// Where the license key is kept.
 #[derive(Debug, Clone)]
 pub enum KeyStore {
@@ -116,28 +137,32 @@ pub enum KeyStore {
 }
 
 impl KeyStore {
-    fn file(&self) -> Option<&Path> {
-        match self {
+    fn file(&self, slot: Slot) -> Option<PathBuf> {
+        let own = match self {
             KeyStore::Keyring { fallback } => fallback.as_deref(),
-            KeyStore::File(path) => Some(path),
+            KeyStore::File(path) => Some(path.as_path()),
             KeyStore::None => None,
-        }
+        }?;
+        Some(match slot.file {
+            Some(name) => own.with_file_name(name),
+            None => own.to_path_buf(),
+        })
     }
 
     /// The file is read first: it holds either the key saved last, while no
     /// credential store answered, or a removal marker.
-    fn load(&self) -> Option<String> {
-        if let Some(file) = self.file() {
+    fn load(&self, slot: Slot) -> Option<String> {
+        if let Some(file) = self.file(slot) {
             match std::fs::read_to_string(file) {
                 Ok(text) if text.trim() == REMOVED => return None,
                 Ok(text) if !text.trim().is_empty() => return Some(text.trim().to_string()),
                 Ok(_) => {}
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) => tracing::warn!(error = %e, "could not read the license file"),
+                Err(e) => tracing::warn!(error = %e, slot = slot.user, "could not read the file"),
             }
         }
         if let KeyStore::Keyring { .. } = self {
-            match keyring_entry().and_then(|e| e.get_password()) {
+            match keyring_entry(slot).and_then(|e| e.get_password()) {
                 Ok(key) => return Some(key),
                 Err(keyring::Error::NoEntry) => {}
                 Err(e) => tracing::debug!(error = %e, "no credential store"),
@@ -146,22 +171,22 @@ impl KeyStore {
         None
     }
 
-    fn save(&self, key: &str) -> Result<(), String> {
+    fn save(&self, slot: Slot, key: &str) -> Result<(), String> {
         if let KeyStore::Keyring { .. } = self {
-            match keyring_entry().and_then(|e| e.set_password(key)) {
+            match keyring_entry(slot).and_then(|e| e.set_password(key)) {
                 // The file would win over the credential store, so it has to go.
-                Ok(()) => return self.remove_file(),
+                Ok(()) => return self.remove_file(slot),
                 Err(e) => tracing::debug!(error = %e, "no credential store, using the file"),
             }
         }
-        let file = self.file().ok_or("there is nowhere to store it")?;
-        write_private(file, key).map_err(|e| format!("{}: {e}", file.display()))
+        let file = self.file(slot).ok_or("there is nowhere to store it")?;
+        write_private(&file, key).map_err(|e| format!("{}: {e}", file.display()))
     }
 
-    fn delete(&self) -> Result<(), String> {
+    fn delete(&self, slot: Slot) -> Result<(), String> {
         let mut confirmed = true;
         if let KeyStore::Keyring { .. } = self {
-            match keyring_entry().and_then(|e| e.delete_credential()) {
+            match keyring_entry(slot).and_then(|e| e.delete_credential()) {
                 Ok(()) | Err(keyring::Error::NoEntry) | Err(keyring::Error::NoDefaultStore) => {}
                 Err(e) => {
                     tracing::debug!(error = %e, "the credential store didn't confirm the removal");
@@ -169,18 +194,21 @@ impl KeyStore {
                 }
             }
         }
-        match self.file() {
-            Some(_) if confirmed => self.remove_file(),
+        match self.file(slot) {
+            Some(_) if confirmed => self.remove_file(slot),
             Some(file) => {
-                write_private(file, REMOVED).map_err(|e| format!("{}: {e}", file.display()))
+                write_private(&file, REMOVED).map_err(|e| format!("{}: {e}", file.display()))
             }
             None if confirmed => Ok(()),
             None => Err("the credential store couldn't be reached".into()),
         }
     }
 
-    fn remove_file(&self) -> Result<(), String> {
-        match self.file().map(|f| (f, std::fs::remove_file(f))) {
+    fn remove_file(&self, slot: Slot) -> Result<(), String> {
+        match self.file(slot).map(|f| {
+            let removed = std::fs::remove_file(&f);
+            (f, removed)
+        }) {
             Some((file, Err(e))) if e.kind() != io::ErrorKind::NotFound => {
                 Err(format!("{}: {e}", file.display()))
             }
@@ -189,8 +217,8 @@ impl KeyStore {
     }
 }
 
-fn keyring_entry() -> keyring::Result<keyring::Entry> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+fn keyring_entry(slot: Slot) -> keyring::Result<keyring::Entry> {
+    keyring::Entry::new(KEYRING_SERVICE, slot.user)
 }
 
 /// Replaces `path` with a new file holding `text` that only the user can
@@ -271,7 +299,7 @@ pub struct Licensing {
 impl Licensing {
     pub fn new(config: Config) -> Self {
         let key = if config.enforce {
-            config.store.load()
+            config.store.load(LICENSE)
         } else {
             None
         };
@@ -281,7 +309,7 @@ impl Licensing {
     /// Reads the stored key again.
     pub fn reload(&mut self) {
         if self.config.enforce {
-            self.key = self.config.store.load();
+            self.key = self.config.store.load(LICENSE);
         }
     }
 
@@ -368,17 +396,78 @@ impl Licensing {
             .as_ref()
             .ok_or(ActivateError::NoPublicKey)?;
         let license = crate::verify(key, public_key).map_err(|_| ActivateError::Invalid)?;
-        self.config.store.save(key).map_err(ActivateError::Store)?;
+        self.config
+            .store
+            .save(LICENSE, key)
+            .map_err(ActivateError::Store)?;
         self.key = Some(key.to_string());
         Ok(license)
     }
 
     /// Removes the stored license from this machine.
     pub fn deactivate(&mut self) -> Result<(), String> {
-        self.config.store.delete()?;
+        self.config.store.delete(LICENSE)?;
         self.key = None;
         Ok(())
     }
+
+    /// Stores a key that renewal fetched, without asking, when it is a valid
+    /// Pro key that covers builds the stored key doesn't. A stored key that
+    /// covers as much or more stays, so renewal never shortens what this
+    /// machine may run, and a key that doesn't verify changes nothing.
+    pub fn offer_key(&mut self, key: &str) -> Result<Renewed, ActivateError> {
+        let key = key.trim();
+        let public_key = self
+            .config
+            .public_key
+            .as_ref()
+            .ok_or(ActivateError::NoPublicKey)?;
+        let offered = crate::verify(key, public_key).map_err(|_| ActivateError::Invalid)?;
+        if offered.plan != Plan::Pro {
+            return Err(ActivateError::Invalid);
+        }
+        self.key = self.config.store.load(LICENSE);
+        if let Some(current) = self.license()
+            && current.updates_until >= offered.updates_until
+        {
+            return Ok(Renewed::Kept(current));
+        }
+        self.config
+            .store
+            .save(LICENSE, key)
+            .map_err(ActivateError::Store)?;
+        self.key = Some(key.to_string());
+        Ok(Renewed::Stored(offered))
+    }
+
+    /// The convt.app sign-in kept on this machine, if any. Read whether or
+    /// not this build checks licenses: sign-in is for Pro renewal and the
+    /// cloud, not for converting.
+    pub fn session(&self) -> Option<Session> {
+        let text = self.config.store.load(ACCOUNT)?;
+        serde_json::from_str(&text)
+            .inspect_err(|_| tracing::warn!("the stored sign-in is unreadable; ignoring it"))
+            .ok()
+    }
+
+    pub fn save_session(&self, session: &Session) -> Result<(), String> {
+        let text = serde_json::to_string(session).map_err(|e| e.to_string())?;
+        self.config.store.save(ACCOUNT, &text)
+    }
+
+    /// Forgets the sign-in on this machine. The license key stays.
+    pub fn clear_session(&self) -> Result<(), String> {
+        self.config.store.delete(ACCOUNT)
+    }
+}
+
+/// What [`Licensing::offer_key`] did with a key renewal fetched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Renewed {
+    /// The key covers newer builds than the stored one, and replaced it.
+    Stored(License),
+    /// The stored key covers as much or more, and stays.
+    Kept(License),
 }
 
 #[cfg(test)]
@@ -602,10 +691,10 @@ mod tests {
         // older one still in the store.
         let newer = f.key("2028-10-02");
         write_private(&fallback, &newer).unwrap();
-        assert!(matches!(fresh.config.store.load(), Some(k) if k == newer));
+        assert!(matches!(fresh.config.store.load(LICENSE), Some(k) if k == newer));
         std::fs::remove_file(&fallback).unwrap();
         l.deactivate().unwrap();
-        assert!(keyring_entry().unwrap().get_password().is_err());
+        assert!(keyring_entry(LICENSE).unwrap().get_password().is_err());
     }
 
     #[test]
@@ -646,6 +735,125 @@ mod tests {
         assert_eq!(
             cli.begin_conversion(),
             Err(Blocked::State(State::TrialEnded))
+        );
+    }
+
+    fn pro_key(f: &Fixture, until: &str) -> String {
+        sign(
+            &License {
+                id: format!("lic_pro_{until}"),
+                email: "a@b.c".into(),
+                plan: Plan::Pro,
+                issued: "2026-09-01".into(),
+                updates_until: until.into(),
+            },
+            &f.signing,
+        )
+    }
+
+    #[test]
+    fn renewal_stores_only_a_pro_key_that_covers_more() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        // Nothing stored: a valid Pro key goes in without asking.
+        let first = l.offer_key(&pro_key(&f, "2026-11-01")).unwrap();
+        assert!(matches!(&first, Renewed::Stored(k) if k.updates_until == "2026-11-01"));
+        assert!(matches!(l.state(), State::Licensed(_)));
+        // The same key again, or an older one, changes nothing.
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2026-11-01")),
+            Ok(Renewed::Kept(_))
+        ));
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2026-10-15")),
+            Ok(Renewed::Kept(k)) if k.updates_until == "2026-11-01"
+        ));
+        // The next period's key replaces it.
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2026-12-01")),
+            Ok(Renewed::Stored(k)) if k.updates_until == "2026-12-01"
+        ));
+        assert!(
+            matches!(f.licensing(true).state(), State::Licensed(k) if k.updates_until == "2026-12-01")
+        );
+        // A Desktop key with a later window stays ahead of a Pro key.
+        l.activate(&f.key("2027-10-01")).unwrap();
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2027-01-01")),
+            Ok(Renewed::Kept(k)) if k.plan == Plan::Desktop
+        ));
+        // Keys that don't verify, or aren't Pro, are refused and change nothing.
+        let other = Fixture::new();
+        assert!(matches!(
+            l.offer_key(&pro_key(&other, "2099-01-01")),
+            Err(ActivateError::Invalid)
+        ));
+        assert!(matches!(
+            l.offer_key(&f.key("2099-01-01")),
+            Err(ActivateError::Invalid)
+        ));
+        assert!(matches!(
+            l.offer_key("garbage"),
+            Err(ActivateError::Invalid)
+        ));
+        assert!(matches!(l.state(), State::Licensed(k) if k.updates_until == "2027-10-01"));
+    }
+
+    #[test]
+    fn renewal_replaces_a_key_this_build_outgrew() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        l.activate(&pro_key(&f, "2026-09-01")).unwrap();
+        assert!(matches!(l.state(), State::NotCovered(_)));
+        l.offer_key(&pro_key(&f, "2026-11-01")).unwrap();
+        assert!(matches!(l.state(), State::Licensed(_)));
+    }
+
+    #[test]
+    fn the_sign_in_is_stored_privately_next_to_the_key() {
+        let f = Fixture::new();
+        // A source build keeps a sign-in too: it is for renewal and the cloud.
+        let l = f.licensing(false);
+        assert_eq!(l.session(), None);
+        let session = Session {
+            email: "a@b.c".into(),
+            token: "cvd_token".into(),
+        };
+        l.save_session(&session).unwrap();
+        let file = f.dir.path().join("config/account.json");
+        assert!(
+            std::fs::read_to_string(&file)
+                .unwrap()
+                .contains("cvd_token")
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&file).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        assert_eq!(f.licensing(true).session(), Some(session));
+        // Signing out keeps the license.
+        let mut l = f.licensing(true);
+        l.activate(&f.key("2027-10-02")).unwrap();
+        l.clear_session().unwrap();
+        assert!(!file.exists());
+        assert_eq!(l.session(), None);
+        assert!(matches!(l.state(), State::Licensed(_)));
+        // A broken file is no sign-in, not a crash.
+        write_private(&file, "{").unwrap();
+        assert_eq!(l.session(), None);
+        // Nowhere to keep it.
+        let none = Licensing::new(Config {
+            store: KeyStore::None,
+            ..f.licensing(true).config
+        });
+        assert!(
+            none.save_session(&Session {
+                email: "a@b.c".into(),
+                token: "t".into()
+            })
+            .is_err()
         );
     }
 

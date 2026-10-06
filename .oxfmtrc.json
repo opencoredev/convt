@@ -1,3 +1,15 @@
 {
-  "ignorePatterns": ["apps/web/src/routeTree.gen.ts"]
+  "ignorePatterns": [
+    "apps/web/src/routeTree.gen.ts",
+    "apps/web/content/formats.json",
+    "crates/convt-server/.sqlx",
+    "packages/db/migrations/meta",
+    "packaging/release/rust-notices/**",
+    "packaging/release/*.lock.json",
+    "packaging/release/rust-notice-sources.json",
+    "packaging/linux/*lock.json",
+    "packaging/release/rust-notice-blockers.json",
+    "packaging/release/rust-spdx/**",
+    "packaging/release/rust-*.json"
+  ]
 }

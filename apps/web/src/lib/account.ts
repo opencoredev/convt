@@ -1,38 +1,39 @@
-// Data access for the dashboard and account pages. Today every function returns
-// placeholder data; when the account API exists (plan P6 to P9), replace the bodies
-// with real requests and keep the signatures.
+// Data access for the dashboard and account pages. Each function is a server
+// function (src/server/account-fns.ts) that checks the session and reads only the
+// signed-in user's rows.
 
+import type { SessionInfo } from "#/server/session";
 import {
-  placeholderApi,
-  placeholderBilling,
-  placeholderLicenses,
-  placeholderMacs,
-  placeholderOverview,
-  placeholderSettings,
-} from "./placeholder";
-import type { AccountSettings, ApiOverview, Billing, License, Mac, Overview } from "./types";
+  fetchAccountSettings,
+  fetchApiOverview,
+  fetchBilling,
+  fetchLicenseKey,
+  fetchLicenses,
+  fetchOverview,
+} from "#/server/account-fns";
 
-export async function getOverview(): Promise<Overview> {
-  return placeholderOverview;
-}
+import type { Account } from "./types";
 
-export async function getLicenses(): Promise<{ licenses: License[]; macs: Mac[] }> {
-  return { licenses: placeholderLicenses, macs: placeholderMacs };
-}
+export const getOverview = () => fetchOverview();
 
-export async function getBilling(): Promise<Billing> {
-  return placeholderBilling;
-}
+export const getLicenses = () => fetchLicenses();
 
-export async function getApiOverview(): Promise<ApiOverview> {
-  return placeholderApi;
-}
+export const getBilling = () => fetchBilling();
 
-export async function getAccountSettings(): Promise<AccountSettings> {
-  return placeholderSettings;
-}
+export const getApiOverview = () => fetchApiOverview();
 
-/** The signed-in account for the header. Placeholder until sessions exist. */
-export async function getAccount() {
-  return placeholderOverview.account;
+export const getAccountSettings = () => fetchAccountSettings();
+
+/** The full license key, fetched only when the user copies or activates it. */
+export const getLicenseKey = async (id: string) => (await fetchLicenseKey({ data: { id } })).token;
+
+/** The signed-in account for the header, from the session the shell already loaded. */
+export function accountFromSession(session: SessionInfo): Account {
+  const { user } = session;
+  return {
+    name: user.name.trim() || user.email.split("@")[0],
+    email: user.email,
+    emailVerified: user.emailVerified,
+    avatarUrl: user.image,
+  };
 }

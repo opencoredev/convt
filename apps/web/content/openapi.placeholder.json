@@ -1,0 +1,223 @@
+{
+  "openapi": "3.1.0",
+  "x-convt-placeholder": true,
+  "info": {
+    "title": "convt API",
+    "version": "0.0.0-placeholder",
+    "description": "Convert files with the same engines as the convt app. Upload a file, start a job, poll until it finishes and download the result. Inputs and outputs are deleted 24 hours after the job is created."
+  },
+  "servers": [{ "url": "https://api.convt.app" }],
+  "security": [{ "apiKey": [] }],
+  "tags": [
+    { "name": "Jobs", "description": "A job converts one input file to one target format." },
+    { "name": "Formats", "description": "What the API can read and write." }
+  ],
+  "paths": {
+    "/v1/jobs": {
+      "post": {
+        "tags": ["Jobs"],
+        "operationId": "createJob",
+        "summary": "Create a job",
+        "description": "Reserves the conversion against your spend cap and returns a presigned URL. PUT the file to `upload_url`, then start the job.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateJob" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The job, waiting for its upload.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "402": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/jobs/{id}/start": {
+      "post": {
+        "tags": ["Jobs"],
+        "operationId": "startJob",
+        "summary": "Start a job",
+        "description": "Checks the uploaded file and queues the conversion.",
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
+        "responses": {
+          "202": {
+            "description": "Queued.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/jobs/{id}": {
+      "get": {
+        "tags": ["Jobs"],
+        "operationId": "getJob",
+        "summary": "Get a job",
+        "description": "Returns the job's status. When it has succeeded, `outputs` lists presigned download URLs that expire after 15 minutes.",
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
+        "responses": {
+          "200": {
+            "description": "The job.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "delete": {
+        "tags": ["Jobs"],
+        "operationId": "cancelJob",
+        "summary": "Cancel a job",
+        "description": "Stops a queued or running job and deletes its files. You are not charged for a cancelled job.",
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
+        "responses": {
+          "200": {
+            "description": "The cancelled job.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/formats": {
+      "get": {
+        "tags": ["Formats"],
+        "operationId": "listFormats",
+        "summary": "List formats",
+        "description": "Every format the API reads, with the targets each one converts to.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The format list.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Format" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key from the dashboard, sent as `Authorization: Bearer cvt_live_...`."
+      }
+    },
+    "parameters": {
+      "JobId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The job id returned by Create a job.",
+        "schema": { "type": "string", "example": "job_01J9Z3K6X2" }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "An error.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    },
+    "schemas": {
+      "CreateJob": {
+        "type": "object",
+        "required": ["filename", "size", "to"],
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Input file name. The extension picks the input format.",
+            "example": "report.docx"
+          },
+          "size": {
+            "type": "integer",
+            "description": "Input size in bytes, at most 2 GB.",
+            "example": 48213
+          },
+          "to": {
+            "type": "string",
+            "description": "Target format id from List formats.",
+            "example": "pdf"
+          },
+          "options": { "$ref": "#/components/schemas/Options" }
+        }
+      },
+      "Options": {
+        "type": "object",
+        "description": "Optional settings. Each applies only to targets that support it.",
+        "properties": {
+          "quality": { "type": "integer", "description": "Image or video quality, 1 to 100." },
+          "max_size": { "type": "integer", "description": "Longest image edge in pixels." },
+          "pages": { "type": "string", "description": "PDF page range, for example `1-3,5`." },
+          "dpi": { "type": "integer", "description": "PDF render resolution." }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "required": ["id", "status", "to", "created_at", "expires_at"],
+        "properties": {
+          "id": { "type": "string", "example": "job_01J9Z3K6X2" },
+          "status": {
+            "type": "string",
+            "enum": ["created", "uploaded", "queued", "running", "succeeded", "failed", "cancelled"]
+          },
+          "to": { "type": "string", "example": "pdf" },
+          "upload_url": {
+            "type": "string",
+            "description": "Presigned PUT URL. Present while the job is `created`."
+          },
+          "outputs": {
+            "type": "array",
+            "description": "Present when the job has succeeded. Paged output (PDF to images) has one entry per page.",
+            "items": { "$ref": "#/components/schemas/Output" }
+          },
+          "error": { "$ref": "#/components/schemas/Error" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the job's files are deleted, 24 hours after creation."
+          }
+        }
+      },
+      "Output": {
+        "type": "object",
+        "required": ["filename", "size", "url"],
+        "properties": {
+          "filename": { "type": "string", "example": "report.pdf" },
+          "size": { "type": "integer", "example": 91877 },
+          "url": { "type": "string", "description": "Presigned download URL." }
+        }
+      },
+      "Format": {
+        "type": "object",
+        "required": ["id", "name", "category", "extensions", "targets"],
+        "properties": {
+          "id": { "type": "string", "example": "docx" },
+          "name": { "type": "string", "example": "DOCX" },
+          "category": { "type": "string", "enum": ["image", "video", "audio", "document"] },
+          "extensions": { "type": "array", "items": { "type": "string" } },
+          "targets": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "example": "spend_cap_reached" },
+          "message": {
+            "type": "string",
+            "example": "This conversion would pass your monthly spend cap."
+          }
+        }
+      }
+    }
+  }
+}

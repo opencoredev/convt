@@ -34,11 +34,13 @@ cache=${CONVT_BUNDLE_CACHE:-$repo/packaging/.cache}
 mkdir -p "$cache"
 cache=$(realpath "$cache")
 python3 packaging/linux/fetch.py "$cache"
+python3 packaging/linux/fetch.py "$cache" packaging/linux/ffmpeg-source-inputs.lock.json
+CONVT_BUNDLE_CACHE="$cache" python3 packaging/release/pdfium-source-verify.py packaging/release/pdfium-source.lock.json --fetch
 python3 packaging/linux/fetch.py "$cache" packaging/linux/build-rpms.lock.json
 work=$(mktemp -d)
 image="convt-pkg-builder-$$"
 container="convt-pkg-build-$$"
-cleanup() { docker image rm "$image" >/dev/null 2>&1 || true; rm -rf "$work"; }
+cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; docker image rm "$image" >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
 base=$(python3 -c 'import json; print(json.load(open("packaging/linux/build-image.json"))["image"])')
 mkdir "$work/context"
@@ -57,13 +59,14 @@ registry=${CARGO_HOME:-$HOME/.cargo}/registry
 build_work=${CONVT_BUILD_WORK:-$work/build}
 mkdir -p "$build_work"
 build_work=$(realpath "$build_work")
-docker run --rm --name "$container" --network none \
+docker run --rm --label app=convt --label purpose=release-build --name "$container" --network none \
   -v "$repo:/repo:ro" -v "$cache:/inputs:ro" -v "$rust:/rust:ro" \
   -v "$registry:/cargo/registry:ro" -v "$build_work:/work" \
   -e "CONVT_DOCUMENT_PACK_URL=${CONVT_DOCUMENT_PACK_URL:-}" \
   -e "CONVT_DOCUMENT_PACK_SHA256=${CONVT_DOCUMENT_PACK_SHA256:-}" \
   -e "CONVT_DOCUMENT_PACK_VERSION=${CONVT_DOCUMENT_PACK_VERSION:-unconfigured}" \
   -e "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" -e "CONVT_BUILD_DATE=$CONVT_BUILD_DATE" \
+  -e "CONVT_UPDATE_PUBKEY=${CONVT_UPDATE_PUBKEY:-}" \
   -e "CONVT_LICENSE_PUBKEY=${CONVT_LICENSE_PUBKEY:-}" -e "CONVT_LICENSE_ENFORCE=${CONVT_LICENSE_ENFORCE:-}" \
   -e "CONVT_BUILD_CLOCK_OFFSET_DAYS=${CONVT_BUILD_CLOCK_OFFSET_DAYS:-}" \
   -e "CONVT_BUILD_JOBS=${CONVT_BUILD_JOBS:-8}" -e "CONVT_BUILD_UID=$(id -u)" -e "CONVT_BUILD_GID=$(id -g)" "$image" \
@@ -73,6 +76,9 @@ mkdir -p "$out"
 [[ ! -e "$out/convt" ]] || { echo "Output already exists: $out/convt" >&2; exit 1; }
 cp -a "$build_work/convt" "$out/convt"
 cp -a "$build_work/validation-tools" "$out/validation-tools"
+license_flags=()
+[[ ${CONVT_RELEASE:-0} != 1 ]] || license_flags+=(--release)
+python3 packaging/linux/license-metadata.py "$out/convt" "$out/license-metadata" "${license_flags[@]}"
 # appimage.sh reads this so the AppImage carries the same timestamps.
 echo "$SOURCE_DATE_EPOCH" > "$out/source-date-epoch"
 python3 - "$out/convt" "$out/components.json" <<'SIZES'

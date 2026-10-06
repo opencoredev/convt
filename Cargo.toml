@@ -8,6 +8,7 @@ default-members = [
   "crates/convt-engines",
   "crates/convt-cli",
   "crates/convt-license",
+  "crates/convt-update",
   "crates/convt-server",
   "crates/convt-worker",
   "crates/convt-ffi",
@@ -25,16 +26,19 @@ authors = ["Convt"]
 convt-core = { path = "crates/convt-core" }
 convt-engines = { path = "crates/convt-engines" }
 convt-license = { path = "crates/convt-license" }
+convt-update = { path = "crates/convt-update" }
 
 anyhow = "1.0.104"
 axum = "0.8.9"
 base64 = "0.23.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.6.7", features = ["derive"] }
 ctrlc = "3.5.2"
 dirs = "6"
 ed25519-dalek = "3.0.0"
 futures = "0.3.34"
 getrandom = "0.3"
+hex = "0.4.3"
 gpui-kit = "0.7.0" # GPUI + platform + gpui-component, version-matched
 image = "0.25.10"
 keyring = "4.2.0"
@@ -42,9 +46,20 @@ libc = "0.2"
 libloading = "0.8.9"
 pdfium-render = "0.9.4"
 resvg = "0.48.1"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+# 0.39 is the newest rusqlite whose libsqlite3-sys (0.37) fits sqlx 0.9.0's range
+# (<0.38). Cargo checks `links = "sqlite3"` across the whole lockfile, optional
+# dependencies included, so both must agree even though convt-server never uses SQLite.
+rusqlite = { version = "0.39.0", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.10.9"
+sqlx = { version = "0.9.0", default-features = false, features = [
+  "chrono",
+  "macros",
+  "postgres",
+  "runtime-tokio",
+  "tls-rustls",
+] }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "0.8.23"

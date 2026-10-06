@@ -2,10 +2,9 @@
 //! trial or enter a license, and a last word on how to convert. It shows once,
 //! and only in builds that check licenses.
 //!
-//! Signing in opens convt.app in the browser. When the user has signed in,
-//! the site opens `convt://signin?email=...` and `ui::route` calls
-//! [`FirstRunView::signed_in`]. The app never polls convt.app for the
-//! session: the desktop app makes no network calls.
+//! The plan step also offers an optional convt.app sign-in for Pro
+//! subscribers, so their key renews itself (see `crate::account`). The trial
+//! and a Desktop key never need it: starting the trial opens no browser.
 
 use convt_license::client::{BUY_URL, State};
 use gpui_kit::component::input::InputState;
@@ -15,7 +14,6 @@ use gpui_kit::*;
 use super::LICENSE_PRICE;
 use super::theme::{self, Palette, mono, primary_button, text, text_button};
 use crate::model::AppState;
-use crate::placeholder::{SIGN_IN_METHODS, sign_in_url};
 
 /// The URL that opens Login Items & Extensions in macOS System Settings.
 const EXTENSION_SETTINGS: &str =
@@ -67,6 +65,9 @@ pub struct FirstRunView {
     pub(super) plan: Plan,
     /// System Settings was opened from the Finder step.
     opened_settings: bool,
+    /// Whether the Finder extension is on, polled while the Finder step shows.
+    pub(super) finder_on: Option<bool>,
+    _finder_watch: Option<Task<()>>,
     pub(super) key: Entity<InputState>,
     pub(super) error: Option<String>,
     _observe: Subscription,
@@ -87,17 +88,11 @@ impl FirstRunView {
             step,
             plan: Plan::Trial,
             opened_settings: false,
+            finder_on: None,
+            _finder_watch: (first_step() == Step::Finder).then(|| watch_finder(cx)),
             key: cx.new(|cx| InputState::new(window, cx).placeholder("License key")),
             error: None,
         }
-    }
-
-    /// A `convt://signin` link arrived: the account is saved, so move on.
-    pub fn signed_in(&mut self, cx: &mut Context<Self>) {
-        if self.step == Step::Plan {
-            self.step = Step::Done;
-        }
-        cx.notify();
     }
 
     fn back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -115,18 +110,13 @@ impl FirstRunView {
 
     pub(super) fn next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.step {
-            Step::Finder if !self.opened_settings => {
+            Step::Finder if !self.opened_settings && self.finder_on != Some(true) => {
                 cx.open_url(EXTENSION_SETTINGS);
                 self.opened_settings = true;
             }
             Step::Finder => self.step = Step::Plan,
             Step::Plan => match self.plan {
-                Plan::Trial => {
-                    if self.app.read(cx).settings.account.is_none() {
-                        cx.open_url(&sign_in_url("email"));
-                    }
-                    self.step = Step::Done;
-                }
+                Plan::Trial => self.step = Step::Done,
                 Plan::Key => {
                     let key = self.key.read(cx).value().trim().to_string();
                     if key.is_empty() {
@@ -206,7 +196,12 @@ impl FirstRunView {
                             .h(px(16.))
                             .p(px(2.))
                             .rounded(px(8.))
-                            .bg(p.toggle_off)
+                            .when(self.finder_on == Some(true), |d| d.justify_end())
+                            .bg(if self.finder_on == Some(true) {
+                                p.control_on
+                            } else {
+                                p.toggle_off
+                            })
                             .child(div().size(px(12.)).rounded(px(6.)).bg(rgb(0xFFFFFF))),
                     ),
             )
@@ -259,35 +254,7 @@ impl FirstRunView {
                         .child(about),
                 )
         };
-        let account = self.app.read(cx).settings.account.clone();
-        let extra = match (self.plan, account) {
-            (Plan::Key, _) => None,
-            (Plan::Trial, Some(email)) => Some(
-                div()
-                    .id("account")
-                    .test_support()
-                    .aria_label(SharedString::from(format!("Signed in as {email}")))
-                    .child(text(12., 16., p.secondary).child(format!("Signed in as {email}")))
-                    .into_any_element(),
-            ),
-            (Plan::Trial, None) => Some(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .child(text(12., 16., p.tertiary).child("Sign in with"))
-                    .children(SIGN_IN_METHODS.iter().map(|&(id, label, method)| {
-                        text_button(id, label, p.green, 12.)
-                            .font_weight(FontWeight::MEDIUM)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.open_url(&sign_in_url(method));
-                                this.step = Step::Done;
-                                cx.notify();
-                            }))
-                    }))
-                    .into_any_element(),
-            ),
-        };
+        let extra = super::account::compact(&self.app, p, cx);
         let about = |line: &'static str| text(12., 16., p.secondary).child(line).into_any_element();
         // The key field takes the place of the description, so the window
         // keeps its size.
@@ -308,10 +275,10 @@ impl FirstRunView {
                 "plan-trial",
                 Plan::Trial,
                 "Start 7-day trial",
-                about("Every feature, no card. Sign in with email."),
+                about("Every feature, no card, no account."),
             ))
             .child(card("plan-key", Plan::Key, "I have a license", key_about))
-            .children(extra)
+            .child(extra)
     }
 
     fn done_art(&self, p: &Palette) -> Div {
@@ -385,6 +352,40 @@ impl FirstRunView {
     }
 }
 
+/// Checks every second whether the Finder extension is on, so the step
+/// updates when the user comes back from System Settings.
+fn watch_finder(cx: &mut Context<FirstRunView>) -> Task<()> {
+    cx.spawn(async move |this, cx| {
+        loop {
+            let Ok(watching) = this.update(cx, |view, _| view.step == Step::Finder) else {
+                break;
+            };
+            if watching {
+                let on = cx.background_spawn(async { finder_enabled() }).await;
+                let updated = this.update(cx, |view, cx| {
+                    if view.finder_on != on {
+                        view.finder_on = on;
+                        cx.notify();
+                    }
+                });
+                if updated.is_err() {
+                    break;
+                }
+            }
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(1))
+                .await;
+        }
+    })
+}
+
+fn finder_enabled() -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    return crate::macos::finder_extension_enabled();
+    #[cfg(not(target_os = "macos"))]
+    None
+}
+
 impl Render for FirstRunView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let _ = window;
@@ -408,6 +409,12 @@ impl Render for FirstRunView {
             _ => None,
         };
         let (title, body, back, next) = match self.step {
+            Step::Finder if self.finder_on == Some(true) => (
+                "The Finder menu is on",
+                "Right-click a file in Finder to see Convert with convt. You can turn it off in System Settings.".to_string(),
+                None,
+                "Continue",
+            ),
             Step::Finder => (
                 "Turn on the Finder menu",
                 "macOS keeps Finder extensions off until you allow them. Switch on convt, then come back here.".to_string(),

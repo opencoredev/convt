@@ -1,11 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 
+import { CopyKeyButton } from "#/components/app/license-actions";
 import { MacList } from "#/components/app/mac-list";
-import { usePlaceholderAction } from "#/components/app/notice";
-import { Card, PageTitle, PrimaryLink, TextButton, cx, focusRing } from "#/components/app/ui";
+import { Card, PageTitle, PrimaryLink, cx, focusRing } from "#/components/app/ui";
 import { getOverview } from "#/lib/account";
 import { links } from "#/lib/config";
-import { formatDate, formatNumber, formatShortDate, plural } from "#/lib/format";
+import { formatNumber, formatShortDate, plural } from "#/lib/format";
 
 export const Route = createFileRoute("/_app/_shell/dashboard/")({
   head: () => ({ meta: [{ title: "Overview · convt" }] }),
@@ -20,7 +20,6 @@ const linkAction = cx(
 
 function OverviewPage() {
   const data = Route.useLoaderData();
-  const placeholder = usePlaceholderAction();
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,7 +33,9 @@ function OverviewPage() {
           <div className="flex flex-col gap-1">
             <h2 className="text-[17px]/5.5 font-semibold tracking-[-0.02em]">convt for Mac</h2>
             <p className="text-[13px]/4 text-ink-2">
-              Your license is on this account. Sign in inside the app to unlock it.
+              {data.license
+                ? "Your license is on this account. Sign in inside the app to unlock it."
+                : "Every format works free for 7 days. Pick a plan when you're ready."}
             </p>
           </div>
           <PrimaryLink href={links.downloadMac} className="shrink-0 self-start sm:self-auto">
@@ -44,50 +45,93 @@ function OverviewPage() {
       </section>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard
-          label="Plan"
-          value={
-            <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">{data.plan.name}</span>
-          }
-          detail={data.plan.priceLabel}
-          meta={`Renews ${formatDate(data.plan.renewsOn)}`}
-          action={
-            <Link to="/dashboard/billing" className={linkAction}>
-              Manage
-            </Link>
-          }
-        />
-        <SummaryCard
-          label="License key"
-          value={
-            <span className="inline-block py-[3px] font-mono text-base/5 font-medium">
-              {data.license.maskedKey}
-            </span>
-          }
-          detail={`Active on ${plural(data.license.activeMacs, "Mac")}`}
-          meta={data.license.updatesLabel}
-          action={
-            // PLACEHOLDER: the full key will come from the account API.
-            <TextButton onClick={() => placeholder("Copying your license key")}>
-              Copy key
-            </TextButton>
-          }
-        />
-        <SummaryCard
-          label="API this month"
-          value={
-            <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">
-              {formatNumber(data.api.conversionsThisMonth)}
-            </span>
-          }
-          detail={`Conversions since ${formatShortDate(data.api.since)}`}
-          meta={plural(data.api.keyCount, "key")}
-          action={
-            <Link to="/dashboard/api" className={linkAction}>
-              View usage
-            </Link>
-          }
-        />
+        {data.plan ? (
+          <SummaryCard
+            label="Plan"
+            value={
+              <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">
+                {data.plan.name}
+              </span>
+            }
+            detail={data.plan.priceLabel}
+            meta={data.plan.meta}
+            action={
+              <Link to="/dashboard/billing" className={linkAction}>
+                Manage
+              </Link>
+            }
+          />
+        ) : (
+          <SummaryCard
+            label="Plan"
+            value={<span className="text-[22px]/7 font-semibold tracking-[-0.02em]">No plan</span>}
+            detail="Desktop is $29 once. Pro is $12 a month."
+            meta="7-day free trial"
+            action={
+              <a href={links.pricing} className={linkAction}>
+                See pricing
+              </a>
+            }
+          />
+        )}
+        {data.license ? (
+          <SummaryCard
+            label="License key"
+            value={
+              <span className="inline-block py-[3px] font-mono text-base/5 font-medium">
+                {data.license.maskedKey}
+              </span>
+            }
+            detail={`Active on ${plural(data.license.activeMacs, "Mac")}`}
+            meta={data.license.updatesLabel}
+            action={<CopyKeyButton license={data.license} />}
+          />
+        ) : (
+          <SummaryCard
+            label="License key"
+            value={
+              <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">No key yet</span>
+            }
+            detail="Buying Desktop or Pro puts a key here."
+            meta="Works offline"
+            action={
+              <a href={links.pricing} className={linkAction}>
+                See pricing
+              </a>
+            }
+          />
+        )}
+        {data.api ? (
+          <SummaryCard
+            label="API this month"
+            value={
+              <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">
+                {formatNumber(data.api.conversionsThisMonth)}
+              </span>
+            }
+            detail={`Conversions since ${formatShortDate(data.api.since)}`}
+            meta={plural(data.api.keyCount, "key")}
+            action={
+              <Link to="/dashboard/api" className={linkAction}>
+                View usage
+              </Link>
+            }
+          />
+        ) : (
+          <SummaryCard
+            label="API"
+            value={
+              <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">Not set up</span>
+            }
+            detail="Pay per conversion, no plan needed."
+            meta="Same engines as the app"
+            action={
+              <a href={links.apiReference} className={linkAction}>
+                API docs
+              </a>
+            }
+          />
+        )}
       </div>
 
       <MacList macs={data.macs} />

@@ -2,6 +2,7 @@
 //! convert opens for files sent without a target; Settings and the first-run
 //! window are their own windows; the menu bar popover belongs to the tray.
 
+mod account;
 mod first_run;
 mod main_window;
 mod pack;
@@ -11,6 +12,7 @@ mod settings_window;
 #[cfg(test)]
 mod tests;
 pub mod theme;
+mod update;
 
 use std::path::{Path, PathBuf};
 
@@ -81,23 +83,21 @@ fn show<V: Render>(
 
 /// Sends a request where it belongs:
 ///
-/// - A sign-in link records the account and returns to the first-run window.
+/// - A sign-in reply finishes the sign-in the app started, if it did, and
+///   brings back the window that started it: first run, or the License tab.
 /// - A license key opens the License tab of Settings.
 /// - Files with a target, from the command line or the Finder menu, convert
 ///   in place with no window. Links never do: any web page can open one.
 /// - Other files open Quick convert, and no files open the main window.
 pub fn route(request: Request, cx: &mut App) {
     let app = model::shared(cx);
-    if let Some(email) = request.account {
-        app.update(cx, |s, cx| s.sign_in(&email, cx));
+    if let Some(reply) = request.auth {
+        // A link the app didn't ask for is dropped inside; the window that
+        // comes forward says so.
+        let _ = app.update(cx, |s, cx| s.finish_sign_in(reply, cx));
         match Open::<FirstRunView>::get(cx) {
-            Some((handle, view)) => {
-                let _ = handle.update(cx, |_, window, cx| {
-                    window.activate_window();
-                    view.update(cx, |v, cx| v.signed_in(cx));
-                });
-            }
-            None => show_main(cx),
+            Some((handle, _)) if handle.update(cx, |_, w, _| w.activate_window()).is_ok() => {}
+            _ => show_settings(SettingsTab::License, cx),
         }
     } else if request.license.is_some() {
         show_license(request.license, cx);

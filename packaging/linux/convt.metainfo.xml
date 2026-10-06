@@ -11,7 +11,6 @@
   </description>
   <launchable type="desktop-id">convt-app.desktop</launchable>
   <url type="homepage">https://convt.app</url>
-  <url type="vcs-browser">https://github.com/opencoredev/convt</url>
   <provides><binary>convt</binary><binary>convt-app</binary></provides>
   <categories><category>Utility</category></categories>
   <content_rating type="oars-1.1"/>

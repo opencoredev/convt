@@ -16,12 +16,14 @@ pub struct OfficeEngine {
 
 impl OfficeEngine {
     pub fn new() -> Self {
+        let pack = crate::packs::installed_documents();
+        // Without the pack, a LibreOffice.app the user installed.
+        #[cfg(target_os = "macos")]
+        let pack = pack
+            .filter(|p| p.is_file())
+            .or_else(crate::paths::libreoffice_app);
         Self {
-            soffice: crate::find_tool_with_pack(
-                &["soffice", "libreoffice"],
-                "CONVT_SOFFICE",
-                crate::packs::installed_documents(),
-            ),
+            soffice: crate::find_tool_with_pack(&["soffice", "libreoffice"], "CONVT_SOFFICE", pack),
         }
     }
 }

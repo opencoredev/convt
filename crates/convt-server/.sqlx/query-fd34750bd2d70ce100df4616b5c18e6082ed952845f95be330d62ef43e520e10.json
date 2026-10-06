@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set status='queued',input_key=$3,queued_at=now(),updated_at=now() where id=$1 and user_id=$2 and status='created' and expires_at>now() and reservation='open'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fd34750bd2d70ce100df4616b5c18e6082ed952845f95be330d62ef43e520e10"
+}

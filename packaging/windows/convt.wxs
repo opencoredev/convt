@@ -1,0 +1,18 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="convt" Manufacturer="Convt" Version="$(var.Version)" UpgradeCode="BAE8028B-1352-4B85-B1C7-A10B7EA54D08" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of convt is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="convt">
+      </Directory>
+    </StandardDirectory>
+    <Feature Id="Main" Title="convt" Level="1">
+      <ComponentGroupRef Id="Payload" />
+    </Feature>
+  </Package>
+  <Fragment>
+    <ComponentGroup Id="Payload" Directory="INSTALLFOLDER">
+      <Files Include="$(var.Payload)\**" />
+    </ComponentGroup>
+  </Fragment>
+</Wix>

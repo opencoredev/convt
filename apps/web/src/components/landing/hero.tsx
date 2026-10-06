@@ -1,4 +1,5 @@
-import { DOWNLOAD_MAC_URL, GITHUB_URL } from "./placeholder";
+import { GITHUB_URL, routes } from "#/lib/site";
+
 import { ButtonLink, Container, DownloadIcon } from "./ui";
 
 export function Hero() {
@@ -15,7 +16,7 @@ export function Hero() {
         <div className="flex flex-wrap justify-center gap-2.5 pt-2.5">
           <ButtonLink
             variant="primary"
-            href={DOWNLOAD_MAC_URL}
+            href={`${routes.download}?os=macos`}
             className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
           >
             <DownloadIcon />

@@ -1,30 +1,49 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { AuthLayout } from "#/components/app/auth-layout";
 import { CodeInput } from "#/components/app/code-input";
-import { usePlaceholderAction } from "#/components/app/notice";
-import { PreviewNote, TextButton, cx, focusRing } from "#/components/app/ui";
+import { FormError, FormStatus } from "#/components/app/form-error";
+import { TextButton, cx, focusRing } from "#/components/app/ui";
+import { sendSignInCode, signInWithCode } from "#/lib/auth-client";
 import { magicLinkMinutes, signInCodeLength } from "#/lib/config";
+import { safeRedirect } from "#/lib/safe-redirect";
+import { authSearch, siteOrigin } from "#/lib/sign-in";
 
-// PLACEHOLDER FLOW: the sign-in form navigates here without sending anything. When
-// auth exists (plan P6), this page shows after the magic-link request succeeds.
+// Shown after the sign-in form sent a code. The email holds the same code and a
+// link to /sign-in/verify; either one signs in, once.
 export const Route = createFileRoute("/_app/sign-in/check-email")({
-  validateSearch: (search: Record<string, unknown>): { email?: string } =>
-    typeof search.email === "string" && search.email !== "" ? { email: search.email } : {},
+  validateSearch: authSearch,
   head: () => ({ meta: [{ title: "Check your email · convt" }] }),
   component: CheckEmailPage,
 });
 
 function CheckEmailPage() {
-  const { email } = Route.useSearch();
-  const placeholder = usePlaceholderAction();
+  const { email, redirect: redirectTo } = Route.useSearch();
   const codeLabelId = useId();
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // A new key clears the boxes after a wrong code.
+  const [attempt, setAttempt] = useState(0);
+
+  async function submit(code: string) {
+    if (!email || busy) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    const result = await signInWithCode(email, code);
+    if (result.ok) {
+      window.location.assign(safeRedirect(redirectTo, siteOrigin()));
+      return;
+    }
+    setBusy(false);
+    setError(result.message);
+    setAttempt((n) => n + 1);
+  }
 
   return (
     <AuthLayout>
-      {/* PLACEHOLDER: the sign-in form does not send email yet; say so on this screen. */}
-      <PreviewNote className="self-start">Preview only. No email was sent.</PreviewNote>
       <span
         aria-hidden="true"
         className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-green-tint shadow-[inset_0_0_0_1px_var(--green-line)]"
@@ -64,18 +83,32 @@ function CheckEmailPage() {
           Or enter the code from the email
         </p>
         <CodeInput
+          key={attempt}
           length={signInCodeLength}
           labelId={codeLabelId}
-          // PLACEHOLDER: codes are checked by the auth backend, which does not exist yet.
-          onComplete={() => placeholder("Checking sign-in codes")}
+          onComplete={submit}
         />
+        <FormError>{error}</FormError>
+        <FormStatus>{status}</FormStatus>
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <TextButton onClick={() => placeholder("Resending the link")}>Resend link</TextButton>
+        <TextButton
+          disabled={!email}
+          onClick={async () => {
+            if (!email) return;
+            setError(null);
+            setStatus(null);
+            const result = await sendSignInCode(email);
+            if (result.ok) setStatus("We sent a new link. The old one no longer works.");
+            else setError(result.message);
+          }}
+        >
+          Resend link
+        </TextButton>
         <Link
           to="/sign-in"
-          search={email ? { email } : {}}
+          search={{ ...(email ? { email } : {}), ...(redirectTo ? { redirect: redirectTo } : {}) }}
           className={cx("rounded-sm text-[13px]/4 text-ink-2 hover:text-ink", focusRing)}
         >
           Use a different email

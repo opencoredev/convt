@@ -1,0 +1,3608 @@
+{
+  "schema_version": 1,
+  "scope": "Existing non-V8 shared PDFium chromium/8076 pins: Linux x64 and macOS arm64/x64/universal. Conservative minimal checkout includes build/test dependencies, not just the top-level PDFium archive.",
+  "pdfium_revision": "8ca5b735df4263f43c830479b78213854a392c22",
+  "builder_revision": "f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+  "binary_associations": [
+    {
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-linux-x64.tgz",
+      "sha256": "d9d67bc40af03aef4fe28a60b19b1086f28ace019c8c9caf19cb7fe3d14ceca3",
+      "size_bytes": 3747808,
+      "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93"
+        },
+        {
+          "member": "licenses/abseil.txt",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "member": "licenses/libopenjpeg.txt",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "member": "licenses/icu.txt",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.md",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "member": "licenses/freetype.txt",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "member": "licenses/simdutf.txt",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.ijg",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "member": "licenses/lcms.txt",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "member": "licenses/pdfium.txt",
+          "sha256": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e"
+        },
+        {
+          "member": "licenses/zlib.txt",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "member": "licenses/agg23.txt",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "member": "licenses/fast_float.txt",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "member": "licenses/llvm-libc.txt",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "member": "licenses/libpng.txt",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        }
+      ],
+      "args_gn": "clang_use_chrome_plugins = false\nis_component_build = false\nis_debug = false\npdf_enable_v8 = false\npdf_enable_xfa = false\npdf_is_standalone = true\npdf_use_partition_alloc = false\ntarget_cpu = \"x64\"\ntarget_os = \"linux\"\ntreat_warnings_as_errors = false\n",
+      "version": "MAJOR=156\nMINOR=0\nBUILD=8076\nPATCH=0\n",
+      "source_revision": "8ca5b735df4263f43c830479b78213854a392c22",
+      "source_archive_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "build_recipe_revision": "f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+      "notice_recipe_member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/08-licenses.sh"
+    },
+    {
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-mac-arm64.tgz",
+      "sha256": "0d6781fe08906baff3d82c90953e519fbc4eb253fe76431e5ed53b157763b97c",
+      "size_bytes": 3487497,
+      "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93"
+        },
+        {
+          "member": "licenses/abseil.txt",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "member": "licenses/libopenjpeg.txt",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "member": "licenses/icu.txt",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.md",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "member": "licenses/freetype.txt",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "member": "licenses/simdutf.txt",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.ijg",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "member": "licenses/lcms.txt",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "member": "licenses/pdfium.txt",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        },
+        {
+          "member": "licenses/zlib.txt",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "member": "licenses/agg23.txt",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "member": "licenses/fast_float.txt",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "member": "licenses/llvm-libc.txt",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "member": "licenses/libpng.txt",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        }
+      ],
+      "args_gn": "clang_use_chrome_plugins = false\nis_component_build = false\nis_debug = false\npdf_enable_v8 = false\npdf_enable_xfa = false\npdf_is_standalone = true\npdf_use_partition_alloc = false\ntarget_cpu = \"arm64\"\ntarget_os = \"mac\"\ntreat_warnings_as_errors = false\n",
+      "version": "MAJOR=156\nMINOR=0\nBUILD=8076\nPATCH=0\n",
+      "source_revision": "8ca5b735df4263f43c830479b78213854a392c22",
+      "source_archive_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "build_recipe_revision": "f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+      "notice_recipe_member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/08-licenses.sh"
+    },
+    {
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-mac-x64.tgz",
+      "sha256": "40865f34642c34d82cc336132df9e0347133f4692cd46776647af160f9a5cca9",
+      "size_bytes": 3680415,
+      "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93"
+        },
+        {
+          "member": "licenses/abseil.txt",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "member": "licenses/libopenjpeg.txt",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "member": "licenses/icu.txt",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.md",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "member": "licenses/freetype.txt",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "member": "licenses/simdutf.txt",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.ijg",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "member": "licenses/lcms.txt",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "member": "licenses/pdfium.txt",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        },
+        {
+          "member": "licenses/zlib.txt",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "member": "licenses/agg23.txt",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "member": "licenses/fast_float.txt",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "member": "licenses/llvm-libc.txt",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "member": "licenses/libpng.txt",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        }
+      ],
+      "args_gn": "clang_use_chrome_plugins = false\nis_component_build = false\nis_debug = false\npdf_enable_v8 = false\npdf_enable_xfa = false\npdf_is_standalone = true\npdf_use_partition_alloc = false\ntarget_cpu = \"x64\"\ntarget_os = \"mac\"\ntreat_warnings_as_errors = false\n",
+      "version": "MAJOR=156\nMINOR=0\nBUILD=8076\nPATCH=0\n",
+      "source_revision": "8ca5b735df4263f43c830479b78213854a392c22",
+      "source_archive_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "build_recipe_revision": "f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+      "notice_recipe_member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/08-licenses.sh"
+    },
+    {
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-mac-univ.tgz",
+      "sha256": "3bdb93e229298dfdf083dc8ccc7d1a8cf87790b6917e5073335504fe2ff0bdc1",
+      "size_bytes": 7049107,
+      "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93"
+        },
+        {
+          "member": "licenses/abseil.txt",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "member": "licenses/libopenjpeg.txt",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "member": "licenses/icu.txt",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.md",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "member": "licenses/freetype.txt",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "member": "licenses/simdutf.txt",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "member": "licenses/libjpeg_turbo.ijg",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "member": "licenses/lcms.txt",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "member": "licenses/pdfium.txt",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        },
+        {
+          "member": "licenses/zlib.txt",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "member": "licenses/agg23.txt",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "member": "licenses/fast_float.txt",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "member": "licenses/llvm-libc.txt",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "member": "licenses/libpng.txt",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        }
+      ],
+      "args_gn": "clang_use_chrome_plugins = false\nis_component_build = false\nis_debug = false\npdf_enable_v8 = false\npdf_enable_xfa = false\npdf_is_standalone = true\npdf_use_partition_alloc = false\ntarget_os = \"mac\"\ntreat_warnings_as_errors = false\n",
+      "version": "MAJOR=156\nMINOR=0\nBUILD=8076\nPATCH=0\n",
+      "source_revision": "8ca5b735df4263f43c830479b78213854a392c22",
+      "source_archive_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "build_recipe_revision": "f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+      "notice_recipe_member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/08-licenses.sh"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://pdfium.googlesource.com/pdfium/+archive/8ca5b735df4263f43c830479b78213854a392c22.tar.gz",
+      "sha256": "ef0a6153bf4a62c82c866153b6c8f6c2f672fdedf71cd967831c6faa6678a67d",
+      "size_bytes": 13045391,
+      "cache_filename": "pdfium-source/pdfium-8ca5b735df4263f43c830479b78213854a392c22.tar.gz",
+      "checkout_path": ".",
+      "revision": "8ca5b735df4263f43c830479b78213854a392c22",
+      "repository": "https://pdfium.googlesource.com/pdfium.git",
+      "member_count": 5586,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        },
+        {
+          "member": "third_party/NotoSansBengali2/LICENSE",
+          "sha256": "d6639d6624144ef0611b03172e085251c29d4c929b3c11e891e72db6a5b5c2e1"
+        },
+        {
+          "member": "third_party/NotoSansBengali3/LICENSE",
+          "sha256": "d6639d6624144ef0611b03172e085251c29d4c929b3c11e891e72db6a5b5c2e1"
+        },
+        {
+          "member": "third_party/NotoSansCJK/LICENSE",
+          "sha256": "d6639d6624144ef0611b03172e085251c29d4c929b3c11e891e72db6a5b5c2e1"
+        },
+        {
+          "member": "third_party/agg23/copying",
+          "sha256": "0e16f9c2285583269242e94c6f502de0c9910dfcbbc7b386e236cdf29ecd4333"
+        },
+        {
+          "member": "third_party/bigint/LICENSE",
+          "sha256": "32759d1397d8f7b9e15ece146e4038b22b90e93b4935b5a840bcef4d2ba5ea55"
+        },
+        {
+          "member": "third_party/fp16/LICENSE",
+          "sha256": "c91377adafa2f498211a4fe017788e20c38892124673860f068f2919c289193d"
+        },
+        {
+          "member": "third_party/freetype/FTL.TXT",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "member": "third_party/highway/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "member": "third_party/lcms/LICENSE",
+          "sha256": "6dbd60437f8ef91d8de1f08ad75882547fd4931bfcc3566a0735f28db1484d31"
+        },
+        {
+          "member": "third_party/libopenjpeg/LICENSE",
+          "sha256": "a6af136f3e15038a666b61f376612a07d9a4e48cb7c01adbf3e33b3f14ab49b6"
+        },
+        {
+          "member": "third_party/libtiff/LICENSE.md",
+          "sha256": "0780558a8bfba0af1160ec1ff11ade4f41c0d7deafd6ecfc796b492a788e380d"
+        }
+      ]
+    },
+    {
+      "checkout_path": "base/allocator/partition_allocator",
+      "repository": "https://chromium.googlesource.com/chromium/src/base/allocator/partition_allocator.git",
+      "revision": "89615a645f0220fb03875111c2d9ae4dea9887d8",
+      "url": "https://chromium.googlesource.com/chromium/src/base/allocator/partition_allocator/+archive/89615a645f0220fb03875111c2d9ae4dea9887d8.tar.gz",
+      "cache_filename": "pdfium-source/base--allocator--partition_allocator-89615a645f0220fb03875111c2d9ae4dea9887d8.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "183f531317ef7b336fb7bd6aea46bf1aaf973bb20cb82277d8a5853d21210ce9",
+      "size_bytes": 895830,
+      "member_count": 455,
+      "notice_members": [
+        {
+          "member": "src/partition_alloc/third_party/apple_apsl/LICENSE",
+          "sha256": "b23e682fda7310afe43505ed6041919ccff8f9e0c6799ebd7542cbcef11102e3"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "build",
+      "repository": "https://chromium.googlesource.com/chromium/src/build.git",
+      "revision": "2cd94c0abeada712aeea6906d99021913c9fc28d",
+      "url": "https://chromium.googlesource.com/chromium/src/build/+archive/2cd94c0abeada712aeea6906d99021913c9fc28d.tar.gz",
+      "cache_filename": "pdfium-source/build-2cd94c0abeada712aeea6906d99021913c9fc28d.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "ff4bc4179cc6847fa8dd232905bf3f611bc90385b519bb426f5c33e1e3d1b4ff",
+      "size_bytes": 1968408,
+      "member_count": 1806,
+      "notice_members": [
+        {
+          "member": "android/incremental_install/third_party/AndroidHiddenApiBypass/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "buildtools",
+      "repository": "https://chromium.googlesource.com/chromium/src/buildtools.git",
+      "revision": "6f6a5dbf04b734214f3b1f386567d101ec9d607e",
+      "url": "https://chromium.googlesource.com/chromium/src/buildtools/+archive/6f6a5dbf04b734214f3b1f386567d101ec9d607e.tar.gz",
+      "cache_filename": "pdfium-source/buildtools-6f6a5dbf04b734214f3b1f386567d101ec9d607e.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "0be1eead04a43cd476f16179da544b97464b888e56e17f8dab261e867c4917ff",
+      "size_bytes": 60910,
+      "member_count": 123,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "ff11d445fb41a1087c7630e120ab15f1a2cb67c1b707173cb494141805fca35e"
+        },
+        {
+          "member": "third_party/mold/LICENSE",
+          "sha256": "c98a2858469bd3b231c8865c5b65f80f6ffbf25e850d5d575967e3d9ee080755"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/abseil-cpp",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp.git",
+      "revision": "435e7d977fb36fb47854a4c552c0706dad0bd7cf",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp/+archive/435e7d977fb36fb47854a4c552c0706dad0bd7cf.tar.gz",
+      "cache_filename": "pdfium-source/third_party--abseil-cpp-435e7d977fb36fb47854a4c552c0706dad0bd7cf.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "73fe9d98106756d46ff3b2a3d7f29a3634c750da3cb96174c1a9d1785f2d2251",
+      "size_bytes": 3235987,
+      "member_count": 1729,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/brotli",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/brotli.git",
+      "revision": "803ac71664ad62af1de39ff55e63ebbe07006fc8",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/brotli/+archive/803ac71664ad62af1de39ff55e63ebbe07006fc8.tar.gz",
+      "cache_filename": "pdfium-source/third_party--brotli-803ac71664ad62af1de39ff55e63ebbe07006fc8.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "a3292744e97b1eaa568bbb3c7b11da28cb6e8988d2268ed521546e3b1ecc771c",
+      "size_bytes": 494092,
+      "member_count": 126,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/clang-format/script",
+      "repository": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/clang/tools/clang-format.git",
+      "revision": "70510081984cfcdb14a15b3e08dfe9776dc7ed37",
+      "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/clang/tools/clang-format/+archive/70510081984cfcdb14a15b3e08dfe9776dc7ed37.tar.gz",
+      "cache_filename": "pdfium-source/third_party--clang-format--script-70510081984cfcdb14a15b3e08dfe9776dc7ed37.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "503c1f035f2fb4dd6f0868dbdfe2d5e4ac18c5c778724b9ac49bd5a7a9fff4fb",
+      "size_bytes": 29687,
+      "member_count": 14,
+      "notice_members": [],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/depot_tools",
+      "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+      "revision": "36a8df4ad006eaa0572fb446edb8145fe5403592",
+      "url": "https://chromium.googlesource.com/chromium/tools/depot_tools/+archive/36a8df4ad006eaa0572fb446edb8145fe5403592.tar.gz",
+      "cache_filename": "pdfium-source/third_party--depot_tools-36a8df4ad006eaa0572fb446edb8145fe5403592.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "be5f88db13eb6409daf973ddee0f67c6eb9c43de9cbae73a30337b045821cdc1",
+      "size_bytes": 1679096,
+      "member_count": 1010,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "20b1e32e55821d109bcd17e1e150cfe242b54590d3e8083648d1276f88d33d16"
+        },
+        {
+          "member": "metadata/LICENSE_OWNERS",
+          "sha256": "c203ade846c159e17bb36214eef81b55866645a3ece3cf4f10d9fcff110e444a"
+        },
+        {
+          "member": "metadata/fields/custom/license.py",
+          "sha256": "8dabd9a3478fabeb5ecf0ee2624ed7b41a8c346fdcb3d24a9fc4098a30ba4f54"
+        },
+        {
+          "member": "metadata/fields/custom/license_allowlist.py",
+          "sha256": "edbebc789240aa96e5449d429cd2f8d92d35ce2268e18a3bc7fdf9aac3d79891"
+        },
+        {
+          "member": "metadata/fields/custom/license_file.py",
+          "sha256": "4ab59682a096a2c31ab9ae42f2666dc6d5e72bac0071942a2e28d6d57d6732b6"
+        },
+        {
+          "member": "metadata/restrictive_license_approval.proto",
+          "sha256": "ce4239beb9ada6d4cc5c7458250dccb6da988fa639dda9677cd853961cf0bdcb"
+        },
+        {
+          "member": "metadata/restrictive_license_approval_pb2.py",
+          "sha256": "63c14e7a3061128d1602d563e1fc1bd9d57338092f038a9217c2f9cc1632ab67"
+        },
+        {
+          "member": "metadata/scripts/parse_restrictive_license_approval.py",
+          "sha256": "fe968748d5f5c2e1b6b3d4551bb74a4f72ceb33335701b741da26d074d393420"
+        },
+        {
+          "member": "metadata/scripts/parse_restrictive_license_approval.py.uv.lock",
+          "sha256": "31be62e0857b73b92d065b376ed5eac3f63433c4b498e3be1332c97c6d7f1010"
+        },
+        {
+          "member": "metadata/tests/data/LICENSE",
+          "sha256": "8bc55eba9da5911fd65d6b9dddfd56d94e30ff7fc2a9a30a5782bfc47cdf9c35"
+        },
+        {
+          "member": "metadata/tests/data/README.chromium.test.reciprocal-license",
+          "sha256": "73702bb77e2ddb030d39f39968c8ae99e3d8e6c4e2bdf0ab44805c64b7837ce3"
+        },
+        {
+          "member": "metadata/tests/data/README.chromium.test.restricted-license",
+          "sha256": "b5e85688c66c4c5a426a1f6a29ef890c61baa9beca6b695d03151a795d839643"
+        },
+        {
+          "member": "metadata/tests/data/invalid_restrictive_license_approval/restrictive_license_approval.textproto",
+          "sha256": "d43f83798cf7b4e5556a8ff31553915dbea6e9e168a9c65865fe25c342d16e7c"
+        },
+        {
+          "member": "metadata/tests/data/restrictive_license_approval.textproto",
+          "sha256": "6599584737e9bbd8da03cbca20e9291bc748052be9ce2198e41d08901c131f9e"
+        },
+        {
+          "member": "metadata/tests/data/src/LICENSE.txt",
+          "sha256": "19ad13f8d801c13b5dde35625d2a57a0c3e1e4cb4d073dd2aff72be3925940e6"
+        },
+        {
+          "member": "third_party/colorama/LICENSE.txt",
+          "sha256": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318"
+        },
+        {
+          "member": "third_party/repo/COPYING",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "member": "third_party/schema/LICENSE-MIT",
+          "sha256": "f4360ca8f779e6a673cd2882f73419bc2c5f74184fd9db91d2e86a368cc04e0b"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/dragonbox/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/jk-jeon/dragonbox.git",
+      "revision": "beeeef91cf6fef89a4d4ba5e95d47ca64ccb3a44",
+      "url": "https://chromium.googlesource.com/external/github.com/jk-jeon/dragonbox/+archive/beeeef91cf6fef89a4d4ba5e95d47ca64ccb3a44.tar.gz",
+      "cache_filename": "pdfium-source/third_party--dragonbox--src-beeeef91cf6fef89a4d4ba5e95d47ca64ccb3a44.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "ca7d0e8bf51dbaa83a252c1a2c08b9a96e8e90f6bb9c5d0b6277d2cc128c7204",
+      "size_bytes": 4235094,
+      "member_count": 122,
+      "notice_members": [
+        {
+          "member": "LICENSE-Apache2-LLVM",
+          "sha256": "9e45e856bedccee9f67254082ca11851d954de2fed7448c4bed19ad9aab99a91"
+        },
+        {
+          "member": "LICENSE-Boost",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        },
+        {
+          "member": "subproject/3rdparty/shaded_plots/license.txt",
+          "sha256": "4940bc5686a12692b9f95bb3af225592994fd1bc910e212f975cc73ab3799d2c"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/fast_float/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/fastfloat/fast_float.git",
+      "revision": "34164f547b7df3f5d794ff67e9f885c36819ebfc",
+      "url": "https://chromium.googlesource.com/external/github.com/fastfloat/fast_float/+archive/34164f547b7df3f5d794ff67e9f885c36819ebfc.tar.gz",
+      "cache_filename": "pdfium-source/third_party--fast_float--src-34164f547b7df3f5d794ff67e9f885c36819ebfc.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "260e5932a22f342cb6e4a1b94f619fdfb0363f686071adeb2493d26708a4d073",
+      "size_bytes": 143753,
+      "member_count": 137,
+      "notice_members": [
+        {
+          "member": "LICENSE-APACHE",
+          "sha256": "097a889aa954d04e088b790b10a4014d6189561d0a6013935a73ce3d4ddaaf06"
+        },
+        {
+          "member": "LICENSE-BOOST",
+          "sha256": "8d8291caf1cee26d23acf3eb67c9f9a2d58f1c681b16a4fbe8cbfb9e3c0b5a9b"
+        },
+        {
+          "member": "LICENSE-MIT",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/freetype/src",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
+      "revision": "4800589f76dc62fbe523a74a59e0d4850a5dd7df",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/freetype2/+archive/4800589f76dc62fbe523a74a59e0d4850a5dd7df.tar.gz",
+      "cache_filename": "pdfium-source/third_party--freetype--src-4800589f76dc62fbe523a74a59e0d4850a5dd7df.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "d770e08bccd8c8ff8863ede3cf3d7a805e3c5493dd76c3726bf537edd22eb980",
+      "size_bytes": 2599522,
+      "member_count": 835,
+      "notice_members": [
+        {
+          "member": "LICENSE.TXT",
+          "sha256": "bd36c8b474855fa294c2ec5c184544478ef3720aad37d65a6296a4f264fd2d3b"
+        },
+        {
+          "member": "docs/FTL.TXT",
+          "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f"
+        },
+        {
+          "member": "src/base/ftpatent.c",
+          "sha256": "e6740b91751c39d81ecb7a93e0ede78ed28588254734d4bac8badb0e807435fc"
+        }
+      ],
+      "gitmodules_members": [
+        ".gitmodules"
+      ]
+    },
+    {
+      "checkout_path": "third_party/googletest/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/google/googletest.git",
+      "revision": "4fe3307fb2d9f86d19777c7eb0e4809e9694dde7",
+      "url": "https://chromium.googlesource.com/external/github.com/google/googletest/+archive/4fe3307fb2d9f86d19777c7eb0e4809e9694dde7.tar.gz",
+      "cache_filename": "pdfium-source/third_party--googletest--src-4fe3307fb2d9f86d19777c7eb0e4809e9694dde7.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "d9073df86ba091c31170abda45deb79818e8b9186a18def9c6209839bdde95c3",
+      "size_bytes": 901393,
+      "member_count": 280,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/harfbuzz/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git",
+      "revision": "886fc1e645388080b72f6d9b06347533a0018045",
+      "url": "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz/+archive/886fc1e645388080b72f6d9b06347533a0018045.tar.gz",
+      "cache_filename": "pdfium-source/third_party--harfbuzz--src-886fc1e645388080b72f6d9b06347533a0018045.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "b46468d51d7b635874b84f1ccf152969816a492044d77362c65f74027d53ad3d",
+      "size_bytes": 38075848,
+      "member_count": 3965,
+      "notice_members": [
+        {
+          "member": "COPYING",
+          "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"
+        },
+        {
+          "member": "src/ms-use/COPYING",
+          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        },
+        {
+          "member": "test/COPYING",
+          "sha256": "9b35b8485f69cd298fccbb3c40a827dc06cf1185553bef827903497d2944a8d7"
+        },
+        {
+          "member": "test/shape/data/aots/COPYING",
+          "sha256": "f55f74bf740db07bb032a90aa74af4307adea3d489c1ccba12453cf0c0a764cb"
+        },
+        {
+          "member": "test/shape/data/text-rendering-tests/COPYING",
+          "sha256": "d24039e4d22c9bc72096f6174374539d92a3d6e1163938546ec59179fe095e6f"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/icu",
+      "repository": "https://chromium.googlesource.com/chromium/deps/icu.git",
+      "revision": "8cc91d9b6ab9991802fd208ee03a69714fd0251c",
+      "url": "https://chromium.googlesource.com/chromium/deps/icu/+archive/8cc91d9b6ab9991802fd208ee03a69714fd0251c.tar.gz",
+      "cache_filename": "pdfium-source/third_party--icu-8cc91d9b6ab9991802fd208ee03a69714fd0251c.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "8cdefbc42780115891c8319d0a29797c4805fec8ded0e85267c383cc77a7af2c",
+      "size_bytes": 55720195,
+      "member_count": 7263,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "member": "license.html",
+          "sha256": "c62d7697c03979f5056d28b338fafc7a1152820f7b379adf4a9d88cd37160f96"
+        },
+        {
+          "member": "scripts/LICENSE",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/instrumented_libs",
+      "repository": "https://chromium.googlesource.com/chromium/third_party/instrumented_libraries.git",
+      "revision": "423262e4438b032c0ba5ea61f78a85ac3690298c",
+      "url": "https://chromium.googlesource.com/chromium/third_party/instrumented_libraries/+archive/423262e4438b032c0ba5ea61f78a85ac3690298c.tar.gz",
+      "cache_filename": "pdfium-source/third_party--instrumented_libs-423262e4438b032c0ba5ea61f78a85ac3690298c.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "520076c0c0f5d5524ad7ce13c5fcd5e5b8cac5c6bed837d0c3b1ab2dc505fd96",
+      "size_bytes": 34396,
+      "member_count": 69,
+      "notice_members": [],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/libc++/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx.git",
+      "revision": "97b436da4c33663581d394f4ee0a5977fc38c2f4",
+      "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx/+archive/97b436da4c33663581d394f4ee0a5977fc38c2f4.tar.gz",
+      "cache_filename": "pdfium-source/third_party--libc++--src-97b436da4c33663581d394f4ee0a5977fc38c2f4.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "46f32ee443dcaddf4ad6fef39e746f661005c4a011d8c493faaa24fbc0630bf7",
+      "size_bytes": 9029529,
+      "member_count": 14873,
+      "notice_members": [
+        {
+          "member": "LICENSE.TXT",
+          "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+        },
+        {
+          "member": "test/libcxx-03/algorithms/robust_against_copying_comparators.pass.cpp",
+          "sha256": "b5c019419710c478f92d9fd50935aa541c592f1c49c44ceba630a1d0f476fb7b"
+        },
+        {
+          "member": "test/libcxx/algorithms/ranges_robust_against_copying_comparators.pass.cpp",
+          "sha256": "d2ce7fa574a94c49e92e8023739360a7efeacb5afff88b7d80feb3e3dc9ae15e"
+        },
+        {
+          "member": "test/libcxx/algorithms/ranges_robust_against_copying_projections.pass.cpp",
+          "sha256": "75abf3eb20f808dd691dd3a1ae9ffe769168d8fc87243efd0b179dcee3273f02"
+        },
+        {
+          "member": "test/libcxx/algorithms/robust_against_copying_comparators.pass.cpp",
+          "sha256": "d951cf2be0d210595c103c7ee6dee0c8e4441ed046456504ed25271ec7b42328"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/libc++abi/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi.git",
+      "revision": "fc1897a2c12aa27e703c3ed48b62eba8abf4ce19",
+      "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi/+archive/fc1897a2c12aa27e703c3ed48b62eba8abf4ce19.tar.gz",
+      "cache_filename": "pdfium-source/third_party--libc++abi--src-fc1897a2c12aa27e703c3ed48b62eba8abf4ce19.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "42dcc35f705e3f8155064f1faf2b4cacf398ad6d4a888ee5590352fa18761ac7",
+      "size_bytes": 808191,
+      "member_count": 183,
+      "notice_members": [
+        {
+          "member": "LICENSE.TXT",
+          "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/libjpeg_turbo",
+      "repository": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git",
+      "revision": "640f254ad0fa03f6b1f29f89b7dd9366f2f6e533",
+      "url": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo/+archive/640f254ad0fa03f6b1f29f89b7dd9366f2f6e533.tar.gz",
+      "cache_filename": "pdfium-source/third_party--libjpeg_turbo-640f254ad0fa03f6b1f29f89b7dd9366f2f6e533.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "4b4710bd51bb4093017b44f4aa2c92e4d013f5e19aecc2d4e4ffbefc757b7375",
+      "size_bytes": 2624940,
+      "member_count": 319,
+      "notice_members": [
+        {
+          "member": "LICENSE.md",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "member": "LICENSE.md.chromium",
+          "sha256": "152a0f78d9c3a3afc09470cba1e66eabb915515cb121252d6c85c4ed6352a073"
+        },
+        {
+          "member": "README.ijg",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/libpng",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/libpng.git",
+      "revision": "0179a807421cf96731cdfa10008bba04fda243c1",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/libpng/+archive/0179a807421cf96731cdfa10008bba04fda243c1.tar.gz",
+      "cache_filename": "pdfium-source/third_party--libpng-0179a807421cf96731cdfa10008bba04fda243c1.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "c784a4aff83c2af2a156d0d6555a1d87a4873ea798a4f195ee22fa5f33f208c2",
+      "size_bytes": 350596,
+      "member_count": 54,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/llvm-libc/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libc.git",
+      "revision": "320824188c37e5c28738b9652a0ca8087c934bc9",
+      "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libc/+archive/320824188c37e5c28738b9652a0ca8087c934bc9.tar.gz",
+      "cache_filename": "pdfium-source/third_party--llvm-libc--src-320824188c37e5c28738b9652a0ca8087c934bc9.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "f574f5cb48625d52744f38aad5d1b980b18908b821bec405f016e4174227a2c1",
+      "size_bytes": 8047142,
+      "member_count": 8791,
+      "notice_members": [
+        {
+          "member": "LICENSE.TXT",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/nasm",
+      "repository": "https://chromium.googlesource.com/chromium/deps/nasm.git",
+      "revision": "525a09a813be0f75b646ee93fc2a31c27b87d722",
+      "url": "https://chromium.googlesource.com/chromium/deps/nasm/+archive/525a09a813be0f75b646ee93fc2a31c27b87d722.tar.gz",
+      "cache_filename": "pdfium-source/third_party--nasm-525a09a813be0f75b646ee93fc2a31c27b87d722.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "f1bfe7d6b6a8f69eb37ba8b95dfecd17e540ec021ef270f796d400798ca368d3",
+      "size_bytes": 2433425,
+      "member_count": 1387,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "7436a7c46b6e4d969b41e1ce387885ae4ced25710662189ff2983665253729ac"
+        },
+        {
+          "member": "zlib/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/simdutf",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/simdutf",
+      "revision": "f7356eed293f8208c40b3c1b344a50bd70971983",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/simdutf/+archive/f7356eed293f8208c40b3c1b344a50bd70971983.tar.gz",
+      "cache_filename": "pdfium-source/third_party--simdutf-f7356eed293f8208c40b3c1b344a50bd70971983.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "575b04864a33da069638620471eb38803c55832695c1be472b4d94ea3602bd8a",
+      "size_bytes": 425715,
+      "member_count": 6,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/test_fonts",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/test_fonts.git",
+      "revision": "7f51783942943e965cd56facf786544ccfc07713",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/test_fonts/+archive/7f51783942943e965cd56facf786544ccfc07713.tar.gz",
+      "cache_filename": "pdfium-source/third_party--test_fonts-7f51783942943e965cd56facf786544ccfc07713.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "edfaa1dc9b98a204493b344211d7374922db8b04347dbe36d879bd97d43d1053",
+      "size_bytes": 20868,
+      "member_count": 14,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "81e32dadf795edf077c0e567963e598b64f3c6b1ffa8ebac907bf01d3e7b2c1a"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/zlib",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/zlib.git",
+      "revision": "285e94b8fa95ad3b7d16b80798ec8dce6febb8c8",
+      "url": "https://chromium.googlesource.com/chromium/src/third_party/zlib/+archive/285e94b8fa95ad3b7d16b80798ec8dce6febb8c8.tar.gz",
+      "cache_filename": "pdfium-source/third_party--zlib-285e94b8fa95ad3b7d16b80798ec8dce6febb8c8.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "11dc500b7afa0c5049e1cabd79e7b064a82799a4c9155173965a74a5dabee297",
+      "size_bytes": 1393282,
+      "member_count": 214,
+      "notice_members": [
+        {
+          "member": "LICENSE",
+          "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+        }
+      ],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "tools/clang",
+      "repository": "https://chromium.googlesource.com/chromium/src/tools/clang",
+      "revision": "450d823868eaee61e2b2cb986e19aec287f16d58",
+      "url": "https://chromium.googlesource.com/chromium/src/tools/clang/+archive/450d823868eaee61e2b2cb986e19aec287f16d58.tar.gz",
+      "cache_filename": "pdfium-source/tools--clang-450d823868eaee61e2b2cb986e19aec287f16d58.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "c41e8f146bf51e599ccdaafb8e29b0d3f85c86e988c76bdeb3ded82842f76675",
+      "size_bytes": 692206,
+      "member_count": 1251,
+      "notice_members": [],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "tools/code_coverage",
+      "repository": "https://chromium.googlesource.com/chromium/src/tools/code_coverage.git",
+      "revision": "e1878fbb1ff79de75d54b6b57caa19a92b90079b",
+      "url": "https://chromium.googlesource.com/chromium/src/tools/code_coverage/+archive/e1878fbb1ff79de75d54b6b57caa19a92b90079b.tar.gz",
+      "cache_filename": "pdfium-source/tools--code_coverage-e1878fbb1ff79de75d54b6b57caa19a92b90079b.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "684d9d68f3d3c97952f5044aa835601e7da1f014610f616337f67e5f0822be26",
+      "size_bytes": 112307,
+      "member_count": 67,
+      "notice_members": [],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "tools/memory",
+      "repository": "https://chromium.googlesource.com/chromium/src/tools/memory",
+      "revision": "0732f7097d066a81e673f90862994f76886fc638",
+      "url": "https://chromium.googlesource.com/chromium/src/tools/memory/+archive/0732f7097d066a81e673f90862994f76886fc638.tar.gz",
+      "cache_filename": "pdfium-source/tools--memory-0732f7097d066a81e673f90862994f76886fc638.tar.gz",
+      "deps_parent": "DEPS",
+      "sha256": "349e92705b95b5403e9014f7c8a6fd4f14cf8a13f1d5b024117a23991d63eef6",
+      "size_bytes": 66074,
+      "member_count": 63,
+      "notice_members": [],
+      "gitmodules_members": []
+    },
+    {
+      "checkout_path": "third_party/freetype/src/subprojects/dlg",
+      "revision": "395ccad2c1e0daae535c4d20bb0a3f2424648e17",
+      "repository": "https://github.com/nyorain/dlg.git",
+      "url": "https://codeload.github.com/nyorain/dlg/tar.gz/395ccad2c1e0daae535c4d20bb0a3f2424648e17",
+      "sha256": "263a4a3777d9839e34cd41db988310659e0c00eab37beb7aedd30511a460133b",
+      "cache_filename": "pdfium-source/freetype-dlg-395ccad2c1e0daae535c4d20bb0a3f2424648e17.tar.gz",
+      "size_bytes": 837072,
+      "strip_components": 1,
+      "role": "Conservatively included Freetype gitlink; FT_DEBUG_LOGGING path, not selected by normal Chromium GN build.",
+      "member_count": 38,
+      "notice_members": [
+        {
+          "member": "dlg-395ccad2c1e0daae535c4d20bb0a3f2424648e17/LICENSE",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        }
+      ]
+    },
+    {
+      "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/+archive/20e97c4b113b79586c29ac57738548939a34d22e/compiler-rt.tar.gz",
+      "sha256": "d87e498344676e20d0dbabaf3250094145231dad212d81133ef7fb699c8d7435",
+      "size_bytes": 4900620,
+      "cache_filename": "pdfium-source/compiler-rt-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "checkout_path": null,
+      "source_subtree": "compiler-rt",
+      "revision": "20e97c4b113b79586c29ac57738548939a34d22e",
+      "role": "source for compiler runtime in pinned Clang toolchain",
+      "member_count": 5133,
+      "notice_members": [
+        {
+          "member": "LICENSE.TXT",
+          "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+        }
+      ]
+    },
+    {
+      "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/20e97c4b113b79586c29ac57738548939a34d22e",
+      "sha256": "ab755ce2db522faafb5372a95f6ecb62cf06368f959ee995302802b81006cbfe",
+      "size_bytes": 280189982,
+      "cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "checkout_path": null,
+      "revision": "20e97c4b113b79586c29ac57738548939a34d22e",
+      "strip_components": 1,
+      "role": "Complete LLVM monorepo matching pinned Clang runtime revision: compiler-rt source, CMake modules, LLVM headers/tools and third-party inputs. DEPS libc++/libc++abi snapshots remain separately pinned.",
+      "member_count": 198275,
+      "notice_members": [
+        {
+          "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/LICENSE.TXT",
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+        },
+        {
+          "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/compiler-rt/LICENSE.TXT",
+          "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+        },
+        {
+          "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/libcxx/LICENSE.TXT",
+          "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+        },
+        {
+          "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/libcxxabi/LICENSE.TXT",
+          "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+        },
+        {
+          "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/libunwind/LICENSE.TXT",
+          "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+        },
+        {
+          "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/third-party/benchmark/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    }
+  ],
+  "build_recipe": {
+    "url": "https://codeload.github.com/bblanchon/pdfium-binaries/tar.gz/f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+    "sha256": "0b9b311b5ae99959113a46573e766f5c8f05aa5b2afc14cfe4de4144bfbf30bf",
+    "size_bytes": 142785,
+    "cache_filename": "pdfium-source/builder.tar.gz",
+    "revision": "f2e9a1c45bb17b85b540abf1af30146ef65416ac",
+    "repository": "https://github.com/bblanchon/pdfium-binaries",
+    "member_count": 106,
+    "notice_members": [
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/LICENSE",
+        "sha256": "493abc10084b58f97dce3fac1654624e1a25788f17180fe8925786c266cd2416"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/08-licenses.sh",
+        "sha256": "25944e0d3c02d595283dd1cbde7b4aefdbece6e88eed919d00c3805590742724"
+      }
+    ],
+    "recipe_members": [
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/.github/workflows/build-all.yml",
+        "sha256": "b36a9b3d1334325649fb300b4a7f8b8af403c24270c6e10a4d65ca8b4836d6cf"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/.github/workflows/build-one.yml",
+        "sha256": "e845449bb1ebf39f27029ee9313fb64ffe52b691ffdc287f5c56349f195fda8b"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/.github/workflows/build.yml",
+        "sha256": "cb05c65c906724ca8728fa4840f92c2d6b77ce4a211bd20748096208dfa0896e"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/.github/workflows/mac-univ.yml",
+        "sha256": "40bf78a3da3fbf52a92d8fea3555084ef68f43e549e61bab607ead03b1d5efc7"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/.github/workflows/patch.yml",
+        "sha256": "60ae789529d8d02ca09362bdd4f862908072c491f561e6cb4633248b4b6c9b1e"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/.github/workflows/trigger.yml",
+        "sha256": "649e2cc5b2b83e1dd5ba08cbc298d9269dd834e2e41d254cd195f46123fea1cf"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/build.sh",
+        "sha256": "96298bbf2d4da06952848f180cdce149cbdc7b55e1d95b3cec8dfc85317566dc"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/PDFiumConfig.cmake",
+        "sha256": "f4b8b886025944c5f88312c3b4adaf0c4ae0d2515ec366ca77cadff243397068"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/PDFiumStaticConfig.cmake",
+        "sha256": "579a3ed9378517b0d1e443d5bdbc03223360ead3a716a9e3a328e13fd1904156"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/android/build.patch",
+        "sha256": "1da025a029897b8b36af687463ad93bf75c4d93e9dcade79f65d8ec10cf8c224"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/clang_rt.patch",
+        "sha256": "45a4f7b5796c381bbf4cd74c54d613d63b8644df96ab3fa32ad7d9132b21f151"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/ios/pdfium.patch",
+        "sha256": "3ebee9dbdfc134c844c60ea600343c5ecd60ab8b3f2cdb16641fc2713255ee00"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/ios/v8.patch",
+        "sha256": "29d26c621c3e8388586f90ef824d6c13f75fac9679e9e3f596c241ab0358318d"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/linux/v8.patch",
+        "sha256": "812e5ee7cadd686078507c2f2d13252be5481ea67336d9d8b691b9b9713d1786"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/mac/build.patch",
+        "sha256": "c5967db42fb63775a6a461859eb39d9db8e9b1c2e8a39198dc00ab7b32dcc006"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/mips64el/build.patch",
+        "sha256": "f19f4743fa0dd93a97fe1b51dde227bea9d8fdd58293dd440e78115b82dc97ab"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/musl/build.patch",
+        "sha256": "7c8f712084aff94e5e7fb94332219cfcc6c610018da72381e4273172294b580c"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/musl/pdfium.patch",
+        "sha256": "d4cfb7d3f8c460ade94d3298abca2e5ec8d18ae51b1508e7ae82059b35592fd0"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/musl/toolchain.gn",
+        "sha256": "13beb7190d01be352d0a243f1145b40aa461f45a04a55a233c95c69fb42095ff"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/ppc64/build.patch",
+        "sha256": "abc0c985b188a570490332ee8da7fe44267dc3f47990a70f697a90fa6a7e7409"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/ppc64/pdfium.patch",
+        "sha256": "473852f6a3dc0392aa972222d16d6f4adcb747a4775875e9af4c89bba2d2a38a"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/public_headers.patch",
+        "sha256": "b21cedea243ced82977251000e356240de038712b8cf8721b3dda3d595c6affd"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/shared_library.patch",
+        "sha256": "0fbc6207a5c9da8528914418598a494a3ed358ccb8ee91c8b3f8c1f95ab84057"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/static_library.patch",
+        "sha256": "2a39ae8f9d0c2369ae2bf73130d9fc298565b27047755c1567cb60e5bf147d2c"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/v8/pdfium.patch",
+        "sha256": "cc1ef3f2627f4cb443bc5ce6f15db40978b8cfc6b9b0112c2d0ec955e8081467"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/wasm/build.patch",
+        "sha256": "c72c3b626163998acbf4e4990894b783a1206a92f7532afdd84265cbd28dce7e"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/wasm/config.gn",
+        "sha256": "711e4a422dba9a5c34ca164a4850104e94f32bdd448bd1eb615cf4e790f28bcd"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/wasm/pdfium.patch",
+        "sha256": "a2618956e4b70342877a07e86440ea37de7124928ba6c068540ef33232d4e355"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/wasm/v8.patch",
+        "sha256": "056fd3e06cc6a18e7970f2dc76dd0a5012a75af85f83fc3bebc20ee5041d9f0c"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/win/build.patch",
+        "sha256": "614c50bac5266255266b48950a949bc08186ff47b052d507f83635a5f15751ad"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/patches/win/resources.rc",
+        "sha256": "44dd028d41204749099d9e628727f524e448df57f712bdb7d12414ad61ac0097"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/00-environment.sh",
+        "sha256": "ba36d6b0710ce1e6b0cc078b7f26e947811c5f009416180ac6c0339e4d4d7786"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/01-install.sh",
+        "sha256": "071bfd812f1d11eb9dfae5beac5c3be41cb95d200b7ee0334a4a7550ac12740e"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/02-checkout.sh",
+        "sha256": "75eafb141796de6e37a076cb920c305d2aca46d6408c4bc13f64cc65ac7b91a9"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/03-patch.sh",
+        "sha256": "2aaa586d124e17f669ee10fc2b5a1c32646a095f9ba704c8adc73ab706e64416"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/04-install-extras.sh",
+        "sha256": "535d2ee8bb3451478a6fac22b626a5cc8cef005d559f4672994895cef15a790d"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/05-configure.sh",
+        "sha256": "68c83ed42a18d39ef2846b45f8d162ebd07a919139555d9ca4e90c3fe4511833"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/06-build.sh",
+        "sha256": "060d0a5125bba13ad2d0659ee610ae5e6fe6555ac4aba662e024994094940659"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/07-stage.sh",
+        "sha256": "1d98cd66666ce08b0aac73dcfb8a519948803ef53220c5ff6a0427b381e8708c"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/08-licenses.sh",
+        "sha256": "25944e0d3c02d595283dd1cbde7b4aefdbece6e88eed919d00c3805590742724"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/09-test.sh",
+        "sha256": "f14a1f6084ec8e653cb37520818added0d709b28992d799f0af33a4634790886"
+      },
+      {
+        "member": "pdfium-binaries-f2e9a1c45bb17b85b540abf1af30146ef65416ac/steps/10-pack.sh",
+        "sha256": "4be8fa990a1cda91cce0fcec87fb93e9bf7d013f62c4604cb97aa5450874412d"
+      }
+    ]
+  },
+  "attestation": {
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-attestation.json",
+    "sha256": "98ab698094a23f8a8d46b8f333d7f5c114bdb820e64c2a60dae3a3f80ee085a5",
+    "size_bytes": 18403,
+    "cache_filename": "pdfium-source/pdfium-attestation.json",
+    "verification": "Decoded statement subject SHA-256 and builder commit checked; Sigstore certificate, signature and transparency proof NOT cryptographically verified here."
+  },
+  "source_revision_evidence": {
+    "release_notes_first_commit": "8ca5b735df4263f43c830479b78213854a392c22",
+    "gitiles_revision": {
+      "url": "https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8076?format=JSON",
+      "sha256": "5c041191e9feb71d3e70b2247b31088f17d63edfaaccb5359ff7c62a928b85f5",
+      "size_bytes": 2202,
+      "cache_filename": "pdfium-source/revision.json"
+    },
+    "qualification": "Branch head matches first commit in release notes; notice reproduction below provides independent source-content association. Attestation does not contain the PDFium checkout hash.",
+    "release_metadata": {
+      "url": "https://api.github.com/repos/bblanchon/pdfium-binaries/releases/tags/chromium%2F8076",
+      "sha256": "53713d0ad9bad184ac68ebf3d008b4a31ab81bb4bbfb15688017958f06857f48",
+      "size_bytes": 83276,
+      "cache_filename": "pdfium-source/release.json"
+    }
+  },
+  "notice_reproduction": [
+    {
+      "binary_member": "licenses/abseil.txt",
+      "source_checkout": "third_party/abseil-cpp",
+      "source_member": "LICENSE",
+      "transformation": "copy",
+      "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/fast_float.txt",
+      "source_checkout": "third_party/fast_float/src",
+      "source_member": "LICENSE-MIT",
+      "transformation": "copy",
+      "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/freetype.txt",
+      "source_checkout": ".",
+      "source_member": "third_party/freetype/FTL.TXT",
+      "transformation": "copy",
+      "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/icu.txt",
+      "source_checkout": "third_party/icu",
+      "source_member": "LICENSE",
+      "transformation": "copy",
+      "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/libpng.txt",
+      "source_checkout": "third_party/libpng",
+      "source_member": "LICENSE",
+      "transformation": "copy",
+      "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/libjpeg_turbo.md",
+      "source_checkout": "third_party/libjpeg_turbo",
+      "source_member": "LICENSE.md",
+      "transformation": "copy",
+      "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/libjpeg_turbo.ijg",
+      "source_checkout": "third_party/libjpeg_turbo",
+      "source_member": "README.ijg",
+      "transformation": "copy",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/llvm-libc.txt",
+      "source_checkout": "third_party/llvm-libc/src",
+      "source_member": "LICENSE.TXT",
+      "transformation": "copy",
+      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/simdutf.txt",
+      "source_checkout": "third_party/simdutf",
+      "source_member": "LICENSE",
+      "transformation": "copy",
+      "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "copy",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/agg23.txt",
+      "source_checkout": ".",
+      "source_member": "third_party/agg23/agg_array.h",
+      "transformation": "strip blank lines, stop before #ifndef",
+      "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "strip blank lines, stop before #ifndef",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "strip blank lines, stop before #ifndef",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "strip blank lines, stop before #ifndef",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "strip blank lines, stop before #ifndef",
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/lcms.txt",
+      "source_checkout": ".",
+      "source_member": "third_party/lcms/include/lcms2.h",
+      "transformation": "stop before first blank line",
+      "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "stop before first blank line",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "stop before first blank line",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "stop before first blank line",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "stop before first blank line",
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/libopenjpeg.txt",
+      "source_checkout": ".",
+      "source_member": "third_party/libopenjpeg/openjpeg.c",
+      "transformation": "through first closing comment",
+      "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "through first closing comment",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "through first closing comment",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "through first closing comment",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "through first closing comment",
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/zlib.txt",
+      "source_checkout": "third_party/zlib",
+      "source_member": "zlib.h",
+      "transformation": "comment starting /* zlib.h through first closing comment",
+      "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "comment starting /* zlib.h through first closing comment",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "comment starting /* zlib.h through first closing comment",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "comment starting /* zlib.h through first closing comment",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "comment starting /* zlib.h through first closing comment",
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        }
+      ]
+    },
+    {
+      "binary_member": "licenses/pdfium.txt",
+      "source_checkout": ".",
+      "source_member": "LICENSE",
+      "transformation": "strip leading // and optional space",
+      "sha256": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e",
+      "verified_binary_associations": [
+        {
+          "cache_filename": "pdfium-source/pdfium-linux-x64.tgz",
+          "transformation": "strip leading // and optional space",
+          "sha256": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-arm64.tgz",
+          "transformation": "copy source LICENSE unchanged (observed BSD sed output)",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-x64.tgz",
+          "transformation": "copy source LICENSE unchanged (observed BSD sed output)",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        },
+        {
+          "cache_filename": "pdfium-source/pdfium-mac-univ.tgz",
+          "transformation": "copy source LICENSE unchanged (observed BSD sed output)",
+          "sha256": "1fe9dea718fbd75cf149adaf4d8a22a4335604d964ddb76d1b45383dec8668c9"
+        }
+      ]
+    }
+  ],
+  "build_inputs": [
+    {
+      "checkout_path": "buildtools/linux64",
+      "kind": "cipd-build-input",
+      "package": "gn/gn/linux-amd64",
+      "version": "git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b",
+      "url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/fwUSTPIu-y5KOPUMye_NqR8RwqJx-_Hzem8QpzoUDK4",
+      "cache_filename": "pdfium-source/cipd-gn--gn--linux-amd64-56b2ccaa6649.zip",
+      "response_headers": {},
+      "sha256": "7f05124cf22efb2e4a38f50cc9efcda91f11c2a271fbf1f37a6f10a73a140cae",
+      "size_bytes": 3583037,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "gn/gn/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "7f05124cf22efb2e4a38f50cc9efcda91f11c2a271fbf1f37a6f10a73a140cae"
+        },
+        "registeredBy": "user:infra-internal-gn-builder@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-31T07:06:12.301975Z"
+      },
+      "instance_id": "fwUSTPIu-y5KOPUMye_NqR8RwqJx-_Hzem8QpzoUDK4",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b"
+    },
+    {
+      "checkout_path": "buildtools/mac",
+      "kind": "cipd-build-input",
+      "package": "gn/gn/mac-amd64",
+      "version": "git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b",
+      "url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/uogcb3LZnoIwZS6-sp-FNjhjLtU5o8AbOPClZikhAhE",
+      "cache_filename": "pdfium-source/cipd-gn--gn--mac-amd64-56b2ccaa6649.zip",
+      "response_headers": {},
+      "sha256": "ba881c6f72d99e8230652ebeb29f853638632ed539a3c01b38f0a56629210211",
+      "size_bytes": 1134747,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "gn/gn/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "ba881c6f72d99e8230652ebeb29f853638632ed539a3c01b38f0a56629210211"
+        },
+        "registeredBy": "user:infra-internal-gn-builder@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-31T07:09:23.948425Z"
+      },
+      "instance_id": "uogcb3LZnoIwZS6-sp-FNjhjLtU5o8AbOPClZikhAhE",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b"
+    },
+    {
+      "checkout_path": "buildtools/mac",
+      "kind": "cipd-build-input",
+      "package": "gn/gn/mac-arm64",
+      "version": "git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b",
+      "url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-arm64/+/NxFeI4gOBU3B7mxzIWo9ZUm_B7LYlyimTwXNEriRj_8",
+      "cache_filename": "pdfium-source/cipd-gn--gn--mac-arm64-56b2ccaa6649.zip",
+      "response_headers": {},
+      "sha256": "37115e23880e054dc1ee6c73216a3d6549bf07b2d89728a64f05cd12b8918fff",
+      "size_bytes": 1050941,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "gn/gn/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "37115e23880e054dc1ee6c73216a3d6549bf07b2d89728a64f05cd12b8918fff"
+        },
+        "registeredBy": "user:infra-internal-gn-builder@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-31T07:12:21.427565Z"
+      },
+      "instance_id": "NxFeI4gOBU3B7mxzIWo9ZUm_B7LYlyimTwXNEriRj_8",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-arm64/+/git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b"
+    },
+    {
+      "checkout_path": "buildtools/reclient",
+      "kind": "cipd-build-input",
+      "package": "infra/rbe/client/linux-amd64",
+      "version": "re_client_version:0.185.0.db415f21-gomaip",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/rbe/client/linux-amd64/+/ADvz6sQzvQcUUOl6LmYz9_kwRoKMi-QopcOTjGPdF2Q",
+      "cache_filename": "pdfium-source/cipd-infra--rbe--client--linux-amd64-30c68177fc39.zip",
+      "response_headers": {},
+      "sha256": "003bf3eac433bd071450e97a2e6633f7f93046828c8be428a5c3938c63dd1764",
+      "size_bytes": 171776820,
+      "member_count": 20,
+      "notice_members": [
+        "LICENSE",
+        "NOTICE"
+      ],
+      "cipd_resolution": {
+        "package": "infra/rbe/client/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "003bf3eac433bd071450e97a2e6633f7f93046828c8be428a5c3938c63dd1764"
+        },
+        "registeredBy": "user:kokoro@reclient-releases.iam.gserviceaccount.com",
+        "registeredTs": "2025-10-03T14:21:12.373752Z"
+      },
+      "instance_id": "ADvz6sQzvQcUUOl6LmYz9_kwRoKMi-QopcOTjGPdF2Q",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/rbe/client/linux-amd64/+/re_client_version:0.185.0.db415f21-gomaip"
+    },
+    {
+      "checkout_path": "buildtools/reclient",
+      "kind": "cipd-build-input",
+      "package": "infra/rbe/client/mac-amd64",
+      "version": "re_client_version:0.185.0.db415f21-gomaip",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/rbe/client/mac-amd64/+/wQPyr6y3ne3hMzQlVHJS6xg3Xb_kjrCfm6lf5Xl_bi0",
+      "cache_filename": "pdfium-source/cipd-infra--rbe--client--mac-amd64-30c68177fc39.zip",
+      "response_headers": {},
+      "sha256": "c103f2afacb79dede1333425547252eb18375dbfe48eb09f9ba95fe5797f6e2d",
+      "size_bytes": 167288185,
+      "member_count": 20,
+      "notice_members": [
+        "LICENSE",
+        "NOTICE"
+      ],
+      "cipd_resolution": {
+        "package": "infra/rbe/client/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "c103f2afacb79dede1333425547252eb18375dbfe48eb09f9ba95fe5797f6e2d"
+        },
+        "registeredBy": "user:kokoro-mac@reclient-releases.iam.gserviceaccount.com",
+        "registeredTs": "2025-10-03T14:34:06.587091Z"
+      },
+      "instance_id": "wQPyr6y3ne3hMzQlVHJS6xg3Xb_kjrCfm6lf5Xl_bi0",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/rbe/client/mac-amd64/+/re_client_version:0.185.0.db415f21-gomaip"
+    },
+    {
+      "checkout_path": "buildtools/reclient",
+      "kind": "cipd-build-input",
+      "package": "infra/rbe/client/mac-arm64",
+      "version": "re_client_version:0.185.0.db415f21-gomaip",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/rbe/client/mac-arm64/+/MDM5Hn41yaFLSKD962CO0Nv4swiX0VfgbQMIl13fZUM",
+      "cache_filename": "pdfium-source/cipd-infra--rbe--client--mac-arm64-30c68177fc39.zip",
+      "response_headers": {},
+      "sha256": "3033391e7e35c9a14b48a0fdeb608ed0dbf8b30897d157e06d0308975ddf6543",
+      "size_bytes": 160718494,
+      "member_count": 20,
+      "notice_members": [
+        "LICENSE",
+        "NOTICE"
+      ],
+      "cipd_resolution": {
+        "package": "infra/rbe/client/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "3033391e7e35c9a14b48a0fdeb608ed0dbf8b30897d157e06d0308975ddf6543"
+        },
+        "registeredBy": "user:kokoro-mac@reclient-releases.iam.gserviceaccount.com",
+        "registeredTs": "2025-10-03T14:32:09.955002Z"
+      },
+      "instance_id": "MDM5Hn41yaFLSKD962CO0Nv4swiX0VfgbQMIl13fZUM",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/rbe/client/mac-arm64/+/re_client_version:0.185.0.db415f21-gomaip"
+    },
+    {
+      "checkout_path": "third_party/cpython3/host",
+      "kind": "cipd-build-input",
+      "package": "infra/3pp/tools/cpython3/linux-amd64",
+      "version": "version:3@3.11.9.chromium.38",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/cpython3/linux-amd64/+/t7igptFxuJGP2lGu4db_6wyKFMeR-x0LxddFTIydlJs",
+      "cache_filename": "pdfium-source/cipd-infra--3pp--tools--cpython3--linux-amd64-776a48ff341e.zip",
+      "response_headers": {},
+      "sha256": "b7b8a0a6d171b8918fda51aee1d6ffeb0c8a14c791fb1d0bc5d7454c8c9d949b",
+      "size_bytes": 48644009,
+      "member_count": 2217,
+      "notice_members": [
+        "lib/python3.11/LICENSE.txt",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE.APACHE",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE.BSD",
+        "lib/python3.11/site-packages/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/cachecontrol/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/certifi/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/distlib/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/distro/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/idna/LICENSE.md",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE.APACHE",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE.BSD",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/pip/_vendor/pkg_resources/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/platformdirs/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/pygments/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/pyproject_hooks/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/requests/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/resolvelib/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/rich/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/tomli/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/tomli_w/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/truststore/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/urllib3/LICENSE.txt",
+        "lib/python3.11/site-packages/setuptools-83.0.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+        "lib/python3.11/site-packages/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/config/NOTICE",
+        "lib/python3.11/site-packages/setuptools/config/_validate_pyproject/NOTICE",
+        "lib/python3.11/site-packages/wheel-0.47.0.dist-info/licenses/LICENSE.txt"
+      ],
+      "cipd_resolution": {
+        "package": "infra/3pp/tools/cpython3/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "b7b8a0a6d171b8918fda51aee1d6ffeb0c8a14c791fb1d0bc5d7454c8c9d949b"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-06T16:30:05.100922Z"
+      },
+      "instance_id": "t7igptFxuJGP2lGu4db_6wyKFMeR-x0LxddFTIydlJs",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/cpython3/linux-amd64/+/version:3%403.11.9.chromium.38"
+    },
+    {
+      "checkout_path": "third_party/cpython3/host",
+      "kind": "cipd-build-input",
+      "package": "infra/3pp/tools/cpython3/mac-amd64",
+      "version": "version:3@3.11.9.chromium.38",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/cpython3/mac-amd64/+/QRfz1fAOMjRpxCADb0o54_1kE5WaWdomxi16y-Jay90",
+      "cache_filename": "pdfium-source/cipd-infra--3pp--tools--cpython3--mac-amd64-776a48ff341e.zip",
+      "response_headers": {},
+      "sha256": "4117f3d5f00e323469c420036f4a39e3fd6413959a59da26c62d7acbe25acbdd",
+      "size_bytes": 25881110,
+      "member_count": 2217,
+      "notice_members": [
+        "lib/python3.11/LICENSE.txt",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE.APACHE",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE.BSD",
+        "lib/python3.11/site-packages/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/cachecontrol/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/certifi/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/distlib/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/distro/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/idna/LICENSE.md",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE.APACHE",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE.BSD",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/pip/_vendor/pkg_resources/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/platformdirs/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/pygments/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/pyproject_hooks/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/requests/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/resolvelib/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/rich/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/tomli/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/tomli_w/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/truststore/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/urllib3/LICENSE.txt",
+        "lib/python3.11/site-packages/setuptools-83.0.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+        "lib/python3.11/site-packages/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/config/NOTICE",
+        "lib/python3.11/site-packages/setuptools/config/_validate_pyproject/NOTICE",
+        "lib/python3.11/site-packages/wheel-0.47.0.dist-info/licenses/LICENSE.txt"
+      ],
+      "cipd_resolution": {
+        "package": "infra/3pp/tools/cpython3/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "4117f3d5f00e323469c420036f4a39e3fd6413959a59da26c62d7acbe25acbdd"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-06T16:23:37.463877Z"
+      },
+      "instance_id": "QRfz1fAOMjRpxCADb0o54_1kE5WaWdomxi16y-Jay90",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/cpython3/mac-amd64/+/version:3%403.11.9.chromium.38"
+    },
+    {
+      "checkout_path": "third_party/cpython3/host",
+      "kind": "cipd-build-input",
+      "package": "infra/3pp/tools/cpython3/mac-arm64",
+      "version": "version:3@3.11.9.chromium.38",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/cpython3/mac-arm64/+/z6bO4Z5kwtk0uh9oxGXOd5O7LyZDAnmlO-e86nZLRiE",
+      "cache_filename": "pdfium-source/cipd-infra--3pp--tools--cpython3--mac-arm64-776a48ff341e.zip",
+      "response_headers": {},
+      "sha256": "cfa6cee19e64c2d934ba1f68c465ce7793bb2f26430279a53be7bcea764b4621",
+      "size_bytes": 25414892,
+      "member_count": 2217,
+      "notice_members": [
+        "lib/python3.11/LICENSE.txt",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE.APACHE",
+        "lib/python3.11/site-packages/packaging-26.3.dist-info/licenses/LICENSE.BSD",
+        "lib/python3.11/site-packages/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/AUTHORS.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+        "lib/python3.11/site-packages/pip-26.2.1.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/cachecontrol/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/certifi/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/distlib/LICENSE.txt",
+        "lib/python3.11/site-packages/pip/_vendor/distro/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/idna/LICENSE.md",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE.APACHE",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/LICENSE.BSD",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/pip/_vendor/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/pip/_vendor/pkg_resources/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/platformdirs/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/pygments/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/pyproject_hooks/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/requests/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/resolvelib/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/rich/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/tomli/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/tomli_w/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/truststore/LICENSE",
+        "lib/python3.11/site-packages/pip/_vendor/urllib3/LICENSE.txt",
+        "lib/python3.11/site-packages/setuptools-83.0.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging/licenses/__init__.py",
+        "lib/python3.11/site-packages/setuptools/_vendor/packaging/licenses/_spdx.py",
+        "lib/python3.11/site-packages/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+        "lib/python3.11/site-packages/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+        "lib/python3.11/site-packages/setuptools/config/NOTICE",
+        "lib/python3.11/site-packages/setuptools/config/_validate_pyproject/NOTICE",
+        "lib/python3.11/site-packages/wheel-0.47.0.dist-info/licenses/LICENSE.txt"
+      ],
+      "cipd_resolution": {
+        "package": "infra/3pp/tools/cpython3/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "cfa6cee19e64c2d934ba1f68c465ce7793bb2f26430279a53be7bcea764b4621"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-06T16:20:49.133866Z"
+      },
+      "instance_id": "z6bO4Z5kwtk0uh9oxGXOd5O7LyZDAnmlO-e86nZLRiE",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/cpython3/mac-arm64/+/version:3%403.11.9.chromium.38"
+    },
+    {
+      "checkout_path": "third_party/llvm-build/Release+Asserts",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Linux_x64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz?generation=1787607001504676",
+      "sha256": "565f7d980b31411e76d9478731cf3f0ac907a46f274d289ea7f03d9137354053",
+      "cache_filename": "pdfium-source/gcs-565f7d980b31411e76d9478731cf3f0ac907a46f274d289ea7f03d9137354053",
+      "size_bytes": 56894668,
+      "generation": 1787607001504676,
+      "object_name": "Linux_x64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "response_headers": {},
+      "member_count": 453,
+      "notice_members": []
+    },
+    {
+      "checkout_path": "third_party/llvm-build/Release+Asserts",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Linux_x64/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz?generation=1787607001713199",
+      "sha256": "cc8a621ec8cc3c48471c90cf4ed88dcc56bfb403824eda10f8b55796abaec280",
+      "cache_filename": "pdfium-source/gcs-cc8a621ec8cc3c48471c90cf4ed88dcc56bfb403824eda10f8b55796abaec280",
+      "size_bytes": 5912568,
+      "generation": 1787607001713199,
+      "object_name": "Linux_x64/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "response_headers": {},
+      "member_count": 8,
+      "notice_members": []
+    },
+    {
+      "checkout_path": "third_party/llvm-build/Release+Asserts",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Mac/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz?generation=1787607010939621",
+      "sha256": "ba2b707d83f7a19d81b9403b4ebe8e999d41ae35fead00a142f02b67e197fe2f",
+      "cache_filename": "pdfium-source/gcs-ba2b707d83f7a19d81b9403b4ebe8e999d41ae35fead00a142f02b67e197fe2f",
+      "size_bytes": 56420628,
+      "generation": 1787607010939621,
+      "object_name": "Mac/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "response_headers": {},
+      "member_count": 387,
+      "notice_members": []
+    },
+    {
+      "checkout_path": "third_party/llvm-build/Release+Asserts",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Mac/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz?generation=1787607011035157",
+      "sha256": "4ddefa96f6aaa04ac502610fc736528f65dc3e1b997fc4a5380081937f6ffb1a",
+      "cache_filename": "pdfium-source/gcs-4ddefa96f6aaa04ac502610fc736528f65dc3e1b997fc4a5380081937f6ffb1a",
+      "size_bytes": 5874672,
+      "generation": 1787607011035157,
+      "object_name": "Mac/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "response_headers": {},
+      "member_count": 8,
+      "notice_members": []
+    },
+    {
+      "checkout_path": "third_party/llvm-build/Release+Asserts",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Mac_arm64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz?generation=1787607020088085",
+      "sha256": "264d803970f9b58ddbdc90464ad82e54cef642c58ec371ba5356dfa7342ece4d",
+      "cache_filename": "pdfium-source/gcs-264d803970f9b58ddbdc90464ad82e54cef642c58ec371ba5356dfa7342ece4d",
+      "size_bytes": 47226204,
+      "generation": 1787607020088085,
+      "object_name": "Mac_arm64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "response_headers": {},
+      "member_count": 387,
+      "notice_members": []
+    },
+    {
+      "checkout_path": "third_party/llvm-build/Release+Asserts",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Mac_arm64/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz?generation=1787607020228775",
+      "sha256": "c67f5dba316d6367be8c153ede456fdbef0dfffad4da10aaf597ff967c07378c",
+      "cache_filename": "pdfium-source/gcs-c67f5dba316d6367be8c153ede456fdbef0dfffad4da10aaf597ff967c07378c",
+      "size_bytes": 5610096,
+      "generation": 1787607020228775,
+      "object_name": "Mac_arm64/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "response_headers": {},
+      "member_count": 8,
+      "notice_members": []
+    },
+    {
+      "checkout_path": "third_party/ninja",
+      "kind": "cipd-build-input",
+      "package": "infra/3pp/tools/ninja/linux-amd64",
+      "version": "version:3@1.12.1.chromium.4",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/linux-amd64/+/Px8cwPaaG8_fZ_tsK8dBmx3YEruNDnmvqb-oo1U7UII",
+      "cache_filename": "pdfium-source/cipd-infra--3pp--tools--ninja--linux-amd64-caee494d1968.zip",
+      "response_headers": {},
+      "sha256": "3f1f1cc0f69a1bcfdf67fb6c2bc7419b1dd812bb8d0e79afa9bfa8a3553b5082",
+      "size_bytes": 182403,
+      "member_count": 4,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "infra/3pp/tools/ninja/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "3f1f1cc0f69a1bcfdf67fb6c2bc7419b1dd812bb8d0e79afa9bfa8a3553b5082"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2024-06-21T04:16:03.629046Z"
+      },
+      "instance_id": "Px8cwPaaG8_fZ_tsK8dBmx3YEruNDnmvqb-oo1U7UII",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/linux-amd64/+/version:3%401.12.1.chromium.4"
+    },
+    {
+      "checkout_path": "third_party/ninja",
+      "kind": "cipd-build-input",
+      "package": "infra/3pp/tools/ninja/mac-amd64",
+      "version": "version:3@1.12.1.chromium.4",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/mac-amd64/+/mGbmncDR78ysAZaXITtasuAzLcxiloLxNzPgeS6pURk",
+      "cache_filename": "pdfium-source/cipd-infra--3pp--tools--ninja--mac-amd64-caee494d1968.zip",
+      "response_headers": {},
+      "sha256": "9866e69dc0d1efccac019697213b5ab2e0332dcc629682f13733e0792ea95119",
+      "size_bytes": 160010,
+      "member_count": 4,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "infra/3pp/tools/ninja/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "9866e69dc0d1efccac019697213b5ab2e0332dcc629682f13733e0792ea95119"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2024-06-21T04:16:54.858640Z"
+      },
+      "instance_id": "mGbmncDR78ysAZaXITtasuAzLcxiloLxNzPgeS6pURk",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/mac-amd64/+/version:3%401.12.1.chromium.4"
+    },
+    {
+      "checkout_path": "third_party/ninja",
+      "kind": "cipd-build-input",
+      "package": "infra/3pp/tools/ninja/mac-arm64",
+      "version": "version:3@1.12.1.chromium.4",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/mac-arm64/+/xem0_6s7Lt77xBhJ_IHxFsjQR7JYkGvswGG-nsrwSv0",
+      "cache_filename": "pdfium-source/cipd-infra--3pp--tools--ninja--mac-arm64-caee494d1968.zip",
+      "response_headers": {},
+      "sha256": "c5e9b4ffab3b2edefbc41849fc81f116c8d047b258906becc061be9ecaf04afd",
+      "size_bytes": 145520,
+      "member_count": 4,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "infra/3pp/tools/ninja/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "c5e9b4ffab3b2edefbc41849fc81f116c8d047b258906becc061be9ecaf04afd"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2024-06-21T04:15:19.714042Z"
+      },
+      "instance_id": "xem0_6s7Lt77xBhJ_IHxFsjQR7JYkGvswGG-nsrwSv0",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/mac-arm64/+/version:3%401.12.1.chromium.4"
+    },
+    {
+      "checkout_path": "third_party/rust-toolchain",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Linux_x64/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz?generation=1786821088882867",
+      "sha256": "4b131e81d157a97bcf454ad0fbb71bc2063b2a3708c858410c04201ef06134e5",
+      "cache_filename": "pdfium-source/gcs-4b131e81d157a97bcf454ad0fbb71bc2063b2a3708c858410c04201ef06134e5",
+      "size_bytes": 276314860,
+      "generation": 1786821088882867,
+      "object_name": "Linux_x64/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+      "response_headers": {},
+      "member_count": 8596,
+      "notice_members": [
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_cranelift/LICENSE-APACHE",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_cranelift/LICENSE-MIT",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_gcc/LICENSE-APACHE",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_gcc/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/backtrace/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/backtrace/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/compiler-builtins/LICENSE.txt",
+        "lib/rustlib/src/rust/library/compiler-builtins/libm/LICENSE.txt",
+        "lib/rustlib/src/rust/library/portable-simd/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/portable-simd/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/crates/intrinsic-test/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/crates/intrinsic-test/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/addr2line-0.27.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/addr2line-0.27.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-0BSD",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/cc-1.2.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/cc-1.2.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/cfg-if-1.0.4/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/cfg-if-1.0.4/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/dlmalloc-0.2.14/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/dlmalloc-0.2.14/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/foldhash-0.2.0/LICENSE",
+        "lib/rustlib/src/rust/library/vendor/getopts-0.2.24/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/getopts-0.2.24/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/gimli-0.34.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/gimli-0.34.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/hermit-abi-0.5.2/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/hermit-abi-0.5.2/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/libc-0.2.189/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/libc-0.2.189/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/COPYING",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/UNLICENSE",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-APACHE.md",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-MIT.md",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-ZLIB.md",
+        "lib/rustlib/src/rust/library/vendor/moto-rt-0.16.4/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/moto-rt-0.16.4/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/object-0.39.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/object-0.39.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand-0.9.5/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand-0.9.5/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand_core-0.9.5/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand_core-0.9.5/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand_xorshift-0.4.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand_xorshift-0.4.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rustc-demangle-0.1.28/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rustc-demangle-0.1.28/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rustc-literal-escaper-0.0.8/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rustc-literal-escaper-0.0.8/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/shlex-1.3.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/shlex-1.3.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/unwinding-0.2.10/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/unwinding-0.2.10/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/src/llvm-project/libunwind/LICENSE.TXT",
+        "lib/third_party/crubit/LICENSE",
+        "share/doc/cargo/LICENSE-APACHE",
+        "share/doc/cargo/LICENSE-MIT",
+        "share/doc/cargo/LICENSE-THIRD-PARTY",
+        "share/doc/clippy/LICENSE-APACHE",
+        "share/doc/clippy/LICENSE-MIT",
+        "share/doc/rust-analyzer/LICENSE-APACHE",
+        "share/doc/rust-analyzer/LICENSE-MIT",
+        "share/doc/rustfmt/LICENSE-APACHE",
+        "share/doc/rustfmt/LICENSE-MIT"
+      ]
+    },
+    {
+      "checkout_path": "third_party/rust-toolchain",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Mac/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz?generation=1786821092536805",
+      "sha256": "12ca849195c27495073ba52ae7126d8a4a9a5807cd7a0dc6ba6b6fa612302a6d",
+      "cache_filename": "pdfium-source/gcs-12ca849195c27495073ba52ae7126d8a4a9a5807cd7a0dc6ba6b6fa612302a6d",
+      "size_bytes": 264031896,
+      "generation": 1786821092536805,
+      "object_name": "Mac/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+      "response_headers": {},
+      "member_count": 8597,
+      "notice_members": [
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_cranelift/LICENSE-APACHE",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_cranelift/LICENSE-MIT",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_gcc/LICENSE-APACHE",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_gcc/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/backtrace/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/backtrace/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/compiler-builtins/LICENSE.txt",
+        "lib/rustlib/src/rust/library/compiler-builtins/libm/LICENSE.txt",
+        "lib/rustlib/src/rust/library/portable-simd/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/portable-simd/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/crates/intrinsic-test/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/crates/intrinsic-test/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/addr2line-0.27.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/addr2line-0.27.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-0BSD",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/cc-1.2.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/cc-1.2.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/cfg-if-1.0.4/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/cfg-if-1.0.4/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/dlmalloc-0.2.14/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/dlmalloc-0.2.14/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/foldhash-0.2.0/LICENSE",
+        "lib/rustlib/src/rust/library/vendor/getopts-0.2.24/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/getopts-0.2.24/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/gimli-0.34.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/gimli-0.34.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/hermit-abi-0.5.2/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/hermit-abi-0.5.2/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/libc-0.2.189/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/libc-0.2.189/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/COPYING",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/UNLICENSE",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-APACHE.md",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-MIT.md",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-ZLIB.md",
+        "lib/rustlib/src/rust/library/vendor/moto-rt-0.16.4/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/moto-rt-0.16.4/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/object-0.39.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/object-0.39.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand-0.9.5/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand-0.9.5/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand_core-0.9.5/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand_core-0.9.5/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand_xorshift-0.4.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand_xorshift-0.4.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rustc-demangle-0.1.28/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rustc-demangle-0.1.28/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rustc-literal-escaper-0.0.8/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rustc-literal-escaper-0.0.8/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/shlex-1.3.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/shlex-1.3.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/unwinding-0.2.10/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/unwinding-0.2.10/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/src/llvm-project/libunwind/LICENSE.TXT",
+        "lib/third_party/crubit/LICENSE",
+        "share/doc/cargo/LICENSE-APACHE",
+        "share/doc/cargo/LICENSE-MIT",
+        "share/doc/cargo/LICENSE-THIRD-PARTY",
+        "share/doc/clippy/LICENSE-APACHE",
+        "share/doc/clippy/LICENSE-MIT",
+        "share/doc/rust-analyzer/LICENSE-APACHE",
+        "share/doc/rust-analyzer/LICENSE-MIT",
+        "share/doc/rustfmt/LICENSE-APACHE",
+        "share/doc/rustfmt/LICENSE-MIT"
+      ]
+    },
+    {
+      "checkout_path": "third_party/rust-toolchain",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Mac_arm64/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz?generation=1786821096222521",
+      "sha256": "fe128475561d7a51c797d1cb3ccea6f94fd770b167c8e0cc33bf75e7c25d8225",
+      "cache_filename": "pdfium-source/gcs-fe128475561d7a51c797d1cb3ccea6f94fd770b167c8e0cc33bf75e7c25d8225",
+      "size_bytes": 248465344,
+      "generation": 1786821096222521,
+      "object_name": "Mac_arm64/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+      "response_headers": {},
+      "member_count": 8597,
+      "notice_members": [
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_cranelift/LICENSE-APACHE",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_cranelift/LICENSE-MIT",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_gcc/LICENSE-APACHE",
+        "lib/rustlib/rustc-src/rust/compiler/rustc_codegen_gcc/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/backtrace/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/backtrace/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/compiler-builtins/LICENSE.txt",
+        "lib/rustlib/src/rust/library/compiler-builtins/libm/LICENSE.txt",
+        "lib/rustlib/src/rust/library/portable-simd/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/portable-simd/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/stdarch/crates/intrinsic-test/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/stdarch/crates/intrinsic-test/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/addr2line-0.27.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/addr2line-0.27.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-0BSD",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/adler2-2.0.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/cc-1.2.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/cc-1.2.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/cfg-if-1.0.4/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/cfg-if-1.0.4/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/dlmalloc-0.2.14/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/dlmalloc-0.2.14/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/foldhash-0.2.0/LICENSE",
+        "lib/rustlib/src/rust/library/vendor/getopts-0.2.24/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/getopts-0.2.24/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/gimli-0.34.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/gimli-0.34.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/hashbrown-0.17.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/hermit-abi-0.5.2/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/hermit-abi-0.5.2/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/libc-0.2.189/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/libc-0.2.189/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/COPYING",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/memchr-2.8.3/UNLICENSE",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-APACHE.md",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-MIT.md",
+        "lib/rustlib/src/rust/library/vendor/miniz_oxide-0.9.1/LICENSE-ZLIB.md",
+        "lib/rustlib/src/rust/library/vendor/moto-rt-0.16.4/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/moto-rt-0.16.4/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/object-0.39.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/object-0.39.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand-0.9.5/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand-0.9.5/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand_core-0.9.5/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand_core-0.9.5/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rand_xorshift-0.4.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rand_xorshift-0.4.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rustc-demangle-0.1.28/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rustc-demangle-0.1.28/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/rustc-literal-escaper-0.0.8/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/rustc-literal-escaper-0.0.8/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/shlex-1.3.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/shlex-1.3.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/unwinding-0.2.10/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/unwinding-0.2.10/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wasip2-1.0.4+wasi-0.2.12/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wasip3-0.7.0+wasi-0.3.0/LICENSE-MIT",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-APACHE",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "lib/rustlib/src/rust/library/vendor/wit-bindgen-0.57.1/LICENSE-MIT",
+        "lib/rustlib/src/rust/src/llvm-project/libunwind/LICENSE.TXT",
+        "lib/third_party/crubit/LICENSE",
+        "share/doc/cargo/LICENSE-APACHE",
+        "share/doc/cargo/LICENSE-MIT",
+        "share/doc/cargo/LICENSE-THIRD-PARTY",
+        "share/doc/clippy/LICENSE-APACHE",
+        "share/doc/clippy/LICENSE-MIT",
+        "share/doc/rust-analyzer/LICENSE-APACHE",
+        "share/doc/rust-analyzer/LICENSE-MIT",
+        "share/doc/rustfmt/LICENSE-APACHE",
+        "share/doc/rustfmt/LICENSE-MIT"
+      ]
+    },
+    {
+      "checkout_path": "third_party/siso/cipd",
+      "kind": "cipd-build-input",
+      "package": "build/siso/linux-amd64",
+      "version": "git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c",
+      "url": "https://chrome-infra-packages.appspot.com/dl/build/siso/linux-amd64/+/S_uQ-QDRXwu7CEO56SJImqkvrTBH5AM1LYoBGrB9LWk",
+      "cache_filename": "pdfium-source/cipd-build--siso--linux-amd64-9651e4ffed7a.zip",
+      "response_headers": {},
+      "sha256": "4bfb90f900d15f0bbb0843b9e922489aa92fad3047e403352d8a011ab07d2d69",
+      "size_bytes": 29969072,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "build/siso/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "4bfb90f900d15f0bbb0843b9e922489aa92fad3047e403352d8a011ab07d2d69"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-28T08:37:24.446523Z"
+      },
+      "instance_id": "S_uQ-QDRXwu7CEO56SJImqkvrTBH5AM1LYoBGrB9LWk",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/build/siso/linux-amd64/+/git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c"
+    },
+    {
+      "checkout_path": "third_party/siso/cipd",
+      "kind": "cipd-build-input",
+      "package": "build/siso/mac-amd64",
+      "version": "git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c",
+      "url": "https://chrome-infra-packages.appspot.com/dl/build/siso/mac-amd64/+/26hpyvwVVGx4JnBuMAc8459kI9aSobJoNU8W8da62ns",
+      "cache_filename": "pdfium-source/cipd-build--siso--mac-amd64-9651e4ffed7a.zip",
+      "response_headers": {},
+      "sha256": "dba869cafc15546c7826706e30073ce39f6423d692a1b268354f16f1d6bada7b",
+      "size_bytes": 31384975,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "build/siso/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "dba869cafc15546c7826706e30073ce39f6423d692a1b268354f16f1d6bada7b"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-28T08:39:13.085681Z"
+      },
+      "instance_id": "26hpyvwVVGx4JnBuMAc8459kI9aSobJoNU8W8da62ns",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/build/siso/mac-amd64/+/git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c"
+    },
+    {
+      "checkout_path": "third_party/siso/cipd",
+      "kind": "cipd-build-input",
+      "package": "build/siso/mac-arm64",
+      "version": "git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c",
+      "url": "https://chrome-infra-packages.appspot.com/dl/build/siso/mac-arm64/+/cCvoJZt9mRTRH63yAPd5cQwkXJV1Vw1JH-fBfthQfcg",
+      "cache_filename": "pdfium-source/cipd-build--siso--mac-arm64-9651e4ffed7a.zip",
+      "response_headers": {},
+      "sha256": "702be8259b7d9914d11fadf200f779710c245c9575570d491fe7c17ed8507dc8",
+      "size_bytes": 29454744,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "build/siso/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "702be8259b7d9914d11fadf200f779710c245c9575570d491fe7c17ed8507dc8"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-08-28T08:39:47.086883Z"
+      },
+      "instance_id": "cCvoJZt9mRTRH63yAPd5cQwkXJV1Vw1JH-fBfthQfcg",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/build/siso/mac-arm64/+/git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c"
+    },
+    {
+      "checkout_path": "tools/resultdb",
+      "kind": "cipd-build-input",
+      "package": "infra/tools/result_adapter/linux-amd64",
+      "version": "git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/tools/result_adapter/linux-amd64/+/v9d06vVBFkAEPeZc_T_Hlp7dru37V52eI1N19xBapo4",
+      "cache_filename": "pdfium-source/cipd-infra--tools--result_adapter--linux-amd64-42b058d109ce.zip",
+      "response_headers": {},
+      "sha256": "bfd774eaf5411640043de65cfd3fc7969eddaeedfb579d9e235375f7105aa68e",
+      "size_bytes": 12405175,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "infra/tools/result_adapter/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "bfd774eaf5411640043de65cfd3fc7969eddaeedfb579d9e235375f7105aa68e"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2025-06-02T23:50:52.970421Z"
+      },
+      "instance_id": "v9d06vVBFkAEPeZc_T_Hlp7dru37V52eI1N19xBapo4",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/tools/result_adapter/linux-amd64/+/git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8"
+    },
+    {
+      "checkout_path": "tools/resultdb",
+      "kind": "cipd-build-input",
+      "package": "infra/tools/result_adapter/mac-amd64",
+      "version": "git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/tools/result_adapter/mac-amd64/+/btZ6WaFWwI5tAqvuZFdeQMcUu3wNyOZ3421ZyQmUkxo",
+      "cache_filename": "pdfium-source/cipd-infra--tools--result_adapter--mac-amd64-42b058d109ce.zip",
+      "response_headers": {},
+      "sha256": "6ed67a59a156c08e6d02abee64575e40c714bb7c0dc8e677e36d59c90994931a",
+      "size_bytes": 12388415,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "infra/tools/result_adapter/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "6ed67a59a156c08e6d02abee64575e40c714bb7c0dc8e677e36d59c90994931a"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2025-06-02T23:49:04.929613Z"
+      },
+      "instance_id": "btZ6WaFWwI5tAqvuZFdeQMcUu3wNyOZ3421ZyQmUkxo",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/tools/result_adapter/mac-amd64/+/git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8"
+    },
+    {
+      "checkout_path": "tools/resultdb",
+      "kind": "cipd-build-input",
+      "package": "infra/tools/result_adapter/mac-arm64",
+      "version": "git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8",
+      "url": "https://chrome-infra-packages.appspot.com/dl/infra/tools/result_adapter/mac-arm64/+/UY2dOJAakoXf_MWODwoCVYoSoAw74W46X0CCs3ES6l0",
+      "cache_filename": "pdfium-source/cipd-infra--tools--result_adapter--mac-arm64-42b058d109ce.zip",
+      "response_headers": {},
+      "sha256": "518d9d38901a9285dffcc58e0f0a02558a12a00c3be16e3a5f4082b37112ea5d",
+      "size_bytes": 11913945,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "infra/tools/result_adapter/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "518d9d38901a9285dffcc58e0f0a02558a12a00c3be16e3a5f4082b37112ea5d"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2025-06-02T23:48:31.512314Z"
+      },
+      "instance_id": "UY2dOJAakoXf_MWODwoCVYoSoAw74W46X0CCs3ES6l0",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/infra/tools/result_adapter/mac-arm64/+/git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8"
+    },
+    {
+      "checkout_path": "tools/skia_goldctl/linux",
+      "kind": "cipd-build-input",
+      "package": "skia/tools/goldctl/linux-amd64",
+      "version": "git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd",
+      "url": "https://chrome-infra-packages.appspot.com/dl/skia/tools/goldctl/linux-amd64/+/mzsfuIHZD64HZruM-czaYtjnG2sfC98pAR7fJ2VcSCc",
+      "cache_filename": "pdfium-source/cipd-skia--tools--goldctl--linux-amd64-d823b8effe85.zip",
+      "response_headers": {},
+      "sha256": "9b3b1fb881d90fae0766bb8cf9ccda62d8e71b6b1f0bdf29011edf27655c4827",
+      "size_bytes": 23907549,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "skia/tools/goldctl/linux-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "9b3b1fb881d90fae0766bb8cf9ccda62d8e71b6b1f0bdf29011edf27655c4827"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-09-15T07:58:07.919400Z"
+      },
+      "instance_id": "mzsfuIHZD64HZruM-czaYtjnG2sfC98pAR7fJ2VcSCc",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/skia/tools/goldctl/linux-amd64/+/git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd"
+    },
+    {
+      "checkout_path": "tools/skia_goldctl/mac_amd64",
+      "kind": "cipd-build-input",
+      "package": "skia/tools/goldctl/mac-amd64",
+      "version": "git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd",
+      "url": "https://chrome-infra-packages.appspot.com/dl/skia/tools/goldctl/mac-amd64/+/miUv2D8P6o4hRG5gsGcq_9AFV42V8BLDJdCWGPGxxuo",
+      "cache_filename": "pdfium-source/cipd-skia--tools--goldctl--mac-amd64-d823b8effe85.zip",
+      "response_headers": {},
+      "sha256": "9a252fd83f0fea8e21446e60b0672affd005578d95f012c325d09618f1b1c6ea",
+      "size_bytes": 25224877,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "skia/tools/goldctl/mac-amd64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "9a252fd83f0fea8e21446e60b0672affd005578d95f012c325d09618f1b1c6ea"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-09-15T07:58:28.018607Z"
+      },
+      "instance_id": "miUv2D8P6o4hRG5gsGcq_9AFV42V8BLDJdCWGPGxxuo",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/skia/tools/goldctl/mac-amd64/+/git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd"
+    },
+    {
+      "checkout_path": "tools/skia_goldctl/mac_arm64",
+      "kind": "cipd-build-input",
+      "package": "skia/tools/goldctl/mac-arm64",
+      "version": "git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd",
+      "url": "https://chrome-infra-packages.appspot.com/dl/skia/tools/goldctl/mac-arm64/+/COWJNJofO5EsLs0q-twu-cB1JXcqh40fKlzswKT8Se0",
+      "cache_filename": "pdfium-source/cipd-skia--tools--goldctl--mac-arm64-d823b8effe85.zip",
+      "response_headers": {},
+      "sha256": "08e589349a1f3b912c2ecd2afadc2ef9c07525772a878d1f2a5cecc0a4fc49ed",
+      "size_bytes": 23926151,
+      "member_count": 2,
+      "notice_members": [],
+      "cipd_resolution": {
+        "package": "skia/tools/goldctl/mac-arm64",
+        "instance": {
+          "hashAlgo": "SHA256",
+          "hexDigest": "08e589349a1f3b912c2ecd2afadc2ef9c07525772a878d1f2a5cecc0a4fc49ed"
+        },
+        "registeredBy": "user:infra-packager@chops-service-accounts.iam.gserviceaccount.com",
+        "registeredTs": "2026-09-15T07:59:35.887718Z"
+      },
+      "instance_id": "COWJNJofO5EsLs0q-twu-cB1JXcqh40fKlzswKT8Se0",
+      "version_url": "https://chrome-infra-packages.appspot.com/dl/skia/tools/goldctl/mac-arm64/+/git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd"
+    },
+    {
+      "checkout_path": "build/linux/debian_bullseye_amd64-sysroot",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d?generation=1770327973518330",
+      "sha256": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+      "cache_filename": "pdfium-source/gcs-52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+      "size_bytes": 19727236,
+      "generation": 1770327973518330,
+      "object_name": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+      "response_headers": {},
+      "member_count": 20810,
+      "notice_members": [
+        "./usr/lib/python3.9/LICENSE.txt"
+      ]
+    },
+    {
+      "checkout_path": "build/linux/debian_bullseye_i386-sysroot",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chrome-linux-sysroot/3de724b0d63478e1ae35f07b95d02261581a66e05c19aebe4e443d76179a565e?generation=1770327987132454",
+      "sha256": "3de724b0d63478e1ae35f07b95d02261581a66e05c19aebe4e443d76179a565e",
+      "cache_filename": "pdfium-source/gcs-3de724b0d63478e1ae35f07b95d02261581a66e05c19aebe4e443d76179a565e",
+      "size_bytes": 19768196,
+      "generation": 1770327987132454,
+      "object_name": "3de724b0d63478e1ae35f07b95d02261581a66e05c19aebe4e443d76179a565e",
+      "response_headers": {},
+      "member_count": 20775,
+      "notice_members": [
+        "./usr/lib/python3.9/LICENSE.txt"
+      ]
+    },
+    {
+      "checkout_path": "buildtools/mac-format",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-clang-format/35ddc571ab654a4f58d7b35f394b04835d0b98f9?generation=1779297382681217",
+      "sha256": "39a9c4e138a8c5e6ab5cd7b21321c2ca03f3f518a6ed07de82162d9f4f37318f",
+      "cache_filename": "pdfium-source/gcs-39a9c4e138a8c5e6ab5cd7b21321c2ca03f3f518a6ed07de82162d9f4f37318f",
+      "size_bytes": 3567528,
+      "generation": 1779297382681217,
+      "object_name": "35ddc571ab654a4f58d7b35f394b04835d0b98f9",
+      "response_headers": {},
+      "format": "raw executable"
+    },
+    {
+      "checkout_path": "buildtools/mac_arm64-format",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-clang-format/945e45cbcb5443c3e569d5e0783fd012154fc4a7?generation=1779297393605542",
+      "sha256": "a1fb17260eda2971f52ed341501b93703b0fce69ffb43a179b891b66f6f63e5a",
+      "cache_filename": "pdfium-source/gcs-a1fb17260eda2971f52ed341501b93703b0fce69ffb43a179b891b66f6f63e5a",
+      "size_bytes": 3245456,
+      "generation": 1779297393605542,
+      "object_name": "945e45cbcb5443c3e569d5e0783fd012154fc4a7",
+      "response_headers": {},
+      "format": "raw executable"
+    },
+    {
+      "checkout_path": "buildtools/linux64-format",
+      "kind": "gcs-build-input",
+      "url": "https://storage.googleapis.com/chromium-clang-format/f5485c39451137ee943021a0fb63738b306c5026?generation=1779297360709713",
+      "sha256": "5d384f2a3e72f01c5c61dd07e3a2577723cfa20c8c019131467f00fb6da8a75c",
+      "cache_filename": "pdfium-source/gcs-5d384f2a3e72f01c5c61dd07e3a2577723cfa20c8c019131467f00fb6da8a75c",
+      "size_bytes": 3764032,
+      "generation": 1779297360709713,
+      "object_name": "f5485c39451137ee943021a0fb63738b306c5026",
+      "response_headers": {},
+      "format": "raw executable"
+    }
+  ],
+  "hook_inputs": [
+    {
+      "url": "https://storage.googleapis.com/chromium-browser-clang/d72733d9365a8c75966b524a739bccb23151a021",
+      "upstream_sha1": "d72733d9365a8c75966b524a739bccb23151a021",
+      "cache_filename": "pdfium-source/hook-d72733d9365a8c75966b524a739bccb23151a021",
+      "recipe_member": "dsymutil/bin/dsymutil.arm64.sha1",
+      "recipe_archive": "tools--clang-450d823868eaee61e2b2cb986e19aec287f16d58.tar.gz",
+      "sha256": "704b60f6b13359b4065ee8710d27bb7def9ef40ad6da0549e7f78be89fd8aaa6",
+      "size_bytes": 52150632
+    },
+    {
+      "url": "https://storage.googleapis.com/chromium-browser-clang/55066ee8ff148d9f04a46e71216866134fc538a6",
+      "upstream_sha1": "55066ee8ff148d9f04a46e71216866134fc538a6",
+      "cache_filename": "pdfium-source/hook-55066ee8ff148d9f04a46e71216866134fc538a6",
+      "recipe_member": "dsymutil/bin/dsymutil.x64.sha1",
+      "recipe_archive": "tools--clang-450d823868eaee61e2b2cb986e19aec287f16d58.tar.gz",
+      "sha256": "158bf6a6c6d577a9059661191e1b1769aa58f62a3b7a95f35227b51cfcfae075",
+      "size_bytes": 59687704
+    },
+    {
+      "url": "https://storage.googleapis.com/chromium-fonts/cd96fc55dc243f6c6f4cb63ad117cad6cd48dceb",
+      "upstream_sha1": "cd96fc55dc243f6c6f4cb63ad117cad6cd48dceb",
+      "cache_filename": "pdfium-source/hook-cd96fc55dc243f6c6f4cb63ad117cad6cd48dceb",
+      "recipe_member": "test_fonts.tar.gz.sha1",
+      "recipe_archive": "third_party--test_fonts-7f51783942943e965cd56facf786544ccfc07713.tar.gz",
+      "sha256": "ec973eccd669d417fbf2d0a4dac730744a3174268ff062db5451b55c82bc3492",
+      "size_bytes": 26759650
+    }
+  ],
+  "dependency_selection": {
+    "excluded": [
+      {
+        "checkout_path": "buildtools/win",
+        "condition": "host_os == \"win\""
+      },
+      {
+        "checkout_path": "testing/corpus",
+        "condition": "checkout_testing_corpus"
+      },
+      {
+        "checkout_path": "testing/scripts/rust",
+        "condition": "checkout_rust"
+      },
+      {
+        "checkout_path": "third_party/android_toolchain/ndk",
+        "condition": "checkout_android_native_support and ((host_os == \"linux\" and host_cpu == \"x64\") or (host_os == \"mac\" and host_cpu == \"arm64\"))"
+      },
+      {
+        "checkout_path": "third_party/catapult",
+        "condition": "checkout_android"
+      },
+      {
+        "checkout_path": "third_party/cpu_features/src",
+        "condition": "checkout_android"
+      },
+      {
+        "checkout_path": "third_party/fp16/src",
+        "condition": "checkout_v8"
+      },
+      {
+        "checkout_path": "third_party/highway/src",
+        "condition": "checkout_v8"
+      },
+      {
+        "checkout_path": "third_party/jinja2",
+        "condition": "checkout_v8"
+      },
+      {
+        "checkout_path": "third_party/libunwind/src",
+        "condition": "checkout_android"
+      },
+      {
+        "checkout_path": "third_party/markupsafe",
+        "condition": "checkout_v8"
+      },
+      {
+        "checkout_path": "third_party/rust",
+        "condition": "checkout_rust"
+      },
+      {
+        "checkout_path": "third_party/skia",
+        "condition": "checkout_skia"
+      },
+      {
+        "checkout_path": "tools/rust",
+        "condition": "checkout_rust"
+      },
+      {
+        "checkout_path": "tools/skia_goldctl/win",
+        "condition": "checkout_win"
+      },
+      {
+        "checkout_path": "tools/win",
+        "condition": "checkout_win"
+      },
+      {
+        "checkout_path": "v8",
+        "condition": "checkout_v8"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_arm64-sysroot",
+        "condition": "checkout_linux and checkout_arm64"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_armhf-sysroot",
+        "condition": "checkout_linux and checkout_arm"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_mips64el-sysroot",
+        "condition": "checkout_linux and checkout_mips64"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_mipsel-sysroot",
+        "condition": "checkout_linux and checkout_mips"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_ppc64el-sysroot",
+        "condition": "checkout_linux and checkout_ppc"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_s390x-sysroot",
+        "condition": "checkout_linux and checkout_s390"
+      },
+      {
+        "checkout_path": "build/linux/debian_trixie_riscv64-sysroot",
+        "condition": "checkout_linux and checkout_riscv64"
+      },
+      {
+        "checkout_path": "buildtools/win-format",
+        "condition": "host_os == \"win\""
+      },
+      {
+        "checkout_path": "third_party/instrumented_libs/binaries",
+        "condition": "checkout_instrumented_libraries and non_git_source"
+      }
+    ],
+    "non_git_dependencies": [
+      {
+        "checkout_path": "buildtools/linux64",
+        "packages": [
+          {
+            "package": "gn/gn/linux-${{arch}}",
+            "version": "git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b"
+          }
+        ],
+        "dep_type": "cipd",
+        "condition": "host_os == \"linux\""
+      },
+      {
+        "checkout_path": "buildtools/mac",
+        "packages": [
+          {
+            "package": "gn/gn/mac-${{arch}}",
+            "version": "git_revision:150a9d6ba0aa7f407aa4feeabc5f03ce9aa7e04b"
+          }
+        ],
+        "dep_type": "cipd",
+        "condition": "host_os == \"mac\""
+      },
+      {
+        "checkout_path": "buildtools/reclient",
+        "packages": [
+          {
+            "package": "infra/rbe/client/${{platform}}",
+            "version": "re_client_version:0.185.0.db415f21-gomaip"
+          }
+        ],
+        "dep_type": "cipd"
+      },
+      {
+        "checkout_path": "third_party/cpython3/host",
+        "packages": [
+          {
+            "package": "infra/3pp/tools/cpython3/${{platform}}",
+            "version": "version:3@3.11.9.chromium.38"
+          }
+        ],
+        "condition": "non_git_source",
+        "dep_type": "cipd"
+      },
+      {
+        "checkout_path": "third_party/cpython3/linux-amd64",
+        "packages": [
+          {
+            "package": "infra/3pp/tools/cpython3/linux-amd64",
+            "version": "version:3@3.11.9.chromium.38"
+          }
+        ],
+        "condition": "non_git_source",
+        "dep_type": "cipd"
+      },
+      {
+        "checkout_path": "third_party/llvm-build/Release+Asserts",
+        "dep_type": "gcs",
+        "bucket": "chromium-browser-clang",
+        "objects": [
+          {
+            "object_name": "Linux_x64/clang-android-runtime-library-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "780597375163e78615a307a73ec66346b54c58ea3164aa6fbedf24eae85382fc",
+            "size_bytes": 6210856,
+            "generation": 1787607008868327,
+            "condition": "checkout_android and non_git_source"
+          },
+          {
+            "object_name": "Linux_x64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "565f7d980b31411e76d9478731cf3f0ac907a46f274d289ea7f03d9137354053",
+            "size_bytes": 56894668,
+            "generation": 1787607001504676,
+            "condition": "host_os == \"linux\" and non_git_source"
+          },
+          {
+            "object_name": "Linux_x64/clang-tidy-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "4290664a4fa8aa11fd1e6b2d3ff4965d26b41cca1a4950f9835ff19115c2384f",
+            "size_bytes": 14877500,
+            "generation": 1787607001575317,
+            "condition": "host_os == \"linux\" and checkout_clang_tidy and non_git_source"
+          },
+          {
+            "object_name": "Linux_x64/clangd-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "9db50937915608c466da28ba4166cfa69a5f6bcad346233e47807f532cc3075b",
+            "size_bytes": 15049952,
+            "generation": 1787607001603946,
+            "condition": "host_os == \"linux\" and checkout_clangd and non_git_source"
+          },
+          {
+            "object_name": "Linux_x64/llvm-code-coverage-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "34747a8e113c399daa36f75a5a0a4c0963871ceafbce7c49a3b5133f81a63bae",
+            "size_bytes": 2352288,
+            "generation": 1787607001865886,
+            "condition": "host_os == \"linux\" and checkout_clang_coverage_tools and non_git_source"
+          },
+          {
+            "object_name": "Linux_x64/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "cc8a621ec8cc3c48471c90cf4ed88dcc56bfb403824eda10f8b55796abaec280",
+            "size_bytes": 5912568,
+            "generation": 1787607001713199,
+            "condition": "((checkout_linux or checkout_mac or checkout_android) and host_os == \"linux\") and non_git_source"
+          },
+          {
+            "object_name": "Mac/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "ba2b707d83f7a19d81b9403b4ebe8e999d41ae35fead00a142f02b67e197fe2f",
+            "size_bytes": 56420628,
+            "generation": 1787607010939621,
+            "condition": "host_os == \"mac\" and host_cpu == \"x64\""
+          },
+          {
+            "object_name": "Mac/clang-mac-runtime-library-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "da06337f54ba4b36c79e0d379557832bf82b9c7e85fe8ef78a5b953567d98de1",
+            "size_bytes": 1012348,
+            "generation": 1787607018227451,
+            "condition": "checkout_mac and not host_os == \"mac\""
+          },
+          {
+            "object_name": "Mac/clang-tidy-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "ae5cbec1362517b6928162fddb9b160bd1c75e8fd90789718393e1cadf1342ae",
+            "size_bytes": 14882308,
+            "generation": 1787607010909866,
+            "condition": "host_os == \"mac\" and host_cpu == \"x64\" and checkout_clang_tidy"
+          },
+          {
+            "object_name": "Mac/clangd-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "73f5de0f007f8c588593d824147963ec770b66d487a707d1c377a06e34952d89",
+            "size_bytes": 16779464,
+            "generation": 1787607010899287,
+            "condition": "host_os == \"mac\" and host_cpu == \"x64\" and checkout_clangd"
+          },
+          {
+            "object_name": "Mac/llvm-code-coverage-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "c47eb37873d3290cc95ba5f9027337895eeeaa199c3f70e63c5d09b710faf250",
+            "size_bytes": 2411184,
+            "generation": 1787607011184644,
+            "condition": "host_os == \"mac\" and host_cpu == \"x64\" and checkout_clang_coverage_tools"
+          },
+          {
+            "object_name": "Mac/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "4ddefa96f6aaa04ac502610fc736528f65dc3e1b997fc4a5380081937f6ffb1a",
+            "size_bytes": 5874672,
+            "generation": 1787607011035157,
+            "condition": "host_os == \"mac\" and host_cpu == \"x64\""
+          },
+          {
+            "object_name": "Mac_arm64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "264d803970f9b58ddbdc90464ad82e54cef642c58ec371ba5356dfa7342ece4d",
+            "size_bytes": 47226204,
+            "generation": 1787607020088085,
+            "condition": "host_os == \"mac\" and host_cpu == \"arm64\""
+          },
+          {
+            "object_name": "Mac_arm64/clang-tidy-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "3e02eae391e05018fb4e95d3c90b270688a5e3d5f5b31df6c59512e602478f36",
+            "size_bytes": 12960456,
+            "generation": 1787607020070956,
+            "condition": "host_os == \"mac\" and host_cpu == \"arm64\" and checkout_clang_tidy"
+          },
+          {
+            "object_name": "Mac_arm64/clangd-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "a56514d09cfcb216efa297e5fecd51a2e248faf7db6edd2d444cfe78e0e219d3",
+            "size_bytes": 13320572,
+            "generation": 1787607020209265,
+            "condition": "host_os == \"mac\" and host_cpu == \"arm64\" and checkout_clangd"
+          },
+          {
+            "object_name": "Mac_arm64/llvm-code-coverage-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "b593c509e8f4269cf4a16272f6eddcea0f9dd47f6f3fe39b9813041d0f96d4e3",
+            "size_bytes": 2031112,
+            "generation": 1787607020489366,
+            "condition": "host_os == \"mac\" and host_cpu == \"arm64\" and checkout_clang_coverage_tools"
+          },
+          {
+            "object_name": "Mac_arm64/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "c67f5dba316d6367be8c153ede456fdbef0dfffad4da10aaf597ff967c07378c",
+            "size_bytes": 5610096,
+            "generation": 1787607020228775,
+            "condition": "host_os == \"mac\" and host_cpu == \"arm64\""
+          },
+          {
+            "object_name": "Win/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "166437ede456b3d7cf0d9317287511e47714f91da547dbde02992261aeef7174",
+            "size_bytes": 51467544,
+            "generation": 1787607030157700,
+            "condition": "host_os == \"win\""
+          },
+          {
+            "object_name": "Win/clang-tidy-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "13cae70dfa207c9ec27e294f38b732b5c820ef637f48d24cc8b97f5f3a96e220",
+            "size_bytes": 15134360,
+            "generation": 1787607030186388,
+            "condition": "host_os == \"win\" and checkout_clang_tidy"
+          },
+          {
+            "object_name": "Win/clang-win-runtime-library-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "4ff9a06f5fc4a711103cd890e724ae4448d67873de438542f3ac6772e68d3c63",
+            "size_bytes": 2638196,
+            "generation": 1787607037249082,
+            "condition": "checkout_win and not host_os == \"win\""
+          },
+          {
+            "object_name": "Win/clangd-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "17f1d575127724051099a778d77e609f650702248cf4e7ff3ec33b377053edd9",
+            "size_bytes": 15444040,
+            "generation": 1787607030301504,
+            "condition": "host_os == \"win\" and checkout_clangd"
+          },
+          {
+            "object_name": "Win/llvm-code-coverage-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "78aa6b2b9cf057077be6705b76e43ffed83e46e17ee86da1ab699340129b1aca",
+            "size_bytes": 2512968,
+            "generation": 1787607030493491,
+            "condition": "host_os == \"win\" and checkout_clang_coverage_tools"
+          },
+          {
+            "object_name": "Win/llvmobjdump-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+            "sha256sum": "4b899193da883a447c75f057e3a94f5e7ab93e5df5724ad94cbd6bf82ea792b4",
+            "size_bytes": 5994644,
+            "generation": 1787607030276791,
+            "condition": "(checkout_linux or checkout_mac or checkout_android) and host_os == \"win\""
+          }
+        ]
+      },
+      {
+        "checkout_path": "third_party/ninja",
+        "packages": [
+          {
+            "package": "infra/3pp/tools/ninja/${{platform}}",
+            "version": "version:3@1.12.1.chromium.4"
+          }
+        ],
+        "dep_type": "cipd"
+      },
+      {
+        "checkout_path": "third_party/rust-toolchain",
+        "dep_type": "gcs",
+        "bucket": "chromium-browser-clang",
+        "objects": [
+          {
+            "object_name": "Linux_x64/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+            "sha256sum": "4b131e81d157a97bcf454ad0fbb71bc2063b2a3708c858410c04201ef06134e5",
+            "size_bytes": 276314860,
+            "generation": 1786821088882867,
+            "condition": "host_os == \"linux\" and non_git_source"
+          },
+          {
+            "object_name": "Mac/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+            "sha256sum": "12ca849195c27495073ba52ae7126d8a4a9a5807cd7a0dc6ba6b6fa612302a6d",
+            "size_bytes": 264031896,
+            "generation": 1786821092536805,
+            "condition": "host_os == \"mac\" and host_cpu == \"x64\""
+          },
+          {
+            "object_name": "Mac_arm64/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+            "sha256sum": "fe128475561d7a51c797d1cb3ccea6f94fd770b167c8e0cc33bf75e7c25d8225",
+            "size_bytes": 248465344,
+            "generation": 1786821096222521,
+            "condition": "host_os == \"mac\" and host_cpu == \"arm64\""
+          },
+          {
+            "object_name": "Win/rust-toolchain-0913b18e489ac1011b580e31fa5559654be12bfc-2-llvmorg-24-init-3796-g20e97c4b.tar.xz",
+            "sha256sum": "14bc9cea5e00cb191f58204ef44d68a6794f856a76f885c50298a12d052035bc",
+            "size_bytes": 414479372,
+            "generation": 1786821099612317,
+            "condition": "host_os == \"win\""
+          }
+        ]
+      },
+      {
+        "checkout_path": "third_party/siso/cipd",
+        "packages": [
+          {
+            "package": "build/siso/${{platform}}",
+            "version": "git_revision:efbbe7f1892211b5e9512576843a3c247b6a6d7c"
+          }
+        ],
+        "dep_type": "cipd"
+      },
+      {
+        "checkout_path": "tools/resultdb",
+        "packages": [
+          {
+            "package": "infra/tools/result_adapter/${{platform}}",
+            "version": "git_revision:5fb3ca203842fd691cab615453f8e5a14302a1d8"
+          }
+        ],
+        "dep_type": "cipd"
+      },
+      {
+        "checkout_path": "tools/skia_goldctl/linux",
+        "packages": [
+          {
+            "package": "skia/tools/goldctl/linux-amd64",
+            "version": "git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd"
+          }
+        ],
+        "dep_type": "cipd",
+        "condition": "checkout_linux"
+      },
+      {
+        "checkout_path": "tools/skia_goldctl/mac_amd64",
+        "packages": [
+          {
+            "package": "skia/tools/goldctl/mac-amd64",
+            "version": "git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd"
+          }
+        ],
+        "dep_type": "cipd",
+        "condition": "checkout_mac"
+      },
+      {
+        "checkout_path": "tools/skia_goldctl/mac_arm64",
+        "packages": [
+          {
+            "package": "skia/tools/goldctl/mac-arm64",
+            "version": "git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd"
+          }
+        ],
+        "dep_type": "cipd",
+        "condition": "checkout_mac"
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_amd64-sysroot",
+        "deps_parent": "build/DEPS",
+        "bucket": "chrome-linux-sysroot",
+        "condition": "checkout_linux and checkout_x64",
+        "dep_type": "gcs",
+        "objects": [
+          {
+            "generation": 1770327973518330,
+            "object_name": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+            "sha256sum": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+            "size_bytes": 19727236
+          }
+        ]
+      },
+      {
+        "checkout_path": "build/linux/debian_bullseye_i386-sysroot",
+        "deps_parent": "build/DEPS",
+        "bucket": "chrome-linux-sysroot",
+        "condition": "checkout_linux and (checkout_x86 or checkout_x64)",
+        "dep_type": "gcs",
+        "objects": [
+          {
+            "generation": 1770327987132454,
+            "object_name": "3de724b0d63478e1ae35f07b95d02261581a66e05c19aebe4e443d76179a565e",
+            "sha256sum": "3de724b0d63478e1ae35f07b95d02261581a66e05c19aebe4e443d76179a565e",
+            "size_bytes": 19768196
+          }
+        ]
+      },
+      {
+        "checkout_path": "buildtools/mac-format",
+        "deps_parent": "buildtools/DEPS",
+        "bucket": "chromium-clang-format",
+        "condition": "host_os == \"mac\" and host_cpu == \"x64\"",
+        "dep_type": "gcs",
+        "objects": [
+          {
+            "object_name": "35ddc571ab654a4f58d7b35f394b04835d0b98f9",
+            "sha256sum": "39a9c4e138a8c5e6ab5cd7b21321c2ca03f3f518a6ed07de82162d9f4f37318f",
+            "size_bytes": 3567528,
+            "generation": 1779297382681217,
+            "output_file": "clang-format"
+          }
+        ]
+      },
+      {
+        "checkout_path": "buildtools/mac_arm64-format",
+        "deps_parent": "buildtools/DEPS",
+        "bucket": "chromium-clang-format",
+        "condition": "host_os == \"mac\" and host_cpu == \"arm64\"",
+        "dep_type": "gcs",
+        "objects": [
+          {
+            "object_name": "945e45cbcb5443c3e569d5e0783fd012154fc4a7",
+            "sha256sum": "a1fb17260eda2971f52ed341501b93703b0fce69ffb43a179b891b66f6f63e5a",
+            "size_bytes": 3245456,
+            "generation": 1779297393605542,
+            "output_file": "clang-format"
+          }
+        ]
+      },
+      {
+        "checkout_path": "buildtools/linux64-format",
+        "deps_parent": "buildtools/DEPS",
+        "bucket": "chromium-clang-format",
+        "condition": "host_os == \"linux\"",
+        "dep_type": "gcs",
+        "objects": [
+          {
+            "object_name": "f5485c39451137ee943021a0fb63738b306c5026",
+            "sha256sum": "5d384f2a3e72f01c5c61dd07e3a2577723cfa20c8c019131467f00fb6da8a75c",
+            "size_bytes": 3764032,
+            "generation": 1779297360709713,
+            "output_file": "clang-format"
+          }
+        ]
+      }
+    ],
+    "recursive_deps": [
+      {
+        "checkout_path": "build",
+        "deps_present": true,
+        "recursedeps": []
+      },
+      {
+        "checkout_path": "buildtools",
+        "deps_present": true,
+        "recursedeps": []
+      },
+      {
+        "checkout_path": "third_party/instrumented_libs",
+        "deps_present": true,
+        "recursedeps": []
+      }
+    ]
+  },
+  "supplemental_source_notices": [
+    {
+      "component": "third_party/libc++/src",
+      "source_cache_filename": "pdfium-source/third_party--libc++--src-97b436da4c33663581d394f4ee0a5977fc38c2f4.tar.gz",
+      "member": "LICENSE.TXT",
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+      "reason": "Supplemental notice retained even though vendor license collector ignores libc++ under its libc pattern."
+    },
+    {
+      "component": "third_party/libc++abi/src",
+      "source_cache_filename": "pdfium-source/third_party--libc++abi--src-fc1897a2c12aa27e703c3ed48b62eba8abf4ce19.tar.gz",
+      "member": "LICENSE.TXT",
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+      "reason": "Supplemental notice retained even though vendor license collector ignores libc++ under its libc pattern."
+    },
+    {
+      "component": "third_party/llvm-libc/src",
+      "source_cache_filename": "pdfium-source/third_party--llvm-libc--src-320824188c37e5c28738b9652a0ca8087c934bc9.tar.gz",
+      "member": "LICENSE.TXT",
+      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+      "reason": "Supplemental notice retained even though vendor license collector ignores libc++ under its libc pattern."
+    },
+    {
+      "component": "Clang runtime/LLVM source",
+      "source_cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/LICENSE.TXT",
+      "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+      "reason": "Exact compiler runtime source and LLVM licensing, including supporting monorepo source."
+    },
+    {
+      "component": "Clang runtime/LLVM source",
+      "source_cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/compiler-rt/LICENSE.TXT",
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+      "reason": "Exact compiler runtime source and LLVM licensing, including supporting monorepo source."
+    },
+    {
+      "component": "Clang runtime/LLVM source",
+      "source_cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/libcxx/LICENSE.TXT",
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+      "reason": "Exact compiler runtime source and LLVM licensing, including supporting monorepo source."
+    },
+    {
+      "component": "Clang runtime/LLVM source",
+      "source_cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/libcxxabi/LICENSE.TXT",
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+      "reason": "Exact compiler runtime source and LLVM licensing, including supporting monorepo source."
+    },
+    {
+      "component": "Clang runtime/LLVM source",
+      "source_cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/libunwind/LICENSE.TXT",
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+      "reason": "Exact compiler runtime source and LLVM licensing, including supporting monorepo source."
+    },
+    {
+      "component": "Clang runtime/LLVM source",
+      "source_cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
+      "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/third-party/benchmark/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "reason": "Exact compiler runtime source and LLVM licensing, including supporting monorepo source."
+    }
+  ],
+  "remaining_gaps": [],
+  "remaining_source_gaps": [],
+  "not_checked": [
+    {
+      "id": "binary-build-environment",
+      "detail": "Builder steps/01-install.sh clones bootstrap depot_tools without a revision; hosted runner labels and apt/brew dependencies are moving. Captured DEPS depot_tools revision is not proof of the bootstrap checkout used by the historical run."
+    },
+    {
+      "id": "macos-sdk",
+      "detail": "Pinned recipe runs on macos-15. Actual Xcode/SDK and hook behavior from that historical runner have not been recovered. Chromium build/mac_toolchain.py references private infra_internal CIPD Xcode binaries, which require authenticated access if selected."
+    },
+    {
+      "id": "offline-rebuild",
+      "detail": "No exact historical binary rebuild or network-disabled PDFium build has been run."
+    }
+  ],
+  "integration_requirements": [
+    {
+      "id": "notice-installation",
+      "detail": "Existing macOS bundle copies top-level LICENSE but must copy every licenses/ member, plus assess compiler runtime/libc++ notices from captured sources. Shared macOS files are outside this agent ownership."
+    },
+    {
+      "id": "source-delivery-integration",
+      "detail": "New lock and cache not yet consumed by scripts/release/source.py. Shared integration belongs to caller."
+    }
+  ],
+  "source_closure_evidence": {
+    "selection": "All 26 active git DEPS for minimal non-V8 Linux x64, macOS x64 and arm64; build/buildtools/instrumented_libs DEPS recursively evaluated; Freetype dlg gitlink additionally retained. Excluded V8/Skia/Android/rust source/test corpus are explicit in dependency_selection.excluded.",
+    "archive_count": 30,
+    "runtime": "Pinned DEPS libc++, libc++abi and llvm-libc source plus compiler-rt subtree and full LLVM monorepo matching Clang revision, including notices. Dynamic ELF runtime ABI packages belong to parent native Linux closure.",
+    "notice_association": "All 14 binary component notices re-created from pinned source bytes for all four binary archives; macOS raw PDFium LICENSE variant accounted for.",
+    "qualification": "No readiness flags. NOT CHECKED historical runner/bootstrap/SDK provenance and byte-identical rebuild are separate from missing corresponding source."
+  },
+  "linux_binary_evidence": {
+    "binary_sha256": "fd4de9f91f183476d04b1bc3fd17dacd95aba349c55d2c376512d95e082b441e",
+    "dynamic_needed": [
+      "0x0000000000000001 (NEEDED)             Shared library: [libpthread.so.0]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]",
+      "0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]"
+    ],
+    "symbol_evidence": {
+      "chromium_libcxx_namespace_symbol_count": 1923,
+      "clang_builtins_compiler_rt_symbol_sample": []
+    },
+    "linux_binary_smoke": "PASS: dynamically loaded exact libpdfium, initialized, loaded generated valid PDF and observed one page, closed document and destroyed library."
+  }
+}

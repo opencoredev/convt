@@ -1,0 +1,85 @@
+// Public-site facts and outbound links in one place. Values marked PLACEHOLDER
+// are stand-ins that Leo replaces before launch; the report lists each one.
+
+/** Canonical origin for sitemap, canonical links and Open Graph URLs. */
+export const SITE_ORIGIN = "https://convt.app";
+export const SITE_NAME = "convt";
+
+export const GITHUB_URL = "https://github.com/opencoredev/convt";
+
+/** PLACEHOLDER: no status page exists yet. Every status link on the site reads this. */
+export const STATUS_URL = "https://status.convt.app";
+
+/** PLACEHOLDER: support inbox (plan P12). */
+export const SUPPORT_EMAIL = "support@convt.app";
+/** PLACEHOLDER: privacy and data-request inbox. */
+export const PRIVACY_EMAIL = "privacy@convt.app";
+
+/**
+ * PLACEHOLDER legal facts for the privacy policy and terms. Leo fills these in
+ * after legal review; the pages show them highlighted until then.
+ */
+export const legal = {
+  entity: "[Legal entity name]",
+  address: "[Registered address]",
+  jurisdiction: "[Governing law and courts]",
+  effectiveDate: "[Effective date]",
+} as const;
+
+/** Internal routes the landing page and the site footer link to. */
+export const routes = {
+  download: "/download",
+  formats: "/formats",
+  pricing: "/#pricing",
+  changelog: "/changelog",
+  apiDocs: "/docs/api",
+  privacy: "/privacy",
+  terms: "/terms",
+  contact: "/contact",
+  signIn: "/sign-in",
+} as const;
+
+/** Checkout for the $29 Desktop License; works signed out. */
+export const BUY_DESKTOP_URL = "/checkout/desktop";
+/** Checkout for Pro; signs in first. */
+export const buyProUrl = (interval: "month" | "year") => `/checkout/pro?interval=${interval}`;
+
+/** Pages listed in the sitemap, in order. */
+export const sitemapPaths = [
+  "/",
+  routes.download,
+  routes.formats,
+  routes.changelog,
+  routes.apiDocs,
+  routes.contact,
+  routes.privacy,
+  routes.terms,
+] as const;
+
+/** Head tags for a public page: title, description, canonical URL and Open Graph. */
+export function seo({
+  title,
+  description,
+  path,
+}: {
+  title: string;
+  description: string;
+  path: string;
+}) {
+  const url = `${SITE_ORIGIN}${path}`;
+  return {
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: url },
+      { property: "og:site_name", content: SITE_NAME },
+      { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: description },
+    ],
+    links: [{ rel: "canonical", href: url }],
+  };
+}

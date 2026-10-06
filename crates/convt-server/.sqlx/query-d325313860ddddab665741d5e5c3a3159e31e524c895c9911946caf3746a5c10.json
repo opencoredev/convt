@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select hash, created_at as \"created_at!\" from drizzle.__drizzle_migrations order by created_at, id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "drizzle.__drizzle_migrations",
+            "name": "hash"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "drizzle.__drizzle_migrations",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "d325313860ddddab665741d5e5c3a3159e31e524c895c9911946caf3746a5c10"
+}

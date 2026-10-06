@@ -41,6 +41,11 @@ pub struct Registry {
 /// Conversions longer than this are almost always lossy detours.
 const MAX_HOPS: usize = 3;
 
+/// Intermediate formats that lose nothing, preferred when routes tie on length.
+const LOSSLESS_HOPS: &[&str] = &[
+    "png", "tiff", "wav", "flac", "mkv", "pdf", "odt", "ods", "odp",
+];
+
 impl Registry {
     pub fn new() -> Self {
         Self::default()
@@ -94,7 +99,17 @@ impl Registry {
             if d == MAX_HOPS {
                 continue;
             }
-            for (target, edge) in self.edges.get(node).into_iter().flatten() {
+            // HashMap order changes between runs, so equal-length routes would be
+            // picked at random. Visit neighbours in a fixed, preferred order.
+            let mut next: Vec<_> = self.edges.get(node).into_iter().flatten().collect();
+            next.sort_by_key(|(target, edge)| {
+                (
+                    -edge.0.priority(),
+                    !LOSSLESS_HOPS.contains(target),
+                    **target,
+                )
+            });
+            for (target, edge) in next {
                 // Only a direct step may turn a still file into video or audio,
                 // so an SVG never offers MP4 by way of an animated GIF.
                 let media = |f: &Format| matches!(f.category, Category::Video | Category::Audio);
@@ -127,6 +142,36 @@ impl Registry {
             .collect();
         out.sort_by_key(|f| (f.category as u8, f.name));
         out
+    }
+
+    /// The few targets a right-click menu offers for `from`, most wanted
+    /// first. Everything else stays one click away in Quick convert, so a
+    /// HEIC photo is offered JPEG, PNG and WebP rather than ICO or QOI. Only
+    /// targets [`targets`](Self::targets) reaches are listed; a format with
+    /// none of its preferred targets gets the first few it can reach.
+    pub fn menu_targets(&self, from: &'static Format) -> Vec<&'static Format> {
+        const MENU_SIZE: usize = 4;
+        let preferred: &[&str] = match (from.id, from.category) {
+            ("gif", _) => &["mp4", "webp", "png"],
+            (_, Category::Image) => &["jpeg", "png", "webp"],
+            (_, Category::Vector) => &["png", "jpeg", "pdf"],
+            (_, Category::Video) => &["mp4", "mov", "gif", "mp3"],
+            (_, Category::Audio) => &["mp3", "m4a", "wav"],
+            (_, Category::Pdf) => &["png", "jpeg", "docx"],
+            (_, Category::Document) => &["pdf", "docx", "txt"],
+            (_, Category::Spreadsheet) => &["pdf", "xlsx", "csv"],
+            (_, Category::Presentation) => &["pdf", "pptx"],
+        };
+        let reachable = self.targets(from);
+        let picked: Vec<_> = preferred
+            .iter()
+            .filter_map(|id| reachable.iter().find(|f| f.id == *id).copied())
+            .collect();
+        if picked.is_empty() {
+            reachable.into_iter().take(MENU_SIZE).collect()
+        } else {
+            picked
+        }
     }
 
     /// Runs a job: routes it, runs every hop on every artifact the previous
@@ -390,6 +435,56 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["png", "pdf"]
         );
+    }
+
+    #[test]
+    fn equal_length_routes_are_picked_the_same_way_every_time() {
+        for _ in 0..50 {
+            let mut r = Registry::new();
+            r.register(Arc::new(Fake(
+                "img",
+                0,
+                vec![("exr", "jpeg"), ("exr", "tiff"), ("exr", "bmp")],
+            )));
+            r.register(Arc::new(Fake(
+                "heif",
+                0,
+                vec![("jpeg", "heic"), ("tiff", "heic"), ("bmp", "heic")],
+            )));
+            assert_eq!(
+                r.plan(f("exr"), f("heic")).unwrap().describe(),
+                "exr -[img]-> tiff -[heif]-> heic"
+            );
+        }
+    }
+
+    #[test]
+    fn menus_offer_the_popular_targets_that_are_reachable() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "img",
+            0,
+            vec![
+                ("heic", "png"),
+                ("png", "jpeg"),
+                ("png", "webp"),
+                ("png", "gif"),
+                ("png", "ico"),
+                ("png", "heic"),
+            ],
+        )));
+        r.register(Arc::new(Fake("x", 0, vec![("flac", "opus")])));
+        let ids = |from| {
+            r.menu_targets(f(from))
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        // GIF, ICO and the input's own format stay in Quick convert.
+        assert_eq!(ids("heic"), ["jpeg", "png", "webp"]);
+        assert_eq!(ids("png"), ["jpeg", "webp"]);
+        // No preferred target is reachable: fall back to what is.
+        assert_eq!(ids("flac"), ["opus"]);
     }
 
     #[test]

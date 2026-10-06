@@ -3,12 +3,13 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "tools/*"
   ],
   "type": "module",
   "scripts": {
     "dev": "turbo run dev",
-    "dev:web": "turbo run dev --filter=@convt/web",
+    "dev:web": "bash scripts/dev-web.sh",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "lint": "oxlint",
@@ -27,13 +28,30 @@
     "package:deb": "bash packaging/linux/package.sh deb",
     "package:rpm": "bash packaging/linux/package.sh rpm",
     "package:linux": "bash packaging/linux/package.sh",
-    "test:packages": "bash packaging/linux/test-packages.sh"
+    "test:packages": "bash packaging/linux/test-packages.sh",
+    "db:up": "bash scripts/db.sh up",
+    "db:down": "bash scripts/db.sh down",
+    "db:migrate": "bun packages/db/src/cli/migrate.ts",
+    "db:rollback": "bun packages/db/src/cli/rollback.ts",
+    "db:reset": "bun packages/db/src/cli/reset.ts",
+    "db:seed": "bun packages/db/src/cli/seed.ts",
+    "db:ci": "bash packages/db/scripts/ci.sh",
+    "billing:outbox": "bun packages/billing/src/cli/outbox.ts",
+    "license:keygen": "bun packages/billing/src/cli/keygen.ts",
+    "release:linux": "bash scripts/release-linux.sh",
+    "update:keygen": "bun scripts/release/manifest.ts keygen",
+    "release:manifest": "bun scripts/release/manifest.ts",
+    "release:upload": "bash scripts/release/upload.sh",
+    "test:load": "bun tools/loadtest/src/main.ts"
   },
   "devDependencies": {
     "oxfmt": "latest",
     "oxlint": "latest",
     "turbo": "latest",
     "typescript": "^6.0.2"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
   },
   "packageManager": "bun@1.4.2"
 }

@@ -11,9 +11,11 @@ cache.mkdir(parents=True, exist_ok=True)
 lock = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else pathlib.Path(__file__).with_name('inputs.lock.json')
 for item in json.loads(lock.read_text()):
     path = cache / item['name']
+    if not path.exists() and item.get('built_by'):
+        sys.exit(f'Missing source-built input: {path}; run its owning build wrapper')
     if not path.exists():
         partial = path.with_suffix(path.suffix + '.partial')
-        with urllib.request.urlopen(item['url']) as response, partial.open('wb') as output:
+        with urllib.request.urlopen(item['url'], timeout=45) as response, partial.open('wb') as output:
             while block := response.read(1024 * 1024):
                 output.write(block)
         partial.rename(path)

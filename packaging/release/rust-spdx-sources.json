@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/spdx/license-list-data",
+  "revision": "31ba1a50e5397e00a304dbadc76531740e89ee48",
+  "licenses": [
+    {
+      "license_id": "MIT",
+      "path": "rust-spdx/MIT.json",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/MIT.json",
+      "sha256": "0c2b3c87a154a4aaac6bc6a735dd454dc29d9a78c23a85deedb080e0c65de1f8",
+      "license_text_sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+    },
+    {
+      "license_id": "Apache-2.0",
+      "path": "rust-spdx/Apache-2.0.json",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/Apache-2.0.json",
+      "sha256": "b0f85bc041014e63212f71924bf154e0fae058c03356b3185b092028a74811b4",
+      "license_text_sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff"
+    },
+    {
+      "license_id": "CC0-1.0",
+      "path": "rust-spdx/CC0-1.0.json",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/CC0-1.0.json",
+      "sha256": "294ac7fc5a0bd851cf1367a9673491aa25a43f182f93cdb8b77d214f54f42ac6",
+      "license_text_sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+    },
+    {
+      "license_id": "MPL-2.0",
+      "path": "rust-spdx/MPL-2.0.json",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/MPL-2.0.json",
+      "sha256": "b909c2b38d4ab47ab70dd45327bb6e547a4dc8fd2ea4877ca083f12effbe294f",
+      "license_text_sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+    }
+  ]
+}

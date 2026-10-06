@@ -6,10 +6,10 @@
     "version": "8c8c91f762b412a19f4e8d2c4b35afb98f2d7c81"
   },
   {
-    "name": "runtime-x86_64",
-    "url": "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64",
-    "sha256": "156f4bdbde9c52d01814600013e0a273f0118dc2de98975f3c8c63427ec79074",
-    "version": "8f39b89e2ac31e1640b3d3f7e9a5108e6ce805fa"
+    "name": "runtime-source-built-x86_64",
+    "sha256": "57940b0449dc59aefdfad1a1251f2e1d4420bce722d730d67c5e0136b64769f1",
+    "version": "8f39b89e2ac31e1640b3d3f7e9a5108e6ce805fa",
+    "built_by": "packaging/release/appimage-source-build.py"
   },
   {
     "name": "runtime-LICENSE",

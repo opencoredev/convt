@@ -1,0 +1,1240 @@
+{
+  "schema_version": 1,
+  "scope": "Martin Riedl macOS FFmpeg/ffprobe 9.0.2 timestamp pins in packaging/macos/inputs.sh; read-only vendor research, no replacement binary selected.",
+  "binary_associations": [
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip",
+      "sha256": "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924",
+      "size_bytes": 28395699,
+      "cache_filename": "macos-source/ffmpeg-arm64.zip",
+      "member_count": 1,
+      "binary_member": "ffmpeg",
+      "binary_sha256": "2e11c6f90993cdb79fff84d3f90044d28316b310e75b3e030cfc9a54f2c9d384",
+      "macho_cpu_type": "0x100000c",
+      "notice_members": [],
+      "embedded_configuration": "--prefix=/Volumes/ffmpeg_arm64/out --pkg-config-flags=--static --extra-version='https://www.martin-riedl.de' --enable-gray --enable-libxml2 --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype --enable-fontconfig --enable-libharfbuzz --enable-libbluray --enable-libsnappy --enable-libsrt --enable-libvmaf --enable-libass --enable-libklvanc --enable-libzimg --enable-libzvbi --enable-libaom --enable-libdav1d --enable-libopenh264 --enable-libopenjpeg --enable-librav1e --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libtheora",
+      "embedded_codec_version_evidence": [
+        "4.0+1-6318f22"
+      ],
+      "timestamp": 1789931890,
+      "timestamp_utc": "2026-09-20T19:18:10+00:00",
+      "source_association": "FFmpeg version-string match only; complete exact linked-library source closure not established"
+    },
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffprobe.zip",
+      "sha256": "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6",
+      "size_bytes": 28317701,
+      "cache_filename": "macos-source/ffprobe-arm64.zip",
+      "member_count": 1,
+      "binary_member": "ffprobe",
+      "binary_sha256": "2738aa46a7f9acbc8ab09a6715554c90f7de603171ac403726765685df6a0059",
+      "macho_cpu_type": "0x100000c",
+      "notice_members": [],
+      "embedded_configuration": "--prefix=/Volumes/ffmpeg_arm64/out --pkg-config-flags=--static --extra-version='https://www.martin-riedl.de' --enable-gray --enable-libxml2 --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype --enable-fontconfig --enable-libharfbuzz --enable-libbluray --enable-libsnappy --enable-libsrt --enable-libvmaf --enable-libass --enable-libklvanc --enable-libzimg --enable-libzvbi --enable-libaom --enable-libdav1d --enable-libopenh264 --enable-libopenjpeg --enable-librav1e --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libtheora",
+      "embedded_codec_version_evidence": [
+        "4.0+1-6318f22"
+      ],
+      "timestamp": 1789931890,
+      "timestamp_utc": "2026-09-20T19:18:10+00:00",
+      "source_association": "FFmpeg version-string match only; complete exact linked-library source closure not established"
+    },
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip",
+      "sha256": "7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4",
+      "size_bytes": 33816391,
+      "cache_filename": "macos-source/ffmpeg-x86_64.zip",
+      "member_count": 1,
+      "binary_member": "ffmpeg",
+      "binary_sha256": "b25689cf2211c0582d317e849912769a1f1c93904fe102c485b5364a425633d1",
+      "macho_cpu_type": "0x1000007",
+      "notice_members": [],
+      "embedded_configuration": "--prefix=/Volumes/ffmpeg_amd64/out --pkg-config-flags=--static --extra-version='https://www.martin-riedl.de' --enable-gray --enable-libxml2 --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype --enable-fontconfig --enable-libharfbuzz --enable-libbluray --enable-libsnappy --enable-libsrt --enable-libvmaf --enable-libass --enable-libklvanc --enable-libzimg --enable-libzvbi --enable-libaom --enable-libdav1d --enable-libopenh264 --enable-libopenjpeg --enable-librav1e --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libtheora",
+      "embedded_codec_version_evidence": [
+        "4.0+1-6318f22"
+      ],
+      "timestamp": 1789931006,
+      "timestamp_utc": "2026-09-20T19:03:26+00:00",
+      "source_association": "FFmpeg version-string match only; complete exact linked-library source closure not established"
+    },
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffprobe.zip",
+      "sha256": "2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd",
+      "size_bytes": 33719233,
+      "cache_filename": "macos-source/ffprobe-x86_64.zip",
+      "member_count": 1,
+      "binary_member": "ffprobe",
+      "binary_sha256": "b5df9964b0c2048318fafedcd4e3bbafbc561033cee77de8da1840685d8a9d0d",
+      "macho_cpu_type": "0x1000007",
+      "notice_members": [],
+      "embedded_configuration": "--prefix=/Volumes/ffmpeg_amd64/out --pkg-config-flags=--static --extra-version='https://www.martin-riedl.de' --enable-gray --enable-libxml2 --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype --enable-fontconfig --enable-libharfbuzz --enable-libbluray --enable-libsnappy --enable-libsrt --enable-libvmaf --enable-libass --enable-libklvanc --enable-libzimg --enable-libzvbi --enable-libaom --enable-libdav1d --enable-libopenh264 --enable-libopenjpeg --enable-librav1e --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libtheora",
+      "embedded_codec_version_evidence": [
+        "4.0+1-6318f22"
+      ],
+      "timestamp": 1789931006,
+      "timestamp_utc": "2026-09-20T19:03:26+00:00",
+      "source_association": "FFmpeg version-string match only; complete exact linked-library source closure not established"
+    }
+  ],
+  "official_ffmpeg_source_archives": [
+    {
+      "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.bz2",
+      "sha256": "ee80a25a5621df84498cef46917be87eab3b4f01951e85c2c7cbe5c94914ee70",
+      "size_bytes": 14464861,
+      "cache_filename": "macos-source/ffmpeg-9.0.2.tar.bz2",
+      "package": "ffmpeg",
+      "version": "9.0.2",
+      "association": "Official release source URL used by vendor recipe, version matches binaries. Vendor timestamp source hash/patch attestation unavailable.",
+      "member_count": 10525,
+      "notice_members": [
+        {
+          "member": "ffmpeg-9.0.2/COPYING.LGPLv2.1",
+          "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+        },
+        {
+          "member": "ffmpeg-9.0.2/COPYING.GPLv2",
+          "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+        },
+        {
+          "member": "ffmpeg-9.0.2/COPYING.LGPLv3",
+          "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+        },
+        {
+          "member": "ffmpeg-9.0.2/COPYING.GPLv3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "member": "ffmpeg-9.0.2/tests/checkasm/ext/src/html_data/LICENSE",
+          "sha256": "0fd2c601fb2ead2add56807b7e32664da8d973b9835a422464f210bfea997a52"
+        },
+        {
+          "member": "ffmpeg-9.0.2/tests/checkasm/ext/LICENSE",
+          "sha256": "a2dc8194271e5989c0622531c645a7b41af5da92eeb2531e4f2a3ec31023bc52"
+        },
+        {
+          "member": "ffmpeg-9.0.2/LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+        }
+      ]
+    },
+    {
+      "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+      "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+      "size_bytes": 12040788,
+      "cache_filename": "macos-source/ffmpeg-9.0.2.tar.xz",
+      "package": "ffmpeg",
+      "version": "9.0.2",
+      "association": "Official release source; equivalent file contents to retained bz2 archive.",
+      "member_count": 10525,
+      "notice_members": [
+        {
+          "member": "ffmpeg-9.0.2/COPYING.LGPLv2.1",
+          "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+        },
+        {
+          "member": "ffmpeg-9.0.2/COPYING.GPLv2",
+          "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+        },
+        {
+          "member": "ffmpeg-9.0.2/COPYING.LGPLv3",
+          "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+        },
+        {
+          "member": "ffmpeg-9.0.2/COPYING.GPLv3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "member": "ffmpeg-9.0.2/tests/checkasm/ext/src/html_data/LICENSE",
+          "sha256": "0fd2c601fb2ead2add56807b7e32664da8d973b9835a422464f210bfea997a52"
+        },
+        {
+          "member": "ffmpeg-9.0.2/tests/checkasm/ext/LICENSE",
+          "sha256": "a2dc8194271e5989c0622531c645a7b41af5da92eeb2531e4f2a3ec31023bc52"
+        },
+        {
+          "member": "ffmpeg-9.0.2/LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+        }
+      ]
+    }
+  ],
+  "candidate_public_build_recipe": {
+    "url": "https://git.martin-riedl.de/ffmpeg/build-script.git",
+    "sha256": "6101f60068813c98cccfbc893c5fb22930ef024c90a994953ab2c314a2b28224",
+    "size_bytes": 2610258,
+    "cache_filename": "macos-source/build-script-6a611e19870e197bc37c6e4c7fccddebd3715466.git-archive.tar.gz",
+    "revision": "6a611e19870e197bc37c6e4c7fccddebd3715466",
+    "retrieval": {
+      "type": "git-archive",
+      "format": "tar.gz",
+      "command": [
+        "git",
+        "archive",
+        "--format=tar.gz",
+        "6a611e19870e197bc37c6e4c7fccddebd3715466"
+      ]
+    },
+    "association": "Candidate public 9.0.2 recipe commit, NOT proven recipe used for these timestamps.",
+    "member_count": 90,
+    "notice_members": [
+      {
+        "member": "LICENSE",
+        "sha256": "312034a3970879c952eadd4136d186e148a4a1512de792d3bfca1bc40f91c830"
+      }
+    ],
+    "recipe_members": [
+      {
+        "member": "build.sh",
+        "sha256": "b896995bbb3f06d67974b70f80026ade773efd8ce18c84b796ca8ee3a43e1f4d"
+      },
+      {
+        "member": "script/build-aom.sh",
+        "sha256": "88bd267c49c6ebe019970c0c29ec4460166591dc8bbcc740d3b5a327df4de7f8"
+      },
+      {
+        "member": "script/build-cmake.sh",
+        "sha256": "3a8275fc3e316d7006161ccf455a1be7c4881bb55e51ab08d8f84c91ff5d0b15"
+      },
+      {
+        "member": "script/build-dav1d.sh",
+        "sha256": "49f60eccf4215247962463736a367021095db59fb7ae316fda87e679e592c072"
+      },
+      {
+        "member": "script/build-decklink.sh",
+        "sha256": "b6b91845ac282e05533c7ec42aac2212e0e97072c7fa5a8735b6f44f6fe8e749"
+      },
+      {
+        "member": "script/build-ffmpeg.sh",
+        "sha256": "dfb6a52b78b7c71990a2493d755ac55d18e494f4c8ebea3d8728c0c9870d30c9"
+      },
+      {
+        "member": "script/build-fontconfig.sh",
+        "sha256": "0c012c7c6d3b782a3e9b9012f9a6df558817d2fdec5db93e54df152448836295"
+      },
+      {
+        "member": "script/build-freetype.sh",
+        "sha256": "4709a2a3c96ef214e756cbb597ec1ca90ad74206f29d74cd9a446864d4becfb0"
+      },
+      {
+        "member": "script/build-fribidi.sh",
+        "sha256": "f0f766a02075cd49f9532e2ce727ad6fc506b7f1b29d8fd81708e4de18514329"
+      },
+      {
+        "member": "script/build-harfbuzz.sh",
+        "sha256": "3ad4a87b8afdf352784b886829f3c8f7333889ec26474516e723a89a828553eb"
+      },
+      {
+        "member": "script/build-lame.sh",
+        "sha256": "259343b60d7de2ccc4eaa8919f014cf4ff62d7ecba1374623c182104b411c5ef"
+      },
+      {
+        "member": "script/build-libass.sh",
+        "sha256": "ac1d8b7a6c836633cc1cbcc75a626acf856479c0b90e0bef49f4819c4c9bf846"
+      },
+      {
+        "member": "script/build-libbluray.sh",
+        "sha256": "1f7155be13c679078ac6f5c5609d6ffc46bd2701d1418d9352127db2d6131f7f"
+      },
+      {
+        "member": "script/build-libiconv.sh",
+        "sha256": "545a08db23be4af0259246374e29c13f0e5d90eaf29c051fc3704615e0d6ba5b"
+      },
+      {
+        "member": "script/build-libklvanc.sh",
+        "sha256": "6626ddb86717118871f28726618a4686cdaab0b146c1fdcfc48a5196f258d3ca"
+      },
+      {
+        "member": "script/build-libogg.sh",
+        "sha256": "7b6218fdb0e0e55c455bf2a7051101bd43075d7b1955a2c8905e3b3d30a59262"
+      },
+      {
+        "member": "script/build-libtheora.sh",
+        "sha256": "14b415588dec7c72eab6c790d0a56a976b7259ab6a0f0bea5358e1600fd93e43"
+      },
+      {
+        "member": "script/build-libvmaf.sh",
+        "sha256": "b208651fedb3a1df32f4ed5cf70eb1b506c784e489f3bab05de4970facf4f3ed"
+      },
+      {
+        "member": "script/build-libvorbis.sh",
+        "sha256": "e574da4ca799a03de42da80d5955d5a7637ebe59a79c22ab25692e4efa83c11e"
+      },
+      {
+        "member": "script/build-libwebp.sh",
+        "sha256": "0fb4164bfeafebf433b18ef31f24ae9459106e460b4432bd39fdcc1b42f3033d"
+      },
+      {
+        "member": "script/build-libxml2.sh",
+        "sha256": "bd56d3fac7fa0a3b9781563a461a5c89e70c8be93e8c70822b3c25799c2a3bf4"
+      },
+      {
+        "member": "script/build-nasm.sh",
+        "sha256": "b8f6c8d30a50b022754f1ea5b38e482c5a128d28175ae35e698b172f96ed3080"
+      },
+      {
+        "member": "script/build-ninja.sh",
+        "sha256": "bc2775f45c7f1e1a5fc85280d0a1d494862d368c5a629cee6817495bad54667f"
+      },
+      {
+        "member": "script/build-openh264.sh",
+        "sha256": "88e6cf111cc325a5bfd490c266c92778a2d91d33626d639c118f90a2b16449fa"
+      },
+      {
+        "member": "script/build-openjpeg.sh",
+        "sha256": "1861f5367e8429e350222abb41c322beb2c4caaf972108b6ba9158f89f640d3b"
+      },
+      {
+        "member": "script/build-openssl.sh",
+        "sha256": "c380841a9fd06d1e9e7a3240fbabaf112ab92b12bf3febfa9477fb61506b3532"
+      },
+      {
+        "member": "script/build-opus.sh",
+        "sha256": "e3567b8621a462d397f659ec72be44044dc4ac388b4962c2abcc444acba6fdcb"
+      },
+      {
+        "member": "script/build-pkg-config.sh",
+        "sha256": "8e627f60eaef3c103fe9bf5771e0623d35b742bd6f8d1545d9109722f9dc8599"
+      },
+      {
+        "member": "script/build-rav1e.sh",
+        "sha256": "e861b22cfbe62a1044e75aec8893b12df8edf4c42e96cbbc99f88e0c6c67814d"
+      },
+      {
+        "member": "script/build-sdl.sh",
+        "sha256": "3d149abf971aeb5e4a6bcd7b4f6919b9f8dd6675f294cecfb2f85c59408dd8cb"
+      },
+      {
+        "member": "script/build-snappy.sh",
+        "sha256": "e3d5b3fab5ff6235946b809a497ed33c4bbe5192b27751125d52c4a6ad9de8a7"
+      },
+      {
+        "member": "script/build-srt.sh",
+        "sha256": "affa67d98aa6b4d111d78cbb619da96fcfea9d5ba339bfb715d500651be5ea38"
+      },
+      {
+        "member": "script/build-svt-av1.sh",
+        "sha256": "f855329b073d8e29e9ecabc9813b306f5dfea6d2959106b07574a33e0df420ea"
+      },
+      {
+        "member": "script/build-vpx.sh",
+        "sha256": "a41fe1c5ffcde50891f8887661e508a5403e7fe610da42b2600e9d5ea1e96e19"
+      },
+      {
+        "member": "script/build-vvenc.sh",
+        "sha256": "413eedfdd407a5b3f55c609eb09a1d92e44a5f24708bae8a7e9aaaf3f9f2aa89"
+      },
+      {
+        "member": "script/build-x264.sh",
+        "sha256": "de68b97d8dcb45959a7ea287d282c7b2ae4ea2370e8536e8af345fbba87f0960"
+      },
+      {
+        "member": "script/build-x265.sh",
+        "sha256": "57aaaadb71d91afefefe0c09f766f98cba03b79e7bb322747a5f5d473ae9996e"
+      },
+      {
+        "member": "script/build-zimg.sh",
+        "sha256": "5dc784ca89064d9953c5ccf4fd751bf153c76749ad0ffc4abcf75dcdd9bf6c10"
+      },
+      {
+        "member": "script/build-zlib.sh",
+        "sha256": "270b20f133819f006abca28b6a34ae2ec0d8ccc53e8256c900e48c708ca42a74"
+      },
+      {
+        "member": "script/build-zvbi.sh",
+        "sha256": "44e1ddd4ad3a762272f25da14d5235cc7f69aaea2b5726fbfdebaa19aa250738"
+      },
+      {
+        "member": "script/functions.sh",
+        "sha256": "d468e27b641014bd6c625fbaf1c48bb216d4ecb9c7de28e531a7e995e66a8d8f"
+      },
+      {
+        "member": "version/aom",
+        "sha256": "dfce32f303f641cde5f16a0b30c3279be699d1d98319c65fc2ba0529751bc2af"
+      },
+      {
+        "member": "version/dav1d",
+        "sha256": "e82745514f06d82c0e99c4d5181ad144322843e663b64143a07c448499354dc9"
+      },
+      {
+        "member": "version/ffmpeg",
+        "sha256": "db66e3af23c516e1c8fb65c65efaff2e346761f99121c8d3db1dd009d3d406e4"
+      },
+      {
+        "member": "version/fontconfig",
+        "sha256": "b12e7d9b7a860f098264e38f72b906493886046c4f0e9b778b12ea5221a817a9"
+      },
+      {
+        "member": "version/freetype",
+        "sha256": "86ecc599f5e6081a6e29f00660b6e5f99ad1cb623f3ca959e79a5bbba4a28743"
+      },
+      {
+        "member": "version/fribidi",
+        "sha256": "938e60bf0e7173db40ff40b7ced3c1acee304dab0cdeed19c0e598b29ae1a8de"
+      },
+      {
+        "member": "version/harfbuzz",
+        "sha256": "9a102e2995b1256d419fc5a0ad80cf1957ddaedba3382fd0525808c924c08e42"
+      },
+      {
+        "member": "version/lame",
+        "sha256": "fbd04e1aae9ce0b11a8946e2c9ac2619f7428a64d32d01eff61d809dcb70ee8e"
+      },
+      {
+        "member": "version/libass",
+        "sha256": "bbb66799c241575d6220e029a277448823244f2a4f0d3b16aca4ed9bd8d7d8a2"
+      },
+      {
+        "member": "version/libbluray",
+        "sha256": "1f4dc096d58f7d21e3875671aee6f29b120ab84218fa47db2cb53bc9eb5b4dac"
+      },
+      {
+        "member": "version/libiconv",
+        "sha256": "3d7a51acc5cb98f4e350eed557c0c4a7034a1fdb057a8fc2b38cf2138980b74b"
+      },
+      {
+        "member": "version/libklvanc",
+        "sha256": "562368b20a64be95651bb8246b7420f7fce55538dff999aefaa78662a14d0d39"
+      },
+      {
+        "member": "version/libogg",
+        "sha256": "813b231f281e55d9af5ea2364998b4d88d5d8c59158214c140f2d0f812d36d5d"
+      },
+      {
+        "member": "version/libtheora",
+        "sha256": "9f77034b1eb57d24f21ac7deb65c9cc99f63b72775e311f1f280ab2b6c2e06a2"
+      },
+      {
+        "member": "version/libvmaf",
+        "sha256": "a23c8e6b166f831a5bb3c1bde0b66b185c6e3e5905292e8a82afeaf8417a5476"
+      },
+      {
+        "member": "version/libvorbis",
+        "sha256": "0faff9f97292449eee32b81df88f812bca038d443c5a2254802df6108463f0fe"
+      },
+      {
+        "member": "version/libwebp",
+        "sha256": "562368b20a64be95651bb8246b7420f7fce55538dff999aefaa78662a14d0d39"
+      },
+      {
+        "member": "version/libxml2",
+        "sha256": "ffa513a75c478b9768296f77715e5957d9db6f2ef68f1b0f7136167ec0a9229c"
+      },
+      {
+        "member": "version/nasm",
+        "sha256": "f8f688bffaffbc7c792eea1f0abead3980b4d08af0a9e61a1545835c96b73ca2"
+      },
+      {
+        "member": "version/ninja",
+        "sha256": "87729f1910e8eb02719463db46083e0f1a4c3cbade23b357806338b25df16a6a"
+      },
+      {
+        "member": "version/openh264",
+        "sha256": "e33ccf6527ddb87b2dc894b17dd846206c5d18334710d253f7f366f2c4403fe0"
+      },
+      {
+        "member": "version/openjpeg",
+        "sha256": "c2aa373940a71be39dc675dc1c07dcf00db694d405979882e77ba80d4d3769a6"
+      },
+      {
+        "member": "version/openssl",
+        "sha256": "5d4dd3337b8f5d06bdfd8636b6c76d4da145bc92b178cee454ae933c7a6886e2"
+      },
+      {
+        "member": "version/opus",
+        "sha256": "fdfe13d50cc583494b0bcd54861b89449ecc2337b3f763041f8334ccbd57d167"
+      },
+      {
+        "member": "version/pkg-config",
+        "sha256": "5c7879e6c63f647c563fd103380dc5c8f5de4bba9f4a4d6648f3d7a20125924f"
+      },
+      {
+        "member": "version/rav1e",
+        "sha256": "b9b55dc4cb16987b1b7a73adb603f2fbd776e2e7a892a51256cd5aeb4e40b6f8"
+      },
+      {
+        "member": "version/sdl",
+        "sha256": "2a48b1bdc05aa600fb146629818962c309865d7bfe230318ab5e0c0079da6038"
+      },
+      {
+        "member": "version/snappy",
+        "sha256": "1ec4fab0d8dd5eafef82e67f61a35c03ee994988a5293e17cf3d3e97c3511847"
+      },
+      {
+        "member": "version/srt",
+        "sha256": "53ae027a22b07078809309bd61dbecfa6ba8614633fc1ade165f05d4dbcb9dff"
+      },
+      {
+        "member": "version/svt-av1",
+        "sha256": "96507e12a51ba1be94a614f5b0eaaf6975e748d75c523640d9d10bd282887056"
+      },
+      {
+        "member": "version/vpx",
+        "sha256": "3b41f45fe69f6f347d1c880395c9cd55bb2d00ea0006e3672bdc6fab43992d52"
+      },
+      {
+        "member": "version/vvenc",
+        "sha256": "45b2d9dc7463345bd6fa29edce2c10899765b1d22fee137d902edd0bd9bf2d37"
+      },
+      {
+        "member": "version/x265",
+        "sha256": "2912aa729c973b7d68a2deda6cb5595fdb1e0368cffffaf6a8c135cdea63c83d"
+      },
+      {
+        "member": "version/zimg",
+        "sha256": "ae24fa38ddb13bd8ac787b206e794f4d7cbb8aa13dd2e0b2aad555c27d2214bd"
+      },
+      {
+        "member": "version/zlib",
+        "sha256": "7b13d2af3b6479080c67c5530c51b06fc7fecfc4ff35bb6fb663ad9bb222aaf0"
+      },
+      {
+        "member": "version/zvbi",
+        "sha256": "3ed048b1eda94f1eff67f77730a42a4eb13e1672492beb42bc410840111d84ad"
+      }
+    ]
+  },
+  "candidate_dependency_downloads": [
+    {
+      "package": "aom",
+      "candidate_version": "3.15.0",
+      "recipe_member": "script/build-aom.sh",
+      "source_download_expressions": [
+        "download https://storage.googleapis.com/aom-releases/libaom-$VERSION.tar.gz \"libaom.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "cmake",
+      "candidate_version": null,
+      "recipe_member": "script/build-cmake.sh",
+      "source_download_expressions": [
+        "download https://github.com/Kitware/CMake/releases/download/v${VERSION_PATCH}/cmake-${VERSION_PATCH}-${CMAKE_OS}-${CMAKE_ARCH}.tar.gz \"cmake-release.tar.gz\"",
+        "download https://cmake.org/files/v$VERSION_MINOR/cmake-$VERSION_PATCH.tar.gz \"cmake.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "dav1d",
+      "candidate_version": "1.5.4",
+      "recipe_member": "script/build-dav1d.sh",
+      "source_download_expressions": [
+        "download https://code.videolan.org/videolan/dav1d/-/archive/$VERSION/dav1d-$VERSION.tar.gz \"dav1d.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "decklink",
+      "candidate_version": null,
+      "recipe_member": "script/build-decklink.sh",
+      "source_download_expressions": [],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "ffmpeg",
+      "candidate_version": "9.0.2",
+      "recipe_member": "script/build-ffmpeg.sh",
+      "source_download_expressions": [
+        "download https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.bz2 \"ffmpeg.tar.bz2\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "fontconfig",
+      "candidate_version": "2.17.1",
+      "recipe_member": "script/build-fontconfig.sh",
+      "source_download_expressions": [
+        "download https://gitlab.freedesktop.org/api/v4/projects/890/packages/generic/fontconfig/$VERSION/fontconfig-$VERSION.tar.xz \"fontconfig.tar.xz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "freetype",
+      "candidate_version": "2.13.0",
+      "recipe_member": "script/build-freetype.sh",
+      "source_download_expressions": [
+        "download https://download.savannah.gnu.org/releases/freetype/freetype-$VERSION.tar.gz \"freetype.tar.gz\"",
+        "download https://sourceforge.net/projects/freetype/files/freetype2/$VERSION/freetype-$VERSION.tar.gz/download \"freetype.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "fribidi",
+      "candidate_version": "1.0.16",
+      "recipe_member": "script/build-fribidi.sh",
+      "source_download_expressions": [
+        "download https://github.com/fribidi/fribidi/releases/download/v$VERSION/fribidi-$VERSION.tar.xz \"fribidi.tar.xz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "harfbuzz",
+      "candidate_version": "14.4.0",
+      "recipe_member": "script/build-harfbuzz.sh",
+      "source_download_expressions": [
+        "download https://github.com/harfbuzz/harfbuzz/releases/download/$VERSION/harfbuzz-$VERSION.tar.xz \"harfbuzz.tar.xz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "lame",
+      "candidate_version": "4.0",
+      "recipe_member": "script/build-lame.sh",
+      "source_download_expressions": [
+        "download https://unlimited.dl.sourceforge.net/project/lame/lame/$VERSION/lame-$VERSION.tar.gz \"lame.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libass",
+      "candidate_version": "0.17.5",
+      "recipe_member": "script/build-libass.sh",
+      "source_download_expressions": [
+        "download https://github.com/libass/libass/releases/download/$VERSION/libass-$VERSION.tar.gz \"libass.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libbluray",
+      "candidate_version": "1.5.0",
+      "recipe_member": "script/build-libbluray.sh",
+      "source_download_expressions": [
+        "download https://download.videolan.org/pub/videolan/libbluray/$VERSION/libbluray-$VERSION.tar.xz \"libbluray.tar.xz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libiconv",
+      "candidate_version": "1.17",
+      "recipe_member": "script/build-libiconv.sh",
+      "source_download_expressions": [
+        "download https://ftp.gnu.org/pub/gnu/libiconv/libiconv-$VERSION.tar.gz \"libiconv.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libklvanc",
+      "candidate_version": "1.6.0",
+      "recipe_member": "script/build-libklvanc.sh",
+      "source_download_expressions": [
+        "download https://github.com/stoth68000/libklvanc/archive/refs/tags/vid.obe.$VERSION.tar.gz \"libklvanc.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libogg",
+      "candidate_version": "1.3.6",
+      "recipe_member": "script/build-libogg.sh",
+      "source_download_expressions": [
+        "download https://ftp.osuosl.org/pub/xiph/releases/ogg/libogg-$VERSION.tar.gz \"libogg.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libtheora",
+      "candidate_version": "1.2.0",
+      "recipe_member": "script/build-libtheora.sh",
+      "source_download_expressions": [
+        "download http://downloads.xiph.org/releases/theora/libtheora-$VERSION.tar.gz \"libtheora.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libvmaf",
+      "candidate_version": "3.2.0",
+      "recipe_member": "script/build-libvmaf.sh",
+      "source_download_expressions": [
+        "download https://github.com/Netflix/vmaf/archive/refs/tags/v$VERSION.tar.gz \"libvmaf.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libvorbis",
+      "candidate_version": "1.3.7",
+      "recipe_member": "script/build-libvorbis.sh",
+      "source_download_expressions": [
+        "download https://ftp.osuosl.org/pub/xiph/releases/vorbis/libvorbis-$VERSION.tar.gz \"libvorbis.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libwebp",
+      "candidate_version": "1.6.0",
+      "recipe_member": "script/build-libwebp.sh",
+      "source_download_expressions": [
+        "download https://github.com/webmproject/libwebp/archive/refs/tags/v$VERSION.tar.gz \"libwebp.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "libxml2",
+      "candidate_version": "2.15.3",
+      "recipe_member": "script/build-libxml2.sh",
+      "source_download_expressions": [
+        "download https://download.gnome.org/sources/libxml2/$VERSION_WITHOUT_PATCH/libxml2-$VERSION.tar.xz \"libxml2.tar.xz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "nasm",
+      "candidate_version": "3.02",
+      "recipe_member": "script/build-nasm.sh",
+      "source_download_expressions": [
+        "download http://www.nasm.us/pub/nasm/releasebuilds/$VERSION/nasm-$VERSION.tar.gz nasm.tar.gz",
+        "download https://github.com/netwide-assembler/nasm/archive/refs/tags/nasm-$VERSION.tar.gz nasm.tar.gz"
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "ninja",
+      "candidate_version": "1.13.2",
+      "recipe_member": "script/build-ninja.sh",
+      "source_download_expressions": [
+        "download https://github.com/ninja-build/ninja/archive/refs/tags/v$VERSION.tar.gz \"ninja.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "openh264",
+      "candidate_version": "2.6.0",
+      "recipe_member": "script/build-openh264.sh",
+      "source_download_expressions": [
+        "download https://github.com/cisco/openh264/archive/v$VERSION.tar.gz \"openh264.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "openjpeg",
+      "candidate_version": "2.5.4",
+      "recipe_member": "script/build-openjpeg.sh",
+      "source_download_expressions": [
+        "download https://github.com/uclouvain/openjpeg/archive/refs/tags/v$VERSION.tar.gz \"openjpeg.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "openssl",
+      "candidate_version": "3.6.4",
+      "recipe_member": "script/build-openssl.sh",
+      "source_download_expressions": [
+        "download https://github.com/openssl/openssl/releases/download/openssl-$VERSION/openssl-$VERSION.tar.gz \"openssl.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "opus",
+      "candidate_version": "1.6.1",
+      "recipe_member": "script/build-opus.sh",
+      "source_download_expressions": [
+        "download https://downloads.xiph.org/releases/opus/opus-$VERSION.tar.gz \"opus.tar.gz\"",
+        "download https://gitlab.xiph.org/xiph/opus/-/archive/v$VERSION/opus-v$VERSION.tar.gz \"opus.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "pkg-config",
+      "candidate_version": "0.29.2",
+      "recipe_member": "script/build-pkg-config.sh",
+      "source_download_expressions": [
+        "download https://pkg-config.freedesktop.org/releases/pkg-config-$VERSION.tar.gz \"pkg-config.tar.gz\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1001-Use-CreateFile-on-Win32-to-make-sure-g_unlink-always.patch \"1001-Use-CreateFile-on-Win32-to-make-sure-g_unlink-always.patch\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1003-g_abort.all.patch \"1003-g_abort.all.patch\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1005-glib-send-log-messages-to-correct-stdout-and-stderr.patch \"1005-glib-send-log-messages-to-correct-stdout-and-stderr.patch\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1017-glib-use-gnu-print-scanf.patch \"1017-glib-use-gnu-print-scanf.patch\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1024-return-actually-written-data-in-printf.all.patch \"1024-return-actually-written-data-in-printf.all.patch\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1030-fix-stat.all.patch \"1030-fix-stat.all.patch\"",
+        "download https://raw.githubusercontent.com/msys2/MINGW-packages/5e72f0204a19fd0a45d50d8e08bf9bed6455b32b/mingw-w64-pkg-config/1031-fix-glib-gettext-m4-error.patch \"1031-fix-glib-gettext-m4-error.patch\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "rav1e",
+      "candidate_version": "0.8.1",
+      "recipe_member": "script/build-rav1e.sh",
+      "source_download_expressions": [
+        "download https://github.com/xiph/rav1e/archive/refs/tags/v$VERSION.tar.gz \"rav1e.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "sdl",
+      "candidate_version": "2.32.10",
+      "recipe_member": "script/build-sdl.sh",
+      "source_download_expressions": [
+        "download https://www.libsdl.org/release/SDL2-$VERSION.tar.gz \"SDL2.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "snappy",
+      "candidate_version": "1.2.2",
+      "recipe_member": "script/build-snappy.sh",
+      "source_download_expressions": [
+        "download https://github.com/google/snappy/archive/refs/tags/$VERSION.tar.gz \"snappy.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "srt",
+      "candidate_version": "1.5.7",
+      "recipe_member": "script/build-srt.sh",
+      "source_download_expressions": [
+        "download https://github.com/Haivision/srt/archive/refs/tags/v$VERSION.tar.gz \"srt.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "svt-av1",
+      "candidate_version": "4.2.0",
+      "recipe_member": "script/build-svt-av1.sh",
+      "source_download_expressions": [
+        "download https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/v$VERSION/SVT-AV1-v$VERSION.tar.gz \"SVT-AV1.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "vpx",
+      "candidate_version": "1.16.0",
+      "recipe_member": "script/build-vpx.sh",
+      "source_download_expressions": [
+        "download https://github.com/webmproject/libvpx/archive/v$VERSION.tar.gz \"vpx.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "vvenc",
+      "candidate_version": "1.14.0",
+      "recipe_member": "script/build-vvenc.sh",
+      "source_download_expressions": [
+        "download https://github.com/fraunhoferhhi/vvenc/archive/refs/tags/v$VERSION.tar.gz \"vvenc.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "x264",
+      "candidate_version": null,
+      "recipe_member": "script/build-x264.sh",
+      "source_download_expressions": [
+        "download https://code.videolan.org/videolan/x264/-/archive/master/x264-master.tar.gz \"x264-master.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "x265",
+      "candidate_version": "4.2",
+      "recipe_member": "script/build-x265.sh",
+      "source_download_expressions": [
+        "download https://bitbucket.org/multicoreware/x265_git/get/$VERSION.tar.gz \"x265.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "zimg",
+      "candidate_version": "3.0.6",
+      "recipe_member": "script/build-zimg.sh",
+      "source_download_expressions": [
+        "download https://github.com/sekrit-twc/zimg/archive/refs/tags/release-$VERSION.tar.gz \"zimg.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "zlib",
+      "candidate_version": "1.3.2",
+      "recipe_member": "script/build-zlib.sh",
+      "source_download_expressions": [
+        "download https://www.zlib.net/fossils/zlib-$VERSION.tar.gz \"zlib.tar.gz\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    },
+    {
+      "package": "zvbi",
+      "candidate_version": "0.2.35",
+      "recipe_member": "script/build-zvbi.sh",
+      "source_download_expressions": [
+        "download https://sourceforge.net/projects/zapping/files/zvbi/$VERSION/zvbi-$VERSION.tar.bz2/download \"zvbi.tar.bz2\""
+      ],
+      "association": "candidate only; timestamps do not identify dependency hashes"
+    }
+  ],
+  "embedded_linked_library_flags": [
+    "--enable-libxml2",
+    "--enable-openssl",
+    "--enable-libfreetype",
+    "--enable-fontconfig",
+    "--enable-libharfbuzz",
+    "--enable-libbluray",
+    "--enable-libsnappy",
+    "--enable-libsrt",
+    "--enable-libvmaf",
+    "--enable-libass",
+    "--enable-libklvanc",
+    "--enable-libzimg",
+    "--enable-libzvbi",
+    "--enable-libaom",
+    "--enable-libdav1d",
+    "--enable-libopenh264",
+    "--enable-libopenjpeg",
+    "--enable-librav1e",
+    "--enable-libsvtav1",
+    "--enable-libvpx",
+    "--enable-libvvenc",
+    "--enable-libwebp",
+    "--enable-libx264",
+    "--enable-libx265",
+    "--enable-libmp3lame",
+    "--enable-libopus",
+    "--enable-libvorbis",
+    "--enable-libtheora"
+  ],
+  "remaining_source_gaps": [
+    {
+      "id": "timestamp-build-record",
+      "detail": "No public immutable build record tying both exact timestamps to source digests, dependency checkout hashes, patches, and the executed recipe was recovered. ZIPs contain only executables, no source manifest or notices."
+    },
+    {
+      "id": "x264-moving-ref",
+      "detail": "Candidate script/build-x264.sh downloads x264-master.tar.gz without revision/hash; recipe commit and FFmpeg version cannot identify that checkout."
+    },
+    {
+      "id": "x265-version-mismatch",
+      "detail": "Both pinned ffmpeg binaries embed 4.0+1-6318f22. Candidate 9.0.2 recipe version/x265 says 4.2. Thus applying that recipe versions table as the binaries corresponding source is contradicted by retained binary evidence."
+    },
+    {
+      "id": "other-static-libraries",
+      "detail": "Embedded configuration enables 28 external library flags. Exact library sources, transitive vendor/Rust crates (notably rav1e), patches, and notices remain unassociated with these binary hashes."
+    }
+  ],
+  "not_checked": [
+    {
+      "id": "macos-execution",
+      "detail": "Mach-O architectures, checksums and embedded version/configuration strings validated on Linux; binaries not executed on macOS."
+    },
+    {
+      "id": "replacement-macos-build",
+      "detail": "Helper source and shell/Python syntax validated on Linux; macOS compilation, generated hashes and platform smoke receipts are only produced when macos-source-ffmpeg-build.sh is run on a Mac."
+    }
+  ],
+  "read_attempts": [
+    {
+      "url": "https://ffmpeg.martin-riedl.de/",
+      "result": "HTTP 403"
+    },
+    {
+      "url": "https://git.martin-riedl.de/ffmpeg/build-script",
+      "result": "HTTP 403; git smart HTTP clone succeeded"
+    },
+    {
+      "url": "https://git.martin-riedl.de/ffmpeg/build-script/archive/6a611e19870e197bc37c6e4c7fccddebd3715466.tar.gz",
+      "result": "HTTP 403; exact git archive constructed from cloned commit"
+    },
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/",
+      "result": "HTTP 403 for timestamp directory page; exact ZIP endpoints succeed"
+    },
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/",
+      "result": "HTTP 403 for timestamp directory page; exact ZIP endpoints succeed"
+    }
+  ],
+  "source_build_alternative": {
+    "goal": "Replace Riedl binaries with new, independently source-built FFmpeg 9.0.2. Preserve encoders directly used by crates/convt-engines/src/ffmpeg.rs without reproducing every vendor feature. This does NOT provide corresponding source for the existing Riedl binaries.",
+    "sources": [
+      {
+        "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+        "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+        "size_bytes": 12040788,
+        "cache_filename": "macos-source/ffmpeg-9.0.2.tar.xz",
+        "package": "ffmpeg",
+        "version": "9.0.2",
+        "association": "Official release source; equivalent file contents to retained bz2 archive.",
+        "member_count": 10525,
+        "notice_members": [
+          {
+            "member": "ffmpeg-9.0.2/COPYING.LGPLv2.1",
+            "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+          },
+          {
+            "member": "ffmpeg-9.0.2/COPYING.GPLv2",
+            "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+          },
+          {
+            "member": "ffmpeg-9.0.2/COPYING.LGPLv3",
+            "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+          },
+          {
+            "member": "ffmpeg-9.0.2/COPYING.GPLv3",
+            "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+          },
+          {
+            "member": "ffmpeg-9.0.2/tests/checkasm/ext/src/html_data/LICENSE",
+            "sha256": "0fd2c601fb2ead2add56807b7e32664da8d973b9835a422464f210bfea997a52"
+          },
+          {
+            "member": "ffmpeg-9.0.2/tests/checkasm/ext/LICENSE",
+            "sha256": "a2dc8194271e5989c0622531c645a7b41af5da92eeb2531e4f2a3ec31023bc52"
+          },
+          {
+            "member": "ffmpeg-9.0.2/LICENSE.md",
+            "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+          }
+        ]
+      },
+      {
+        "name": "x264_0.164.3108+git31e19f9.orig.tar.gz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x264/x264_0.164.3108+git31e19f9.orig.tar.gz",
+        "sha256": "41606cb8e788a7f8c4514290646d4ba5c7bc68d9e1ccd1a73f446a90546913eb",
+        "package": "x264",
+        "version": "0.164.3108+git31e19f9",
+        "cache_filename": "macos-source/x264_0.164.3108+git31e19f9.orig.tar.gz",
+        "size_bytes": 954789,
+        "member_count": 259,
+        "notice_members": [
+          {
+            "member": "x264-0.164.3108+git31e19f9/COPYING",
+            "sha256": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670"
+          }
+        ]
+      },
+      {
+        "name": "libvpx_1.14.0.orig.tar.xz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/libv/libvpx/libvpx_1.14.0.orig.tar.xz",
+        "sha256": "11150687870e4c94479abafe5d1ed38790e68dc7bbe08880fd5fb55138e4c6f3",
+        "package": "libvpx",
+        "version": "1.14.0",
+        "cache_filename": "macos-source/libvpx_1.14.0.orig.tar.xz",
+        "size_bytes": 4374856,
+        "member_count": 1321,
+        "notice_members": [
+          {
+            "member": "libvpx-1.14.0/LICENSE",
+            "sha256": "8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615"
+          },
+          {
+            "member": "libvpx-1.14.0/PATENTS",
+            "sha256": "cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c"
+          },
+          {
+            "member": "libvpx-1.14.0/third_party/googletest/src/LICENSE",
+            "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+          },
+          {
+            "member": "libvpx-1.14.0/third_party/libwebm/LICENSE.TXT",
+            "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
+          },
+          {
+            "member": "libvpx-1.14.0/third_party/libwebm/PATENTS.TXT",
+            "sha256": "cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c"
+          },
+          {
+            "member": "libvpx-1.14.0/third_party/libyuv/LICENSE",
+            "sha256": "2b2cc1180c7e6988328ad2033b04b80117419db9c4c584918bbb3cfec7e9364f"
+          },
+          {
+            "member": "libvpx-1.14.0/third_party/x86inc/LICENSE",
+            "sha256": "719d8fa235f2068e0ae6d6a7dceb0a7720d7840f0f0ebed29957989e6ded3cd8"
+          }
+        ]
+      },
+      {
+        "name": "opus_1.4.orig.tar.gz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/o/opus/opus_1.4.orig.tar.gz",
+        "sha256": "c9b32b4253be5ae63d1ff16eea06b94b5f0f2951b7a02aceef58e3a3ce49c51f",
+        "package": "opus",
+        "version": "1.4",
+        "cache_filename": "macos-source/opus_1.4.orig.tar.gz",
+        "size_bytes": 1063408,
+        "member_count": 426,
+        "notice_members": [
+          {
+            "member": "opus-1.4/COPYING",
+            "sha256": "8338ce8d922bb4416ce3dd1e5680173332435e3f0755007ac7801ccd674fe682"
+          }
+        ]
+      },
+      {
+        "name": "lame_3.99.5+repack1.orig.tar.gz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/universe/l/lame/lame_3.99.5+repack1.orig.tar.gz",
+        "sha256": "01c1a34dc5ced11a487f04514cb948d38f6f559daebc85ae23c1c8a6c8280c95",
+        "package": "lame",
+        "version": "3.99.5+repack1",
+        "cache_filename": "macos-source/lame_3.99.5+repack1.orig.tar.gz",
+        "size_bytes": 1464016,
+        "member_count": 325,
+        "notice_members": [
+          {
+            "member": "lame-3.99.5+repack1/LICENSE",
+            "sha256": "2ebbced843af4594e4862bd2bdf60672d8a00f2792c6e050435614227a1a55f4"
+          },
+          {
+            "member": "lame-3.99.5+repack1/COPYING",
+            "sha256": "bfe4a52dc4645385f356a8e83cc54216a293e3b6f1cb4f79f5fc0277abf937fd"
+          }
+        ]
+      },
+      {
+        "name": "libogg_1.3.5.orig.tar.gz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/libo/libogg/libogg_1.3.5.orig.tar.gz",
+        "sha256": "0eb4b4b9420a0f51db142ba3f9c64b333f826532dc0f48c6410ae51f4799b664",
+        "package": "libogg",
+        "version": "1.3.5",
+        "cache_filename": "macos-source/libogg_1.3.5.orig.tar.gz",
+        "size_bytes": 593071,
+        "member_count": 144,
+        "notice_members": [
+          {
+            "member": "libogg-1.3.5/COPYING",
+            "sha256": "d2ab5758336489da61c12cc5bb757da5339c4ae9001f9bb0562b4370249af814"
+          }
+        ]
+      },
+      {
+        "name": "libvorbis_1.3.7.orig.tar.gz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/libv/libvorbis/libvorbis_1.3.7.orig.tar.gz",
+        "sha256": "0e982409a9c3fc82ee06e08205b1355e5c6aa4c36bca58146ef399621b0ce5ab",
+        "package": "libvorbis",
+        "version": "1.3.7",
+        "cache_filename": "macos-source/libvorbis_1.3.7.orig.tar.gz",
+        "size_bytes": 1658963,
+        "member_count": 466,
+        "notice_members": [
+          {
+            "member": "libvorbis-1.3.7/COPYING",
+            "sha256": "ec1815db59fcd302846df949d7424876cb2e2dc5ed1606c5fb0b36787b1cf43a"
+          }
+        ]
+      },
+      {
+        "name": "x265_3.5.orig.tar.gz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x265/x265_3.5.orig.tar.gz",
+        "sha256": "e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8",
+        "package": "x265",
+        "version": "3.5-2build1",
+        "cache_filename": "macos-source/x265_3.5.orig.tar.gz",
+        "size_bytes": 1537044,
+        "member_count": 357,
+        "notice_members": [
+          {
+            "member": "x265_3.5/COPYING",
+            "sha256": "d8afb1bcc7a2cfc603683b168d6987ef0a48e59e0da3693bf55c5d33b67e2b49"
+          },
+          {
+            "member": "x265_3.5/source/dynamicHDR10/LICENSE.txt",
+            "sha256": "47f15d63e82eb8a4de6e46471d5f96cf6d052fd5355944a002c3157880248b69"
+          },
+          {
+            "member": "x265_3.5/source/dynamicHDR10/json11/LICENSE.txt",
+            "sha256": "950e288a2548cb33f6a90d23958806b0803f510ab17c600d661619a73ae3a6c8"
+          }
+        ]
+      },
+      {
+        "name": "zlib-1.3.1.tar.gz",
+        "url": "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz",
+        "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+        "package": "zlib",
+        "version": "1.3.1",
+        "cache_filename": "macos-source/zlib-1.3.1.tar.gz",
+        "size_bytes": 1512791,
+        "member_count": 290,
+        "notice_members": [
+          {
+            "member": "zlib-1.3.1/LICENSE",
+            "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+          },
+          {
+            "member": "zlib-1.3.1/contrib/dotzlib/LICENSE_1_0.txt",
+            "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951"
+          }
+        ]
+      },
+      {
+        "name": "dav1d_1.5.3.orig.tar.xz",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/universe/d/dav1d/dav1d_1.5.3.orig.tar.xz",
+        "sha256": "732010aa5ef461fa93355ed2c6c5fedb48ddc4b74e697eaabe8907eaeb943011",
+        "package": "dav1d",
+        "version": "1.5.3",
+        "cache_filename": "macos-source/dav1d_1.5.3.orig.tar.xz",
+        "size_bytes": 1022836,
+        "member_count": 394,
+        "notice_members": [
+          {
+            "member": "dav1d-1.5.3/COPYING",
+            "sha256": "dd92c3c2247c5651606fc23a5e2d6a1ebc5ace9a3e49cbde0e12f05ad1cb1ee5"
+          }
+        ]
+      }
+    ],
+    "enabled_external_libraries": [
+      "x264",
+      "x265",
+      "libvpx",
+      "opus",
+      "lame",
+      "libvorbis",
+      "dav1d"
+    ],
+    "transitive_source_libraries": [
+      "libogg",
+      "zlib"
+    ],
+    "ffmpeg_configuration": [
+      "--disable-autodetect",
+      "--disable-debug",
+      "--disable-doc",
+      "--disable-shared",
+      "--enable-static",
+      "--enable-gpl",
+      "--enable-version3",
+      "--enable-libx264",
+      "--enable-libx265",
+      "--enable-libvpx",
+      "--enable-libopus",
+      "--enable-libmp3lame",
+      "--enable-libvorbis",
+      "--enable-videotoolbox",
+      "--enable-zlib",
+      "--disable-asm",
+      "--enable-libdav1d"
+    ],
+    "recipe_plan": [
+      {
+        "step": "Toolchain",
+        "action": "On a macOS builder, record Xcode/SDK/clang, cmake, make and pkg-config versions/digests as declared build prerequisites. Choose one fixed MACOSX_DEPLOYMENT_TARGET and SOURCE_DATE_EPOCH; separate arm64 and x86_64 build roots. Meson >=0.49 and Ninja are declared build prerequisites, with their versions retained in the receipt."
+      },
+      {
+        "step": "Sources",
+        "action": "Hash-verify and extract only the ten locked archives. Disable network for configure/build. Use only a private static-library prefix and PKG_CONFIG_LIBDIR to avoid accidental Homebrew or host library linkage."
+      },
+      {
+        "step": "Codec build order",
+        "action": "Build x264, libvpx, opus, lame, libogg, libvorbis and x265 as static PIC libraries. libvorbis consumes libogg. Use x264 --disable-opencl; disable optional x265 assembly and CLI/shared library; use the Apple compiler assembler or pin a separate assembler source/tool if required. Build dav1d static with Meson/Ninja, tools and tests disabled; use the selected Apple target and disable optional assembly."
+      },
+      {
+        "step": "FFmpeg",
+        "action": "Configure from the locked 9.0.2 source with the declared flags, private include/lib paths and pkg-config --static. Explicit VideoToolbox retains the current macOS hardware encoder route using declared Apple SDK frameworks. Inspect config.log and otool -L; reject undeclared libraries."
+      },
+      {
+        "step": "Delivery and proof",
+        "action": "Install both ffmpeg/ffprobe, source archives, exact executed scripts and every component notice. Record output SHA-256 for new binary associations. On each architecture run engine conversions for MP4 AVC/HEVC, WebM VP9+Opus, MP3, Ogg Vorbis and Opus, including VideoToolbox. Rebuild twice and compare unsigned outputs before parent updates Mac pins."
+      }
+    ],
+    "unverified": "Pinned source archives validated. macos-source-ffmpeg-build.sh implements a minimal portable static codec build; actual compilation and conversion smoke on macOS remain NOT CHECKED.",
+    "build_recipe": {
+      "path": "packaging/release/macos-source-ffmpeg-build.sh",
+      "sha256": "11ef97a7e403dd624138a30e0c4a2f8b37db43c9318b7a521cdcb497a9551e3a",
+      "commands": [
+        "CONVT_BUNDLE_CACHE=/absolute/cache bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64",
+        "CONVT_BUNDLE_CACHE=/absolute/cache bash packaging/release/macos-source-ffmpeg-build.sh --arch x86_64"
+      ],
+      "output_paths": [
+        "$CONVT_BUNDLE_CACHE/macos-source-built-arm64/bin/ffmpeg",
+        "$CONVT_BUNDLE_CACHE/macos-source-built-arm64/bin/ffprobe",
+        "$CONVT_BUNDLE_CACHE/macos-source-built-x86_64/bin/ffmpeg",
+        "$CONVT_BUNDLE_CACHE/macos-source-built-x86_64/bin/ffprobe"
+      ],
+      "receipts": [
+        "$CONVT_BUNDLE_CACHE/macos-source-built-arm64/provenance.json",
+        "$CONVT_BUNDLE_CACHE/macos-source-built-x86_64/provenance.json"
+      ],
+      "verification_here": "bash -n PASS; actual Mac compile NOT CHECKED"
+    }
+  }
+}

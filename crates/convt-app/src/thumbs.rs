@@ -203,16 +203,8 @@ fn run(ffmpeg: &Path, path: &Path, at: &str) -> Option<Vec<u8>> {
     if QUIT.load(Ordering::SeqCst) {
         return None;
     }
-    // `file:` keeps a colon in the name from reading as a protocol.
-    let mut input = std::ffi::OsString::from("file:");
-    input.push(path.as_os_str());
-    let mut command = Command::new(ffmpeg);
+    let mut command = convt_engines::ffmpeg::thumbnail_command(ffmpeg, path, at, WIDTH);
     command
-        .args(["-nostdin", "-v", "error", "-ss", at, "-i"])
-        .arg(input)
-        .args(["-frames:v", "1", "-an", "-sn", "-vf"])
-        .arg(format!("scale={WIDTH}:-2"))
-        .args(["-f", "image2pipe", "-c:v", "png", "-"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());

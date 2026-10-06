@@ -1,0 +1,9 @@
+PackageIdentifier: Convt.Convt
+PackageVersion: '@version@'
+InstallerType: '@windows-x86_64.installer.kind@'
+Installers:
+  - Architecture: x64
+    InstallerUrl: '@windows-x86_64.installer.url@'
+    InstallerSha256: '@windows-x86_64.installer.sha256.uppercase@'
+ManifestType: installer
+ManifestVersion: 1.9.0

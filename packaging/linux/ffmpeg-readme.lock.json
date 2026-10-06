@@ -1,0 +1,7 @@
+{
+  "url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz",
+  "sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
+  "member": "ffmpeg-7.0.2-amd64-static/readme.txt",
+  "notice": "license-notices/ffmpeg-readme.txt",
+  "notice_sha256": "72f4b1b06d419d22ace6e7cc75f06826f90737345aa0b1736158929f4aacc537"
+}

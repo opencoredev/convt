@@ -1,0 +1,347 @@
+[
+  {
+    "name": "R-srpm-macros-1.3.7-2.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/r/R-srpm-macros-1.3.7-2.fc44.noarch.rpm",
+    "sha256": "2aaca16438645a50e0e81297f180c2ce6c5bd8232e75c9ae7032731893a16aee"
+  },
+  {
+    "name": "add-determinism-0.7.3-2.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/a/add-determinism-0.7.3-2.fc44.x86_64.rpm",
+    "sha256": "faf570130d5bcd5f6c60b4d79945c009376015c6469293555042634567acfbc8"
+  },
+  {
+    "name": "ansible-srpm-macros-1-20.1.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/a/ansible-srpm-macros-1-20.1.fc44.noarch.rpm",
+    "sha256": "80138ca056ae60e59be39e517c7b3147aabbcf9bb17e3c71f5d5ab99f8ea63be"
+  },
+  {
+    "name": "binutils-2.46.1-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/b/binutils-2.46.1-1.fc44.x86_64.rpm",
+    "sha256": "1f522dfb8e2bf92961da0bd880a5e743207f88d259a27e67daf4c672aa07dfe3"
+  },
+  {
+    "name": "build-reproducibility-srpm-macros-0.7.3-2.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/b/build-reproducibility-srpm-macros-0.7.3-2.fc44.noarch.rpm",
+    "sha256": "e35bf8326fc1b77a3774b36133972debc4c29e67641c1572044f3484aada1842"
+  },
+  {
+    "name": "cmake-srpm-macros-4.3.0-1.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/c/cmake-srpm-macros-4.3.0-1.fc44.noarch.rpm",
+    "sha256": "05abbefbc18437ca9515b7781786f3c5b718a4a5ada677167fe20ae251be326c"
+  },
+  {
+    "name": "cpio-2.15-9.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/c/cpio-2.15-9.fc44.x86_64.rpm",
+    "sha256": "8b8688840d6464f0462ab6284ca8024f119a03aef11da2fbca220506f7976269"
+  },
+  {
+    "name": "debugedit-5.3-2.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/d/debugedit-5.3-2.fc44.x86_64.rpm",
+    "sha256": "6a8c79b6453aaf94c4e12c4e57e72c84c45230ae43ac61f20abe672c84a2238f"
+  },
+  {
+    "name": "diffutils-3.12-5.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/d/diffutils-3.12-5.fc44.x86_64.rpm",
+    "sha256": "45001ec4ea4d2c56a879ad55dc94c426525100bfa421f2ed41224ed08adb9cc3"
+  },
+  {
+    "name": "dwz-0.16-3.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/d/dwz-0.16-3.fc44.x86_64.rpm",
+    "sha256": "c57edfc92e067922737924bd8df33b2a3703e9c53c280d86f2ca9286efe936d5"
+  },
+  {
+    "name": "ed-1.22.5-2.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/e/ed-1.22.5-2.fc44.x86_64.rpm",
+    "sha256": "349b5a8cf63314f14c41dabcf04323a1cead3bd49637996d3e2866355313c834"
+  },
+  {
+    "name": "efi-srpm-macros-6-6.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/e/efi-srpm-macros-6-6.fc44.noarch.rpm",
+    "sha256": "12cc781afc3cd6a191e4c65bd99f5c8a84e8f84cdb7d46dc296911ee6473713e"
+  },
+  {
+    "name": "elfutils-0.196-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/e/elfutils-0.196-1.fc44.x86_64.rpm",
+    "sha256": "1b066cc1137d797a015f8944af5eee52964049acfb195310631989133c13a8aa"
+  },
+  {
+    "name": "elfutils-debuginfod-client-0.196-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/e/elfutils-debuginfod-client-0.196-1.fc44.x86_64.rpm",
+    "sha256": "ab3dbda122ae210400e649334fa7eb9d88f57dbe672843a49152e522b754d8ba"
+  },
+  {
+    "name": "elfutils-libelf-0.196-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/e/elfutils-libelf-0.196-1.fc44.x86_64.rpm",
+    "sha256": "2298bdb5f374e624389f8ebfc7fedceaa31704f6ab227e4650c04deee94f5691"
+  },
+  {
+    "name": "elfutils-libs-0.196-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/e/elfutils-libs-0.196-1.fc44.x86_64.rpm",
+    "sha256": "22bd4070d369eba8a95140054483b6720e99b0e03e0e1eb517782b04524d2cb3"
+  },
+  {
+    "name": "erlang-srpm-macros-0.3.11-1.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/e/erlang-srpm-macros-0.3.11-1.fc44.noarch.rpm",
+    "sha256": "8779a2bd3ef9d27377802fff3cb49da40e17ee6df7cacf1ee756aaca78c5b7e0"
+  },
+  {
+    "name": "file-5.46-10.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/f/file-5.46-10.fc44.x86_64.rpm",
+    "sha256": "d0e2372e97b29daaa98c2acf08e79320bbfc4137bd4f28ce8b2dcb4363a6f65b"
+  },
+  {
+    "name": "filesystem-srpm-macros-3.18-52.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/f/filesystem-srpm-macros-3.18-52.fc44.noarch.rpm",
+    "sha256": "43370351faf41ae1a59726b0e99d8c318c482cc878dda86cfda79bfc924702f2"
+  },
+  {
+    "name": "fonts-srpm-macros-5.0.0-2.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/f/fonts-srpm-macros-5.0.0-2.fc44.noarch.rpm",
+    "sha256": "af193dfef9f302cf285b2a91009705a3397b7e9a388c3bb0e7757cc1caae89c8"
+  },
+  {
+    "name": "forge-srpm-macros-0.4.0-4.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/f/forge-srpm-macros-0.4.0-4.fc44.noarch.rpm",
+    "sha256": "78dcde2d543b8123933b357f8aed44c68f668e9ccc44d00e63260ca655a83854"
+  },
+  {
+    "name": "fpc-srpm-macros-1.3-16.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/f/fpc-srpm-macros-1.3-16.fc44.noarch.rpm",
+    "sha256": "4f8d39ee05c4b3ad71fa5af7bc2106ac643b117cadf0d107b6ef921731f51008"
+  },
+  {
+    "name": "gap-srpm-macros-2-2.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/gap-srpm-macros-2-2.fc44.noarch.rpm",
+    "sha256": "fc91be9d63e7209825aa241670eb84fed9a441a0a7fc3d551909e6c31c9f08ae"
+  },
+  {
+    "name": "gdb-minimal-17.2-4.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/g/gdb-minimal-17.2-4.fc44.x86_64.rpm",
+    "sha256": "0e1757f751b4acce7744e56f7b57e882d0281e5d2018948bf555ba42315b7253"
+  },
+  {
+    "name": "ghc-srpm-macros-1.10-1.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/ghc-srpm-macros-1.10-1.fc44.noarch.rpm",
+    "sha256": "afeba2c2de32f34e0912da359f121254974258b930581d3b9801969af1bba1fe"
+  },
+  {
+    "name": "glibc-2.43-9.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/g/glibc-2.43-9.fc44.x86_64.rpm",
+    "sha256": "594ef5114f0713bdba2a819b70e662e67321755889247ffec2bed31ad6ca4d9f"
+  },
+  {
+    "name": "glibc-common-2.43-9.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/g/glibc-common-2.43-9.fc44.x86_64.rpm",
+    "sha256": "3568d7e83e59a6ee97a08c8a5ecee8e435afaa74a9273042945a148845c3c733"
+  },
+  {
+    "name": "glibc-gconv-extra-2.43-9.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/g/glibc-gconv-extra-2.43-9.fc44.x86_64.rpm",
+    "sha256": "351d975f677d41f8e237a4fdd3f6d3ff1b4f43b0314ecb693a050724f7d72975"
+  },
+  {
+    "name": "glibc-minimal-langpack-2.43-9.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/g/glibc-minimal-langpack-2.43-9.fc44.x86_64.rpm",
+    "sha256": "b9da9b984d902a5bd983c5ad700be1e8adaf36224a3713955228a1128e5c4631"
+  },
+  {
+    "name": "gnat-srpm-macros-7-2.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/gnat-srpm-macros-7-2.fc44.noarch.rpm",
+    "sha256": "764801a4dd8fff1a9f024d97edd752bb02f273492faeaa0889f7d0f9ca8e944a"
+  },
+  {
+    "name": "gnome-srpm-macros-1.0-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/g/gnome-srpm-macros-1.0-1.fc44.noarch.rpm",
+    "sha256": "1f8f4e9cbf0cb531780c8443ff9ab7739be7da234f360e107df9fab470d66de5"
+  },
+  {
+    "name": "go-srpm-macros-3.8.0-2.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/go-srpm-macros-3.8.0-2.fc44.noarch.rpm",
+    "sha256": "3e282b61932a323db83d6e2c6c31a81796d4a0635a79e773c667eb20eb3d665d"
+  },
+  {
+    "name": "gpgverify-2.2-4.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/g/gpgverify-2.2-4.fc44.noarch.rpm",
+    "sha256": "075c1e76f877242da7d5416506f9306ebc8b5d95a402f7534296e8f31eaf4427"
+  },
+  {
+    "name": "jansson-2.14-4.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/j/jansson-2.14-4.fc44.x86_64.rpm",
+    "sha256": "950a7003c1246568c6d602b222188391b1d4f411638d3470179736195f3b04f9"
+  },
+  {
+    "name": "java-srpm-macros-1-8.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/j/java-srpm-macros-1-8.fc44.noarch.rpm",
+    "sha256": "9e68f711e9c0253872bd730ba8fdf294b2441fe616e6328d9090758b3d162079"
+  },
+  {
+    "name": "kernel-srpm-macros-1.0-28.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/k/kernel-srpm-macros-1.0-28.fc44.noarch.rpm",
+    "sha256": "0c63087d50c4c3d30c91cedf328a9b8a376e41667e5e867c3030f0b6f608b844"
+  },
+  {
+    "name": "libfdisk-2.41.5-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/l/libfdisk-2.41.5-1.fc44.x86_64.rpm",
+    "sha256": "0793107e9b41f79b6ea7ed493f16a5e0aa5de5c29a4e8717197ad567d40a212c"
+  },
+  {
+    "name": "liblastlog2-2.41.5-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/l/liblastlog2-2.41.5-1.fc44.x86_64.rpm",
+    "sha256": "b1327aeae3d88c0c65c2070fc3117569cbf101b1aa92d9b05963ca058e9d0349"
+  },
+  {
+    "name": "libpfm-4.13.0-20.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/l/libpfm-4.13.0-20.fc44.x86_64.rpm",
+    "sha256": "55d043617d8ed6c04f52a76250089862b94dc64f321cc43638ff9b3092c2ed13"
+  },
+  {
+    "name": "libpkgconf-2.5.1-1.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/l/libpkgconf-2.5.1-1.fc44.x86_64.rpm",
+    "sha256": "b59040138169f46c60b79230941ffc0dbce15b9e897bd46d1e83361a393400b8"
+  },
+  {
+    "name": "libselinux-3.11-2.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/l/libselinux-3.11-2.fc44.x86_64.rpm",
+    "sha256": "50fc29cc4e31824d87a2a709f4c3e4873fbc1785da333cd05dc5138a8eceea5f"
+  },
+  {
+    "name": "libselinux-utils-3.11-2.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/l/libselinux-utils-3.11-2.fc44.x86_64.rpm",
+    "sha256": "179b5f57dcd4c899b44f357d7db321040b11603517d4b274b83f8be2354e3c30"
+  },
+  {
+    "name": "linkdupes-0.7.3-2.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/l/linkdupes-0.7.3-2.fc44.x86_64.rpm",
+    "sha256": "5ff668c9a7803ecc0298918daa3ac7e2afc516fe0969f3c558ae7ffdb3ed4d54"
+  },
+  {
+    "name": "lua-srpm-macros-1-17.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/l/lua-srpm-macros-1-17.fc44.noarch.rpm",
+    "sha256": "806fd84e898852d36002e06e0810ac3cdabc1a173014d1f25c0cf0b9f22ecd35"
+  },
+  {
+    "name": "ocaml-srpm-macros-11-3.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/o/ocaml-srpm-macros-11-3.fc44.noarch.rpm",
+    "sha256": "48bdc474fe488aae03fbfe0103e296687a356868bea50909ebf5d9d2e95f628d"
+  },
+  {
+    "name": "openblas-srpm-macros-2-21.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/o/openblas-srpm-macros-2-21.fc44.noarch.rpm",
+    "sha256": "3a28e03f7930f6f6ab90fb15c10dae1aae04485b0f9d47259952cc4711f90a87"
+  },
+  {
+    "name": "package-notes-srpm-macros-0.20-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/p/package-notes-srpm-macros-0.20-1.fc44.noarch.rpm",
+    "sha256": "f97ed8c4aa76866b6c31b75d6c8dbc0a3e6d825180cc5325b9398ad110a7f809"
+  },
+  {
+    "name": "patch-2.8-4.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/p/patch-2.8-4.fc44.x86_64.rpm",
+    "sha256": "1b723c3a261ef0bd59b035dcc9cea28d4d407e63b0c687f0230c065f308392bb"
+  },
+  {
+    "name": "perl-srpm-macros-1-61.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/p/perl-srpm-macros-1-61.fc44.noarch.rpm",
+    "sha256": "84f25e6552f5739fc9bc7a714519f8956ed278f953f5e70816f7c630f0431b90"
+  },
+  {
+    "name": "pkgconf-2.5.1-1.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/p/pkgconf-2.5.1-1.fc44.x86_64.rpm",
+    "sha256": "ee3f9558c65ca0a92de766ce54e218be780e703f8d2b1353ebbbff762f067d6e"
+  },
+  {
+    "name": "pkgconf-m4-2.5.1-1.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/p/pkgconf-m4-2.5.1-1.fc44.noarch.rpm",
+    "sha256": "5b45fb58dec26385b34f937b2917608abd66d531eb7d78a878e8ed426c65eff5"
+  },
+  {
+    "name": "pkgconf-pkg-config-2.5.1-1.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/p/pkgconf-pkg-config-2.5.1-1.fc44.x86_64.rpm",
+    "sha256": "da2ce9b6c5e9fac1da7e418be923ff2bbd202180e4812d7b91f118fcd549ede5"
+  },
+  {
+    "name": "policycoreutils-3.11-2.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/p/policycoreutils-3.11-2.fc44.x86_64.rpm",
+    "sha256": "f6a52a74cd0837b52765acc0a528988c6df539437e5718e1eca138d29d897246"
+  },
+  {
+    "name": "pyproject-srpm-macros-1.23.2-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/p/pyproject-srpm-macros-1.23.2-1.fc44.noarch.rpm",
+    "sha256": "5bdfdcbdd51b58b03641ccca78bcdc7b6e1efaa9a77b8b76b35ea9298f76b190"
+  },
+  {
+    "name": "python-srpm-macros-3.14-12.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/p/python-srpm-macros-3.14-12.fc44.noarch.rpm",
+    "sha256": "6f699b118f21f45c92e217bdf247e0bfb0f739b7943ed3412cf1ff89f6c3714b"
+  },
+  {
+    "name": "qt5-srpm-macros-5.15.18-2.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/q/qt5-srpm-macros-5.15.18-2.fc44.noarch.rpm",
+    "sha256": "ac463b32261f24c2cff6c04cab403c427b46d920d28bfe0724c47661ee7beac0"
+  },
+  {
+    "name": "qt6-srpm-macros-6.11.2-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/q/qt6-srpm-macros-6.11.2-1.fc44.noarch.rpm",
+    "sha256": "f4e89f7a53f32bf31029891048c25bd8052b074ade8b5d9e763af14b373bb169"
+  },
+  {
+    "name": "redhat-rpm-config-344-2.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/r/redhat-rpm-config-344-2.fc44.noarch.rpm",
+    "sha256": "717fb345b7f58e197c3d98bff5e651409dbff1a8d90483819c1d3ffc30b4a5ad"
+  },
+  {
+    "name": "rpm-build-6.0.2-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/r/rpm-build-6.0.2-1.fc44.x86_64.rpm",
+    "sha256": "8043f8ada9b1e12f5fe66e81fa72170fe97c7dd0c0ddafadf6732560f4bb00b3"
+  },
+  {
+    "name": "rpm-plugin-selinux-6.0.2-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/r/rpm-plugin-selinux-6.0.2-1.fc44.x86_64.rpm",
+    "sha256": "2394f733c7e22cd5c1ea1f881b603abbb31eac9eda07c14cf522981353128175"
+  },
+  {
+    "name": "rust-srpm-macros-28.5-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/r/rust-srpm-macros-28.5-1.fc44.noarch.rpm",
+    "sha256": "6435a71dc8bbe984d2ee4c8a74f9439ea53d8d6719f8b98e215eb42f42989067"
+  },
+  {
+    "name": "selinux-policy-44.11-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/s/selinux-policy-44.11-1.fc44.noarch.rpm",
+    "sha256": "a7bafbe77f1c4991d164827074456e25cb8b75987de068630667ec1615633ad6"
+  },
+  {
+    "name": "selinux-policy-targeted-44.11-1.fc44.noarch.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/s/selinux-policy-targeted-44.11-1.fc44.noarch.rpm",
+    "sha256": "b6f9af608cb52f46602095278b91b051a93c4e1a08ee46b226815ca4e976f7aa"
+  },
+  {
+    "name": "tree-sitter-srpm-macros-0.4.2-2.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/t/tree-sitter-srpm-macros-0.4.2-2.fc44.noarch.rpm",
+    "sha256": "242fbe5255a81c20432b9ebbd4c706ae7e9172593d54c14a304be43c7379e3a2"
+  },
+  {
+    "name": "unzip-6.0-69.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/u/unzip-6.0-69.fc44.x86_64.rpm",
+    "sha256": "2c8d388de55bb06cbdab00702a03d1e14f442d380509039bc524ed2c7cd41f68"
+  },
+  {
+    "name": "util-linux-2.41.5-1.fc44.x86_64.rpm",
+    "url": "http://mirror.math.princeton.edu/pub/fedora/linux/updates/44/Everything/x86_64/Packages/u/util-linux-2.41.5-1.fc44.x86_64.rpm",
+    "sha256": "b02ace204e78425e41c9abb33fd3f3f91794f42a13aac28310dae6fb02cc39e1"
+  },
+  {
+    "name": "xxhash-libs-0.8.3-4.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/x/xxhash-libs-0.8.3-4.fc44.x86_64.rpm",
+    "sha256": "855a54484a603e33b0702081f862b85455f053556e957a63eb773ab4bda15baa"
+  },
+  {
+    "name": "zig-srpm-macros-1-8.fc44.noarch.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/z/zig-srpm-macros-1-8.fc44.noarch.rpm",
+    "sha256": "124060736b423d98e9b7d493509cf65c69ef3312496edae046fb425778d2f01e"
+  },
+  {
+    "name": "zip-3.0-45.fc44.x86_64.rpm",
+    "url": "http://cofractal-sea.mm.fcix.net/fedora/linux/releases/44/Everything/x86_64/os/Packages/z/zip-3.0-45.fc44.x86_64.rpm",
+    "sha256": "78ecac054bb765596e0d02f5d5a36ef332402d40551309f5913294201c9ba130"
+  }
+]

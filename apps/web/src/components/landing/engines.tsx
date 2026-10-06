@@ -51,7 +51,7 @@ export function Engines() {
           </h2>
           <p className="max-w-[420px] shrink-0 text-[17px]/[26px] text-ink-2 lg:w-[420px]">
             The same tools video editors and office suites run on. convt drives them from Rust, on
-            your computer, so your files never go anywhere.
+            your computer, so your files stay there.
           </p>
         </div>
         <div className="relative overflow-clip rounded-2xl shadow-[0_0_0_1px_#232726]">

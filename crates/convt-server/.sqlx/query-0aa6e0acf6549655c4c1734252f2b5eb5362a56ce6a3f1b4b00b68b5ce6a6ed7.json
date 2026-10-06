@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set lease_expires_at=now()+interval '30 seconds',updated_at=now() where id=$1 and attempt=$2 and lease_owner=$3 and status='running' and lease_expires_at>now() and expires_at>now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0aa6e0acf6549655c4c1734252f2b5eb5362a56ce6a3f1b4b00b68b5ce6a6ed7"
+}

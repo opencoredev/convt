@@ -2,26 +2,21 @@
 
 A Finder Sync extension that adds **Convert with convt** to Finder's right-click menu.
 
-None of this builds or runs on Linux, and it has not been compiled or tried in Finder yet. It needs Xcode, a signed host app and a Mac.
+None of this builds or runs on Linux. It needs Xcode and a Mac.
 
 ## The menu
 
-- `FinderSync/FinderSync.swift` builds the menu. It calls `targetsFor(path:)` from the Rust core (`crates/convt-ffi`) to list the formats a selection can become, grouped under a header per category ("Video", "Audio only" for a video's audio, and so on), with **More options…** at the bottom.
-- Picking a format converts in place with no window. The extension launches the app with `NSWorkspace.openApplication(at:configuration:)` and the arguments `open --to <format> -- <files>`, with `createsNewApplicationInstance` set so the arguments arrive even when convt is running: the new process hands them to the running app over its single-instance socket and exits. A web page can't start a process with arguments, so this path can't be triggered from a browser. `convt://` links still never convert without a click.
-- **More options…** launches `open -- <files>`, which opens Quick convert.
+- `FinderSync/FinderSync.swift` builds the menu from the target list the app publishes. The extension is sandboxed and runs from its own executable, so it never probes tools: `crates/convt-app/src/macos.rs` writes `targets.json` (extension to format, format to targets, with categories) into the App Group container `<TEAMID>.app.convt.desktop` at launch and after every engine change. Both bundles name the group in the `ConvtAppGroup` Info.plist key. The menu shows the targets every selected file shares, grouped under a header per category ("Video", "Audio only" for a video's audio, and so on), with **More options…** at the bottom. With no readable list (the app has never run) it shows only **Open in convt…**.
+- Picking a format converts in place with no window; **More options…** opens Quick convert. AppKit drops `NSWorkspace.OpenConfiguration.arguments` for sandboxed callers, so the extension can't pass `open --to <format> -- <files>`. Instead it writes the request (`{version, to, files, created}`) to `requests/<uuid>.json` in the App Group container and opens `convt://finder` with this bundle's app by path (another app may claim the `convt` scheme). The app takes every fresh request (under two minutes old, absolute paths, deleted before use) on that link, or at launch in place of the main window. The link only wakes the app: a web page can open it, but only processes in the App Group can write requests, so links still never convert without a click.
+- When it can't write the request (no shared container, as in an ad-hoc build), the extension opens the files with convt instead, which shows Quick convert. Finder's "Open With" → convt arrives the same way.
+- The Services menu has **Convert with convt** as a fallback when the extension is off (`NSServices` in `packaging/macos/Info.plist`, handled in `macos.rs`). It opens Quick convert.
 - The extension is sandboxed and ships inside `convt.app/Contents/PlugIns/`. The GPUI app registers the `convt://` scheme for license and sign-in links.
 
-## Building the bindings
+## Building
 
-```sh
-cargo build -p convt-ffi
-cargo run -p convt-ffi --bin uniffi-bindgen -- generate \
-  --library target/debug/libconvt_ffi.dylib \
-  --language swift --out-dir integrations/macos/FinderSync/Generated
-cargo build -p convt-ffi --release --target aarch64-apple-darwin
-```
+`packaging/macos/bundle.sh` compiles the extension with `swiftc` (no Xcode project) and assembles the whole app; see `packaging/macos/README.md`. The extension doesn't link the Rust core, so it needs no uniffi bindings or XCFramework. `crates/convt-ffi` stays for other integrations.
 
-Bindings come from the debug library because release builds strip the metadata uniffi reads; the API is identical. Link the release `libconvt_ffi.a` into the extension target and add the generated Swift file and module map.
+The first-run window's Finder step polls `pluginkit -m -i app.convt.desktop.FinderSync` every second while that step shows; once the extension is on, the step reads "The Finder menu is on" and Continue moves on.
 
 ## Finder progress while converting (not built)
 
@@ -38,6 +33,6 @@ The menu bar icon's passive spinner (no percentage, no highlight) needs an `NSSt
 
 ## Still to do
 
-- Xcode project (or `xcodegen` spec) that wraps the GPUI binary as the host app.
-- Signing with a Developer ID. Finder Sync extensions only load when the host app is signed and notarized.
-- Users enable the extension once in System Settings → General → Login Items & Extensions. The first-run window and Settings link there (`x-apple.systempreferences:com.apple.LoginItems-Settings.extension`), but the app can't yet tell whether the extension is on, so the first-run step doesn't move on by itself. Detecting it needs `FIFinderSyncController.isExtensionEnabled` from Swift, passed to the app.
+- The App Group only works for a team-signed app: macOS refuses to create the container for an ad-hoc build (`could not publish Finder targets: Operation not permitted`), and the menu then shows only "Open in convt…". Sign with Apple Development or Developer ID.
+- The extension's own hand-off is untested until the extension is enabled in Finder and the app is team-signed.
+- Users enable the extension once in System Settings → General → Login Items & Extensions → Finder.

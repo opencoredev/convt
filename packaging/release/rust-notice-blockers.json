@@ -1,0 +1,720 @@
+{
+  "scope": "Remaining explicit upstream ambiguity after exact manifest-declared SPDX terms are reproduced from hash-pinned SPDX license-list-data. These entries remain unresolved even though their manifests declare SPDX licences.",
+  "original_linux_gaps": 30,
+  "original_linux_gaps_closed": 30,
+  "original_linux_resolved": [
+    {
+      "name": "accesskit",
+      "version": "0.24.1"
+    },
+    {
+      "name": "accesskit_atspi_common",
+      "version": "0.19.1"
+    },
+    {
+      "name": "accesskit_consumer",
+      "version": "0.38.0"
+    },
+    {
+      "name": "accesskit_unix",
+      "version": "0.22.1"
+    },
+    {
+      "name": "gpu-descriptor",
+      "version": "0.3.2"
+    },
+    {
+      "name": "gpu-descriptor-types",
+      "version": "0.2.0"
+    },
+    {
+      "name": "gpui-kit",
+      "version": "0.7.0"
+    },
+    {
+      "name": "harfrust",
+      "version": "0.5.2"
+    },
+    {
+      "name": "hexf-parse",
+      "version": "0.2.1"
+    },
+    {
+      "name": "lyon",
+      "version": "1.0.19"
+    },
+    {
+      "name": "lyon_algorithms",
+      "version": "1.0.21"
+    },
+    {
+      "name": "lyon_geom",
+      "version": "1.0.19"
+    },
+    {
+      "name": "lyon_path",
+      "version": "1.0.19"
+    },
+    {
+      "name": "lyon_tessellation",
+      "version": "1.0.22"
+    },
+    {
+      "name": "mac",
+      "version": "0.1.1"
+    },
+    {
+      "name": "pathfinder_geometry",
+      "version": "0.5.1"
+    },
+    {
+      "name": "pathfinder_simd",
+      "version": "0.5.6"
+    },
+    {
+      "name": "profiling",
+      "version": "1.0.18"
+    },
+    {
+      "name": "profiling-procmacros",
+      "version": "1.0.18"
+    },
+    {
+      "name": "pulp-wasm-simd-flag",
+      "version": "0.1.1"
+    },
+    {
+      "name": "rust-i18n-macro",
+      "version": "4.2.4"
+    },
+    {
+      "name": "rust-i18n-support",
+      "version": "4.2.4"
+    },
+    {
+      "name": "seahash",
+      "version": "4.1.0"
+    },
+    {
+      "name": "simd_helpers",
+      "version": "0.1.0"
+    },
+    {
+      "name": "spirv",
+      "version": "0.4.0+sdk-1.4.341.0"
+    },
+    {
+      "name": "svg_fmt",
+      "version": "0.4.5"
+    },
+    {
+      "name": "taffy",
+      "version": "0.13.0"
+    },
+    {
+      "name": "xim-ctext",
+      "version": "0.3.0"
+    },
+    {
+      "name": "xim-parser",
+      "version": "0.2.2"
+    },
+    {
+      "name": "zune-inflate",
+      "version": "0.2.54"
+    }
+  ],
+  "blockers": [
+    {
+      "name": "block2",
+      "version": "0.6.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "e325c51f01145af3e11f2ee5ce7c47f10697d936c1d90b9ee81a0cf4f700f6d7",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "b4167b582b2f75f9a1be75495c41b765344fd03c",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "block2",
+        "version": "0.6.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "e325c51f01145af3e11f2ee5ce7c47f10697d936c1d90b9ee81a0cf4f700f6d7",
+        "vcs_sha1": "b4167b582b2f75f9a1be75495c41b765344fd03c",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "crates/block2",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/b4167b582b2f75f9a1be75495c41b765344fd03c",
+        "archive_sha256": "5a1d3a8562cc03f3675b6a27234eb70dbd2189bd307af218e23b4023f0e01c46",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "dispatch2",
+      "version": "0.3.1",
+      "original_linux_gap": false,
+      "manifest_sha256": "f246cf8997c346fdcabb8925ad5be967f397fd8b92630ef7bcc9bdce5d33f775",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "dispatch2",
+        "version": "0.3.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "f246cf8997c346fdcabb8925ad5be967f397fd8b92630ef7bcc9bdce5d33f775",
+        "vcs_sha1": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "crates/dispatch2",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/8852b424193ca41602281b3d7540d7c8ed51e49a",
+        "archive_sha256": "e26253acf0639ce1986f79690fbc3ae9fa29b082ddc1e8661b9b53ac8d4925b3",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2",
+      "version": "0.6.4",
+      "original_linux_gap": false,
+      "manifest_sha256": "74bfa13bee2c7362432f22886f9749743c78d32eed5916e26a06ff56ae84c901",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2",
+        "version": "0.6.4",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "74bfa13bee2c7362432f22886f9749743c78d32eed5916e26a06ff56ae84c901",
+        "vcs_sha1": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "crates/objc2",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/8852b424193ca41602281b3d7540d7c8ed51e49a",
+        "archive_sha256": "e26253acf0639ce1986f79690fbc3ae9fa29b082ddc1e8661b9b53ac8d4925b3",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "11a761a52774ed9738fb854ba3eecb48fa360b6ce43dddc00c338346853717b5",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-app-kit",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "11a761a52774ed9738fb854ba3eecb48fa360b6ce43dddc00c338346853717b5",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-app-kit",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-cloud-kit",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "64e059344995e74ca1d22cee17edd17dde101cc3e37eb4bd7c7967a54f54a6f5",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-cloud-kit",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "64e059344995e74ca1d22cee17edd17dde101cc3e37eb4bd7c7967a54f54a6f5",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-cloud-kit",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-audio",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "62763a0b5d7e8d78402f464c83c2d31e69138b00ec1e19361f6359d500a4274c",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-audio",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "62763a0b5d7e8d78402f464c83c2d31e69138b00ec1e19361f6359d500a4274c",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-audio",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-audio-types",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "f26066fe0a9932213e31793ec1b72578746e3ceb07dd667be2595daaf84760e1",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-audio-types",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "f26066fe0a9932213e31793ec1b72578746e3ceb07dd667be2595daaf84760e1",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-audio-types",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-data",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "cac3cd4dd382310e930b39f922ea650c83688bbb65a680b5b8fa76d9e2db674c",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-data",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "cac3cd4dd382310e930b39f922ea650c83688bbb65a680b5b8fa76d9e2db674c",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-data",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-foundation",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "c0f54260fa1396923f2db4edf1e2d54e8ab09dea214af4b8ce37aaefa7185e60",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-foundation",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "c0f54260fa1396923f2db4edf1e2d54e8ab09dea214af4b8ce37aaefa7185e60",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-foundation",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-graphics",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "9756d343dc626faf07cdef1cdef29a2b3efed0f6a2fc44ae35fd828e2f482dc1",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-graphics",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "9756d343dc626faf07cdef1cdef29a2b3efed0f6a2fc44ae35fd828e2f482dc1",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-graphics",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-image",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "11e6de07b724221273af1609c9833d06c9c7623354ee7f5821da0846f0b988b8",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-image",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "11e6de07b724221273af1609c9833d06c9c7623354ee7f5821da0846f0b988b8",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-image",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-location",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "2fc0be2a0e31743642374152685fd7cbb3416568ffe50abe28da4239b151d5c4",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-location",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "2fc0be2a0e31743642374152685fd7cbb3416568ffe50abe28da4239b151d5c4",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-location",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-media",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "6fc9ece7e51d21c2884220bf7f53f88985e080286c4a6202c624eff05d0c56f5",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-media",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "6fc9ece7e51d21c2884220bf7f53f88985e080286c4a6202c624eff05d0c56f5",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-media",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-text",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "ee9c5dd4f36414afdf971820df60d8b4ea4f0767f93c6ea7fdbcf71e6cbab250",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-text",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "ee9c5dd4f36414afdf971820df60d8b4ea4f0767f93c6ea7fdbcf71e6cbab250",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-text",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-core-video",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "9d19223267d245d2258aa63244090345c16e0099e6e828841abd72e2e1e4d880",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-core-video",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "9d19223267d245d2258aa63244090345c16e0099e6e828841abd72e2e1e4d880",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-core-video",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-encode",
+      "version": "4.1.0",
+      "original_linux_gap": false,
+      "manifest_sha256": "cf9a8cc812710344d7fe618a5e615530baeeceae5c2826b9d5bb557dc419f159",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-encode",
+        "version": "4.1.0",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "cf9a8cc812710344d7fe618a5e615530baeeceae5c2826b9d5bb557dc419f159",
+        "vcs_sha1": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "crates/objc2-encode",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+        "archive_sha256": "c58f920fbc97c7f21b3af0f89d713188384ff012fd4cdfa2b6242e2952bf1a7d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-io-kit",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "116aba27ef95c53958cf8373de72ee6e939c5042d992d3c3c9936c6dd3e51071",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-io-kit",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "116aba27ef95c53958cf8373de72ee6e939c5042d992d3c3c9936c6dd3e51071",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-io-kit",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-io-surface",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "b42e1ba685611320fbd2f04586d2c1bda70807f93d127d241c0c5c716b76ec40",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-io-surface",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "b42e1ba685611320fbd2f04586d2c1bda70807f93d127d241c0c5c716b76ec40",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-io-surface",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-metal",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "8ea9d2d00d2e462d2f1e0a5bb242ccc8753c2bcd3441edd1d2cf05cba69092ff",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-metal",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "8ea9d2d00d2e462d2f1e0a5bb242ccc8753c2bcd3441edd1d2cf05cba69092ff",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-metal",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-quartz-core",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "7af27150fadd5ac0b3e86ec173b4e3e2b0dd42d614de963a0c9f0bf55cc7b4d9",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-quartz-core",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "7af27150fadd5ac0b3e86ec173b4e3e2b0dd42d614de963a0c9f0bf55cc7b4d9",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-quartz-core",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-screen-capture-kit",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "41ec980d3c2b4d68e7cab2cad31c54131610be26dff48ced2e62aa4a8201bc9e",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-screen-capture-kit",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "41ec980d3c2b4d68e7cab2cad31c54131610be26dff48ced2e62aa4a8201bc9e",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-screen-capture-kit",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    },
+    {
+      "name": "objc2-user-notifications",
+      "version": "0.3.2",
+      "original_linux_gap": false,
+      "manifest_sha256": "77124f44646539c01cbf5e523fe51b3fef7892c114f06ee9b98df9cd88cf5236",
+      "repository": "https://github.com/madsmtm/objc2",
+      "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "targets": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ],
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
+      "provenance": {
+        "name": "objc2-user-notifications",
+        "version": "0.3.2",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "manifest_sha256": "77124f44646539c01cbf5e523fe51b3fef7892c114f06ee9b98df9cd88cf5236",
+        "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "repository": "https://github.com/madsmtm/objc2",
+        "path_in_vcs": "framework-crates/objc2-user-notifications",
+        "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+        "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
+        "notice_complete": false,
+        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
+      }
+    }
+  ]
+}

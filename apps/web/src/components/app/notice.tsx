@@ -1,31 +1,53 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-// PLACEHOLDER FLOW. Buttons that would call the account API (revoke a key, cancel a
-// plan, sign out a Mac, ...) show this notice instead of pretending to succeed.
-// Remove it once the real actions exist.
+// Notices at the bottom of the account pages. `usePlaceholderAction` is for
+// buttons whose backend does not exist yet (billing in P7, API keys in P9, account
+// deletion, Apple sign-in): they say so instead of pretending to succeed.
+// `useNotice` confirms real actions, such as a copied key.
 
 type Notify = (action: string) => void;
 
-const NoticeContext = createContext<Notify>(() => {});
+const NoticeContext = createContext<{ placeholder: Notify; show: Notify }>({
+  placeholder: () => {},
+  show: () => {},
+});
 
 export function usePlaceholderAction() {
-  return useContext(NoticeContext);
+  return useContext(NoticeContext).placeholder;
+}
+
+/** A short confirmation or error at the bottom of the page, such as "Key copied". */
+export function useNotice() {
+  return useContext(NoticeContext).show;
 }
 
 export function NoticeProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const notify = useCallback<Notify>((action) => {
+  const show = useCallback<Notify>((text) => {
     clearTimeout(timer.current);
-    setMessage(`${action} is not available yet. The account service is still being built.`);
+    setMessage(text);
     timer.current = setTimeout(() => setMessage(null), 4000);
   }, []);
+  const placeholder = useCallback<Notify>(
+    (action) => show(`${action} is not available yet. The account service is still being built.`),
+    [show],
+  );
+  const value = useMemo(() => ({ placeholder, show }), [placeholder, show]);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   return (
-    <NoticeContext.Provider value={notify}>
+    <NoticeContext.Provider value={value}>
       {children}
       <div
         role="status"

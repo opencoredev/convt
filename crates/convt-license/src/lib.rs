@@ -5,8 +5,11 @@
 //!
 //! The [`client`] module, behind the `client` feature, holds what the app,
 //! the CLI and the OS menus share: the trial, the stored key and the check
-//! before a conversion.
+//! before a conversion. [`account`], behind the same feature, is desktop
+//! sign-in and Pro renewal, the only code here that uses the network.
 
+#[cfg(feature = "client")]
+pub mod account;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod date;

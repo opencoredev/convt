@@ -1,14 +1,6 @@
-import {
-  CHANGELOG_URL,
-  CONTACT_URL,
-  DOCS_URL,
-  DOWNLOAD_MAC_URL,
-  DOWNLOAD_OTHER_URL,
-  GITHUB_URL,
-  PRIVACY_URL,
-  STATUS_URL,
-  TERMS_URL,
-} from "./placeholder";
+import { routes } from "#/lib/site";
+
+import { footerColumns } from "../site/links";
 import { ButtonLink, Container, cx, focusRing } from "./ui";
 
 export function CallToAction() {
@@ -33,14 +25,14 @@ export function CallToAction() {
         <div className="flex flex-wrap justify-center gap-3">
           <ButtonLink
             variant="primary"
-            href={DOWNLOAD_MAC_URL}
+            href={`${routes.download}?os=macos`}
             className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
           >
             Download for macOS
           </ButtonLink>
           <ButtonLink
             variant="secondary"
-            href={DOWNLOAD_OTHER_URL}
+            href={`${routes.download}#platforms`}
             className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
           >
             Windows and Linux
@@ -50,34 +42,6 @@ export function CallToAction() {
     </Container>
   );
 }
-
-const columns = [
-  {
-    title: "Product",
-    links: [
-      { label: "Download", href: DOWNLOAD_MAC_URL },
-      { label: "Formats", href: "#formats" },
-      { label: "Pricing", href: "#pricing" },
-      { label: "Changelog", href: CHANGELOG_URL },
-    ],
-  },
-  {
-    title: "Developers",
-    links: [
-      { label: "API docs", href: DOCS_URL },
-      { label: "GitHub", href: GITHUB_URL },
-      { label: "Status", href: STATUS_URL },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "Privacy", href: PRIVACY_URL },
-      { label: "Terms", href: TERMS_URL },
-      { label: "Contact", href: CONTACT_URL },
-    ],
-  },
-];
 
 export function Footer() {
   return (
@@ -91,7 +55,7 @@ export function Footer() {
             </p>
           </div>
           <div className="flex flex-wrap gap-x-20 gap-y-10">
-            {columns.map((column) => (
+            {footerColumns.map((column) => (
               <nav
                 key={column.title}
                 aria-labelledby={`footer-${column.title}`}

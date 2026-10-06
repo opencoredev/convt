@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { BUY_DESKTOP_URL, BUY_PRO_URL, DOCS_URL } from "./placeholder";
+import { BUY_DESKTOP_URL, buyProUrl, routes } from "#/lib/site";
+
 import { ButtonLink, Container, cx, focusRing } from "./ui";
 
 export function Pricing() {
@@ -102,7 +103,10 @@ function ProPlan() {
   return (
     <div className={cx(planCard, "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]")}>
       <div className="relative flex flex-col gap-2">
-        <PlanHeader name="Pro" description="Everything in Desktop, plus cloud conversions." />
+        <PlanHeader
+          name="Pro"
+          description="Everything in Desktop, plus cloud conversions when you choose them."
+        />
         <div
           role="group"
           aria-label="Billing period"
@@ -126,13 +130,13 @@ function ProPlan() {
         items={[
           "Everything in Desktop",
           "Convert from phone or browser",
-          "Heavy video jobs run in the cloud",
+          "Send heavy video jobs to the cloud",
           "Every future update included",
         ]}
       />
       <ButtonLink
         variant="primary"
-        href={yearly ? `${BUY_PRO_URL}&period=yearly` : BUY_PRO_URL}
+        href={buyProUrl(yearly ? "year" : "month")}
         className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
       >
         Get convt Pro
@@ -245,7 +249,7 @@ function ApiCard() {
         <div className="flex">
           <ButtonLink
             variant="secondary"
-            href={DOCS_URL}
+            href={routes.apiDocs}
             className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]"
           >
             Read the docs

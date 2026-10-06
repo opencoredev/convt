@@ -12,16 +12,19 @@ use convt_core::{
     format_by_id,
 };
 use convt_license::License;
+use convt_license::account::{self, Api};
 use convt_license::client::{self, Licensing};
 use futures::StreamExt;
 use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
 
+use crate::account::Account;
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
 use crate::request::Request;
 use crate::settings::{Kind, Settings, write_atomic};
+use crate::update::{Update, UpdateConfig};
 
 /// How many rows the History tab shows.
 const RECENT: usize = 200;
@@ -35,6 +38,13 @@ pub struct Paths {
     pub presets: Option<PathBuf>,
     /// The trial file, the key store and whether this build checks licenses.
     pub license: client::Config,
+    /// The site desktop sign-in and renewal talk to, and how. Tests script
+    /// their own [`Api`] so they never reach the network.
+    pub account_url: String,
+    pub account_api: Arc<dyn Api>,
+    /// The update check's key, transport and install target. Tests script
+    /// their own transport.
+    pub update: UpdateConfig,
 }
 
 impl Paths {
@@ -45,6 +55,9 @@ impl Paths {
             history: History::path(),
             presets: paths::presets_dir(),
             license: client::Config::from_env(paths::config_dir(), paths::data_dir()),
+            account_url: account::account_url(),
+            account_api: Arc::new(account::Http::new(&account::account_url())),
+            update: UpdateConfig::from_env(),
         }
     }
 }
@@ -226,9 +239,18 @@ pub struct AppState {
     pub presets_dir: Option<PathBuf>,
     /// Problems loading or saving app files, shown in the Settings tab.
     pub errors: Vec<String>,
-    licensing: Licensing,
+    pub(crate) licensing: Licensing,
     /// Where this machine stands, refreshed whenever it can change.
     pub license: client::State,
+    /// Desktop sign-in and Pro renewal.
+    pub account: Account,
+    pub(crate) update_config: UpdateConfig,
+    /// What the last update check found.
+    pub update: Update,
+    pub(crate) _update_task: Option<Task<()>>,
+    /// The last manifest accepted this session, to select again when the
+    /// license changes.
+    pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in the file manager's
     /// menu). They write next to the original and give no feedback beyond the
@@ -286,6 +308,7 @@ impl AppState {
             }
         });
         let licensing = Licensing::new(paths.license);
+        let account = Account::new(paths.account_url, paths.account_api, licensing.session());
         let mut state = Self {
             registry,
             registry_generation: 0,
@@ -304,6 +327,11 @@ impl AppState {
             errors,
             license: licensing.state(),
             licensing,
+            account,
+            update_config: paths.update,
+            update: Update::Idle,
+            _update_task: None,
+            update_manifest: None,
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]
@@ -649,12 +677,6 @@ impl AppState {
         self.registry_generation += 1;
     }
 
-    /// Records the convt.app account a sign-in link reported.
-    pub fn sign_in(&mut self, email: &str, cx: &mut Context<Self>) {
-        let email = email.to_string();
-        self.update_settings(|s| s.account = Some(email), cx);
-    }
-
     /// Switches an automation rule on or off. Only the setting changes: no
     /// automation engine runs the rules yet.
     pub fn set_automation(&mut self, index: usize, enabled: bool, cx: &mut Context<Self>) {
@@ -672,6 +694,7 @@ impl AppState {
     pub fn activate(&mut self, key: &str, cx: &mut Context<Self>) -> Result<License, String> {
         let result = self.licensing.activate(key).map_err(|e| e.to_string());
         self.license = self.licensing.state();
+        self.reselect_update();
         cx.notify();
         result
     }
@@ -680,6 +703,7 @@ impl AppState {
     pub fn deactivate(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         let result = self.licensing.deactivate();
         self.license = self.licensing.state();
+        self.reselect_update();
         cx.notify();
         result
     }
@@ -872,6 +896,27 @@ impl AppState {
             self.errors.push(format!("Settings were not saved: {e}"));
         }
         cx.notify();
+    }
+
+    /// [`Self::update_settings`] for a change that must reach the disk, such
+    /// as the update check's rollback guard. If saving fails, the change is
+    /// undone and the error returned.
+    pub fn save_settings_now(
+        &mut self,
+        change: impl FnOnce(&mut Settings),
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        let before = self.settings.clone();
+        change(&mut self.settings);
+        if let Some(path) = &self.settings_path
+            && let Err(e) = self.settings.save(path)
+        {
+            self.settings = before;
+            cx.notify();
+            return Err(e.to_string());
+        }
+        cx.notify();
+        Ok(())
     }
 }
 

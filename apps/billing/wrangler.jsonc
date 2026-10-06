@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "convt-billing",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/index.ts",
+  // Production values. Secrets (POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET,
+  // RESEND_API_KEY, LICENSE_SIGNING_KEY) are set with `wrangler secret put` on this
+  // Worker only; the site Worker never holds them. Local development overrides
+  // these from apps/billing/.dev.vars (scripts/dev-web.sh).
+  "vars": {
+    "ENV": "production",
+    "SITE_URL": "https://convt.app",
+    "BILLING_CATALOG": "production",
+    "MAIL_TRANSPORT": "resend",
+    "MAIL_FROM": "convt <hello@convt.app>",
+    // PLACEHOLDER: Leo's address for the daily billing digest.
+    "ALERT_EMAIL": "",
+    // PLACEHOLDER: the public half of the production signing key (P11 embeds it).
+    "LICENSE_PUBLIC_KEY": "",
+  },
+  // Only the webhook path is public; the site reaches everything else through its
+  // service binding to the BillingRpc entrypoint.
+  "routes": [{ "pattern": "convt.app/webhooks/*", "zone_name": "convt.app" }],
+  "workers_dev": false,
+  // PLACEHOLDER id: a Hyperdrive config for the Railway database as convt_billing,
+  // caching disabled. Locally the Vite plugin and Wrangler read
+  // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_BILLING.
+  "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "00000000000000000000000000000001" }],
+  "triggers": {
+    // Outbox drain and deletions every minute; the reconciler every 15 minutes;
+    // the daily check at 03:17 UTC.
+    "crons": ["* * * * *", "*/15 * * * *", "17 3 * * *"],
+  },
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set status='cancelled',reservation='released',lease_expires_at=null,finished_at=now(),updated_at=now() where id=$1 and user_id=$2 and status not in ('succeeded','failed','cancelled')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9ffaa2572b782f3ec0f709db314fc6036f02e49cbf59c2ada0f0244959bc8517"
+}

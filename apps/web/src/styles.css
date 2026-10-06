@@ -18,8 +18,11 @@
   --line-strong: #d5d9d7;
   --ink: #0a0a0a;
   --ink-2: #6b6f6d;
-  --ink-3: #8a8f8c;
-  --green: #1a9a5b;
+  /* Darker than the Paper values (#8a8f8c, #1a9a5b, about 3.3:1) so small labels and
+     text links reach 4.5:1 on every light surface, including --hover and --green-tint.
+     The primary button keeps its own gradient in .btn-primary. */
+  --ink-3: #6c716e;
+  --green: #127a47;
   --green-tint: #eef7f2;
   --error: #b3261e;
   color-scheme: light;
@@ -218,4 +221,14 @@ body {
   background-image: url("/landing/dither-glow.png");
   background-size: cover;
   image-rendering: pixelated;
+}
+
+/* The checkout page's indeterminate progress bar (reduced motion: static). */
+@keyframes convt-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }

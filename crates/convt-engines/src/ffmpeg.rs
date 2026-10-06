@@ -5,8 +5,10 @@ use convt_core::{Ctx, Engine, Error, Options, Result, Step, VideoCodec};
 
 const VIDEO_IN: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
 const VIDEO_OUT: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
-/// Video to image grabs the first frame.
-const FRAME: &[&str] = &["png", "jpeg", "webp"];
+/// Video to image grabs the first frame. WebP goes through PNG and the
+/// `image` engine: FFmpeg has no WebP encoder of its own, and the bundled
+/// builds leave out libwebp.
+const FRAME: &[&str] = &["png", "jpeg"];
 const AUDIO: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus"];
 
 /// The FFmpeg binary the engine would run, found the way every tool is:
@@ -14,6 +16,35 @@ const AUDIO: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus"];
 /// it to grab video thumbnails.
 pub fn ffmpeg_path() -> Option<PathBuf> {
     crate::find_tool(&["ffmpeg"], "CONVT_FFMPEG")
+}
+
+/// Only self-contained media containers are accepted. Playlist demuxers can
+/// open other local files even when network protocols are disabled.
+pub const LOCAL_INPUT_ARGS: &[&str] = &[
+    "-protocol_whitelist",
+    "file,pipe",
+    "-format_whitelist",
+    "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,gif,mp3,wav,flac,aac,ogg",
+];
+
+fn local_path(path: &Path) -> std::ffi::OsString {
+    let mut input = std::ffi::OsString::from("file:");
+    input.push(path.as_os_str());
+    input
+}
+
+/// Build the desktop thumbnail invocation, shared with the local media engine.
+pub fn thumbnail_command(ffmpeg: &Path, path: &Path, at: &str, width: u32) -> Command {
+    let input = local_path(path);
+    let mut command = Command::new(ffmpeg);
+    command
+        .args(LOCAL_INPUT_ARGS)
+        .args(["-nostdin", "-v", "error", "-ss", at, "-i"])
+        .arg(input)
+        .args(["-frames:v", "1", "-an", "-sn", "-vf"])
+        .arg(format!("scale={width}:-2"))
+        .args(["-f", "image2pipe", "-c:v", "png", "-"]);
+    command
 }
 
 /// Runs the FFmpeg binary as a child process, so a crash in a codec can't take
@@ -38,15 +69,16 @@ impl FfmpegEngine {
             return Ok(None);
         };
         let mut cmd = Command::new(ffprobe);
-        cmd.args([
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "csv=p=0",
-        ])
-        .arg(input);
+        cmd.args(LOCAL_INPUT_ARGS)
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+            ])
+            .arg(local_path(input));
         let mut secs = None;
         match crate::run_tool("ffprobe", cmd, ctx, |line| {
             secs = secs.or_else(|| line.trim().parse::<f64>().ok());
@@ -123,7 +155,9 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
                 "-row-mt",
                 "1",
             ]);
-            push(&["-deadline", "good", "-cpu-used", "4"]);
+            // FFmpeg 9 refuses VP9 in RGB (gbrap, from a transparent GIF),
+            // and few players handle it anyway.
+            push(&["-deadline", "good", "-cpu-used", "4", "-pix_fmt", "yuv420p"]);
             if !o.strip_audio {
                 push(&["-c:a", "libopus"]);
                 if let Some(b) = &bitrate {
@@ -151,7 +185,7 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
             push(&["-vf", &vf, "-an"]);
             return args;
         }
-        "png" | "webp" | "jpeg" => {
+        "png" | "jpeg" => {
             push(&["-frames:v", "1", "-update", "1"]);
             if to == "jpeg" {
                 let qv = q.map_or(2, |q| 2 + (100 - u32::from(q)) * 29 / 99);
@@ -229,8 +263,9 @@ impl Engine for FfmpegEngine {
         let output = ctx.artifact(out_dir, 0);
         let mut cmd = Command::new(ffmpeg);
         cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
+            .args(LOCAL_INPUT_ARGS)
             .args(["-progress", "pipe:1", "-nostats", "-i"])
-            .arg(input)
+            .arg(local_path(input))
             .args(output_args(ctx.step.to.id, ctx.options))
             .arg(&output);
         crate::run_tool("ffmpeg", cmd, ctx, |line| {
@@ -291,7 +326,7 @@ mod tests {
         );
         assert_eq!(
             output_args("webm", &o).join(" "),
-            "-c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -deadline good -cpu-used 4 -c:a libopus"
+            "-c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -deadline good -cpu-used 4 -pix_fmt yuv420p -c:a libopus"
         );
         assert_eq!(
             output_args("avi", &o).join(" "),
@@ -537,6 +572,165 @@ mod tests {
                 audio,
                 "{streams:?}"
             );
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod security_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    };
+
+    #[test]
+    fn local_media_never_fetches_dash_references() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let requests = Arc::new(AtomicUsize::new(0));
+        let (end, count) = (stop.clone(), requests.clone());
+        let thread = std::thread::spawn(move || {
+            while !end.load(Ordering::SeqCst) {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(1)))
+                        .unwrap();
+                    let _ = stream.read(&mut [0; 2048]);
+                    count.fetch_add(1, Ordering::SeqCst);
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    );
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            }
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("disguised.mp4");
+        std::fs::write(&input, format!(r#"<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="PT1S" minBufferTime="PT1S"><Period><AdaptationSet mimeType="video/mp4"><Representation id="1" bandwidth="1000"><BaseURL>http://{address}/probe.mp4</BaseURL><SegmentBase indexRange="0-100"><Initialization range="0-100"/></SegmentBase></Representation></AdaptationSet></Period></MPD>"#)).unwrap();
+        // The review reproduction used a descriptor without an extension.
+        // Keep it open in this process while children read through procfs.
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let fd = unsafe { libc::memfd_create(c"convt-security-dash".as_ptr(), 0) };
+        assert!(fd >= 0);
+        let mut memfd = unsafe { std::fs::File::from_raw_fd(fd) };
+        memfd.write_all(&std::fs::read(&input).unwrap()).unwrap();
+        let memfd_path = PathBuf::from(format!(
+            "/proc/{}/fd/{}",
+            std::process::id(),
+            memfd.as_raw_fd()
+        ));
+        let options = Options::default();
+        let cancel = convt_core::Cancel::new();
+        let ctx = Ctx::new(
+            Step {
+                from: convt_core::format_by_id("mp4").unwrap(),
+                to: convt_core::format_by_id("png").unwrap(),
+            },
+            &options,
+            &|_| {},
+            &cancel,
+        );
+        for base in [
+            PathBuf::from("/usr/bin"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packaging/out/convt"),
+        ] {
+            let engine = FfmpegEngine {
+                ffmpeg: Some(base.join("ffmpeg")),
+                ffprobe: Some(base.join("ffprobe")),
+            };
+            if !engine.ffmpeg.as_ref().unwrap().exists()
+                || !engine.ffprobe.as_ref().unwrap().exists()
+            {
+                assert_ne!(
+                    std::env::var("CONVT_REQUIRE_MEDIA_TOOLS").as_deref(),
+                    Ok("1"),
+                    "required toolset missing: {base:?}"
+                );
+                eprintln!("SKIP missing security toolset: {base:?}");
+                continue;
+            }
+            let before = requests.load(Ordering::SeqCst);
+            for path in [&input, &memfd_path] {
+                let _ = engine.duration_us(&ctx, path);
+                assert!(engine.convert(&ctx, path, dir.path()).is_err());
+                let out = thumbnail_command(engine.ffmpeg.as_ref().unwrap(), path, "0", 64)
+                    .output()
+                    .unwrap();
+                assert!(!out.status.success());
+                assert!(
+                    String::from_utf8_lossy(&out.stderr).contains("whitelist"),
+                    "{:?}",
+                    out.stderr
+                );
+            }
+            eprintln!(
+                "{base:?}: {} HTTP requests for probe, conversion and thumbnail, path and memfd",
+                requests.load(Ordering::SeqCst) - before
+            );
+        }
+        stop.store(true, Ordering::SeqCst);
+        thread.join().unwrap();
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            0,
+            "local media issued HTTP requests"
+        );
+    }
+}
+
+#[cfg(test)]
+mod local_playlist_tests {
+    use super::*;
+
+    #[test]
+    fn refuses_manifests_that_reference_other_local_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let segment = dir.path().join("private.mp4");
+        std::fs::write(&segment, b"private local file").unwrap();
+        let manifests = [
+            format!(
+                "#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1,\n{}\n#EXT-X-ENDLIST\n",
+                segment.display()
+            ),
+            format!("ffconcat version 1.0\nfile '{}'\n", segment.display()),
+            format!(
+                r#"<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="PT1S" minBufferTime="PT1S"><Period><AdaptationSet mimeType="video/mp4"><Representation id="1" bandwidth="1000"><BaseURL>{}</BaseURL><SegmentBase indexRange="0-100"><Initialization range="0-100"/></SegmentBase></Representation></AdaptationSet></Period></MPD>"#,
+                segment.display()
+            ),
+        ];
+        let mut tools = Vec::new();
+        if let Some(probe) = crate::find_tool(&["ffprobe"], "CONVT_FFPROBE") {
+            tools.push(probe);
+        }
+        let bundle =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packaging/out/convt/ffprobe");
+        if bundle.exists() {
+            tools.push(bundle);
+        }
+        for tool in tools {
+            for (n, manifest) in manifests.iter().enumerate() {
+                let input = dir
+                    .path()
+                    .join(["playlist.m3u8", "playlist.ffconcat", "playlist.mpd"][n]);
+                std::fs::write(&input, manifest).unwrap();
+                let out = Command::new(&tool)
+                    .args(LOCAL_INPUT_ARGS)
+                    .args(["-v", "error"])
+                    .arg(local_path(&input))
+                    .output()
+                    .unwrap();
+                assert!(!out.status.success());
+                assert!(
+                    String::from_utf8_lossy(&out.stderr).contains("whitelist"),
+                    "{tool:?}: {}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
         }
     }
 }

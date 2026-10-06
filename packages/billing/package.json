@@ -1,0 +1,32 @@
+{
+  "name": "@convt/billing",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts",
+    "./catalog": "./src/catalog.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "test": "bun test test/unit",
+    "test:integration": "bash ../db/scripts/test-db.sh bun test test/integration",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@convt/db": "workspace:*",
+    "@convt/license": "workspace:*",
+    "@convt/mail": "workspace:*",
+    "@polar-sh/sdk": "1.0.2",
+    "drizzle-orm": "0.45.3",
+    "pg": "8.23.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@convt/billing-mock": "workspace:*",
+    "@types/bun": "1.4.2",
+    "@types/pg": "8.23.1",
+    "standardwebhooks": "1.1.1",
+    "typescript": "^6.0.2"
+  }
+}

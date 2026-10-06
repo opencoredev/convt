@@ -18,4 +18,12 @@ export PATH="$HOME/.bun/bin:$PATH"
 bun install
 
 bash scripts/fetch-pdfium.sh
+
+# sqlx-cli for `cargo sqlx prepare` (convt-server's offline query data). Keep its
+# version equal to the sqlx crate in Cargo.toml; it needs only Postgres over rustls.
+SQLX_VERSION=0.9.0
+if ! cargo install --list | grep -q "^sqlx-cli v$SQLX_VERSION:"; then
+  cargo install sqlx-cli --version "$SQLX_VERSION" --locked \
+    --no-default-features --features postgres,rustls
+fi
 echo "Done. Try: cargo run -p convt-cli -- formats"

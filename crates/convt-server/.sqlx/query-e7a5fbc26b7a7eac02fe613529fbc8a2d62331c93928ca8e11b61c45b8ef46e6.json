@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update usage_events set reported_at=now(),provider_event_id=$2 where id=$1 and reported_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e7a5fbc26b7a7eac02fe613529fbc8a2d62331c93928ca8e11b61c45b8ef46e6"
+}

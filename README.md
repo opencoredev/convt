@@ -14,6 +14,7 @@ Early. The CLI converts real files today; the desktop app and context menus are 
 bun run setup                                  # installs system packages (asks for sudo), Rust, Bun deps, PDFium
 cargo run -p convt-cli -- clip.mov --to mp4
 cargo run -p convt-cli -- engines              # what's available on this machine
+bun run dev:web && bun run db:seed             # convt.app with a local Postgres, Mailpit and OAuth mock (needs Docker)
 ```
 
 See [AGENTS.md](AGENTS.md) for the repo layout and commands.

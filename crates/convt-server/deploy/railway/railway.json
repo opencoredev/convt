@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "crates/convt-server/deploy/railway/Dockerfile"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ALWAYS",
+    "sleepApplication": false,
+    "drainingSeconds": 30,
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 120
+  }
+}

@@ -1,0 +1,750 @@
+[
+  {
+    "name": "convt",
+    "version": "0.1.0",
+    "files": [
+      "convt",
+      "convt.bin",
+      "convt-app",
+      "convt-app.bin"
+    ],
+    "license": "AGPL-3.0-only",
+    "holders": [
+      "Convt contributors (no project copyright holder statement supplied)"
+    ],
+    "notices": [
+      "licenses/convt-AGPL.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/convt-AGPL.txt": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    }
+  },
+  {
+    "name": "FFmpeg",
+    "version": "7.0.2-source-built",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "GPL-3.0-or-later",
+    "holders": [
+      "2000-2024 the FFmpeg developers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-GPLv3.txt",
+      "licenses/ffmpeg-configuration.txt",
+      "licenses/ffmpeg-source/ffmpeg.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/ffmpeg-GPLv3.txt": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    }
+  },
+  {
+    "name": "libheif",
+    "version": "1.17.6-1ubuntu4.9",
+    "files": [
+      "lib/libheif*",
+      "lib/libheif/plugins/*.so"
+    ],
+    "license": "LGPL-3.0-or-later AND MIT AND BSD-3-Clause AND BSL-1.0",
+    "holders": [
+      "2017 struktur AG, Dirk Farin and Joachim Bauch",
+      "Additional bundled source authors; full per-file holders in notice"
+    ],
+    "notices": [
+      "licenses/codecs/libheif.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/codecs/libheif.txt": "578d9edcdb9297025b359d30084b8862b8085640c6b33a681f70526da1165060"
+    }
+  },
+  {
+    "name": "libde265",
+    "version": "1.0.15-1ubuntu0.1",
+    "files": [
+      "lib/libde265*"
+    ],
+    "license": "LGPL-3.0-or-later AND LicenseRef-libde265-md5",
+    "holders": [
+      "2013-2014 struktur AG, Dirk Farin; 2013 openHEVC contributors",
+      "2001 Alexander Peslyak (MD5 public-domain dedication and fallback terms)"
+    ],
+    "notices": [
+      "licenses/codecs/libde265.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/codecs/libde265.txt": "2dd8bb1cac96311447eeb3b66570ef262437fa7f47b1be667a4f82f3f22ab8be"
+    }
+  },
+  {
+    "name": "x265",
+    "version": "3.5-2build1",
+    "files": [
+      "lib/libx265*"
+    ],
+    "license": "GPL-2.0-or-later AND LGPL-2.1-or-later AND ISC AND MIT",
+    "holders": [
+      "2013-2020 MulticoreWare, Inc; 2003-2013 x264 project; 2013-2017 x265 project",
+      "Additional bundled source authors; full per-file holders in notice"
+    ],
+    "notices": [
+      "licenses/codecs/x265.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/codecs/x265.txt": "993d16fbf3d32b7eeeae4081167e4a4b1d05bdb0e20b79b576113c0697c5f729"
+    }
+  },
+  {
+    "name": "aom",
+    "version": "3.8.2-2ubuntu0.2",
+    "files": [
+      "lib/libaom*"
+    ],
+    "license": "BSD-2-Clause AND BSD-3-Clause AND ISC AND MIT AND LicenseRef-aom-md5-public-domain",
+    "holders": [
+      "2001-2022 Alliance for Open Media",
+      "Colin Plumb and additional bundled source authors; full per-file holders in notice"
+    ],
+    "notices": [
+      "licenses/codecs/aom.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/codecs/aom.txt": "ada07e225cadeca52dc7e1abb3def52e5f948f30c8a51691069a1706a224db8a"
+    }
+  },
+  {
+    "name": "GCC runtime",
+    "version": "15.2.0 build 20",
+    "files": [
+      "lib/libstdc++.so.6",
+      "lib/libgcc_s.so.1"
+    ],
+    "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+    "holders": [
+      "Free Software Foundation, Inc. and GCC contributors"
+    ],
+    "notices": [
+      "licenses/compiler/COPYING3",
+      "licenses/compiler/COPYING.RUNTIME"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/compiler/COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "licenses/compiler/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    }
+  },
+  {
+    "name": "PDFium",
+    "version": "Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "BSD-3-Clause",
+    "holders": [
+      "2014 The PDFium Authors"
+    ],
+    "notices": [
+      "licenses/pdfium/pdfium.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/pdfium.txt": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e"
+    }
+  },
+  {
+    "name": "PDFium build",
+    "version": "Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "MIT",
+    "holders": [
+      "2014-2025 Benoit Blanchon"
+    ],
+    "notices": [
+      "licenses/pdfium-build-MIT.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-build-MIT.txt": "ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93"
+    }
+  },
+  {
+    "name": "PDFium/abseil",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0",
+    "holders": [
+      "The Abseil Authors"
+    ],
+    "notices": [
+      "licenses/pdfium/abseil.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/abseil.txt": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+    }
+  },
+  {
+    "name": "PDFium/agg23",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "LicenseRef-AGG-2.3",
+    "holders": [
+      "2002-2005 Maxim Shemanarev"
+    ],
+    "notices": [
+      "licenses/pdfium/agg23.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/agg23.txt": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+    }
+  },
+  {
+    "name": "PDFium/fast_float",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "MIT",
+    "holders": [
+      "2021 The fast_float authors"
+    ],
+    "notices": [
+      "licenses/pdfium/fast_float.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/fast_float.txt": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+    }
+  },
+  {
+    "name": "PDFium/freetype",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "FTL",
+    "holders": [
+      "1996-2002, 2006 David Turner, Robert Wilhelm, Werner Lemberg"
+    ],
+    "notices": [
+      "licenses/pdfium/freetype.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/freetype.txt": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+    }
+  },
+  {
+    "name": "PDFium/icu",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Unicode-3.0",
+    "holders": [
+      "2016-2025 Unicode, Inc."
+    ],
+    "notices": [
+      "licenses/pdfium/icu.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/icu.txt": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+    }
+  },
+  {
+    "name": "PDFium/lcms",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "MIT",
+    "holders": [
+      "1998-2026 Marti Maria Saguer"
+    ],
+    "notices": [
+      "licenses/pdfium/lcms.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/lcms.txt": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+    }
+  },
+  {
+    "name": "PDFium/libjpeg-turbo",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "IJG AND BSD-3-Clause AND Zlib",
+    "holders": [
+      "Independent JPEG Group; 2009-2024 D. R. Commander; 2015 Viktor Szathmary"
+    ],
+    "notices": [
+      "licenses/pdfium/libjpeg_turbo.md",
+      "licenses/pdfium/libjpeg_turbo.ijg"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/libjpeg_turbo.md": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430",
+      "licenses/pdfium/libjpeg_turbo.ijg": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+    }
+  },
+  {
+    "name": "PDFium/libopenjpeg",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "BSD-2-Clause",
+    "holders": [
+      "2005 Herve Drolon, FreeImage Team; 2008, 2011-2012 CNES; 2012 CS Systemes d\u2019Information"
+    ],
+    "notices": [
+      "licenses/pdfium/libopenjpeg.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/libopenjpeg.txt": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+    }
+  },
+  {
+    "name": "PDFium/libpng",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "libpng-2.0",
+    "holders": [
+      "PNG Reference Library Authors; Cosmin Truta; Glenn Randers-Pehrson; Andreas Dilger; Guy Eric Schalnat"
+    ],
+    "notices": [
+      "licenses/pdfium/libpng.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/libpng.txt": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+    }
+  },
+  {
+    "name": "PDFium/llvm-libc",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "The LLVM Project contributors"
+    ],
+    "notices": [
+      "licenses/pdfium/llvm-libc.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/llvm-libc.txt": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+    }
+  },
+  {
+    "name": "PDFium/simdutf",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "MIT",
+    "holders": [
+      "2021 The simdutf authors"
+    ],
+    "notices": [
+      "licenses/pdfium/simdutf.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/simdutf.txt": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
+    }
+  },
+  {
+    "name": "PDFium/zlib",
+    "version": "as bundled in Chromium 8076",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Zlib",
+    "holders": [
+      "1995-2026 Jean-loup Gailly and Mark Adler"
+    ],
+    "notices": [
+      "licenses/pdfium/zlib.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium/zlib.txt": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+    }
+  },
+  {
+    "name": "libxcb",
+    "version": "1.13.1",
+    "files": [
+      "lib/libxcb.so.1",
+      "lib/libxcb-xkb.so.1"
+    ],
+    "license": "LicenseRef-libxcb-notice",
+    "holders": [
+      "2001-2006 Bart Massey, Jamey Sharp, Josh Triplett",
+      "2009 Open Text Corporation (generated XKB protocol binding)"
+    ],
+    "notices": [
+      "licenses/native/libxcb.txt",
+      "licenses/native/xcb-xkb.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/native/libxcb.txt": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd",
+      "licenses/native/xcb-xkb.txt": "e5407ee28c0ba8ad1553c8728188230a6d114e23fbb28a5837b219ce62834e08"
+    }
+  },
+  {
+    "name": "libXau",
+    "version": "1.0.9",
+    "files": [
+      "lib/libXau.so.6"
+    ],
+    "license": "X11",
+    "holders": [
+      "1988, 1993, 1994, 1998 The Open Group"
+    ],
+    "notices": [
+      "licenses/native/libXau.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/native/libXau.txt": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa"
+    }
+  },
+  {
+    "name": "libxkbcommon",
+    "version": "0.9.1",
+    "files": [
+      "lib/libxkbcommon.so.0",
+      "lib/libxkbcommon-x11.so.0"
+    ],
+    "license": "LicenseRef-libxkbcommon-notice",
+    "holders": [
+      "Daniel Stone; Ran Benita; Intel Corporation; Dan Nicholson; Francisco Jerez; The Open Group; Silicon Graphics; Digital Equipment Corporation; Joseph Adams"
+    ],
+    "notices": [
+      "licenses/native/libxkbcommon.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/native/libxkbcommon.txt": "086caee279449369d41c1157911ec7696e707b93feba7280de757d3c470b2dfb"
+    }
+  },
+  {
+    "name": "FFmpeg/x264",
+    "version": "0.164.3108+git31e19f9",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "GPL-2.0-or-later",
+    "holders": [
+      "See full upstream source notices and source headers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/x264.txt"
+    ],
+    "status": "source-built pinned input; complete upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/x264.txt": "73ade24e0ef5143516c2338b51633a2f40e624c1a45819179af8d5a4150151a3"
+    }
+  },
+  {
+    "name": "FFmpeg/libvpx",
+    "version": "1.14.0",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "BSD-3-Clause",
+    "holders": [
+      "See full upstream source notices and source headers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/libvpx.txt"
+    ],
+    "status": "source-built pinned input; complete upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/libvpx.txt": "cae8055534dd9004b2e5669b9ec6cef2fd9a38596f3a6779d0e8889bb9731857"
+    }
+  },
+  {
+    "name": "FFmpeg/opus",
+    "version": "1.4",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "BSD-3-Clause",
+    "holders": [
+      "See full upstream source notices and source headers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/opus.txt"
+    ],
+    "status": "source-built pinned input; complete upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/opus.txt": "ebbc9c89b36044174f7dc276e8350e995be6d4144bc4b34bb57f1c2fc8eeb851"
+    }
+  },
+  {
+    "name": "FFmpeg/lame",
+    "version": "3.99.5+repack1",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "LGPL-2.0-or-later",
+    "holders": [
+      "See full upstream source notices and source headers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/lame.txt"
+    ],
+    "status": "source-built pinned input; complete upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/lame.txt": "5b37be8ab1ef73a3fb199990a7101b26564571fd0d147da4cfa8d0756f44eb1d"
+    }
+  },
+  {
+    "name": "FFmpeg/libogg",
+    "version": "1.3.5",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "BSD-3-Clause",
+    "holders": [
+      "See full upstream source notices and source headers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/libogg.txt"
+    ],
+    "status": "source-built pinned input; complete upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/libogg.txt": "075be98d9fc3570cc9513a072f606e024dbbdfefbb7b588817bef8e72b89e86e"
+    }
+  },
+  {
+    "name": "FFmpeg/libvorbis",
+    "version": "1.3.7",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "BSD-3-Clause",
+    "holders": [
+      "See full upstream source notices and source headers"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/libvorbis.txt"
+    ],
+    "status": "source-built pinned input; complete upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/libvorbis.txt": "31d172164b712ffd684f5522ed5c7082007d87ce32b9e5ea8b62dbaff48d5bcf"
+    }
+  },
+  {
+    "name": "FFmpeg/zlib",
+    "version": "1.3.1",
+    "files": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "license": "Zlib",
+    "holders": [
+      "1995-2024 Jean-loup Gailly and Mark Adler"
+    ],
+    "notices": [
+      "licenses/ffmpeg-source/zlib.txt"
+    ],
+    "status": "source-built pinned input; full upstream notices retained",
+    "notice_sha256": {
+      "licenses/ffmpeg-source/zlib.txt": "1e03a4cde9108e277bef0c025cfa34a58bb16a994dc1020219fead30629d7f2b"
+    }
+  },
+  {
+    "name": "PDFium/runtime/0",
+    "version": "third_party/libc++/src",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/0-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/0-LICENSE.txt": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+    }
+  },
+  {
+    "name": "PDFium/runtime/1",
+    "version": "third_party/libc++abi/src",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/1-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/1-LICENSE.txt": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+    }
+  },
+  {
+    "name": "PDFium/runtime/2",
+    "version": "third_party/llvm-libc/src",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/2-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/2-LICENSE.txt": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+    }
+  },
+  {
+    "name": "PDFium/runtime/3",
+    "version": "Clang runtime/LLVM source",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/3-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/3-LICENSE.txt": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+    }
+  },
+  {
+    "name": "PDFium/runtime/4",
+    "version": "Clang runtime/LLVM source",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/4-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/4-LICENSE.txt": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+    }
+  },
+  {
+    "name": "PDFium/runtime/5",
+    "version": "Clang runtime/LLVM source",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/5-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/5-LICENSE.txt": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+    }
+  },
+  {
+    "name": "PDFium/runtime/6",
+    "version": "Clang runtime/LLVM source",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/6-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/6-LICENSE.txt": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+    }
+  },
+  {
+    "name": "PDFium/runtime/7",
+    "version": "Clang runtime/LLVM source",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/7-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/7-LICENSE.txt": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+    }
+  },
+  {
+    "name": "PDFium/runtime/8",
+    "version": "Clang runtime/LLVM source",
+    "files": [
+      "lib/libpdfium.so"
+    ],
+    "license": "Apache-2.0",
+    "holders": [
+      "Full upstream copyright statements retained in the notice and corresponding source"
+    ],
+    "notices": [
+      "licenses/pdfium-runtime/8-LICENSE.txt"
+    ],
+    "status": "audited-notices",
+    "notice_sha256": {
+      "licenses/pdfium-runtime/8-LICENSE.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  }
+]

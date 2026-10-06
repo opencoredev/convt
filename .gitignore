@@ -14,6 +14,10 @@ dist
 .env
 .env.*
 !.env.example
+# Worker dev variables (scripts/dev-web.sh writes them from .convt-dev/services.env)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 # Downloaded native libraries (scripts/fetch-pdfium.sh)
 /vendor/*
 !/vendor/README.md
@@ -21,3 +25,6 @@ dist
 /tmp
 *.log
 .DS_Store
+# Python
+__pycache__/
+*.pyc

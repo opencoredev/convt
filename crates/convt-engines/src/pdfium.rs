@@ -29,9 +29,21 @@ fn shipped_dirs(override_dir: Option<PathBuf>, exe_dir: Option<PathBuf>) -> Vec<
     override_dir.into_iter().chain(exe_dir).collect()
 }
 
+fn absolute_override() -> Option<PathBuf> {
+    let dir = PathBuf::from(std::env::var_os("CONVT_PDFIUM_DIR")?);
+    if dir.is_absolute() {
+        Some(dir)
+    } else {
+        eprintln!(
+            "convt: ignoring CONVT_PDFIUM_DIR={dir:?}: native library overrides must be absolute paths"
+        );
+        None
+    }
+}
+
 fn candidate_dirs() -> Vec<PathBuf> {
     let mut dirs = shipped_dirs(
-        std::env::var_os("CONVT_PDFIUM_DIR").map(PathBuf::from),
+        absolute_override(),
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(Path::to_path_buf)),
@@ -150,6 +162,82 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
+    fn worker_entry() {
+        let _ = PdfiumEngine::new();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn relative_override_never_runs_library_constructor() {
+        let dir = tempfile::tempdir().unwrap();
+        let relative = dir.path().join("relative");
+        std::fs::create_dir(&relative).unwrap();
+        let source = dir.path().join("sentinel.c");
+        let marker = dir.path().join("loaded");
+        std::fs::write(
+            &source,
+            r#"#include <stdio.h>
+#include <stdlib.h>
+__attribute__((constructor)) static void loaded(void) {
+  FILE *f = fopen(getenv("CONVT_TEST_NATIVE_MARKER"), "w");
+  if (f) { fputs("loaded", f); fclose(f); }
+}
+"#,
+        )
+        .unwrap();
+        assert!(
+            std::process::Command::new("cc")
+                .args(["-shared", "-fPIC"])
+                .arg(&source)
+                .arg("-o")
+                .arg(dir.path().join("libpdfium.so"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        std::fs::copy(
+            dir.path().join("libpdfium.so"),
+            relative.join("libpdfium.so"),
+        )
+        .unwrap();
+        for value in ["", ".", "relative"] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "pdfium::tests::worker_entry",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .current_dir(dir.path())
+                .env("CONVT_PDFIUM_DIR", value)
+                .env("CONVT_TEST_NATIVE_MARKER", &marker)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            assert!(
+                !marker.exists(),
+                "relative PDFium override ran native code: {value:?}"
+            );
+            assert!(String::from_utf8_lossy(&output.stderr).contains("CONVT_PDFIUM_DIR"));
+            assert!(String::from_utf8_lossy(&output.stderr).contains("must be absolute"));
+        }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "pdfium::tests::worker_entry",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("CONVT_PDFIUM_DIR", dir.path())
+            .env("CONVT_TEST_NATIVE_MARKER", &marker)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(marker.exists(), "absolute PDFium override was not loaded");
+    }
+
+    #[test]
     fn shipped_discovery_never_searches_executable_ancestors() {
         let exe_dir = PathBuf::from("/home/user/bin");
         assert_eq!(
@@ -170,7 +258,7 @@ mod tests {
         assert_eq!(
             candidate_dirs(),
             shipped_dirs(
-                std::env::var_os("CONVT_PDFIUM_DIR").map(PathBuf::from),
+                absolute_override(),
                 std::env::current_exe()
                     .ok()
                     .and_then(|p| p.parent().map(Path::to_path_buf)),

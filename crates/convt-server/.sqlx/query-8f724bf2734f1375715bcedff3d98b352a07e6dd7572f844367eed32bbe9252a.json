@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select to_regclass('drizzle.__drizzle_migrations') is not null as \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8f724bf2734f1375715bcedff3d98b352a07e6dd7572f844367eed32bbe9252a"
+}

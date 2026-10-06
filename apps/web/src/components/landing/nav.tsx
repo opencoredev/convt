@@ -1,4 +1,5 @@
-import { DOWNLOAD_MAC_URL, GITHUB_URL, SIGN_IN_URL } from "./placeholder";
+import { GITHUB_URL, routes } from "#/lib/site";
+
 import { ButtonLink, Container, cx, focusRing } from "./ui";
 
 const links = [
@@ -43,14 +44,14 @@ export function Nav() {
         <div className="flex items-center justify-end gap-2 md:w-[200px] md:shrink-0">
           <ButtonLink
             variant="secondary"
-            href={SIGN_IN_URL}
+            href={routes.signIn}
             className="rounded-lg px-3 py-[7px] text-[14px]/[18px]"
           >
             Sign in
           </ButtonLink>
           <ButtonLink
             variant="primary"
-            href={DOWNLOAD_MAC_URL}
+            href={routes.download}
             className="rounded-lg px-3 py-[7px] text-[14px]/[18px] shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_1px_2px_#0a3c2340,0_2px_6px_#0a3c231f]!"
           >
             Download

@@ -1,3 +1,4 @@
+# convt-generated: linux-integration-v1
 """Nautilus (GNOME Files) extension: adds "Convert with convt" to the context menu.
 
 Install: copy to ~/.local/share/nautilus-python/extensions/ and restart Nautilus
@@ -6,9 +7,11 @@ Install: copy to ~/.local/share/nautilus-python/extensions/ and restart Nautilus
 opens the app, which shows progress and errors.
 """
 
+import json
 import os
 import shutil
 import subprocess
+import time
 from functools import lru_cache
 
 from gi.repository import GObject, Nautilus
@@ -17,18 +20,39 @@ CONVT = shutil.which("convt") or "convt"
 APP = shutil.which("convt-app") or "convt-app"
 
 
+CACHE_TTL = 30
+
+
 @lru_cache(maxsize=256)
-def targets_for(extension):
+def cached_targets(extension, generation):
     if not extension:
         return ()
     try:
         out = subprocess.run(
-            [CONVT, "targets", f"file.{extension}"],
+            [CONVT, "targets", "--menu", f"file.{extension}"],
             capture_output=True, text=True, timeout=2, check=True,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return ()
     return tuple(out.split())
+
+
+def targets_for(extension):
+    return cached_targets(extension, int(time.monotonic() / CACHE_TTL))
+
+
+@lru_cache(maxsize=2)
+def cached_extensions(generation):
+    try:
+        result = subprocess.run([CONVT, "formats", "--json"], capture_output=True,
+                                text=True, timeout=2, check=True)
+        return frozenset(e for f in json.loads(result.stdout) for e in f["extensions"])
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        return frozenset()
+
+
+def supported_extensions():
+    return cached_extensions(int(time.monotonic() / CACHE_TTL))
 
 
 def path_of(item):
@@ -51,9 +75,10 @@ class ConvtMenu(GObject.GObject, Nautilus.MenuProvider):
             return []
         exts = [extension_of(p) for p in paths]
         # Offer only targets every selected file supports, in the first file's order.
-        lists = [targets_for(e) for e in exts]
-        if not all(lists):
+        supported = supported_extensions()
+        if not all(e in supported for e in exts):
             return []
+        lists = [targets_for(e) for e in exts]
         common = set.intersection(*(set(targets) for targets in lists))
         targets = [t for t in lists[0] if t in common]
 

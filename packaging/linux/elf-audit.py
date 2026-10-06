@@ -6,8 +6,8 @@ usage: elf-audit.py ROOT [--lib DIR]... [--report FILE]
 
 Each ELF must need no GLIBC symbol version above the 2.28 baseline, and every
 dependency must resolve inside ROOT or to the host glibc ABI. ldd runs with
-LD_LIBRARY_PATH limited to the --lib directories (default ROOT/lib), as the
-launcher sets it. All violations are printed and the exit status is 1.
+LD_LIBRARY_PATH limited to the --lib directories (default ROOT/lib), to audit the closure. The launcher clears inherited loader paths; product
+executables find this closure through fixed $ORIGIN/lib DT_RPATH. All violations are printed and the exit status is 1.
 """
 import os
 from pathlib import Path

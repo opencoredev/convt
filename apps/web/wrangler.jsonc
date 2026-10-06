@@ -4,4 +4,20 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  // Production values. Secrets (BETTER_AUTH_SECRET, GITHUB_CLIENT_SECRET,
+  // GOOGLE_CLIENT_SECRET, RESEND_API_KEY) are set with `wrangler secret put`.
+  // Local development overrides these from apps/web/.dev.vars (scripts/dev-web.sh).
+  "vars": {
+    "ENV": "production",
+    "BETTER_AUTH_URL": "https://convt.app",
+    "MAIL_TRANSPORT": "resend",
+    "MAIL_FROM": "convt <hello@convt.app>",
+  },
+  // PLACEHOLDER id: Leo creates the Hyperdrive config (caching disabled) for the
+  // Railway database as convt_web and puts its id here. Locally, Wrangler and the
+  // Vite plugin read CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "00000000000000000000000000000000" }],
+  // convt-billing's RPC entrypoint: checkout, results, plan changes, the portal,
+  // the spend cap and deletion. The site holds no billing secret.
+  "services": [{ "binding": "BILLING", "service": "convt-billing", "entrypoint": "BillingRpc" }],
 }

@@ -1,0 +1,2 @@
+CREATE INDEX "cloud_jobs_subscription_open_idx" ON "cloud_jobs" USING btree ("subscription_id") WHERE "cloud_jobs"."reservation" = 'open';--> statement-breakpoint
+CREATE INDEX "usage_events_subscription_occurred_idx" ON "usage_events" USING btree ("subscription_id","occurred_at");

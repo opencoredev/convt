@@ -1,0 +1,1441 @@
+{
+  "schema_version": 1,
+  "closure_complete": true,
+  "scope": "Baseline RPM libraries and conda compiler runtimes only; excludes FFmpeg, PDFium and other parent-owned native sources.",
+  "sources": [
+    {
+      "name": "libXau-1.0.9-3.el8.src.rpm",
+      "url": "https://repo.almalinux.org/vault/8.3/BaseOS/Source/Packages/libXau-1.0.9-3.el8.src.rpm",
+      "sha256": "f9e5775417473caa6b5699171eec64253ef90473f36f0efe81d020b52a5de49a",
+      "cache": "native-source/libXau-1.0.9-3.el8.src.rpm",
+      "format": "rpm",
+      "role": "source-rpm"
+    },
+    {
+      "name": "libXau-1.0.9.tar.bz2",
+      "url": "https://xorg.freedesktop.org/archive/individual/lib/libXau-1.0.9.tar.bz2",
+      "sha256": "ccf8cbf0dbf676faa2ea0a6d64bcc3b6746064722b606c8c52917ed00dcb73ec",
+      "cache": "native-source/libXau-1.0.9.tar.bz2"
+    },
+    {
+      "name": "libXau-1.0.9-3.el8.x86_64.rpm",
+      "url": "https://repo.almalinux.org/vault/8.3/BaseOS/x86_64/os/Packages/libXau-1.0.9-3.el8.x86_64.rpm",
+      "sha256": "09c85c9941434b51302e2818d1739931219342e21a62803ca2a221ac4be0caec",
+      "cache": "native-source/libXau-1.0.9-3.el8.x86_64.rpm",
+      "format": "rpm",
+      "role": "binary"
+    },
+    {
+      "name": "libxcb-1.13.1-1.el8.src.rpm",
+      "url": "https://repo.almalinux.org/vault/8.3/BaseOS/Source/Packages/libxcb-1.13.1-1.el8.src.rpm",
+      "sha256": "baa73f081a3752cedf538c6612583ef3dbfdea534a95537013b2555dddbf75e9",
+      "cache": "native-source/libxcb-1.13.1-1.el8.src.rpm",
+      "format": "rpm",
+      "role": "source-rpm"
+    },
+    {
+      "name": "libxcb-1.13.1.tar.bz2",
+      "url": "https://xcb.freedesktop.org/dist/libxcb-1.13.1.tar.bz2",
+      "sha256": "a89fb7af7a11f43d2ce84a844a4b38df688c092bf4b67683aef179cdf2a647c4",
+      "cache": "native-source/libxcb-1.13.1.tar.bz2"
+    },
+    {
+      "name": "xcb-proto-1.13.tar.bz2",
+      "url": "https://xcb.freedesktop.org/dist/xcb-proto-1.13.tar.bz2",
+      "sha256": "7b98721e669be80284e9bbfeab02d2d0d54cd11172b72271e47a2fe875e2bde1",
+      "cache": "native-source/xcb-proto-1.13.tar.bz2"
+    },
+    {
+      "name": "libxcb-1.13.1-1.el8.x86_64.rpm",
+      "url": "https://repo.almalinux.org/vault/8.3/BaseOS/x86_64/os/Packages/libxcb-1.13.1-1.el8.x86_64.rpm",
+      "sha256": "bf18a9ee30ac538bee0a737f91aaaf160e8570be11e1795ecf5082032ee14fdc",
+      "cache": "native-source/libxcb-1.13.1-1.el8.x86_64.rpm",
+      "format": "rpm",
+      "role": "binary"
+    },
+    {
+      "name": "libxkbcommon-0.9.1-1.el8.src.rpm",
+      "url": "https://repo.almalinux.org/vault/8.3/BaseOS/Source/Packages/libxkbcommon-0.9.1-1.el8.src.rpm",
+      "sha256": "dffe2da730b194e8224aed9510bc64e5f540a424a8a49f3dce96be7e53ae2acc",
+      "cache": "native-source/libxkbcommon-0.9.1-1.el8.src.rpm",
+      "format": "rpm",
+      "role": "source-rpm"
+    },
+    {
+      "name": "libxkbcommon-0.9.1.tar.xz",
+      "url": "https://xkbcommon.org/download/libxkbcommon-0.9.1.tar.xz",
+      "sha256": "d4c6aabf0a5c1fc616f8a6a65c8a818c03773b9a87da9fbc434da5acd1199be0",
+      "cache": "native-source/libxkbcommon-0.9.1.tar.xz"
+    },
+    {
+      "name": "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+      "url": "https://repo.almalinux.org/almalinux/8.10/AppStream/x86_64/os/Packages/libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+      "sha256": "3573869075b9a6b5146b78e789476aa7c2bcc3b06124743979730e52d2b6f1a8",
+      "cache": "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+      "format": "rpm",
+      "role": "binary"
+    },
+    {
+      "name": "libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+      "url": "https://repo.almalinux.org/vault/8.3/BaseOS/x86_64/os/Packages/libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+      "sha256": "9ba313c55750dc3c0faee5f706dd0d051ffd06d1a544544b425ddb7c8c33f905",
+      "cache": "native-source/libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+      "format": "rpm",
+      "role": "binary"
+    },
+    {
+      "name": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+      "url": "https://codeload.github.com/conda-forge/ctng-compilers-feedstock/tar.gz/09ad78041f74217e78e3302caa1db6d0aead31c9",
+      "sha256": "3d8ab946554401c862aede212e47c570a9c892e80d88747026e4a307048ce44a",
+      "cache": "native-source/ctng-compilers-feedstock.tar.gz"
+    },
+    {
+      "name": "gcc-15.2.0.tar.gz",
+      "url": "https://mirrors.ocf.berkeley.edu/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.gz",
+      "sha256": "7294d65cc1a0558cb815af0ca8c7763d86f7a31199794ede3f630c0d1b0a5723",
+      "cache": "gcc-15.2.0.tar.gz"
+    },
+    {
+      "name": "zlib-1.3.1.tar.gz",
+      "url": "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz",
+      "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+      "cache": "native-source/zlib-1.3.1.tar.gz"
+    },
+    {
+      "name": "libgcc-15.2.0-he0feb66_20.conda",
+      "url": "https://conda.anaconda.org/conda-forge/linux-64/libgcc-15.2.0-he0feb66_20.conda",
+      "sha256": "e3b7bb287d1685b15781a6d9e3408d6ddaff23f5a1d0d6c0140619dd3950fe72",
+      "cache": "libgcc-15.2.0-he0feb66_20.conda",
+      "role": "binary"
+    },
+    {
+      "name": "libstdcxx-15.2.0-h934c35e_20.conda",
+      "url": "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-15.2.0-h934c35e_20.conda",
+      "sha256": "b5eadda8fb0df262f0d424c4a0c8c1c8d65d904ce622f07936c793ea1b8a39d9",
+      "cache": "libstdcxx-15.2.0-h934c35e_20.conda",
+      "role": "binary"
+    }
+  ],
+  "components": [
+    {
+      "name": "libXau",
+      "sources": [
+        "libXau-1.0.9-3.el8.src.rpm",
+        "libXau-1.0.9-3.el8.x86_64.rpm",
+        "libXau-1.0.9.tar.bz2"
+      ],
+      "recipes": [
+        {
+          "source": "libXau-1.0.9-3.el8.src.rpm",
+          "member": "libXau.spec",
+          "sha256": "a93c25410749f0c9eea78971e8753ac57ed9c48deaad1d9b0528c03125e34e03",
+          "retain_as": "libXau.spec"
+        }
+      ],
+      "notices": [
+        {
+          "source": "libXau-1.0.9.tar.bz2",
+          "member": "libXau-1.0.9/COPYING",
+          "sha256": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa"
+        }
+      ],
+      "binaries": [
+        {
+          "payload_path": "lib/libXau.so.6",
+          "origin_sha256": "154567c4fde177111c7970ac5ade35d570017c1d5b89d5f1f30e3871de890340",
+          "binary_package": "libXau-1.0.9-3.el8.x86_64.rpm",
+          "source_rpm": "libXau-1.0.9-3.el8.src.rpm",
+          "original": {
+            "source": "libXau-1.0.9-3.el8.x86_64.rpm",
+            "member": "usr/lib64/libXau.so.6",
+            "sha256": "154567c4fde177111c7970ac5ade35d570017c1d5b89d5f1f30e3871de890340"
+          },
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "b2f46257dcbd0f2a41c9c7dd5f1daeea819f4123d142694634330a50c271261d",
+          "observed_payload_sha256": "b2f46257dcbd0f2a41c9c7dd5f1daeea819f4123d142694634330a50c271261d"
+        }
+      ],
+      "source_identity_verified": true
+    },
+    {
+      "name": "libxcb",
+      "sources": [
+        "libxcb-1.13.1-1.el8.src.rpm",
+        "libxcb-1.13.1-1.el8.x86_64.rpm",
+        "libxcb-1.13.1.tar.bz2",
+        "xcb-proto-1.13.tar.bz2"
+      ],
+      "recipes": [
+        {
+          "source": "libxcb-1.13.1-1.el8.src.rpm",
+          "member": "libxcb.spec",
+          "sha256": "51b5f44bec3595d54a25413844d0f39e9867ac6b19084d001f76f3a168f115a8",
+          "retain_as": "libxcb.spec"
+        },
+        {
+          "source": "libxcb-1.13.1-1.el8.src.rpm",
+          "member": "pthread-stubs.pc.in",
+          "sha256": "0c068f4df2e355f0575025863f6e1ecc6f16ad105213d5cd08261b8e36c375a2",
+          "retain_as": "pthread-stubs.pc.in"
+        }
+      ],
+      "notices": [
+        {
+          "source": "libxcb-1.13.1.tar.bz2",
+          "member": "libxcb-1.13.1/COPYING",
+          "sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd"
+        },
+        {
+          "source": "xcb-proto-1.13.tar.bz2",
+          "member": "xcb-proto-1.13/COPYING",
+          "sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd"
+        },
+        {
+          "source": "xcb-proto-1.13.tar.bz2",
+          "member": "xcb-proto-1.13/src/xkb.xml",
+          "sha256": "351507a7d596b09ea2501df43512b391d9123bd2d129edd2078b46ae7ac0704f"
+        }
+      ],
+      "binaries": [
+        {
+          "payload_path": "lib/libxcb-xkb.so.1",
+          "origin_sha256": "fd53f741085bc4ab7b27690a4d62563ddca4806800b626da8b7e997878e68756",
+          "binary_package": "libxcb-1.13.1-1.el8.x86_64.rpm",
+          "source_rpm": "libxcb-1.13.1-1.el8.src.rpm",
+          "original": {
+            "source": "libxcb-1.13.1-1.el8.x86_64.rpm",
+            "member": "usr/lib64/libxcb-xkb.so.1",
+            "sha256": "fd53f741085bc4ab7b27690a4d62563ddca4806800b626da8b7e997878e68756"
+          },
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "96cb1aff4ea65bdb3174d9f000fa04f40cae6e93ff436634e749a1580b86fcdc",
+          "observed_payload_sha256": "96cb1aff4ea65bdb3174d9f000fa04f40cae6e93ff436634e749a1580b86fcdc"
+        },
+        {
+          "payload_path": "lib/libxcb.so.1",
+          "origin_sha256": "5ddf675627c2e9109b051c0d7d1e53a2766da7c675f18588f569ce656c222cc0",
+          "binary_package": "libxcb-1.13.1-1.el8.x86_64.rpm",
+          "source_rpm": "libxcb-1.13.1-1.el8.src.rpm",
+          "original": {
+            "source": "libxcb-1.13.1-1.el8.x86_64.rpm",
+            "member": "usr/lib64/libxcb.so.1",
+            "sha256": "5ddf675627c2e9109b051c0d7d1e53a2766da7c675f18588f569ce656c222cc0"
+          },
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "fe591e83a6fd693ca01184f3fab603c3f5fc2d789eb0f0047a44284c3970c6e9",
+          "observed_payload_sha256": "fe591e83a6fd693ca01184f3fab603c3f5fc2d789eb0f0047a44284c3970c6e9"
+        }
+      ],
+      "source_identity_verified": true
+    },
+    {
+      "name": "libxkbcommon",
+      "sources": [
+        "libxkbcommon-0.9.1-1.el8.src.rpm",
+        "libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+        "libxkbcommon-0.9.1.tar.xz",
+        "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm"
+      ],
+      "recipes": [
+        {
+          "source": "libxkbcommon-0.9.1-1.el8.src.rpm",
+          "member": "libxkbcommon.spec",
+          "sha256": "ebed072246cea3f3848c0c562ce543230c368eccfa9e8167e9301ad329cd0cf8",
+          "retain_as": "libxkbcommon.spec"
+        },
+        {
+          "source": "libxkbcommon-0.9.1-1.el8.src.rpm",
+          "member": "make-git-snapshot.sh",
+          "sha256": "60c1e5af9c5dac36cbf478d417828a950da34e436cb119a6d5e93972c9e4a88c",
+          "retain_as": "make-git-snapshot.sh"
+        }
+      ],
+      "notices": [
+        {
+          "source": "libxkbcommon-0.9.1.tar.xz",
+          "member": "libxkbcommon-0.9.1/LICENSE",
+          "sha256": "086caee279449369d41c1157911ec7696e707b93feba7280de757d3c470b2dfb"
+        }
+      ],
+      "binaries": [
+        {
+          "payload_path": "lib/libxkbcommon-x11.so.0",
+          "origin_sha256": "27b61ed070ac551e7da152aa73717e27f0c5ef76f10aafbc9720ae1e2d68ad93",
+          "binary_package": "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+          "source_rpm": "libxkbcommon-0.9.1-1.el8.src.rpm",
+          "original": {
+            "source": "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+            "member": "usr/lib64/libxkbcommon-x11.so.0",
+            "sha256": "27b61ed070ac551e7da152aa73717e27f0c5ef76f10aafbc9720ae1e2d68ad93"
+          },
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "5441f183227003df7d02d64d841645990476bf74356076d4b3b2eb4a8a10512d",
+          "observed_payload_sha256": "5441f183227003df7d02d64d841645990476bf74356076d4b3b2eb4a8a10512d"
+        },
+        {
+          "payload_path": "lib/libxkbcommon.so.0",
+          "origin_sha256": "de59cad24a9a462036a7b622e479f1d26c778c30f2c6357588b102f222c0dbae",
+          "binary_package": "libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+          "source_rpm": "libxkbcommon-0.9.1-1.el8.src.rpm",
+          "original": {
+            "source": "libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+            "member": "usr/lib64/libxkbcommon.so.0",
+            "sha256": "de59cad24a9a462036a7b622e479f1d26c778c30f2c6357588b102f222c0dbae"
+          },
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "e05c1e4e2983862168c358310d8eb6409ba1b02eae42f875b5b0c7602c5280c7",
+          "observed_payload_sha256": "e05c1e4e2983862168c358310d8eb6409ba1b02eae42f875b5b0c7602c5280c7"
+        }
+      ],
+      "source_identity_verified": true
+    },
+    {
+      "name": "libgcc",
+      "sources": [
+        "gcc-15.2.0.tar.gz",
+        "zlib-1.3.1.tar.gz",
+        "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+        "libgcc-15.2.0-he0feb66_20.conda"
+      ],
+      "recipes": [
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/about.json",
+          "sha256": "13a475d5e80038436355ea4a2fc540ca107ce8f9a4092dca61e4aef8f2e214d5",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "about.json"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/hash_input.json",
+          "sha256": "e619fdceb240fedb8aa60ed37c7cb3a7128f7904c39574f8926fbddb4c715861",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "hash_input.json"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/index.json",
+          "sha256": "016c77ebe7f7394d17bcdf9bcd6d38600d5feeebfb3d1712a237437a64e4ac6f",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "index.json"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/paths.json",
+          "sha256": "174058c342aa8ec3caacdc47885cb8326476b5c109d3d06a984991760d61f0ff",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "paths.json"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/conda_build_config.yaml",
+          "sha256": "06d7685fcb706ad9452c6acbc825505612fe114ef6568ca7139a28f94c10d37d",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/conda_build_config.yaml"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/install-libgcc-no-gomp.sh",
+          "sha256": "9ffa8014687d097a4f0b34bb8c41774013029a54d943a6177a4904af3b2b46a1",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/install-libgcc-no-gomp.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/meta.yaml",
+          "sha256": "3cf621f311b03c1abde157028e331b3180dfa1498589d36d39586138078e4780",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/meta.yaml"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/LICENSE",
+          "sha256": "344c439ba60e5db75f0c894fdd22e3445db089b3bd936806bdf128c0016c12c7",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/LICENSE"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/build.sh",
+          "sha256": "eb209fbcc538aee0e9b30056d7b74beceb3150c9f9294d4122f7b5f2cf13cdd4",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/build.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/c11threads.c",
+          "sha256": "1d3f9d38d6c9e3a6016483fe6fa6cf7b66917cf43be7832fb6af34f68af45035",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/c11threads.c"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/conda_build_config.yaml",
+          "sha256": "2022e1a58c1bd5e7fe5b8672594007d9122086b4a8eee7f82b18d6803e809f67",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/conda_build_config.yaml"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/get_cpu_arch.sh",
+          "sha256": "6a50a29b1df12a015cf6fd941e0f27f1d43cb4e6cdb346172c5cec801ab64f88",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/get_cpu_arch.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/hello-world.cpp",
+          "sha256": "94192b2708a835b34fa08f277fee7a31bd9c0c4171dcfba0d672ae074a1bcf80",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/hello-world.cpp"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/include-fixed-math.h",
+          "sha256": "32453ae2d7962e1d1666809602e4f33be607d45214ee13130064dceff521d6f5",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/include-fixed-math.h"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-conda-specs.sh",
+          "sha256": "562b203b00f6f51da4aca920da4dc3f7e689f6b36b9ab08e1850865adf615c39",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-conda-specs.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-g++.sh",
+          "sha256": "6879bebf6f7d15a6d0efdb5234821696ad6cdccc446d43bf7518bf58f991dd9b",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-g++.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-gcc.sh",
+          "sha256": "bac1d3e9fab45e6a7c66d7e4348331d6484c97f50b5b6d7a5153f8923acd0556",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-gcc.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-gfortran.sh",
+          "sha256": "ed693a31fc7923dff2b7915b638315d0348052f88b045834fa5c8b8eb7789821",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-gfortran.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libgcc-devel.sh",
+          "sha256": "c9912f6c112228bf79df2b2b9eef4bc87f0f47c057c8471785cd20f382a33ff6",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgcc-devel.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libgcc-no-gomp.sh",
+          "sha256": "9ffa8014687d097a4f0b34bb8c41774013029a54d943a6177a4904af3b2b46a1",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgcc-no-gomp.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libgcc.sh",
+          "sha256": "c62aa77461ab21b3d4799ff9913a201db72c54545aa827b60272d242e6c64987",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgcc.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libgfortran.sh",
+          "sha256": "eb5122f447d2ce59c3142b3147fe0c0006814f626ba983e25bf0b1cda2bcd017",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgfortran.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libgomp.sh",
+          "sha256": "b6d2c5f984ed8b90457844d5cd96d6dd008a02f38e741211edfbea95115b1698",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgomp.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libsanitizer.sh",
+          "sha256": "84eff94f9ff3494aedc77deb623f1a27fa56197a310ac15787df9e93e42a8831",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libsanitizer.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libstdc++-devel.sh",
+          "sha256": "40aa78902962db050583481ac25f0e5432a72ace89d5950860ac9954ca3a26b8",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libstdc++-devel.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-libstdc++.sh",
+          "sha256": "609aee05652e112ebd51d483304a4d468924048ecee805a20b144481cb6bc17f",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libstdc++.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-openmp_impl.sh",
+          "sha256": "27d2cd5aac26c398dfe490570524f6f28ba047af936a9e04d9a8c4382eaea6c1",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-openmp_impl.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/install-symlinks.sh",
+          "sha256": "3b4d4cbccb11594fde4fd87b680ae09305001caf37dd252a3f822aa3800ce5a8",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-symlinks.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/libgcc_s.so.ldscript",
+          "sha256": "69a56a9993b7729b29b274e65016031c81f2397f176ed5ad44d59bd50425e0bd",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/libgcc_s.so.ldscript"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/make_tool_links.sh",
+          "sha256": "d0d0378059a70f6117b839e71b4098f86aada520332626f303304bb70d58d18d",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/make_tool_links.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/meta.yaml",
+          "sha256": "0efa70857652d6264a134cf96489c59be71c2a9b6c24ebc5c489effd614d0f6c",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/meta.yaml"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/patches/0001-allow-commands-in-main-specfile.patch",
+          "sha256": "91a111c018f29cf390f5ee2aeb25361b5f984b9426e99d9dfd398bad62b1fb7a",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0001-allow-commands-in-main-specfile.patch"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch",
+          "sha256": "ab613e33b93aede957a3c0cb6b8087a7503ddab50af9ad6d9d090ad608fc75e5",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch",
+          "sha256": "8d438cfe76608ab9fc617a40f37bf6184ac0b1b4447bd0d6ec5faad9d36f6676",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch",
+          "sha256": "4a56f0594400dfbc7d0def0074976791efacc7d9e7a550c1e807263aa3bf43d1",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/recipe-scripts-license.txt",
+          "sha256": "b76585ad68860b271fc4c5a346444e4a70cacd48a3fd688cb2e8dd18d5935cd1",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/recipe-scripts-license.txt"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/setup_compiler.sh",
+          "sha256": "a535d9ba2592e3cf3feadd152ffa8e640f498ae2c1553015ba1256cdc82ddf72",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/setup_compiler.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/aligned_alloc.c",
+          "sha256": "25a4c518d60aaf22e54b9773e69989a7f0bbc3492316701cdf595de9fed67640",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/aligned_alloc.c"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/aligned_alloc.cpp",
+          "sha256": "1d1cb76aea3be07ebaad38eb182a12ae957c7174770f69354e094f0ff0f1c4c0",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/aligned_alloc.cpp"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/CMakeLists.txt",
+          "sha256": "c6a33238b5b6816bdb6b984425b4ba553e22a814befa27078fdb90961134c323",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/CMakeLists.txt"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/hello.f90",
+          "sha256": "b3fc4b4b1cb9ac36aa4f23605a3d927cd1121a10cf8c9ccf5908bf3f98352921",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/hello.f90"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/maths.f90",
+          "sha256": "deff8897106122e6912ad62730211a73fe60439a27ad2414037c67a9abf7b9ca",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/maths.f90"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/omp-threadprivate.f90",
+          "sha256": "d0443cdbbd23118e35631b3d8c4bc52f5b15c5880abd060c766e4a6782068511",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/omp-threadprivate.f90"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/test_fort.sh",
+          "sha256": "d86dcea1cecded8b215ed0fa8c08cc54e9e924d2b8b1d875c62fbcfdab1e7efd",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/test_fort.sh"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/hello_world.c",
+          "sha256": "a77b6cc0d498d9f98d16f2e887428d00708509359de5f66720fb7192728d6bed",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/hello_world.c"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/hello_world.cpp",
+          "sha256": "50927d802bd67ff0786921db7dd070f09b640df2ebaa5215edc588790c505b3d",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/hello_world.cpp"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/howdy-dso.c",
+          "sha256": "8b059c263fbb73297ca9389768271700908834d6fac5b4e216d27b518672475a",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/howdy-dso.c"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/libhowdy.c",
+          "sha256": "23e54f3159b6dbd5c7105670e0ece78495a24a62e92a0dc6d6cdc63406dd6502",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/libhowdy.c"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/libhowdy.h",
+          "sha256": "2a3ba5ee871dcc376c196b2829f70587bc04e2cb6f4a6b9957f52c1c52730dec",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/libhowdy.h"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/tzdb-override.cpp",
+          "sha256": "bace3e1298a630f4603165075c2f4a567883fd38a293cde81565e2f93961fc04",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/tzdb-override.cpp"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/tests/tzdb.cpp",
+          "sha256": "2f0e902aece722f31e66358183b8aaf08930435f63873da704508aff025e84f8",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/tzdb.cpp"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/yum_requirements.txt",
+          "sha256": "d9589bf7c67e753ee907e78edd0c0852f7fb5235ea62e28828b14dfc98c278bd",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/yum_requirements.txt"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/meta.yaml",
+          "sha256": "0efa70857652d6264a134cf96489c59be71c2a9b6c24ebc5c489effd614d0f6c",
+          "retain_as": "feedstock/meta.yaml"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0001-allow-commands-in-main-specfile.patch",
+          "sha256": "91a111c018f29cf390f5ee2aeb25361b5f984b9426e99d9dfd398bad62b1fb7a",
+          "retain_as": "feedstock/patches/0001-allow-commands-in-main-specfile.patch"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch",
+          "sha256": "ab613e33b93aede957a3c0cb6b8087a7503ddab50af9ad6d9d090ad608fc75e5",
+          "retain_as": "feedstock/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch",
+          "sha256": "8d438cfe76608ab9fc617a40f37bf6184ac0b1b4447bd0d6ec5faad9d36f6676",
+          "retain_as": "feedstock/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch",
+          "sha256": "4a56f0594400dfbc7d0def0074976791efacc7d9e7a550c1e807263aa3bf43d1",
+          "retain_as": "feedstock/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch"
+        }
+      ],
+      "notices": [
+        {
+          "source": "gcc-15.2.0.tar.gz",
+          "member": "gcc-15.2.0/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "source": "gcc-15.2.0.tar.gz",
+          "member": "gcc-15.2.0/COPYING.RUNTIME",
+          "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+        },
+        {
+          "source": "zlib-1.3.1.tar.gz",
+          "member": "zlib-1.3.1/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/LICENSE",
+          "sha256": "344c439ba60e5db75f0c894fdd22e3445db089b3bd936806bdf128c0016c12c7"
+        },
+        {
+          "source": "libgcc-15.2.0-he0feb66_20.conda",
+          "member": "info/recipe/parent/recipe-scripts-license.txt",
+          "sha256": "b76585ad68860b271fc4c5a346444e4a70cacd48a3fd688cb2e8dd18d5935cd1",
+          "containers": [
+            "info-libgcc-15.2.0-he0feb66_20.tar.zst"
+          ]
+        }
+      ],
+      "recipe_commit": "09ad78041f74217e78e3302caa1db6d0aead31c9",
+      "recipe_exact_match": true,
+      "binaries": [
+        {
+          "payload_path": "lib/libgcc_s.so.1",
+          "original": {
+            "source": "libgcc-15.2.0-he0feb66_20.conda",
+            "member": "lib/libgcc_s.so.1",
+            "sha256": "2d10ddd8be91e1894015be55836a95be3b7cd5a8f7871dbc2dbd14dcf8e8f4ed",
+            "containers": [
+              "pkg-libgcc-15.2.0-he0feb66_20.tar.zst"
+            ]
+          },
+          "binary_package": "libgcc-15.2.0-he0feb66_20.conda",
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "53908ffe6a5eaff1f7b345942c4bb1a97d378ac355bb9ec7ab18ea0614297561",
+          "observed_payload_sha256": "53908ffe6a5eaff1f7b345942c4bb1a97d378ac355bb9ec7ab18ea0614297561"
+        }
+      ]
+    },
+    {
+      "name": "libstdcxx",
+      "sources": [
+        "gcc-15.2.0.tar.gz",
+        "zlib-1.3.1.tar.gz",
+        "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+        "libstdcxx-15.2.0-h934c35e_20.conda"
+      ],
+      "recipes": [
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/about.json",
+          "sha256": "633be8b5446e30eeab2b70ef565cc898f7a3b8e8acbc53c66e0ae9b4e44ad29e",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "about.json"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/hash_input.json",
+          "sha256": "723257606e868c2f9c640459310ac801e637bc0497eb3d1585154d97a8c49f43",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "hash_input.json"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/index.json",
+          "sha256": "d4c9e7aebd8e4c8e2da94efe01159c1061ad8043b79f2770ff7c4ca3f0196397",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "index.json"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/paths.json",
+          "sha256": "1b4d48f155a88285ba6a367a8c654e03148bdd7ca3736437a686278e73a3d39b",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "paths.json"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/conda_build_config.yaml",
+          "sha256": "06d7685fcb706ad9452c6acbc825505612fe114ef6568ca7139a28f94c10d37d",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/conda_build_config.yaml"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/install-libstdc++.sh",
+          "sha256": "609aee05652e112ebd51d483304a4d468924048ecee805a20b144481cb6bc17f",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/install-libstdc++.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/meta.yaml",
+          "sha256": "2b561669cf023d6febb925e223e1e4561e14840a59c9144123858aecf3a5cc9c",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/meta.yaml"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/LICENSE",
+          "sha256": "344c439ba60e5db75f0c894fdd22e3445db089b3bd936806bdf128c0016c12c7",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/LICENSE"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/build.sh",
+          "sha256": "eb209fbcc538aee0e9b30056d7b74beceb3150c9f9294d4122f7b5f2cf13cdd4",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/build.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/c11threads.c",
+          "sha256": "1d3f9d38d6c9e3a6016483fe6fa6cf7b66917cf43be7832fb6af34f68af45035",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/c11threads.c"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/conda_build_config.yaml",
+          "sha256": "2022e1a58c1bd5e7fe5b8672594007d9122086b4a8eee7f82b18d6803e809f67",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/conda_build_config.yaml"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/get_cpu_arch.sh",
+          "sha256": "6a50a29b1df12a015cf6fd941e0f27f1d43cb4e6cdb346172c5cec801ab64f88",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/get_cpu_arch.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/hello-world.cpp",
+          "sha256": "94192b2708a835b34fa08f277fee7a31bd9c0c4171dcfba0d672ae074a1bcf80",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/hello-world.cpp"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/include-fixed-math.h",
+          "sha256": "32453ae2d7962e1d1666809602e4f33be607d45214ee13130064dceff521d6f5",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/include-fixed-math.h"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-conda-specs.sh",
+          "sha256": "562b203b00f6f51da4aca920da4dc3f7e689f6b36b9ab08e1850865adf615c39",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-conda-specs.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-g++.sh",
+          "sha256": "6879bebf6f7d15a6d0efdb5234821696ad6cdccc446d43bf7518bf58f991dd9b",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-g++.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-gcc.sh",
+          "sha256": "bac1d3e9fab45e6a7c66d7e4348331d6484c97f50b5b6d7a5153f8923acd0556",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-gcc.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-gfortran.sh",
+          "sha256": "ed693a31fc7923dff2b7915b638315d0348052f88b045834fa5c8b8eb7789821",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-gfortran.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libgcc-devel.sh",
+          "sha256": "c9912f6c112228bf79df2b2b9eef4bc87f0f47c057c8471785cd20f382a33ff6",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgcc-devel.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libgcc-no-gomp.sh",
+          "sha256": "9ffa8014687d097a4f0b34bb8c41774013029a54d943a6177a4904af3b2b46a1",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgcc-no-gomp.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libgcc.sh",
+          "sha256": "c62aa77461ab21b3d4799ff9913a201db72c54545aa827b60272d242e6c64987",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgcc.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libgfortran.sh",
+          "sha256": "eb5122f447d2ce59c3142b3147fe0c0006814f626ba983e25bf0b1cda2bcd017",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgfortran.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libgomp.sh",
+          "sha256": "b6d2c5f984ed8b90457844d5cd96d6dd008a02f38e741211edfbea95115b1698",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libgomp.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libsanitizer.sh",
+          "sha256": "84eff94f9ff3494aedc77deb623f1a27fa56197a310ac15787df9e93e42a8831",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libsanitizer.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libstdc++-devel.sh",
+          "sha256": "40aa78902962db050583481ac25f0e5432a72ace89d5950860ac9954ca3a26b8",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libstdc++-devel.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-libstdc++.sh",
+          "sha256": "609aee05652e112ebd51d483304a4d468924048ecee805a20b144481cb6bc17f",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-libstdc++.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-openmp_impl.sh",
+          "sha256": "27d2cd5aac26c398dfe490570524f6f28ba047af936a9e04d9a8c4382eaea6c1",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-openmp_impl.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/install-symlinks.sh",
+          "sha256": "3b4d4cbccb11594fde4fd87b680ae09305001caf37dd252a3f822aa3800ce5a8",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/install-symlinks.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/libgcc_s.so.ldscript",
+          "sha256": "69a56a9993b7729b29b274e65016031c81f2397f176ed5ad44d59bd50425e0bd",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/libgcc_s.so.ldscript"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/make_tool_links.sh",
+          "sha256": "d0d0378059a70f6117b839e71b4098f86aada520332626f303304bb70d58d18d",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/make_tool_links.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/meta.yaml",
+          "sha256": "0efa70857652d6264a134cf96489c59be71c2a9b6c24ebc5c489effd614d0f6c",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/meta.yaml"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/patches/0001-allow-commands-in-main-specfile.patch",
+          "sha256": "91a111c018f29cf390f5ee2aeb25361b5f984b9426e99d9dfd398bad62b1fb7a",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0001-allow-commands-in-main-specfile.patch"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch",
+          "sha256": "ab613e33b93aede957a3c0cb6b8087a7503ddab50af9ad6d9d090ad608fc75e5",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch",
+          "sha256": "8d438cfe76608ab9fc617a40f37bf6184ac0b1b4447bd0d6ec5faad9d36f6676",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch",
+          "sha256": "4a56f0594400dfbc7d0def0074976791efacc7d9e7a550c1e807263aa3bf43d1",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/recipe-scripts-license.txt",
+          "sha256": "b76585ad68860b271fc4c5a346444e4a70cacd48a3fd688cb2e8dd18d5935cd1",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/recipe-scripts-license.txt"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/setup_compiler.sh",
+          "sha256": "a535d9ba2592e3cf3feadd152ffa8e640f498ae2c1553015ba1256cdc82ddf72",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/setup_compiler.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/aligned_alloc.c",
+          "sha256": "25a4c518d60aaf22e54b9773e69989a7f0bbc3492316701cdf595de9fed67640",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/aligned_alloc.c"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/aligned_alloc.cpp",
+          "sha256": "1d1cb76aea3be07ebaad38eb182a12ae957c7174770f69354e094f0ff0f1c4c0",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/aligned_alloc.cpp"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/CMakeLists.txt",
+          "sha256": "c6a33238b5b6816bdb6b984425b4ba553e22a814befa27078fdb90961134c323",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/CMakeLists.txt"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/hello.f90",
+          "sha256": "b3fc4b4b1cb9ac36aa4f23605a3d927cd1121a10cf8c9ccf5908bf3f98352921",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/hello.f90"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/maths.f90",
+          "sha256": "deff8897106122e6912ad62730211a73fe60439a27ad2414037c67a9abf7b9ca",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/maths.f90"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/omp-threadprivate.f90",
+          "sha256": "d0443cdbbd23118e35631b3d8c4bc52f5b15c5880abd060c766e4a6782068511",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/omp-threadprivate.f90"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/fortomp/test_fort.sh",
+          "sha256": "d86dcea1cecded8b215ed0fa8c08cc54e9e924d2b8b1d875c62fbcfdab1e7efd",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/fortomp/test_fort.sh"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/hello_world.c",
+          "sha256": "a77b6cc0d498d9f98d16f2e887428d00708509359de5f66720fb7192728d6bed",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/hello_world.c"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/hello_world.cpp",
+          "sha256": "50927d802bd67ff0786921db7dd070f09b640df2ebaa5215edc588790c505b3d",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/hello_world.cpp"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/howdy-dso.c",
+          "sha256": "8b059c263fbb73297ca9389768271700908834d6fac5b4e216d27b518672475a",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/howdy-dso.c"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/libhowdy.c",
+          "sha256": "23e54f3159b6dbd5c7105670e0ece78495a24a62e92a0dc6d6cdc63406dd6502",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/libhowdy.c"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/libhowdy.h",
+          "sha256": "2a3ba5ee871dcc376c196b2829f70587bc04e2cb6f4a6b9957f52c1c52730dec",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/libhowdy.h"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/tzdb-override.cpp",
+          "sha256": "bace3e1298a630f4603165075c2f4a567883fd38a293cde81565e2f93961fc04",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/tzdb-override.cpp"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/tests/tzdb.cpp",
+          "sha256": "2f0e902aece722f31e66358183b8aaf08930435f63873da704508aff025e84f8",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/tests/tzdb.cpp"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/yum_requirements.txt",
+          "sha256": "d9589bf7c67e753ee907e78edd0c0852f7fb5235ea62e28828b14dfc98c278bd",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ],
+          "retain_as": "recipe/parent/yum_requirements.txt"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/meta.yaml",
+          "sha256": "0efa70857652d6264a134cf96489c59be71c2a9b6c24ebc5c489effd614d0f6c",
+          "retain_as": "feedstock/meta.yaml"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0001-allow-commands-in-main-specfile.patch",
+          "sha256": "91a111c018f29cf390f5ee2aeb25361b5f984b9426e99d9dfd398bad62b1fb7a",
+          "retain_as": "feedstock/patches/0001-allow-commands-in-main-specfile.patch"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch",
+          "sha256": "ab613e33b93aede957a3c0cb6b8087a7503ddab50af9ad6d9d090ad608fc75e5",
+          "retain_as": "feedstock/patches/0002-patch-zoneinfo_dir_override-to-point-to-our-tzdata.patch"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch",
+          "sha256": "8d438cfe76608ab9fc617a40f37bf6184ac0b1b4447bd0d6ec5faad9d36f6676",
+          "retain_as": "feedstock/patches/0003-add-ldl-to-libstdc___la_LDFLAGS.patch"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch",
+          "sha256": "4a56f0594400dfbc7d0def0074976791efacc7d9e7a550c1e807263aa3bf43d1",
+          "retain_as": "feedstock/patches/0004-Hardcode-HAVE_ALIGNED_ALLOC-1-in-libstdc-v3-configur.patch"
+        }
+      ],
+      "notices": [
+        {
+          "source": "gcc-15.2.0.tar.gz",
+          "member": "gcc-15.2.0/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "source": "gcc-15.2.0.tar.gz",
+          "member": "gcc-15.2.0/COPYING.RUNTIME",
+          "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+        },
+        {
+          "source": "zlib-1.3.1.tar.gz",
+          "member": "zlib-1.3.1/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        },
+        {
+          "source": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9.tar.gz",
+          "member": "ctng-compilers-feedstock-09ad78041f74217e78e3302caa1db6d0aead31c9/recipe/LICENSE",
+          "sha256": "344c439ba60e5db75f0c894fdd22e3445db089b3bd936806bdf128c0016c12c7"
+        },
+        {
+          "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "member": "info/recipe/parent/recipe-scripts-license.txt",
+          "sha256": "b76585ad68860b271fc4c5a346444e4a70cacd48a3fd688cb2e8dd18d5935cd1",
+          "containers": [
+            "info-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+          ]
+        }
+      ],
+      "recipe_commit": "09ad78041f74217e78e3302caa1db6d0aead31c9",
+      "recipe_exact_match": true,
+      "binaries": [
+        {
+          "payload_path": "lib/libstdc++.so.6",
+          "original": {
+            "source": "libstdcxx-15.2.0-h934c35e_20.conda",
+            "member": "lib/libstdc++.so.6.0.34",
+            "sha256": "801899f61e165ec48c381f382b49f8bc54f076bae3631f46e1072dbfee5bb4fd",
+            "containers": [
+              "pkg-libstdcxx-15.2.0-h934c35e_20.tar.zst"
+            ]
+          },
+          "binary_package": "libstdcxx-15.2.0-h934c35e_20.conda",
+          "normalization": "Either original package bytes or strip --strip-unneeded using strip_image; verifier emits actual payload proof.",
+          "stripped_sha256": "c4344ab63cebf8e7a04a3e264106f7b5a0cb6ddbd589518491dd45aa51af5d07",
+          "observed_payload_sha256": "c4344ab63cebf8e7a04a3e264106f7b5a0cb6ddbd589518491dd45aa51af5d07"
+        }
+      ]
+    }
+  ],
+  "rpm_headers": [
+    {
+      "source": "libXau-1.0.9-3.el8.src.rpm",
+      "header": "libXau|1.0.9|3.el8|i686|(none)"
+    },
+    {
+      "source": "libXau-1.0.9-3.el8.x86_64.rpm",
+      "header": "libXau|1.0.9|3.el8|x86_64|libXau-1.0.9-3.el8.src.rpm"
+    },
+    {
+      "source": "libxcb-1.13.1-1.el8.src.rpm",
+      "header": "libxcb|1.13.1|1.el8|i686|(none)"
+    },
+    {
+      "source": "libxcb-1.13.1-1.el8.x86_64.rpm",
+      "header": "libxcb|1.13.1|1.el8|x86_64|libxcb-1.13.1-1.el8.src.rpm"
+    },
+    {
+      "source": "libxkbcommon-0.9.1-1.el8.src.rpm",
+      "header": "libxkbcommon|0.9.1|1.el8|i686|(none)"
+    },
+    {
+      "source": "libxkbcommon-x11-0.9.1-1.el8.x86_64.rpm",
+      "header": "libxkbcommon-x11|0.9.1|1.el8|x86_64|libxkbcommon-0.9.1-1.el8.src.rpm"
+    },
+    {
+      "source": "libxkbcommon-0.9.1-1.el8.x86_64.rpm",
+      "header": "libxkbcommon|0.9.1|1.el8|x86_64|libxkbcommon-0.9.1-1.el8.src.rpm"
+    }
+  ],
+  "blockers": [],
+  "strip_image": "quay.io/pypa/manylinux_2_28_x86_64@sha256:39df0042d5cc900b085aa25a0659368b42a0006c54c474299b785b44c1b4ff82"
+}

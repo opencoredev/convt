@@ -20,6 +20,16 @@ pub mod paths;
 pub mod pdfium;
 pub mod svg;
 
+static CLOUD_SUPERVISED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Cloud tools stay in the executor's group. The parent worker owns tree cleanup;
+/// seccomp forbids engines from changing the process group or session.
+pub fn use_cloud_supervisor(package: &std::path::Path) -> std::result::Result<(), &'static str> {
+    paths::set_sandbox_package(package)?;
+    CLOUD_SUPERVISED.store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
 /// A registry with every engine that can run on this machine.
 pub fn default_registry() -> Registry {
     registry(true)
@@ -48,7 +58,8 @@ fn registry(documents: bool) -> Registry {
 }
 
 /// Finds a bundled or installed tool. Checks `$env_var`, then the directory
-/// next to the running executable (where release builds bundle tools), then `PATH`.
+/// next to the running executable (where release builds bundle tools, and
+/// `convt.app/Contents/MacOS` on macOS), then `PATH`.
 pub(crate) fn find_tool(names: &[&str], env_var: &str) -> Option<PathBuf> {
     find_tool_with_pack(names, env_var, None)
 }
@@ -65,11 +76,15 @@ pub(crate) fn find_tool_with_pack(
     {
         return Some(p);
     }
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let exe_dir = paths::exe_dir()?;
     for name in names {
         let bundled = exe_dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
         if bundled.exists() {
-            return Some(bundled);
+            return if CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst) {
+                bundled.canonicalize().ok()
+            } else {
+                Some(bundled)
+            };
         }
     }
     pack.filter(|p| p.is_file())
@@ -98,21 +113,42 @@ pub(crate) fn steps(from: &[&str], to: &[&str]) -> impl Iterator<Item = convt_co
 /// process holding the pipes open cannot hang the job.
 pub(crate) fn run_tool(
     engine: &'static str,
+    cmd: Command,
+    ctx: &Ctx,
+    on_line: impl FnMut(&str),
+) -> Result<()> {
+    run_tool_attempt(engine, cmd, ctx, on_line, 0)
+}
+
+fn run_tool_attempt(
+    engine: &'static str,
     mut cmd: Command,
     ctx: &Ctx,
     mut on_line: impl FnMut(&str),
+    restart: u8,
 ) -> Result<()> {
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    if !CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst) {
+        std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    }
     let mut child = cmd.spawn()?;
     let mut stderr = child.stderr.take().expect("piped");
     let (err_tx, err_rx) = mpsc::channel();
     std::thread::spawn(move || {
         let mut buf = Vec::new();
-        let _ = stderr.read_to_end(&mut buf);
+        let mut chunk = [0_u8; 8192];
+        while let Ok(n) = stderr.read(&mut chunk) {
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            if buf.len() > 65536 {
+                buf.drain(..buf.len() - 65536);
+            }
+        }
         let _ = err_tx.send(buf);
     });
     let stdout = child.stdout.take().expect("piped");
@@ -164,6 +200,16 @@ pub(crate) fn run_tool(
     kill_tree(&mut child);
     let status = child.wait()?;
     let stderr = err_rx.recv_timeout(DRAIN_GRACE).unwrap_or_default();
+    if engine == "libreoffice"
+        && status.code() == Some(81)
+        && restart == 0
+        && CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst)
+    {
+        // Native LibreOffice requests one restart after creating its private
+        // profile. Its desktop launcher handles this; cloud avoids that proc-
+        // dependent launcher and keeps the restart in the confined job group.
+        return run_tool_attempt(engine, cmd, ctx, on_line, 1);
+    }
     if status.success() {
         Ok(())
     } else {
@@ -211,8 +257,10 @@ fn kill_tree(child: &mut Child) {
     #[cfg(unix)]
     // SAFETY: kill(2) with a negative pid signals the process group that
     // `process_group(0)` created for this child; it touches no memory.
-    unsafe {
-        libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+    if !CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst) {
+        unsafe {
+            libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+        }
     }
     // TODO(windows): put the child in a job object so LibreOffice's
     // soffice.bin dies with it.

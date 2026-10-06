@@ -1,0 +1,28 @@
+.TH CONVT 1 "2026-10-04" "convt 0.1.0"
+.SH NAME
+convt \- convert files on this computer
+.SH SYNOPSIS
+.B convt
+.RI [ files ] " --to " format " [options]"
+.SH DESCRIPTION
+Converts images, audio, video, PDF and documents locally.
+Document conversions need an installed LibreOffice or a document pack.
+Use --help for the complete command and option list.
+.SH COMMANDS
+.TP
+.B engines
+List ready engines and explain unavailable engines.
+.TP
+.B targets FILE
+List formats available for the input file.
+.TP
+.B formats
+List known formats.
+.TP
+.B pack status
+Show document pack availability without downloading anything.
+.SH FILES
+The installed payload and bundled libraries are under /opt/convt.
+Per-user presets and document packs are retained when the package is removed.
+.SH SEE ALSO
+.BR convt-app (1)

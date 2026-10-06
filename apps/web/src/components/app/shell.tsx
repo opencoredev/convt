@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { signOut } from "#/lib/auth-client";
 import { links } from "#/lib/config";
 import type { Account } from "#/lib/types";
 
@@ -26,7 +27,7 @@ export function AppShell({ account, children }: { account: Account; children: Re
         Skip to content
       </a>
       <header className="border-b border-line">
-        <div className={cx(column, "flex items-center justify-between pt-5 pb-3.5")}>
+        <div className={cx(column, "flex items-center justify-between gap-4 pt-5 pb-3.5")}>
           <div className="flex min-w-0 items-center gap-3.5">
             <Link
               to="/"
@@ -41,15 +42,8 @@ export function AppShell({ account, children }: { account: Account; children: Re
               /
             </span>
             <span className="truncate text-sm/4.5">{account.name}'s account</span>
-            {/* PLACEHOLDER: the account shown is sample data until accounts are live. */}
-            <span
-              title="Sample data. Accounts aren't live yet."
-              className="shrink-0 rounded bg-hover px-1.5 py-0.5 text-xs/4 text-ink-2"
-            >
-              Sample data<span className="hidden sm:inline"> · accounts aren't live yet</span>
-            </span>
           </div>
-          <div className="flex items-center gap-4.5">
+          <div className="flex shrink-0 items-center gap-4.5">
             <a
               href={links.docs}
               className={cx("rounded-sm text-sm/4.5 text-ink-nav hover:text-ink", focusRing)}
@@ -62,6 +56,20 @@ export function AppShell({ account, children }: { account: Account; children: Re
             >
               Help
             </a>
+            {/* Placed after Help until the designer gives it a home. */}
+            <button
+              type="button"
+              onClick={async () => {
+                await signOut();
+                window.location.assign("/sign-in");
+              }}
+              className={cx(
+                "cursor-pointer rounded-sm text-sm/4.5 whitespace-nowrap text-ink-nav hover:text-ink",
+                focusRing,
+              )}
+            >
+              Sign out
+            </button>
             <Avatar account={account} />
           </div>
         </div>

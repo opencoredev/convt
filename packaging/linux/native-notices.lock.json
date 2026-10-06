@@ -1,0 +1,44 @@
+[
+  {
+    "name": "libxcb",
+    "version": "1.13.1",
+    "url": "https://xcb.freedesktop.org/dist/libxcb-1.13.1.tar.bz2",
+    "sha256": "a89fb7af7a11f43d2ce84a844a4b38df688c092bf4b67683aef179cdf2a647c4",
+    "member": "libxcb-1.13.1/COPYING",
+    "notice": "license-notices/libxcb.txt",
+    "notice_sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd",
+    "rpms": ["libxcb-1.13.1-1.el8.x86_64"],
+    "supplements": [
+      {
+        "name": "xcb-xkb",
+        "version": "xcb-proto 1.13 (libxcb minimum protocol source version; baseline exact generator version not recorded)",
+        "url": "https://xcb.freedesktop.org/dist/xcb-proto-1.13.tar.bz2",
+        "sha256": "7b98721e669be80284e9bbfeab02d2d0d54cd11172b72271e47a2fe875e2bde1",
+        "member": "xcb-proto-1.13/src/xkb.xml",
+        "extract": "first XML comment, stripped boundary whitespace, trailing newline",
+        "notice": "license-notices/xcb-xkb.txt",
+        "notice_sha256": "e5407ee28c0ba8ad1553c8728188230a6d114e23fbb28a5837b219ce62834e08"
+      }
+    ]
+  },
+  {
+    "name": "libXau",
+    "version": "1.0.9",
+    "url": "https://xorg.freedesktop.org/archive/individual/lib/libXau-1.0.9.tar.bz2",
+    "sha256": "ccf8cbf0dbf676faa2ea0a6d64bcc3b6746064722b606c8c52917ed00dcb73ec",
+    "member": "libXau-1.0.9/COPYING",
+    "notice": "license-notices/libXau.txt",
+    "notice_sha256": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa",
+    "rpms": ["libXau-1.0.9-3.el8.x86_64"]
+  },
+  {
+    "name": "libxkbcommon",
+    "version": "0.9.1",
+    "url": "https://xkbcommon.org/download/libxkbcommon-0.9.1.tar.xz",
+    "sha256": "d4c6aabf0a5c1fc616f8a6a65c8a818c03773b9a87da9fbc434da5acd1199be0",
+    "member": "libxkbcommon-0.9.1/LICENSE",
+    "notice": "license-notices/libxkbcommon.txt",
+    "notice_sha256": "086caee279449369d41c1157911ec7696e707b93feba7280de757d3c470b2dfb",
+    "rpms": ["libxkbcommon-0.9.1-1.el8.x86_64", "libxkbcommon-x11-0.9.1-1.el8.x86_64"]
+  }
+]

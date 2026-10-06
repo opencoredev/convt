@@ -110,6 +110,16 @@ const REQUIRED_ROUTES: &[(&str, &str, &str)] = &[
     ("svg", "heic", "hevc-encoder"),
     ("avif", "png", "av1"),
     ("mp4", "webm", "ffmpeg"),
+    ("webm", "mp4", "ffmpeg"),
+    ("mkv", "mp4", "ffmpeg"),
+    ("mkv", "webm", "ffmpeg"),
+    ("mkv", "gif", "ffmpeg"),
+    ("mkv", "png", "ffmpeg"),
+    ("mkv", "wav", "ffmpeg"),
+    ("mp4", "gif", "ffmpeg"),
+    ("webm", "gif", "ffmpeg"),
+    ("webm", "png", "ffmpeg"),
+    ("webm", "wav", "ffmpeg"),
     ("mp4", "png", "ffmpeg"),
     ("mp4", "wav", "ffmpeg"),
     ("wav", "flac", "ffmpeg"),
@@ -293,7 +303,7 @@ fn full_matrix() {
         .iter()
         .filter(|f| support::selected(f.id, "CONVT_MATRIX_INPUT"))
         .collect();
-    let fixtures: Mutex<BTreeMap<&str, Check<Fixture>>> = Mutex::new(BTreeMap::new());
+    let fixtures: Mutex<BTreeMap<String, Check<Fixture>>> = Mutex::new(BTreeMap::new());
     let next = AtomicUsize::new(0);
     std::thread::scope(|scope| {
         for _ in 0..workers {
@@ -306,12 +316,32 @@ fn full_matrix() {
                     } else {
                         Fixture::make(root.path(), format)
                     };
-                    fixtures.lock().unwrap().insert(format.id, result);
+                    fixtures
+                        .lock()
+                        .unwrap()
+                        .insert(format.id.to_owned(), result);
                 }
             });
         }
     });
-    let fixtures = fixtures.into_inner().unwrap();
+    let mut fixtures = fixtures.into_inner().unwrap();
+    let mut av1_inputs = Vec::new();
+    if convt_engines::ffmpeg::FfmpegEngine::new()
+        .unavailable_reason()
+        .is_none()
+    {
+        for from in &formats {
+            if matches!(from.id, "mp4" | "webm" | "mkv") {
+                let label = format!("{}-AV1", from.id);
+                // A ready FFmpeg must exercise AV1 inputs even if its software
+                // decoder is absent. Only the independent encoder is a prerequisite.
+                let fixture = Fixture::make_av1_video(root.path(), from)
+                    .unwrap_or_else(|e| panic!("fixture {label}: {e}"));
+                fixtures.insert(label.clone(), Ok(fixture));
+                av1_inputs.push((*from, label));
+            }
+        }
+    }
     eprintln!(
         "Fixtures generated in {:.3}s",
         started.elapsed().as_secs_f64()
@@ -389,8 +419,22 @@ fn full_matrix() {
                     fixtures[from.id].as_ref().err().unwrap()
                 );
             } else {
-                cases.push((*from, to));
+                cases.push((*from, to, from.id.to_owned()));
             }
+        }
+    }
+    for (from, label) in av1_inputs {
+        for to in registry
+            .targets(from)
+            .into_iter()
+            .filter(|f| support::selected(f.id, "CONVT_MATRIX_TARGET"))
+        {
+            // Unlike optional native validators, missing AV1 media tooling is
+            // a failure: otherwise a ready but decoder-less bundle could pass.
+            if let Some(tool) = support::missing_validation_tool(from, to) {
+                panic!("{label} -> {}: required {tool} validator missing", to.id);
+            }
+            cases.push((from, to, label.clone()));
         }
     }
     // Reachability expectations live separately from Registry::targets, so lost
@@ -426,15 +470,15 @@ fn full_matrix() {
             scope.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
-                    let Some((from, to)) = cases.get(i) else {
+                    let Some((from, to, label)) = cases.get(i) else {
                         break;
                     };
                     let case_started = Instant::now();
                     let result = (|| {
-                        let fixture = fixtures[from.id]
+                        let fixture = fixtures[label]
                             .as_ref()
                             .map_err(|e| format!("fixture generation failed: {e}"))?;
-                        let out = root.path().join(format!("{}-{}", from.id, to.id));
+                        let out = root.path().join(format!("{label}-{}", to.id));
                         std::fs::create_dir(&out).map_err(|e| e.to_string())?;
                         let options = Options {
                             dpi: Some(72),
@@ -497,13 +541,13 @@ fn full_matrix() {
                     eprintln!(
                         "{} {} -> {} {:.3}s",
                         if result.is_ok() { "PASS" } else { "FAIL" },
-                        from.id,
+                        label,
                         to.id,
                         elapsed.as_secs_f64()
                     );
                     results.lock().unwrap().push((
                         support::category_name(from.category),
-                        from.id.to_owned(),
+                        label.to_owned(),
                         to.id.to_owned(),
                         elapsed,
                         result,
@@ -553,4 +597,49 @@ fn raster_heic_outputs_skip_without_independent_validator() {
         support::missing_validation_tool_with(from, to, |_| true, || &missing),
         Some("libheif HEVC validator")
     );
+}
+
+#[test]
+fn av1_video_fixtures_preserve_media_semantics() {
+    let registry = convt_engines::default_registry();
+    if convt_engines::ffmpeg::FfmpegEngine::new()
+        .unavailable_reason()
+        .is_some()
+    {
+        eprintln!("SKIP AV1 fixture regression: FFmpeg engine unavailable");
+        return;
+    }
+    let root = tempfile::Builder::new()
+        .prefix("convt-av1-")
+        .tempdir()
+        .unwrap();
+    for container in ["mp4", "webm", "mkv"] {
+        let from = format_by_id(container).unwrap();
+        let fixture = Fixture::make_av1_video(root.path(), from).unwrap();
+        // Include the other video container: same-format routes intentionally
+        // do not exercise conversion in the registry.
+        for target in ["mp4", "webm", "gif", "png", "wav"] {
+            if target == container {
+                continue;
+            }
+            let to = format_by_id(target).unwrap();
+            assert!(
+                registry.plan(from, to).is_ok(),
+                "required AV1 {container} -> {target} route missing"
+            );
+            let out = root.path().join(format!("{container}-AV1-{target}"));
+            std::fs::create_dir(&out).unwrap();
+            let options = Options::default();
+            let job = Job {
+                output: Output::Dir(out),
+                options: options.clone(),
+                ..Job::new(&fixture.path, to)
+            };
+            let files = registry
+                .run(&job, &|_| {}, &Cancel::new())
+                .unwrap_or_else(|e| panic!("AV1 {container} -> {target}: {e}"));
+            support::validate(&fixture, to, &files, &options)
+                .unwrap_or_else(|e| panic!("AV1 {container} -> {target}: {e}"));
+        }
+    }
 }

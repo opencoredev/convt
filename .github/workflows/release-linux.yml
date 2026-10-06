@@ -1,0 +1,118 @@
+name: Release Linux (manual, private artifacts)
+on:
+  workflow_dispatch:
+    inputs:
+      source_date_epoch:
+        description: Release UTC Unix timestamp
+        required: true
+        type: string
+      history_url:
+        description: Previous signed update manifest HTTPS URL (required after first release)
+        required: false
+        type: string
+      initial_release:
+        description: Explicitly confirm this is the first public release
+        default: false
+        type: boolean
+      dry_run:
+        description: Build verification artifacts without signing or uploading
+        default: true
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: release-linux
+  cancel-in-progress: false
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
+      CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
+      CONVT_UPDATE_PUBKEY: ${{ vars.CONVT_UPDATE_PUBKEY }}
+      CONVT_LICENSE_STORE: file
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Populate locked Rust source cache
+        run: cargo fetch --locked
+      - name: Prepare external update seed
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.CONVT_UPDATE_SIGNING_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          key=$(mktemp)
+          chmod 600 "$key"
+          if [ "$DRY_RUN" = true ]; then
+            rm "$key"
+            bun run update:keygen "$key"
+          else
+            test -n "$UPDATE_SIGNING_KEY"
+            printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
+          fi
+          echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
+      - name: Authenticate retained release history
+        env:
+          HISTORY_URL: ${{ inputs.history_url }}
+          INITIAL_RELEASE: ${{ inputs.initial_release }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ -n "$HISTORY_URL" ]; then
+            case "$HISTORY_URL" in https://*) ;; *) exit 2 ;; esac
+            curl --proto '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
+            bun run release:manifest unpack-history "$RUNNER_TEMP/history-signed.json" "$RUNNER_TEMP/history.json"
+            echo "CONVT_RELEASE_HISTORY=$RUNNER_TEMP/history.json" >> "$GITHUB_ENV"
+          elif [ "$DRY_RUN" = false ] && [ "$INITIAL_RELEASE" != true ]; then
+            echo 'Production requires signed history or explicit first-release confirmation' >&2
+            exit 2
+          fi
+      - name: Rebuild twice and compare unsigned artifacts
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          mode=--dry-run
+          if [ "$DRY_RUN" = true ]; then mode=--verification-only; fi
+          frozen=$(mktemp -d)
+          rmdir "$frozen"
+          python3 scripts/release/source.py snapshot "$frozen"
+          export CONVT_RELEASE_SOURCE_TREE="$frozen"
+          bun run release:linux "$mode" packaging/out/ci-a
+          bun run release:linux "$mode" packaging/out/ci-b
+          version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')
+          python3 scripts/release/compare.py "packaging/out/ci-a/$version" "packaging/out/ci-b/$version"
+          bash scripts/release/rebuild-cli.sh "packaging/out/ci-a/$version/convt-$version-source.tar.gz"
+          rm -rf "$frozen"
+      - name: Sign copies and regenerate manifests
+        if: ${{ !inputs.dry_run }}
+        env:
+          REPO_KEY: ${{ secrets.CONVT_REPO_SIGNING_KEY }}
+          CONVT_REPO_SIGNING_KEY_ID: ${{ vars.CONVT_REPO_SIGNING_KEY_ID }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debsigs rpm
+          export GNUPGHOME
+          GNUPGHOME=$(mktemp -d)
+          chmod 700 "$GNUPGHOME"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          printf '%s' "$REPO_KEY" | gpg --batch --import
+          version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')
+          date=$(date -u -d "@$SOURCE_DATE_EPOCH" +%F)
+          bash scripts/release/sign-linux.sh "packaging/out/ci-a/$version" "packaging/out/signed/$version"
+          bun run release:manifest generate "packaging/out/signed/$version" "$version" "$date" https://downloads.convt.app ${CONVT_RELEASE_HISTORY:+"$CONVT_RELEASE_HISTORY"}
+          bun run release:manifest sign "packaging/out/signed/$version/release-manifest.json" "$CONVT_UPDATE_SIGNING_KEY" "packaging/out/signed/$version/update-manifest.json"
+          python3 scripts/release/templates.py "packaging/out/signed/$version/release-manifest.json" "packaging/out/signed/$version/repositories"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-review
+          path: packaging/out/
+          retention-days: 7
+      - name: Remove update seed
+        if: always()
+        run: |
+          if [ -n "${CONVT_UPDATE_SIGNING_KEY:-}" ]; then rm -f "$CONVT_UPDATE_SIGNING_KEY"; fi
+# Upload remains a separate Leo-authorized operation after all platform
+# artifacts are merged into the same signed manifest and source gates pass.

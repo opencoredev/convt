@@ -10,6 +10,14 @@ license.workspace = true
 anyhow.workspace = true
 convt-core.workspace = true
 convt-engines.workspace = true
+convt-server = { version = "0.1.0", path = "../convt-server" }
+serde_json.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "json"] }
+tar = { version = "=0.4.44", default-features = false }
+tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true

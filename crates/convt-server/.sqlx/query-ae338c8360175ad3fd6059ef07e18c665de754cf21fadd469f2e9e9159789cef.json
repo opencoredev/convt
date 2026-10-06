@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from verifications where identifier not like 'otp-issued:%' and expires_at < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ae338c8360175ad3fd6059ef07e18c665de754cf21fadd469f2e9e9159789cef"
+}

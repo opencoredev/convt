@@ -399,6 +399,23 @@ impl SettingsView {
                     .border_color(p.hairline)
                     .child(field_top("Documents", documents, p)),
             )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(18.))
+                    .px(px(40.))
+                    .pt(px(22.))
+                    .pb(px(28.))
+                    .border_t_1()
+                    .border_color(p.hairline)
+                    .child(field_top(
+                        "Update checks",
+                        super::update::settings_row(&self.app, p, cx),
+                        p,
+                    ))
+                    .child(field_top("Network", network(p), p)),
+            )
     }
 
     fn presets(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -582,8 +599,13 @@ impl SettingsView {
             .px(px(40.))
             .pt(px(28.))
             .pb(px(30.));
+        let account = super::account::section(&self.app, p, cx);
         if state == State::Unrestricted {
-            return body.child(status);
+            return div()
+                .flex()
+                .flex_col()
+                .child(body.child(status))
+                .child(account);
         }
         let licensed = matches!(state, State::Licensed(_) | State::NotCovered(_));
         let notice = self.license_notice.clone().map(|message| {
@@ -604,7 +626,8 @@ impl SettingsView {
                     .child(message),
                 )
         });
-        body.child(status)
+        let license = body
+            .child(status)
             .child(
                 div()
                     .flex()
@@ -646,7 +669,8 @@ impl SettingsView {
                                 .on_click(cx.listener(|this, _, _, cx| this.remove_license(cx))),
                         )
                     }),
-            )
+            );
+        div().flex().flex_col().child(license).child(account)
     }
 
     fn save_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -728,6 +752,44 @@ impl SettingsView {
         self.editing = Some(name.to_string());
         cx.notify();
     }
+}
+
+/// What reaches the network without a click, for the General tab. Update
+/// checks and license refresh are listed together, as the privacy policy
+/// lists them.
+pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
+    (
+        "network-updates",
+        "Update checks: while they're on, once a day at launch and when you click Check now, \
+         convt downloads the signed list of releases from convt.app. The request carries the \
+         app version and nothing about your files.",
+    ),
+    (
+        "network-refresh",
+        "License refresh: only while you're signed in to convt.app, once a day at launch, \
+         to fetch your current Pro key. See License.",
+    ),
+    (
+        "network-other",
+        "Anything else, such as downloading document support, waits for your click. \
+         Your files never leave this computer.",
+    ),
+];
+
+fn network(p: &Palette) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_w(px(0.))
+        .gap(px(6.))
+        .children(NETWORK_LINES.iter().map(|&(id, line)| {
+            div()
+                .id(id)
+                .test_support()
+                .aria_label(line)
+                .child(text(12., 17., p.secondary).child(line))
+        }))
 }
 
 /// A right-aligned label and its control, as in the design's settings rows.

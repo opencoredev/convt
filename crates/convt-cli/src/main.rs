@@ -77,7 +77,12 @@ enum Cmd {
         json: bool,
     },
     /// List the formats a file can be converted to
-    Targets { file: PathBuf },
+    Targets {
+        file: PathBuf,
+        /// Only the few popular targets right-click menus offer
+        #[arg(long)]
+        menu: bool,
+    },
     /// Show the engines available on this machine
     Engines,
     /// List saved presets
@@ -269,10 +274,15 @@ fn main() -> anyhow::Result<()> {
                 println!("{:<6} {:<13} {}", f.id, format!("{:?}", f.category), f.name);
             }
         }
-        Some(Cmd::Targets { file }) => {
+        Some(Cmd::Targets { file, menu }) => {
             let from = format_by_extension(&file)
                 .with_context(|| format!("unknown format: {}", file.display()))?;
-            for f in registry.targets(from) {
+            let targets = if menu {
+                registry.menu_targets(from)
+            } else {
+                registry.targets(from)
+            };
+            for f in targets {
                 println!("{}", f.id);
             }
         }

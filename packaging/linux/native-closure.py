@@ -46,13 +46,10 @@ while queue:
             if owner.returncode == 0 and not python:
                 package = owner.stdout.strip()
                 origins[name]['rpm'] = package
-                files = subprocess.check_output(['rpm', '-ql', package], text=True).splitlines()
-                for f in files:
-                    notice = Path(f)
-                    if notice.is_file() and ('/licenses/' in f or '/doc/' in f and re.search('COPYING|LICENSE|copyright', notice.name, re.I)):
-                        target = root / 'licenses/rpm' / package / notice.name
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(notice, target)
             queue.append(dest)
 report.mkdir(exist_ok=True)
 (report / 'native-origins.json').write_text(json.dumps(origins, indent=2, sort_keys=True) + '\n')
+
+# Also validate reused origins: a prior run must not bypass notice collection.
+if not python:
+    subprocess.run([sys.executable, str(Path(__file__).with_name('collect-native-notices.py')), str(root)], check=True)

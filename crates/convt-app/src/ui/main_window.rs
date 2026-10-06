@@ -147,6 +147,7 @@ impl MainView {
                     ),
             )
             .child(div().flex_1())
+            .children(super::update::sidebar_card(&self.app, p, cx))
             .children(trial_card(&license, p))
     }
 

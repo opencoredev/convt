@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use convt_core::{Ctx, Engine, Options, Preset, Registry, VideoCodec, format_by_id};
+use convt_license::account::{Api, ApiError, Session, challenge_of};
 use convt_license::client::{self, KeyStore};
 use convt_license::{License, Plan};
 use ed25519_dalek::SigningKey;
@@ -30,10 +31,114 @@ use crate::model::{AppState, PackPhase, Paths, Shared};
 use crate::pack::{self, Failure, FailureKind};
 use crate::request::{Request, Source};
 use crate::tray::{self, Indicator};
+use crate::update::{Fetch, FetchError, Update, UpdateConfig};
 
 struct Fixture {
     dir: TempDir,
     app: Entity<AppState>,
+    /// What the app asks convt.app; scripted, never the network.
+    api: Arc<TestApi>,
+    /// What the update check downloads; scripted, never the network.
+    releases: Arc<TestReleases>,
+}
+
+/// A scripted update server. It counts every fetch, so tests can prove a
+/// launch or a switched-off setting made no request.
+#[derive(Default)]
+struct TestReleases {
+    fetches: AtomicUsize,
+    answer: Mutex<Option<Result<Vec<u8>, FetchError>>>,
+    /// Runs during the next fetch, such as breaking the settings file.
+    during: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl TestReleases {
+    fn fetches(&self) -> usize {
+        self.fetches.load(Ordering::SeqCst)
+    }
+    fn serve(&self, answer: Result<Vec<u8>, FetchError>) {
+        *self.answer.lock().unwrap() = Some(answer);
+    }
+}
+
+impl Fetch for TestReleases {
+    fn fetch(&self) -> Result<Vec<u8>, FetchError> {
+        self.fetches.fetch_add(1, Ordering::SeqCst);
+        if let Some(during) = self.during.lock().unwrap().take() {
+            during();
+        }
+        self.answer
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or(Err(FetchError::Offline))
+    }
+}
+
+/// The base URL the fixtures sign in to. Nothing listens there.
+const ACCOUNT_URL: &str = "https://convt.test";
+
+/// A scripted convt.app. It counts every call, so tests can prove that a
+/// link or a launch reached the network or didn't.
+struct TestApi {
+    exchanges: AtomicUsize,
+    renewals: AtomicUsize,
+    sign_outs: AtomicUsize,
+    exchange: Mutex<Result<Session, ApiError>>,
+    key: Mutex<Result<Option<String>, ApiError>>,
+    /// The last code and verifier the app traded.
+    traded: Mutex<Option<(String, String)>>,
+    /// Keeps `exchange` from answering while set, to test what happens meanwhile.
+    hold_exchange: AtomicBool,
+}
+
+impl Default for TestApi {
+    fn default() -> Self {
+        Self {
+            exchanges: AtomicUsize::new(0),
+            renewals: AtomicUsize::new(0),
+            sign_outs: AtomicUsize::new(0),
+            exchange: Mutex::new(Err(ApiError::Rejected)),
+            key: Mutex::new(Err(ApiError::Offline)),
+            traded: Mutex::new(None),
+            hold_exchange: AtomicBool::new(false),
+        }
+    }
+}
+
+impl TestApi {
+    fn calls(&self) -> (usize, usize, usize) {
+        (
+            self.exchanges.load(Ordering::SeqCst),
+            self.renewals.load(Ordering::SeqCst),
+            self.sign_outs.load(Ordering::SeqCst),
+        )
+    }
+    fn answer_key(&self, key: Result<Option<String>, ApiError>) {
+        *self.key.lock().unwrap() = key;
+    }
+}
+
+impl Api for TestApi {
+    fn exchange(&self, code: &str, verifier: &str) -> Result<Session, ApiError> {
+        self.exchanges.fetch_add(1, Ordering::SeqCst);
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while self.hold_exchange.load(Ordering::SeqCst) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        *self.traded.lock().unwrap() = Some((code.into(), verifier.into()));
+        self.exchange.lock().unwrap().clone()
+    }
+    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError> {
+        assert_eq!(version, crate::account::VERSION);
+        assert!(!token.is_empty());
+        self.renewals.fetch_add(1, Ordering::SeqCst);
+        self.key.lock().unwrap().clone()
+    }
+    fn sign_out(&self, _: &str) -> Result<(), ApiError> {
+        self.sign_outs.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 /// The pack backend for tests that aren't about the pack: this machine's
@@ -246,6 +351,32 @@ impl Fixture {
         Self::build_with(cx, Arc::new(SystemPacks), license)
     }
 
+    /// A licensed build already signed in to convt.app as `email`.
+    fn signed_in(cx: &mut TestAppContext, key: Option<&str>, email: &str) -> Self {
+        let session = Session {
+            email: email.into(),
+            token: "cvd_test_token".into(),
+        };
+        Self::build(cx, |dir| {
+            std::fs::write(dir.join("trial"), "2026-09-30").unwrap();
+            if let Some(key) = key {
+                std::fs::write(dir.join("license.key"), key).unwrap();
+            }
+            std::fs::write(
+                dir.join("account.json"),
+                serde_json::to_string(&session).unwrap(),
+            )
+            .unwrap();
+            client::Config {
+                enforce: true,
+                public_key: Some(test_key().verifying_key()),
+                build_date: BUILD_DATE.into(),
+                trial_file: Some(dir.join("trial")),
+                store: KeyStore::File(dir.join("license.key")),
+            }
+        })
+    }
+
     /// A build from source whose document pack is `packs`.
     fn with_packs(cx: &mut TestAppContext, packs: Arc<TestPacks>) -> Self {
         Self::build_with(cx, packs, |_| client::Config {
@@ -263,11 +394,20 @@ impl Fixture {
         license: impl FnOnce(&Path) -> client::Config,
     ) -> Self {
         let dir = tempfile::tempdir().unwrap();
+        let api = Arc::new(TestApi::default());
+        let releases = Arc::new(TestReleases::default());
         let paths = Paths {
             settings: Some(dir.path().join("settings.toml")),
             history: Some(dir.path().join("history.db")),
             presets: Some(dir.path().join("presets")),
             license: license(dir.path()),
+            account_url: ACCOUNT_URL.into(),
+            account_api: api.clone(),
+            update: UpdateConfig {
+                key: Some(update_key().verifying_key()),
+                fetch: releases.clone(),
+                target: ("linux-x86_64", "AppImage"),
+            },
         };
         // Conversions run on real job threads that wake the UI.
         cx.executor().allow_parking();
@@ -279,7 +419,12 @@ impl Fixture {
             cx.set_global(Shared(app.clone()));
             app
         });
-        Self { dir, app }
+        Self {
+            dir,
+            app,
+            api,
+            releases,
+        }
     }
 
     /// A 4x4 PNG in the fixture directory.
@@ -1164,38 +1309,54 @@ fn a_build_from_source_never_shows_first_run(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn signing_in_opens_the_browser_and_a_link_brings_the_account_back(cx: &mut TestAppContext) {
+fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     let app = f.app.clone();
     let (window, view) = open(cx, move |window, cx| {
         cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
     });
     cx.update(|cx| cx.set_global(Open(window, view.downgrade())));
-    click(cx, window, "sign-in-google");
-    assert_eq!(
-        cx.opened_url().as_deref(),
-        Some("https://convt.app/signin?client=desktop&method=google")
-    );
+    // Starting the trial opens no browser and calls nothing.
+    click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+    assert_eq!(cx.opened_url(), None);
     click(cx, window, "first-run-back");
 
-    // The site hands the session back with a link; it starts nothing.
-    let link = crate::request::parse_url("convt://signin?email=a%40example.com").unwrap();
-    cx.update(|cx| super::route(link, cx));
-    cx.read(|cx| {
-        assert_eq!(
-            f.app.read(cx).settings.account.as_deref(),
-            Some("a@example.com")
-        );
-        assert_eq!(view.read(cx).step, Step::Done);
-    });
-    assert!(f.settings_file().contains("account = \"a@example.com\""));
-    assert_eq!(f.jobs(cx), 0);
-    click(cx, window, "first-run-back");
+    // "Sign in with convt.app" opens the device page and waits.
     assert_eq!(
-        label(cx, window, "account").as_deref(),
-        Some("Signed in as a@example.com")
+        label(cx, window, "sign-in").as_deref(),
+        Some("Sign in with convt.app")
     );
+    click(cx, window, "sign-in");
+    let page = cx.opened_url().expect("the device page opened");
+    assert!(
+        page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
+        "{page}"
+    );
+    assert_eq!(
+        label(cx, window, "account-status").as_deref(),
+        Some("Waiting for your browser…")
+    );
+    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Plan));
+
+    // The browser's answer brings first run back, signed in, with the key.
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "pro@example.com".into(),
+        token: "cvd_new".into(),
+    });
+    f.api
+        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+    let link = format!("convt://auth?state={}&code=onetime", query(&page, "state"));
+    cx.update(|cx| super::route(crate::request::parse_url(&link).unwrap(), cx));
+    wait_until(cx, "the key arrived", |cx| {
+        matches!(f.app.read(cx).license, client::State::Licensed(_))
+    });
+    assert_eq!(
+        label(cx, window, "account-status").as_deref(),
+        Some("Signed in as pro@example.com · Pro until 2026-11-01")
+    );
+    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
+    assert_eq!(f.jobs(cx), 0);
 }
 
 #[gpui_kit::test]
@@ -1583,6 +1744,13 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         });
         let (first, view) = window_of::<FirstRunView>(cx);
         assert!(fits(cx, first, "first-run-next"), "first run, trial");
+        // Waiting for the browser, then a link the app ignored.
+        click(cx, first, "sign-in");
+        assert!(fits(cx, first, "sign-in-cancel"), "first run, waiting");
+        cx.update(|cx| super::route(auth_link("not_ours", "code=x"), cx));
+        assert!(fits(cx, first, "account-notice"), "first run, notice");
+        assert!(fits(cx, first, "first-run-next"), "first run, notice");
+        click(cx, first, "sign-in-cancel");
         click(cx, first, "plan-key");
         click(cx, first, "first-run-next");
         cx.read(|cx| assert!(view.read(cx).error.is_some()));
@@ -2418,4 +2586,850 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
                 .unwrap();
         })
     });
+}
+
+/// A Pro key signed with [`test_key`].
+fn pro_key(email: &str, updates_until: &str) -> String {
+    let license = License {
+        id: format!("lic_pro_{updates_until}"),
+        email: email.into(),
+        plan: Plan::Pro,
+        issued: "2026-09-01".into(),
+        updates_until: updates_until.into(),
+    };
+    convt_license::sign(&license, &test_key())
+}
+
+/// One query value of a URL the app opened. The values the app writes are
+/// base64url or percent-encoded.
+fn query(url: &str, key: &str) -> String {
+    url.split(['?', '&'])
+        .find_map(|pair| pair.strip_prefix(&format!("{key}=")))
+        .unwrap_or_else(|| panic!("{key} is not in {url}"))
+        .to_string()
+}
+
+fn auth_link(state: &str, rest: &str) -> Request {
+    crate::request::parse_url(&format!("convt://auth?state={state}&{rest}")).unwrap()
+}
+
+fn today() -> String {
+    convt_license::date::from_days(client::today())
+}
+
+#[gpui_kit::test]
+fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-01"), None);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    assert_eq!(
+        label(cx, settings, "sign-in").as_deref(),
+        Some("Sign in with convt.app")
+    );
+    click(cx, settings, "sign-in");
+    let page = cx.opened_url().expect("the device page opened");
+    let state = query(&page, "state");
+    let challenge = query(&page, "challenge");
+    assert!(query(&page, "os").len() > 1);
+    assert_eq!(query(&page, "version"), crate::account::VERSION);
+    assert!(
+        label(cx, settings, "account-status")
+            .unwrap()
+            .starts_with("Waiting for your browser")
+    );
+    // "Open the page again" reopens the same flow.
+    cx.update(|cx| cx.open_url("about:blank"));
+    click(cx, settings, "sign-in-reopen");
+    assert_eq!(cx.opened_url().as_deref(), Some(page.as_str()));
+    // Waiting is not signed in, and nothing reached the network.
+    assert_eq!(f.api.calls(), (0, 0, 0));
+
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "pro@example.com".into(),
+        token: "cvd_issued".into(),
+    });
+    f.api
+        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+    cx.update(|cx| super::route(auth_link(&state, "code=c0de"), cx));
+    wait_until(cx, "the refresh finished", |cx| {
+        matches!(
+            f.app.read(cx).account.refresh,
+            crate::account::Refresh::Done(_)
+        )
+    });
+    // The code went back with the verifier whose hash the page got.
+    let (code, verifier) = f.api.traded.lock().unwrap().clone().unwrap();
+    assert_eq!(code, "c0de");
+    assert_eq!(challenge_of(&verifier), challenge);
+    assert!(!page.contains(&verifier));
+    assert_eq!(f.api.calls(), (1, 1, 0));
+    // The token is in the store, the key arrived without a confirm click.
+    let stored = std::fs::read_to_string(f.dir.path().join("account.json")).unwrap();
+    assert!(stored.contains("cvd_issued"));
+    cx.read(|cx| {
+        let s = f.app.read(cx);
+        assert!(matches!(&s.license, client::State::Licensed(l) if l.plan == Plan::Pro));
+        assert_eq!(
+            s.settings.license_checked.as_deref(),
+            Some(today().as_str())
+        );
+    });
+    assert_eq!(
+        label(cx, settings, "account-status").as_deref(),
+        Some("Signed in to convt.app as pro@example.com.")
+    );
+    assert_eq!(
+        label(cx, settings, "refresh-status").as_deref(),
+        Some("Got your Pro key, with updates until 2026-11-01.")
+    );
+    assert!(f.dir.path().join("license.key").exists());
+}
+
+#[gpui_kit::test]
+fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "pro@example.com".into(),
+        token: "cvd_issued".into(),
+    });
+    f.api.answer_key(Ok(None));
+
+    // No sign-in started: the link is dropped, with no network call.
+    cx.update(|cx| super::route(auth_link("forged_state", "code=stolen"), cx));
+    let (settings, _) = window_of::<SettingsView>(cx);
+    assert!(
+        label(cx, settings, "account-notice")
+            .unwrap()
+            .contains("didn't start")
+    );
+    assert_eq!(f.api.calls(), (0, 0, 0));
+    assert!(!f.dir.path().join("account.json").exists());
+
+    // While waiting, a link with another state is dropped and the wait goes on.
+    click(cx, settings, "sign-in");
+    let state = query(&cx.opened_url().unwrap(), "state");
+    cx.update(|cx| super::route(auth_link("forged_state", "code=stolen"), cx));
+    assert_eq!(f.api.calls(), (0, 0, 0));
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).account.sign_in,
+            crate::account::SignIn::Waiting
+        )
+    });
+
+    // The right link signs in once.
+    cx.update(|cx| super::route(auth_link(&state, "code=good"), cx));
+    wait_until(cx, "signed in", |cx| {
+        f.app.read(cx).account.session.is_some()
+    });
+    wait_until(cx, "refreshed", |cx| {
+        !matches!(
+            f.app.read(cx).account.refresh,
+            crate::account::Refresh::Running
+        )
+    });
+    assert_eq!(f.api.calls(), (1, 1, 0));
+
+    // Replaying it does nothing: the flow it belonged to is used up.
+    cx.update(|cx| super::route(auth_link(&state, "code=good"), cx));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (1, 1, 0));
+    assert!(
+        label(cx, settings, "account-notice")
+            .unwrap()
+            .contains("didn't start")
+    );
+    cx.read(|cx| assert_eq!(f.app.read(cx).account.email(), Some("pro@example.com")));
+
+    // After a cancel, the cancelled flow's link is dropped too.
+    click(cx, settings, "sign-out");
+    wait_until(cx, "revoked", |_| f.api.calls().2 == 1);
+    click(cx, settings, "sign-in");
+    let state = query(&cx.opened_url().unwrap(), "state");
+    click(cx, settings, "sign-in-cancel");
+    cx.update(|cx| super::route(auth_link(&state, "code=late"), cx));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls().0, 1);
+
+    // A flow left too long fails instead of signing in.
+    click(cx, settings, "sign-in");
+    let state = query(&cx.opened_url().unwrap(), "state");
+    cx.update(|cx| {
+        f.app.update(cx, |s, _| {
+            s.age_sign_in(convt_license::account::SIGN_IN_TIMEOUT)
+        })
+    });
+    cx.update(|cx| super::route(auth_link(&state, "code=slow"), cx));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls().0, 1);
+    assert!(
+        label(cx, settings, "account-status")
+            .unwrap()
+            .contains("took too long")
+    );
+    assert!(!f.dir.path().join("account.json").exists());
+}
+
+#[gpui_kit::test]
+fn a_sign_in_cancelled_or_refused_in_the_browser_fails(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    click(cx, settings, "sign-in");
+    let state = query(&cx.opened_url().unwrap(), "state");
+    cx.update(|cx| super::route(auth_link(&state, "error=access_denied"), cx));
+    assert_eq!(
+        label(cx, settings, "account-status").as_deref(),
+        Some("Sign-in was cancelled in the browser.")
+    );
+    assert_eq!(label(cx, settings, "sign-in").as_deref(), Some("Try again"));
+    assert_eq!(f.api.calls(), (0, 0, 0));
+
+    // convt.app refuses the code (used or expired on its side).
+    click(cx, settings, "sign-in");
+    let state = query(&cx.opened_url().unwrap(), "state");
+    cx.update(|cx| super::route(auth_link(&state, "code=used"), cx));
+    wait_until(cx, "the exchange failed", |cx| {
+        matches!(
+            f.app.read(cx).account.sign_in,
+            crate::account::SignIn::Failed(_)
+        )
+    });
+    assert!(
+        label(cx, settings, "account-status")
+            .unwrap()
+            .contains("didn't accept")
+    );
+    assert!(!f.dir.path().join("account.json").exists());
+    assert_eq!(f.api.calls(), (1, 0, 0));
+}
+
+#[gpui_kit::test]
+fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
+    let current = pro_key("pro@example.com", "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&current), "pro@example.com");
+    // Offline at launch: one try, the key stays, the failure shows in Settings.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    wait_until(cx, "the refresh failed", |cx| {
+        matches!(
+            f.app.read(cx).account.refresh,
+            crate::account::Refresh::Failed(_)
+        )
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    let status = label(cx, settings, "refresh-status").unwrap();
+    assert!(
+        status.contains("couldn't be reached") && status.contains("stays as it is"),
+        "{status}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("license.key")).unwrap(),
+        current
+    );
+    cx.read(|cx| assert!(matches!(f.app.read(cx).license, client::State::Licensed(_))));
+    // Signed in still: offline is not signed out.
+    cx.read(|cx| assert!(f.app.read(cx).account.session.is_some()));
+
+    // A second launch the same day asks nothing.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    // A launch on a later day asks again.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.license_checked = Some("2026-01-01".into()), cx)
+        })
+    });
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    wait_until(cx, "the second launch's refresh", |_| f.api.calls().1 == 2);
+
+    // Refresh license asks whenever clicked, and stores the next period's key.
+    let next = pro_key("pro@example.com", "2026-11-15");
+    f.api.answer_key(Ok(Some(next.clone())));
+    wait_until(cx, "idle", |cx| {
+        f.app.read(cx).account.refresh != crate::account::Refresh::Running
+    });
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.starts_with("Got your Pro key")
+    });
+    assert_eq!(f.api.calls(), (0, 3, 0));
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("license.key"))
+            .unwrap()
+            .trim(),
+        next
+    );
+
+    // Lapsed: the server's newest key is the last one, which changes nothing.
+    f.api.answer_key(Ok(Some(current.clone())));
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.starts_with("Your license is up to date")
+    });
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("license.key"))
+            .unwrap()
+            .trim(),
+        next
+    );
+    // No Pro key at all: the stored key stays.
+    f.api.answer_key(Ok(None));
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| s.contains("no Pro key"));
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("license.key"))
+            .unwrap()
+            .trim(),
+        next
+    );
+    // A key that doesn't verify changes nothing.
+    f.api.answer_key(Ok(Some("forged.key".into())));
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.contains("doesn't accept")
+    });
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("license.key"))
+            .unwrap()
+            .trim(),
+        next
+    );
+}
+
+#[gpui_kit::test]
+fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(
+        cx,
+        Some("2026-09-30"),
+        Some(&license_key("a@b.c", "2027-10-01")),
+    );
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    assert!(!shown(cx, settings, "refresh-license"));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 0, 0));
+    cx.read(|cx| assert_eq!(f.app.read(cx).settings.license_checked, None));
+    // A Desktop owner sees why they don't need to sign in.
+    let (general, _) = f.settings(SettingsTab::General, cx);
+    assert!(
+        label(cx, general, "network-refresh")
+            .unwrap()
+            .contains("only while you're signed in")
+    );
+    assert!(
+        label(cx, general, "network-updates")
+            .unwrap()
+            .starts_with("Update checks")
+    );
+}
+
+#[gpui_kit::test]
+fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut TestAppContext) {
+    let key = pro_key("pro@example.com", "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    f.api.answer_key(Err(ApiError::SignedOut));
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    click(cx, settings, "refresh-license");
+    wait_until(cx, "signed out", |cx| {
+        f.app.read(cx).account.session.is_none()
+    });
+    assert!(!f.dir.path().join("account.json").exists());
+    assert!(
+        label(cx, settings, "refresh-status")
+            .unwrap()
+            .contains("signed out of convt.app")
+    );
+    assert_eq!(
+        label(cx, settings, "sign-in").as_deref(),
+        Some("Sign in with convt.app")
+    );
+    cx.read(|cx| assert!(matches!(f.app.read(cx).license, client::State::Licensed(_))));
+    // Nothing more is asked while signed out.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.license_checked = None, cx);
+            s.renew_on_launch(cx)
+        })
+    });
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 1, 0));
+}
+
+#[gpui_kit::test]
+fn sign_out_forgets_the_token_and_revokes_it(cx: &mut TestAppContext) {
+    let key = pro_key("pro@example.com", "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    click(cx, settings, "sign-out");
+    assert!(!f.dir.path().join("account.json").exists());
+    wait_until(cx, "revoked on the server", |_| f.api.calls().2 == 1);
+    assert_eq!(
+        label(cx, settings, "account-notice").as_deref(),
+        Some("Signed out. The license on this computer stays.")
+    );
+    assert!(f.dir.path().join("license.key").exists());
+}
+
+#[gpui_kit::test]
+fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let (settings, _) = f.settings(SettingsTab::License, cx);
+        let app = f.app.clone();
+        let (first, _) = open(cx, move |window, cx| {
+            cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
+        });
+        // Signed out.
+        assert!(shown(cx, settings, "sign-in") && shown(cx, first, "sign-in"));
+        assert!(shown(cx, settings, "refresh-note"));
+        // Waiting.
+        click(cx, settings, "sign-in");
+        assert!(shown(cx, settings, "sign-in-cancel") && shown(cx, first, "sign-in-cancel"));
+        // Failed.
+        let state = query(&cx.opened_url().unwrap(), "state");
+        cx.update(|cx| super::route(auth_link(&state, "error=denied"), cx));
+        assert!(shown(cx, first, "sign-in"));
+        assert_eq!(label(cx, settings, "sign-in").as_deref(), Some("Try again"));
+        cx.update(|cx| {
+            cx.windows()
+                .iter()
+                .for_each(|w| drop(w.update(cx, |_, w, _| w.remove_window())))
+        });
+    }
+}
+
+#[gpui_kit::test]
+fn a_second_sign_in_cannot_start_while_the_first_is_finishing(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "pro@example.com".into(),
+        token: "cvd_first".into(),
+    });
+    f.api.answer_key(Ok(None));
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    click(cx, settings, "sign-in");
+    let page = cx.opened_url().unwrap();
+    f.api.hold_exchange.store(true, Ordering::SeqCst);
+    cx.update(|cx| super::route(auth_link(&query(&page, "state"), "code=first"), cx));
+    wait_until(cx, "the exchange started", |_| f.api.calls().0 == 1);
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).account.sign_in,
+            crate::account::SignIn::Finishing
+        )
+    });
+    // No sign-in button shows meanwhile, and starting anyway does nothing.
+    assert!(!shown(cx, settings, "sign-in"));
+    cx.update(|cx| cx.open_url("about:blank"));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_sign_in(cx)));
+    assert_eq!(cx.opened_url().as_deref(), Some("about:blank"));
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).account.sign_in,
+            crate::account::SignIn::Finishing
+        )
+    });
+    f.api.hold_exchange.store(false, Ordering::SeqCst);
+    wait_until(cx, "signed in", |cx| {
+        f.app.read(cx).account.session.is_some()
+    });
+    assert_eq!(f.api.calls().0, 1);
+}
+
+/// The key test update manifests are signed with. Made up, and not the
+/// license test key: the two must never be the same.
+fn update_key() -> SigningKey {
+    SigningKey::from_bytes(&[23; 32])
+}
+
+/// A signed manifest issued an hour ago, listing `builds` as (version, date).
+fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8> {
+    use base64::Engine as _;
+    use ed25519_dalek::Signer as _;
+    let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let artifact = |platform: &str, kind: &str| convt_update::Artifact {
+        platform: platform.into(),
+        kind: kind.into(),
+        url: "https://downloads.convt.test/convt".into(),
+        size: 1,
+        sha256: "a".repeat(64),
+    };
+    let m = convt_update::Manifest {
+        schema_version: 1,
+        sequence,
+        issued_at: now - 3600,
+        expires_at: now + 30 * 86_400,
+        distribution_ready: true,
+        purchase_url: "https://convt.test/pricing".into(),
+        builds: builds
+            .iter()
+            .map(|(v, d)| convt_update::Build {
+                version: (*v).into(),
+                build_date: (*d).into(),
+                artifacts: vec![artifact("linux-x86_64", "AppImage")],
+                source: artifact("source", "tar.gz"),
+            })
+            .collect(),
+    };
+    let payload = b64.encode(serde_json::to_vec(&m).unwrap());
+    let signature = b64.encode(
+        key.sign(format!("{}{payload}", convt_update::SIGNING_DOMAIN).as_bytes())
+            .to_bytes(),
+    );
+    serde_json::to_vec(&convt_update::SignedManifest { payload, signature }).unwrap()
+}
+
+fn wait_for_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
+    wait_until(cx, "the update check", |cx| {
+        f.app.read(cx).update != Update::Checking
+    });
+    cx.read(|cx| f.app.read(cx).update.clone())
+}
+
+fn launch_check(f: &Fixture, cx: &mut TestAppContext) {
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates_on_launch(cx)));
+}
+
+fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
+    wait_for_check(f, cx)
+}
+
+#[gpui_kit::test]
+fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
+    // The license covers builds through 2026-10-03.
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-03")));
+    let builds = [
+        ("0.1.0", "2026-10-01"),
+        ("0.2.0", "2026-10-03"),
+        ("0.3.0", "2026-10-04"),
+    ];
+    f.releases.serve(Ok(manifest(7, &builds, &update_key())));
+    launch_check(&f, cx);
+    assert_eq!(
+        wait_for_check(&f, cx),
+        Update::Available {
+            version: "0.2.0".into(),
+            date: "2026-10-03".into(),
+            uncovered: Some("0.3.0".into()),
+        }
+    );
+    cx.read(|cx| {
+        let s = &f.app.read(cx).settings;
+        assert_eq!(s.update_sequence, 7);
+        assert_eq!(s.update_checked.as_deref(), Some(today().as_str()));
+    });
+    assert!(f.settings_file().contains("update_sequence = 7"));
+
+    let (main, _) = f.main(cx);
+    assert_eq!(
+        label(cx, main, "update-card").as_deref(),
+        Some("Update available: convt 0.2.0")
+    );
+    click(cx, main, "update-download");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(convt_license::client::DOWNLOAD_URL)
+    );
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let status = label(cx, settings, "update-status").unwrap();
+    assert!(status.contains("0.2.0 is out") && status.contains("0.3.0 needs a renewed license"));
+
+    // A second launch the same day asks nothing.
+    launch_check(&f, cx);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 1);
+    // Nothing was downloaded or installed: the only fetch was the list.
+}
+
+#[gpui_kit::test]
+fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    f.releases.serve(Ok(manifest(
+        3,
+        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &update_key(),
+    )));
+    assert!(matches!(
+        manual_check(&f, cx),
+        Update::NotCovered { version, .. } if version == "0.2.0"
+    ));
+    let (main, _) = f.main(cx);
+    assert_eq!(
+        label(cx, main, "update-card").as_deref(),
+        Some("New version: convt 0.2.0 needs a renewed license")
+    );
+    click(cx, main, "update-renew");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some("https://convt.test/pricing")
+    );
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .contains("Renew to get it")
+    );
+    assert!(shown(cx, settings, "update-renew"));
+    // Check now stays offered next to Renew.
+    assert!(shown(cx, settings, "check-updates"));
+
+    // Up to date: nothing newer than this build.
+    f.releases
+        .serve(Ok(manifest(4, &[("0.1.0", "2026-10-01")], &update_key())));
+    assert_eq!(manual_check(&f, cx), Update::UpToDate);
+    assert!(!shown(cx, main, "update-card"));
+}
+
+#[gpui_kit::test]
+fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppContext) {
+    use base64::Engine as _;
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let newer = [("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")];
+    // Accept sequence 10 first.
+    f.releases.serve(Ok(manifest(10, &newer, &update_key())));
+    assert!(matches!(manual_check(&f, cx), Update::Available { .. }));
+    let (main, _) = f.main(cx);
+    assert!(shown(cx, main, "update-card"));
+
+    type Answer = Result<Vec<u8>, FetchError>;
+    let failures: Vec<(&str, Answer, &str)> = vec![
+        (
+            "wrong key",
+            Ok(manifest(11, &newer, &test_key())),
+            "didn't check out",
+        ),
+        (
+            "tampered",
+            Ok({
+                let mut env: convt_update::SignedManifest =
+                    serde_json::from_slice(&manifest(12, &newer, &update_key())).unwrap();
+                let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+                let mut payload = String::from_utf8(b64.decode(&env.payload).unwrap()).unwrap();
+                payload = payload.replace("2026-10-03", "2026-10-04");
+                env.payload = b64.encode(payload);
+                serde_json::to_vec(&env).unwrap()
+            }),
+            "didn't check out",
+        ),
+        ("garbage", Ok(b"<html>".to_vec()), "didn't check out"),
+        (
+            "rollback",
+            Ok(manifest(9, &newer, &update_key())),
+            "older than one seen before",
+        ),
+        ("offline", Err(FetchError::Offline), "couldn't be reached"),
+        ("server error", Err(FetchError::Status(503)), "HTTP 503"),
+    ];
+    for (what, answer, note) in failures {
+        f.releases.serve(answer);
+        let update = manual_check(&f, cx);
+        assert!(
+            matches!(&update, Update::Failed(m) if m.contains(note)),
+            "{what}: {update:?}"
+        );
+        // Silent outside Settings: no card, no notification, no window.
+        assert!(!shown(cx, main, "update-card"), "{what}");
+        cx.read(|cx| assert_eq!(f.app.read(cx).settings.update_sequence, 10, "{what}"));
+    }
+    assert!(cx.shown_system_notifications().is_empty());
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let status = label(cx, settings, "update-status").unwrap();
+    assert!(
+        status.starts_with("Couldn't check for updates."),
+        "{status}"
+    );
+    assert!(shown(cx, settings, "check-updates"));
+    // A newer sequence is accepted again.
+    f.releases.serve(Ok(manifest(11, &newer, &update_key())));
+    assert!(matches!(manual_check(&f, cx), Update::Available { .. }));
+    cx.read(|cx| assert_eq!(f.app.read(cx).settings.update_sequence, 11));
+}
+
+#[gpui_kit::test]
+fn update_checks_off_make_no_request(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    f.releases
+        .serve(Ok(manifest(1, &[("0.2.0", "2026-10-03")], &update_key())));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("On"));
+    click(cx, settings, "update-checks");
+    assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("Off"));
+    assert!(f.settings_file().contains("update_checks = false"));
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("Off.")
+    );
+    launch_check(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 0);
+    assert!(!shown(cx, settings, "check-updates"));
+    // Switching it back on is a click, so it checks right away. A trial
+    // covers every build.
+    click(cx, settings, "update-checks");
+    assert!(matches!(wait_for_check(&f, cx), Update::Available { .. }));
+    assert_eq!(f.releases.fetches(), 1);
+    assert!(
+        label(cx, settings, "network-updates")
+            .unwrap()
+            .contains("signed list of releases")
+    );
+}
+
+#[gpui_kit::test]
+fn a_build_without_an_update_key_never_fetches(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_config.key = None));
+    launch_check(&f, cx);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 0);
+    cx.read(|cx| {
+        assert!(matches!(&f.app.read(cx).update, Update::Failed(m) if m.contains("no key")))
+    });
+}
+
+#[gpui_kit::test]
+fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let states = [
+        Update::Idle,
+        Update::Checking,
+        Update::UpToDate,
+        Update::Available {
+            version: "0.2.0".into(),
+            date: "2026-10-03".into(),
+            uncovered: Some("0.3.0".into()),
+        },
+        Update::NotCovered {
+            version: "0.2.0".into(),
+            date: "2026-10-03".into(),
+            purchase_url: "https://convt.test/pricing".into(),
+        },
+        Update::Failed("convt.app couldn't be reached.".into()),
+    ];
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let (main, _) = f.main(cx);
+        let (settings, _) = f.settings(SettingsTab::General, cx);
+        for state in &states {
+            cx.update(|cx| {
+                f.app.update(cx, |s, cx| {
+                    s.update = state.clone();
+                    cx.notify();
+                })
+            });
+            assert!(shown(cx, settings, "update-status"), "{state:?}");
+            let card = matches!(state, Update::Available { .. } | Update::NotCovered { .. });
+            assert_eq!(shown(cx, main, "update-card"), card, "{state:?}");
+            if card {
+                assert!(fits(cx, main, "update-card"), "{state:?}");
+            }
+        }
+    }
+}
+
+/// Makes `settings.toml` unsaveable: a directory takes its name.
+fn break_settings(dir: &Path) {
+    let path = dir.join("settings.toml");
+    let _ = std::fs::remove_file(&path);
+    std::fs::create_dir_all(path.join("blocker")).unwrap();
+}
+
+#[gpui_kit::test]
+fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let newer = [("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")];
+    f.releases.serve(Ok(manifest(8, &newer, &update_key())));
+    // The sequence can't be saved: the result is not shown or remembered.
+    let dir = f.dir.path().to_path_buf();
+    *f.releases.during.lock().unwrap() = Some(Box::new(move || break_settings(&dir)));
+    let update = manual_check(&f, cx);
+    assert!(
+        matches!(&update, Update::Failed(m) if m.contains("couldn't be saved")),
+        "{update:?}"
+    );
+    cx.read(|cx| assert_eq!(f.app.read(cx).settings.update_sequence, 0));
+    let (main, _) = f.main(cx);
+    assert!(!shown(cx, main, "update-card"));
+    // The day can't be recorded: no request at all.
+    cx.update(|cx| f.app.update(cx, |s, _| s.settings.update_checked = None));
+    launch_check(&f, cx);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 1);
+    cx.read(|cx| {
+        assert!(
+            matches!(&f.app.read(cx).update, Update::Failed(m) if m.contains("couldn't be saved"))
+        )
+    });
+}
+
+#[gpui_kit::test]
+fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    f.releases.serve(Ok(manifest(
+        3,
+        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &update_key(),
+    )));
+    assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
+    // Activating (or renewing to) a key that covers it turns Renew into Download.
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2027-10-01"), cx)
+            })
+            .unwrap();
+    });
+    cx.read(|cx| {
+        assert!(matches!(&f.app.read(cx).update, Update::Available { version, .. } if version == "0.2.0"))
+    });
+    // And a renewal through convt.app does the same.
+    let f2 = Fixture::signed_in(
+        cx,
+        Some(&pro_key("pro@example.com", "2026-10-02")),
+        "pro@example.com",
+    );
+    f2.releases.serve(Ok(manifest(
+        3,
+        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &update_key(),
+    )));
+    assert!(matches!(manual_check(&f2, cx), Update::NotCovered { .. }));
+    f2.api
+        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+    cx.update(|cx| f2.app.update(cx, |s, cx| s.refresh_license(cx)));
+    wait_until(cx, "renewed", |cx| {
+        matches!(
+            f2.app.read(cx).account.refresh,
+            crate::account::Refresh::Done(_)
+        )
+    });
+    cx.read(|cx| assert!(matches!(&f2.app.read(cx).update, Update::Available { .. })));
+    assert_eq!(f2.releases.fetches(), 1);
+}
+
+#[gpui_kit::test]
+fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppContext) {
+    // The license ended before this build (2026-10-01) too.
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-09-15")));
+    f.releases.serve(Ok(manifest(
+        2,
+        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &update_key(),
+    )));
+    assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let status = label(cx, settings, "update-status").unwrap();
+    assert!(
+        !status.contains("keeps working") && status.contains("renew to convert again"),
+        "{status}"
+    );
 }

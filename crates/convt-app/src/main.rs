@@ -1,10 +1,13 @@
 //! The convt desktop app. One process runs per user: a second launch hands
 //! its files to the running app and exits.
 
+mod account;
 mod clock;
 mod history;
 mod instance;
 mod jobs;
+#[cfg(target_os = "macos")]
+mod macos;
 mod model;
 mod pack;
 mod placeholder;
@@ -13,6 +16,7 @@ mod settings;
 mod thumbs;
 mod tray;
 mod ui;
+mod update;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -63,6 +67,15 @@ fn run(primary: instance::Primary, first: Request) {
     let app = gpui_kit::application().with_assets(ui::assets());
     let urls = tx.clone();
     app.on_open_urls(move |links| {
+        // The Finder extension's requests, and files opened with convt.
+        #[cfg(target_os = "macos")]
+        let links = {
+            let (requests, links) = macos::open_urls(links);
+            for req in requests {
+                drop(urls.unbounded_send(req));
+            }
+            links
+        };
         for link in links {
             match request::parse_url(&link) {
                 Ok(req) => drop(urls.unbounded_send(req)),
@@ -77,8 +90,16 @@ fn run(primary: instance::Primary, first: Request) {
         gpui_kit::init(cx);
         ui::theme::init(cx);
         let state = cx.new(|cx| AppState::new(Arc::new(pack::Engines), Paths::from_env(), cx));
-        cx.set_global(Shared(state));
+        #[cfg(target_os = "macos")]
+        macos::init(&state, tx.clone(), cx);
+        cx.set_global(Shared(state.clone()));
         cx.on_window_closed(last_window_closed).detach();
+        // One of the two network calls the app makes by itself: while signed in, at
+        // most once a day, ask convt.app for the current Pro key.
+        state.update(cx, |s, cx| s.renew_on_launch(cx));
+        // The other: when update checks are on, at most once a day, fetch the
+        // signed list of releases.
+        state.update(cx, |s, cx| s.check_updates_on_launch(cx));
 
         primary.listen(move |req| drop(tx.unbounded_send(req)));
         cx.spawn(async move |cx| {
@@ -87,7 +108,13 @@ fn run(primary: instance::Primary, first: Request) {
             }
         })
         .detach();
-        ui::route(first, cx);
+        #[cfg(target_os = "macos")]
+        let first = macos::launch_requests(first);
+        #[cfg(not(target_os = "macos"))]
+        let first = vec![first];
+        for req in first {
+            ui::route(req, cx);
+        }
     });
     // In case the platform returns without running the quit observers.
     thumbs::shutdown();

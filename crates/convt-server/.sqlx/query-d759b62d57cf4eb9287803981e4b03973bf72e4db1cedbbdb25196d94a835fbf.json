@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set status=$4, output_keys=$5, reservation=$6, error_code=$7, lease_expires_at=null, finished_at=now(),updated_at=now() where id=$1 and attempt=$2 and lease_owner=$3 and status='running' and lease_expires_at>now() and expires_at>now() and reservation='open'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d759b62d57cf4eb9287803981e4b03973bf72e4db1cedbbdb25196d94a835fbf"
+}

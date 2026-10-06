@@ -70,7 +70,11 @@ patch -d /work/source/libheif -p1 < packaging/linux/libheif-explicit-init.patch
 cmake -S /work/source/libheif -B /work/source/libheif/build "${common[@]}" -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF -DENABLE_PLUGIN_LOADING=ON -DWITH_LIBDE265=ON -DWITH_LIBDE265_PLUGIN=ON -DWITH_X265=ON -DWITH_X265_PLUGIN=ON -DWITH_AOM_DECODER=ON -DWITH_AOM_DECODER_PLUGIN=ON -DWITH_AOM_ENCODER=ON -DWITH_AOM_ENCODER_PLUGIN=ON -DWITH_DAV1D=OFF -DWITH_RAV1E=OFF -DWITH_SvtEnc=OFF -DWITH_LIBSHARPYUV=OFF
 cmake --build /work/source/libheif/build -j "$jobs"
 cmake --install /work/source/libheif/build
-cargo build --offline --locked --release -p convt-cli -p convt-app -j "$jobs"
+# Main-executable DT_RPATH is transitive: native libraries and their plugins
+# retain the private closure without exporting a loader path to Office children.
+# Keep $ORIGIN literal for the ELF loader, independent of the install location.
+RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,--disable-new-dtags -C link-arg=-Wl,-rpath,\$ORIGIN/lib" \
+  cargo build --offline --locked --release -p convt-cli -p convt-app -j "$jobs"
 stage=/work/convt
 install -m755 /work/target/release/convt "$stage/convt.bin"
 install -m755 /work/target/release/convt-app "$stage/convt-app.bin"
@@ -80,6 +84,7 @@ cp -a /work/native/lib/*.so* "$stage/lib/"
 cp -a /work/native/lib/libheif/*.so "$stage/lib/libheif/plugins/"
 tar xf /inputs/pdfium.tgz -C /work/native
 cp /work/native/lib/libpdfium.so "$stage/lib/"
+bash /repo/packaging/linux/build-ffmpeg.sh
 # A newer C++ runtime must also support host desktop drivers loaded by GPUI.
 # These hash-locked conda-forge builds target glibc 2.17; the final ELF audit
 # checks them again inside this baseline container.
@@ -87,15 +92,13 @@ python3 packaging/linux/compiler-runtime.py "$stage"
 # Collect the complete native closure from this old build environment.
 env -u LD_PRELOAD python3 packaging/linux/native-closure.py "$stage"
 for path in "$stage/lib/"*.so* "$stage/lib/libheif/plugins/"*.so; do strip --strip-unneeded "$path"; done
-mkdir /work/ffmpeg
-tar xf /inputs/ffmpeg.tar.xz --strip-components=1 -C /work/ffmpeg
-cp /work/ffmpeg/{ffmpeg,ffprobe} "$stage/"
-cp /work/ffmpeg/GPLv3.txt "$stage/licenses/ffmpeg-GPLv3.txt"
-"$stage/ffmpeg" -version > "$stage/licenses/ffmpeg-configuration.txt"
 cp -a /work/native/licenses "$stage/licenses/pdfium"
 cp /work/native/LICENSE "$stage/licenses/pdfium-build-MIT.txt"
+python3 packaging/release/install-pdfium-notices.py packaging/release/pdfium-source.lock.json /inputs "$stage/licenses/pdfium-runtime"
 cp packaging/linux/{inputs.lock.json,build-rpms.lock.json,build-image.json,INVENTORY.md,libheif-explicit-init.patch} "$stage/licenses/"
 cp LICENSE "$stage/licenses/convt-AGPL.txt"
+# Tie the dependency notice map to this exact payload source snapshot.
+sha256sum Cargo.lock | cut -d" " -f1 > "$stage/licenses/cargo-lock.sha256"
 cp packaging/linux/{convt.desktop,convt.svg} "$stage/share/"
 # Preserve exact patched sources and recipes for the codecs we built.
 mkdir -p "$stage/licenses/codecs"

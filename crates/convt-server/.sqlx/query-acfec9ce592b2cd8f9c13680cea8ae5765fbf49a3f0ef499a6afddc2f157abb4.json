@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*)::bigint as \"count!\", coalesce(sum(input_bytes),0)::bigint as \"bytes!\" from cloud_jobs where user_id=$1 and input_key is not null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "acfec9ce592b2cd8f9c13680cea8ae5765fbf49a3f0ef499a6afddc2f157abb4"
+}

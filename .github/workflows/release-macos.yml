@@ -1,0 +1,79 @@
+name: Release macOS (manual, universal)
+on:
+  workflow_dispatch:
+    inputs:
+      source_date_epoch:
+        description: Release UTC Unix timestamp
+        required: true
+        type: string
+      dry_run:
+        description: Skip Developer ID signing and notarization
+        default: true
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
+      CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
+      CONVT_UPDATE_PUBKEY: ${{ vars.CONVT_UPDATE_PUBKEY }}
+      CONVT_LICENSE_STORE: file
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Import Developer ID certificate
+        if: ${{ !inputs.dry_run }}
+        env:
+          CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/release.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/release.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/release.keychain-db"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$RUNNER_TEMP/release.keychain-db" -P "$PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/release.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/release.keychain-db"
+      - name: Build universal app and signed notarized image
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          CONVT_SIGN_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          CONVT_MAC_ARCHS: arm64 x86_64
+          CONVT_MAC_OUT: packaging/out/macos
+          CONVT_NOTARY_PROFILE: convt-release
+        run: |
+          export CONVT_BUILD="$SOURCE_DATE_EPOCH"
+          if [ "$DRY_RUN" = true ]; then
+            export CONVT_SIGN_IDENTITY=-
+            bash packaging/macos/bundle.sh
+            bash packaging/macos/dmg.sh packaging/out/macos/convt.app
+          else
+            export CONVT_LICENSE_ENFORCE=1
+            xcrun notarytool store-credentials "$CONVT_NOTARY_PROFILE" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --keychain "$RUNNER_TEMP/release.keychain-db"
+            bash packaging/macos/release.sh
+          fi
+          lipo -verify_arch arm64 x86_64 packaging/out/macos/convt.app/Contents/MacOS/convt-app
+          codesign --verify --deep --strict --verbose=2 packaging/out/macos/convt.app
+          # Standardize the filename consumed by the release manifest generator.
+          cp packaging/out/macos/convt-*-universal.dmg packaging/out/convt-macos-universal.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-review
+          path: packaging/out/
+      - name: Remove certificate and keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          if [ -f "$RUNNER_TEMP/release.keychain-db" ]; then security delete-keychain "$RUNNER_TEMP/release.keychain-db"; fi

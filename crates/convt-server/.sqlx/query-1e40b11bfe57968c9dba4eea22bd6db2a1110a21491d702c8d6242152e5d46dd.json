@@ -1,0 +1,280 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.input_key,j.input_bytes,j.output_keys as \"output_keys: _\",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "api_key_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "api_key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subscription_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "subscription_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "quota_period_start",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "quota_period_start"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "input_format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "input_format"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "target_format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "target_format"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "input_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "input_key"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "input_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "input_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "output_keys: _",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "output_keys"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "attempt"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "max_attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "max_attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "lease_owner",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "lease_owner"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "lease_expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "lease_expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "reserved_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "reserved_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "reserved_cents",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "reserved_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "reservation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "reservation"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "error_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "error_code"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1e40b11bfe57968c9dba4eea22bd6db2a1110a21491d702c8d6242152e5d46dd"
+}

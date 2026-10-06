@@ -1,0 +1,58 @@
+[
+  {
+    "name": "x264",
+    "configure_flag": "libx264",
+    "version": "0.164.3108+git31e19f9",
+    "source_name": "x264_0.164.3108+git31e19f9.orig.tar.gz",
+    "source_sha256": "41606cb8e788a7f8c4514290646d4ba5c7bc68d9e1ccd1a73f446a90546913eb",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  },
+  {
+    "name": "libvpx",
+    "configure_flag": "libvpx",
+    "version": "1.14.0",
+    "source_name": "libvpx_1.14.0.orig.tar.xz",
+    "source_sha256": "11150687870e4c94479abafe5d1ed38790e68dc7bbe08880fd5fb55138e4c6f3",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  },
+  {
+    "name": "opus",
+    "configure_flag": "libopus",
+    "version": "1.4",
+    "source_name": "opus_1.4.orig.tar.gz",
+    "source_sha256": "c9b32b4253be5ae63d1ff16eea06b94b5f0f2951b7a02aceef58e3a3ce49c51f",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  },
+  {
+    "name": "lame",
+    "configure_flag": "libmp3lame",
+    "version": "3.99.5+repack1",
+    "source_name": "lame_3.99.5+repack1.orig.tar.gz",
+    "source_sha256": "01c1a34dc5ced11a487f04514cb948d38f6f559daebc85ae23c1c8a6c8280c95",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  },
+  {
+    "name": "libvorbis",
+    "configure_flag": "libvorbis",
+    "version": "1.3.7",
+    "source_name": "libvorbis_1.3.7.orig.tar.gz",
+    "source_sha256": "0e982409a9c3fc82ee06e08205b1355e5c6aa4c36bca58146ef399621b0ce5ab",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  },
+  {
+    "name": "aom",
+    "configure_flag": "libaom",
+    "version": "3.8.2-2ubuntu0.2",
+    "source_name": "aom_3.8.2.orig.tar.gz",
+    "source_sha256": "08be381e014c3cf508293f9127c8e24cc35262c6e9c805b0a8313cebf99cbcda",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  },
+  {
+    "name": "x265",
+    "configure_flag": "libx265",
+    "version": "3.5-2build1",
+    "source_name": "x265_3.5.orig.tar.gz",
+    "source_sha256": "e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8",
+    "status": "source-built from pinned archive; recipe packaging/linux/build-ffmpeg.sh"
+  }
+]

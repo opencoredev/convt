@@ -294,6 +294,14 @@ class Nautilus(unittest.TestCase):
                 sys.path.remove(str(HERE / "nautilus"))
         cls.ext = convt_nautilus
 
+    def setUp(self):
+        patch = mock.patch.object(self.ext, "supported_extensions", return_value={"png", "jpg", "wav"})
+        patch.start()
+        self.recognition_patch = patch
+        self.addCleanup(patch.stop)
+        self.ext.cached_targets.cache_clear()
+        self.ext.cached_extensions.cache_clear()
+
     @staticmethod
     def file(path, directory=False):
         location = types.SimpleNamespace(get_path=lambda: path)
@@ -330,7 +338,7 @@ class Nautilus(unittest.TestCase):
             (root,) = self.ext.ConvtMenu().get_file_items([self.file(p) for p in paths])
         self.assertEqual([item.kw["label"] for item in root.submenu.items], ["More options…"])
 
-    def test_no_menu_without_targets(self):
+    def test_no_menu_for_unrecognized_inputs(self):
         with mock.patch.object(self.ext, "targets_for", self.targets):
             menu = self.ext.ConvtMenu()
             self.assertEqual(menu.get_file_items([self.file("/tmp/README")]), [])
@@ -342,6 +350,198 @@ class Nautilus(unittest.TestCase):
         self.assertEqual(self.ext.extension_of("/a/photo.HEIC"), "heic")
         self.assertEqual(self.ext.extension_of("/a/.hidden"), "")
 
+    def test_recognized_format_without_targets_still_opens_more_options(self):
+        with mock.patch.object(self.ext, 'targets_for', return_value=()):
+            root, = self.ext.ConvtMenu().get_file_items([self.file('/tmp/x.wav')])
+        self.assertEqual([item.kw['label'] for item in root.submenu.items], ['More options…'])
 
-if __name__ == "__main__":
+    def test_targets_retry_after_ttl_including_failed_queries(self):
+        for first in [types.SimpleNamespace(stdout=''), subprocess.TimeoutExpired('convt', 2)]:
+            self.ext.cached_targets.cache_clear()
+            with mock.patch.object(self.ext.time, 'monotonic', return_value=0) as now, \
+                    mock.patch.object(self.ext.subprocess, 'run', side_effect=[first, types.SimpleNamespace(stdout='jpeg webp')]) as run:
+                self.assertEqual(self.ext.targets_for('png'), ())
+                now.return_value = self.ext.CACHE_TTL - 1
+                self.assertEqual(self.ext.targets_for('png'), ())
+                self.assertEqual(run.call_count, 1)
+                now.return_value = self.ext.CACHE_TTL
+                self.assertEqual(self.ext.targets_for('png'), ('jpeg', 'webp'))
+                self.assertEqual(run.call_count, 2)
+
+    def test_recognition_cache_recovers_after_missing_cli(self):
+        # Undo the menu-test recognition stub to exercise the public query.
+        self.recognition_patch.stop()
+        with mock.patch.object(self.ext.time, 'monotonic', return_value=0) as now, \
+                mock.patch.object(self.ext.subprocess, 'run', side_effect=[FileNotFoundError(), types.SimpleNamespace(stdout='[{"extensions":["heic","heif"]}]')]) as run:
+            self.assertEqual(self.ext.supported_extensions(), frozenset())
+            self.assertEqual(self.ext.supported_extensions(), frozenset())
+            self.assertEqual(run.call_count, 1)
+            now.return_value = self.ext.CACHE_TTL
+            self.assertEqual(self.ext.supported_extensions(), {'heic', 'heif'})
+
+
+class SystemIntegration(unittest.TestCase):
+    def test_explicit_user_install_retires_duplicates_without_touching_other_files(self):
+        with tempfile.TemporaryDirectory(prefix="convt-linux-system-") as tmp:
+            root = Path(tmp)
+            system, user = root / "system", root / "user"
+            for directory, name in [("nemo/actions", "convt-zz-more-options.nemo_action"),
+                                    ("kio/servicemenus", "convt-0.desktop"),
+                                    ("nautilus-python/extensions", "convt_nautilus.py"),
+                                    ("applications", "convt-app.desktop")]:
+                for base in [system, user]:
+                    (base / directory).mkdir(parents=True, exist_ok=True)
+                    (base / directory / name).write_text(install.MARKER + "convt")
+                (user / directory / "unrelated").write_text("keep")
+            with mock.patch.object(install, "SYSTEM_DATA", system), mock.patch.object(install, "DATA", user):
+                for name in ["nemo", "dolphin", "nautilus", "app"]:
+                    self.assertTrue(install.use_system_install(name))
+                self.assertFalse(install.use_system_install("thunar"))
+            self.assertEqual(len(list(user.rglob("unrelated"))), 4)
+            self.assertEqual(list(user.rglob("convt*")), [])
+            self.assertEqual(len(list(system.rglob("convt*"))), 4)
+
+    def test_tarball_install_still_uses_user_paths(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(install, "SYSTEM_DATA", Path(tmp)):
+            self.assertFalse(install.use_system_install("nemo"))
+
+
+class Ownership(Fixture):
+    def setUp(self):
+        super().setUp()
+        self.data = self.tmp / 'data'
+        self.config = self.tmp / 'config'
+        for patch in [mock.patch.object(install, 'DATA', self.data),
+                      mock.patch.dict(os.environ, {'XDG_CONFIG_HOME': str(self.config)})]:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def seed(self, legacy=False):
+        artifacts = [('dolphin', install.dolphin_menus(GROUPS)),
+                     ('nemo', install.nemo_actions(GROUPS)),
+                     ('app', {'convt-app.desktop': install.app_entry()}),
+                     ('nautilus', {'convt_nautilus.py': (HERE / 'nautilus/convt_nautilus.py').read_text()})]
+        paths = []
+        for kind, files in artifacts:
+            directory = self.data / install.USER_ARTIFACTS[kind][0]
+            directory.mkdir(parents=True, exist_ok=True)
+            for name, text in files.items():
+                if legacy and kind == 'nautilus':
+                    text = (HERE / 'fixtures/legacy-nautilus.txt').read_text()
+                path = directory / name
+                path.write_text(text.removeprefix(install.MARKER) if legacy else text)
+                paths.append(path)
+        uca = install.thunar_path()
+        uca.parent.mkdir(parents=True, exist_ok=True)
+        actions = ''.join(install.thunar_actions(GROUPS))
+        if legacy:
+            actions = actions.replace(install.ACTION_MARKER, '')
+        self.unrelated_action = '<action><icon>convt</icon><name>Mine</name><unique-id>convt-custom</unique-id><command>echo keep</command></action>'
+        uca.write_text('<actions>' + self.unrelated_action + actions + '</actions>')
+        return paths
+
+    def test_uninstall_marked_files_is_idempotent_and_preserves_others(self):
+        paths = self.seed()
+        unrelated = self.data / 'nemo/actions/convt-personal.nemo_action'
+        unrelated.write_text('[Nemo Action]\nName=Mine\nIcon-Name=convt\nExec=echo keep\n')
+        original = unrelated.read_bytes()
+        link = self.data / 'kio/servicemenus/convt-link.desktop'
+        link.symlink_to(unrelated)
+        with contextlib.redirect_stdout(io.StringIO()):
+            install.uninstall()
+            install.uninstall()
+        self.assertFalse(any(path.exists() for path in paths))
+        self.assertEqual(unrelated.read_bytes(), original)
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(install.thunar_path().read_text().strip(), '<actions>' + self.unrelated_action + '\n' * 4 + '</actions>')
+
+    def test_uninstall_recognizes_complete_legacy_templates_with_quoted_paths(self):
+        paths = self.seed(legacy=True)
+        for path in paths:
+            kind = next(kind for kind, (directory, _) in install.USER_ARTIFACTS.items()
+                        if path.parent == self.data / directory)
+            self.assertTrue(install.owned_file(path, kind), str(path))
+        with contextlib.redirect_stdout(io.StringIO()):
+            install.uninstall()
+        self.assertFalse(any(path.exists() for path in paths))
+        self.assertIn(self.unrelated_action, install.thunar_path().read_text())
+        self.assertNotIn('<unique-id>convt-webp</unique-id>', install.thunar_path().read_text())
+
+    def test_similar_legacy_templates_and_binary_files_are_preserved(self):
+        paths = self.seed(legacy=True)
+        for path in paths:
+            path.write_text(path.read_text().replace('Icon=convt', 'Icon=personal').replace('Icon-Name=convt', 'Icon-Name=personal') + '# user modification\n')
+        binary = self.data / 'nemo/actions/convt-binary.nemo_action'
+        binary.write_bytes(b'\xff\x00')
+        with contextlib.redirect_stdout(io.StringIO()):
+            install.uninstall()
+        self.assertTrue(all(path.exists() for path in paths))
+        self.assertEqual(binary.read_bytes(), b'\xff\x00')
+
+    def test_install_does_not_overwrite_unrelated_colliding_file(self):
+        directory = self.data / 'nemo/actions'
+        directory.mkdir(parents=True)
+        path = directory / 'convt-webp.nemo_action'
+        path.write_text('my custom menu')
+        with contextlib.redirect_stdout(io.StringIO()):
+            install.install_nemo(GROUPS)
+        self.assertEqual(path.read_text(), 'my custom menu')
+
+    def test_uninstall_requires_no_binaries_and_does_not_read_system_files(self):
+        self.seed()
+        with mock.patch.object(sys, 'argv', ['install.py', '--uninstall']), \
+                mock.patch.object(install, 'CONVT', None), mock.patch.object(install, 'APP', None), \
+                mock.patch.object(install, 'groups', side_effect=AssertionError('must not query binaries')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            install.main()
+        self.assertFalse((self.data / 'applications/convt-app.desktop').exists())
+
+    def test_uninstall_does_not_follow_redirected_user_directories(self):
+        outside = self.tmp / 'outside'
+        outside.mkdir()
+        path = outside / 'convt-0.desktop'
+        path.write_text(install.MARKER + 'owned elsewhere')
+        (self.data / 'kio').mkdir(parents=True)
+        (self.data / 'kio/servicemenus').symlink_to(outside, target_is_directory=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            install.uninstall()
+        self.assertTrue(path.exists())
+
+    def test_invalid_thunar_xml_is_left_untouched(self):
+        path = install.thunar_path()
+        path.parent.mkdir(parents=True)
+        text = '<actions><action>' + install.ACTION_MARKER
+        path.write_text(text)
+        with contextlib.redirect_stdout(io.StringIO()):
+            install.uninstall()
+        self.assertEqual(path.read_text(), text)
+
+
+class EmptyTargets(Fixture):
+    def test_user_static_menus_keep_supported_formats_without_targets(self):
+        formats = [{'mime': 'image/heic', 'extensions': ['heic', 'heif']}]
+        with mock.patch.object(install, 'run', side_effect=[json.dumps(formats), '']):
+            groups = install.groups()
+        self.assertEqual(groups, [(formats, ())])
+        text = install.dolphin_menus(groups)['convt-0.desktop']
+        self.assertIn('Actions=options;', text)
+        self.assertIn('MimeType=image/heic;', text)
+        self.assertIn('Extensions=heic;heif;', install.nemo_actions(groups)['convt-zz-more-options.nemo_action'])
+        self.assertIn('<patterns>*.heic;*.heif</patterns>', install.thunar_actions(groups)[0])
+
+    def test_packaged_static_menus_keep_all_recognized_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cli = root / 'convt'
+            formats = [{'mime': 'image/heic', 'extensions': ['heic', 'heif']}]
+            cli.write_text('#!/usr/bin/python3\nprint(' + repr(json.dumps(formats)) + ')\n')
+            cli.chmod(0o755)
+            subprocess.run([sys.executable, str(HERE.parents[1] / 'packaging/linux/system-menus.py'), str(root / 'stage'), str(cli)], check=True)
+            self.assertIn('Actions=options;', (root / 'stage/usr/share/kio/servicemenus/convt-0.desktop').read_text())
+            self.assertIn('Extensions=heic;heif;', (root / 'stage/usr/share/nemo/actions/convt-zz-more-options.nemo_action').read_text())
+
+
+
+
+if __name__ == '__main__':
     unittest.main()

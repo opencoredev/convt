@@ -1,16 +1,32 @@
 import Cocoa
 import FinderSync
 
+/// The formats each input can become, as the app publishes them to the App
+/// Group container (`crates/convt-app/src/macos.rs`). The extension is
+/// sandboxed and runs from its own executable, so it doesn't probe tools
+/// itself: that could offer different targets than the app can convert.
+private struct TargetList: Decodable {
+    let version: Int
+    /// Lowercase extension to format id.
+    let extensions: [String: String]
+    /// Format id to its targets, in menu order.
+    let targets: [String: [Target]]
+}
+
+private struct Target: Decodable {
+    let id: String
+    let name: String
+    let category: String
+}
+
 /// Adds "Convert with convt" to Finder's context menu. The extension only
-/// builds the menu. It asks the Rust core which targets fit the selection,
-/// then hands the job to the main app, because sandboxed extensions shouldn't
-/// run long conversions themselves.
+/// builds the menu and hands the job to the main app, because sandboxed
+/// extensions shouldn't run long conversions themselves.
 ///
-/// Picking a format converts in place with no window: the extension launches
-/// the app with `open --to <format> -- <files>`. Only a local process can pass
-/// those arguments. A `convt://` link would not do, because any web page can
-/// open one, so the app never converts from a link without a click.
-/// "More options…" launches `open -- <files>`, which opens Quick convert.
+/// Picking a format converts in place with no window; "More options…" opens
+/// Quick convert. Either way the request goes through the App Group
+/// container (see `send`), which only processes in the group can write, so a
+/// `convt://` link from a web page can never start a conversion.
 final class FinderSync: FIFinderSync {
     override init() {
         super.init()
@@ -24,89 +40,140 @@ final class FinderSync: FIFinderSync {
               !items.isEmpty
         else { return nil }
 
-        // Offer only targets every selected file supports.
-        let perFile = items.map { Set(targetsFor(path: $0.path).map(\.id)) }
-        let common = perFile.dropFirst().reduce(perFile[0]) { $0.intersection($1) }
-        let targets = targetsFor(path: items[0].path).filter { common.contains($0.id) }
-        guard !targets.isEmpty else { return nil }
-        // Still images can't become video, so a video target means the
-        // selection is video, and its audio targets drop the picture.
-        let isVideo = targets.contains { $0.category == "Video" }
-
         let submenu = NSMenu(title: "Convert with convt")
-        var lastCategory: String?
-        for target in targets {
-            if target.category != lastCategory {
-                if lastCategory != nil {
-                    submenu.addItem(.separator())
-                }
-                submenu.addItem(header(for: target.category, isVideo: isVideo))
+        if let list = loadTargets() {
+            // Offer only targets every selected file supports.
+            let perFile = items.map { url -> [Target] in
+                list.extensions[url.pathExtension.lowercased()].flatMap { list.targets[$0] } ?? []
             }
-            lastCategory = target.category
-            let item = NSMenuItem(title: target.name, action: #selector(convert(_:)), keyEquivalent: "")
-            item.representedObject = target.id
-            item.target = self
-            submenu.addItem(item)
+            let common = perFile.dropFirst().reduce(Set(perFile[0].map(\.id))) {
+                $0.intersection($1.map(\.id))
+            }
+            let targets = perFile[0].filter { common.contains($0.id) }
+            guard !targets.isEmpty else { return nil }
+            // The app publishes only the few popular targets, so no section
+            // headers. Still images can't become video, so a video target
+            // means the selection is video, and an audio target drops the
+            // picture.
+            let isVideo = targets.contains { $0.category == "Video" }
+            for target in targets {
+                let title = isVideo && target.category == "Audio" ? "\(target.name) (audio only)" : target.name
+                // Finder copies this menu into its own process and keeps only
+                // each item's title and action, so `convert` finds the
+                // target again by title.
+                let item = NSMenuItem(title: title, action: #selector(convert(_:)), keyEquivalent: "")
+                item.target = self
+                submenu.addItem(item)
+            }
+            submenu.addItem(.separator())
+            submenu.addItem(moreItem(title: "More options…"))
+        } else {
+            // The app hasn't published its list yet (it has never run, or
+            // the list is unreadable): let the app work out the targets
+            // rather than guess from the format table.
+            submenu.addItem(moreItem(title: "Open in convt…"))
         }
-        submenu.addItem(.separator())
-        let more = NSMenuItem(title: "More options…", action: #selector(moreOptions(_:)), keyEquivalent: "")
-        more.target = self
-        submenu.addItem(more)
 
         let menu = NSMenu(title: "")
         let root = NSMenuItem(title: "Convert with convt", action: nil, keyEquivalent: "")
-        root.image = NSImage(named: "MenuIcon")
+        root.image = NSImage(named: "MenuIconTemplate")
         root.submenu = submenu
         menu.addItem(root)
         return menu
     }
 
-    /// A disabled item naming the group of formats below it.
-    private func header(for category: String, isVideo: Bool) -> NSMenuItem {
-        let title: String
-        switch category {
-        case "Audio": title = isVideo ? "Audio only" : "Audio"
-        case "Pdf": title = "PDF"
-        case "Vector": title = "Vector"
-        default: title = category
-        }
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
+    /// The list the app wrote to the App Group container named by
+    /// `ConvtAppGroup` in this extension's Info.plist.
+    private func loadTargets() -> TargetList? {
+        guard let group = Bundle.main.object(forInfoDictionaryKey: "ConvtAppGroup") as? String,
+              let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group),
+              let data = try? Data(contentsOf: dir.appendingPathComponent("targets.json")),
+              let list = try? JSONDecoder().decode(TargetList.self, from: data),
+              list.version == 1
+        else { return nil }
+        return list
+    }
+
+    private func moreItem(title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(moreOptions(_:)), keyEquivalent: "")
+        item.target = self
         return item
     }
 
     /// Converts the selection in place, with no window.
     @objc private func convert(_ sender: NSMenuItem) {
-        guard let to = sender.representedObject as? String,
-              let items = FIFinderSyncController.default().selectedItemURLs()
-        else { return }
-        launchApp(arguments: ["open", "--to", to, "--"] + items.map(\.path), activate: false)
+        guard let items = FIFinderSyncController.default().selectedItemURLs(), !items.isEmpty else {
+            return
+        }
+        let name = sender.title.replacingOccurrences(of: " (audio only)", with: "")
+        let target = loadTargets().flatMap { list in
+            list.targets.values.lazy.flatMap { $0 }.first { $0.name == name }
+        }
+        guard let target else {
+            // The list changed since the menu was built: let the app decide.
+            NSLog("convt: no target named \(name); opening Quick convert")
+            send(to: nil, items: items, activate: true)
+            return
+        }
+        send(to: target.id, items: items, activate: false)
     }
 
     /// Opens Quick convert for the selection.
     @objc private func moreOptions(_ sender: NSMenuItem) {
         guard let items = FIFinderSyncController.default().selectedItemURLs() else { return }
-        launchApp(arguments: ["open", "--"] + items.map(\.path), activate: true)
+        send(to: nil, items: items, activate: true)
     }
 
-    /// Starts a new convt process with `arguments`. A running convt receives
-    /// them over its single-instance socket and the new process exits, so the
-    /// arguments arrive even when the app is already open.
-    private func launchApp(arguments: [String], activate: Bool) {
-        // The extension lives in convt.app/Contents/PlugIns/<name>.appex.
-        let appURL = Bundle.main.bundleURL
-            .deletingLastPathComponent() // PlugIns
-            .deletingLastPathComponent() // Contents
-            .deletingLastPathComponent() // convt.app
+    private struct Request: Encodable {
+        var version = 1
+        let to: String?
+        let files: [String]
+        /// Seconds since 1970; the app drops requests older than two minutes.
+        let created: Double
+    }
+
+    /// Hands the selection to the app. AppKit drops launch arguments from
+    /// sandboxed callers, so the request goes into the App Group container
+    /// and `convt://finder` only wakes the app, which takes it from there. The
+    /// link is opened with this bundle's app by path, because another app may
+    /// also claim the `convt` scheme.
+    private func send(to: String?, items: [URL], activate: Bool) {
         let configuration = NSWorkspace.OpenConfiguration()
-        configuration.arguments = arguments
-        configuration.createsNewApplicationInstance = true
         configuration.activates = activate
         configuration.addsToRecentItems = false
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+        let done: (NSRunningApplication?, Error?) -> Void = { _, error in
             if let error {
                 NSLog("convt: could not start the app: \(error.localizedDescription)")
             }
         }
+        do {
+            guard let group = Bundle.main.object(forInfoDictionaryKey: "ConvtAppGroup") as? String,
+                  let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
+            else { throw CocoaError(.fileNoSuchFile) }
+            let dir = container.appendingPathComponent("requests", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let request = Request(to: to, files: items.map(\.path), created: Date().timeIntervalSince1970)
+            let data = try JSONEncoder().encode(request)
+            // The app drops request files over 1 MiB unread.
+            guard data.count <= 1 << 20 else { throw CocoaError(.fileWriteOutOfSpace) }
+            try data.write(to: dir.appendingPathComponent(UUID().uuidString + ".json"), options: .atomic)
+        } catch {
+            // No usable shared container (an ad-hoc build, which macOS
+            // doesn't grant the group), or a selection too large for one
+            // request: open the files with convt instead, which shows Quick
+            // convert.
+            NSLog("convt: could not leave a request (\(error.localizedDescription)); opening the files instead")
+            NSWorkspace.shared.open(items, withApplicationAt: appURL, configuration: configuration, completionHandler: done)
+            return
+        }
+        NSWorkspace.shared.open([URL(string: "convt://finder")!], withApplicationAt: appURL, configuration: configuration, completionHandler: done)
+    }
+
+    /// convt.app, which contains this extension at Contents/PlugIns/<name>.appex.
+    private var appURL: URL {
+        Bundle.main.bundleURL
+            .deletingLastPathComponent() // PlugIns
+            .deletingLastPathComponent() // Contents
+            .deletingLastPathComponent() // convt.app
     }
 }

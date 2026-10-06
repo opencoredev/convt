@@ -1,0 +1,21 @@
+{
+  "name": "@convt/oauth-mock",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/mock.ts",
+    "./identities": "./src/identities.ts"
+  },
+  "scripts": {
+    "start": "bun src/main.ts",
+    "test": "bun test",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "^6.2.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "^6.0.2"
+  }
+}

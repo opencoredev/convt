@@ -1,0 +1,151 @@
+// convt-billing's settings and its production guards. Production values are Worker
+// vars and secrets; local development gets them from apps/billing/.dev.vars,
+// which scripts/dev-web.sh writes. Pure, so the guards are unit-tested.
+
+import { importSigningKey, parseSeed, publicKeyOf } from "@convt/license";
+
+import type { CatalogEnv } from "./catalog";
+
+export type BillingEnv = {
+  env: "production" | "development" | "test";
+  catalogEnv: CatalogEnv;
+  polar: { accessToken: string; apiUrl: string; webhookSecret: string; portalOrigin: string };
+  mail:
+    | { transport: "resend"; apiKey: string; apiUrl: string; from: string }
+    | { transport: "log"; from: string };
+  siteUrl: string;
+  alertEmail: string | null;
+  downloadUrl: string;
+  signingSeed: string;
+  /** Production: the public key release builds embed; the signing key must match it. */
+  licensePublicKey: string | null;
+  /** Public keys that must never sign in production (the local dev keys). */
+  devPublicKeys: string[];
+};
+
+export type RawEnv = Record<string, unknown>;
+
+const str = (raw: RawEnv, key: string) => {
+  const v = raw[key];
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
+};
+
+export function isLoopback(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
+export function readBillingEnv(raw: RawEnv): BillingEnv {
+  const envName = str(raw, "ENV") ?? "production";
+  if (envName !== "production" && envName !== "development" && envName !== "test")
+    throw new ConfigError(`ENV must be production, development or test, not ${envName}`);
+  const production = envName === "production";
+  const need = (k: string) => {
+    const v = str(raw, k);
+    if (!v) throw new ConfigError(`${k} is not set`);
+    return v;
+  };
+  const catalogEnv = (str(raw, "BILLING_CATALOG") ??
+    (production ? "production" : "local")) as CatalogEnv;
+  if (!["local", "sandbox", "production"].includes(catalogEnv))
+    throw new ConfigError(`unknown BILLING_CATALOG ${catalogEnv}`);
+  const apiUrl =
+    str(raw, "POLAR_API_URL") ??
+    (catalogEnv === "sandbox" ? "https://sandbox-api.polar.sh" : "https://api.polar.sh");
+  const portalOrigin =
+    str(raw, "POLAR_PORTAL_ORIGIN") ??
+    (catalogEnv === "sandbox" ? "https://sandbox.polar.sh" : "https://polar.sh");
+  const siteUrl = need("SITE_URL").replace(/\/$/, "");
+  const from = str(raw, "MAIL_FROM") ?? "convt <hello@convt.app>";
+  const transport = str(raw, "MAIL_TRANSPORT") ?? "resend";
+  let mail: BillingEnv["mail"];
+  if (transport === "resend") {
+    mail = {
+      transport,
+      apiKey: need("RESEND_API_KEY"),
+      apiUrl: str(raw, "RESEND_API_URL") ?? "https://api.resend.com",
+      from,
+    };
+  } else if (transport === "log") {
+    if (production) throw new ConfigError("MAIL_TRANSPORT=log is refused in production");
+    mail = { transport, from };
+  } else throw new ConfigError(`unknown MAIL_TRANSPORT ${transport}`);
+
+  if (production) {
+    if (catalogEnv !== "production")
+      throw new ConfigError("production must use the production catalog");
+    // `bun run deploy` in apps/billing sets this from the checkout's dev key, so a
+    // deploy that skipped it fails closed instead of skipping the dev-key check.
+    const devKeys = (str(raw, "DEV_LICENSE_PUBKEYS") ?? "").split(",").map((k) => k.trim());
+    if (!devKeys.some((k) => /^[A-Za-z0-9_-]{43}$/.test(k)))
+      throw new ConfigError(
+        "DEV_LICENSE_PUBKEYS must list the dev public key in production (use bun run deploy)",
+      );
+    if (!siteUrl.startsWith("https://"))
+      throw new ConfigError("SITE_URL must be https in production");
+    for (const [k, u] of [
+      ["POLAR_API_URL", apiUrl],
+      ["POLAR_PORTAL_ORIGIN", portalOrigin],
+      ["RESEND_API_URL", mail.transport === "resend" ? mail.apiUrl : "https://api.resend.com"],
+    ] as const) {
+      if (isLoopback(u) || !u.startsWith("https://"))
+        throw new ConfigError(`${k} must be a public https URL in production`);
+    }
+  } else if (str(raw, "POLAR_API_URL") && !isLoopback(apiUrl) && catalogEnv === "local") {
+    throw new ConfigError("the local catalog only talks to a loopback billing mock");
+  }
+  return {
+    env: envName,
+    catalogEnv,
+    polar: {
+      accessToken: need("POLAR_ACCESS_TOKEN"),
+      apiUrl,
+      webhookSecret: need("POLAR_WEBHOOK_SECRET"),
+      portalOrigin,
+    },
+    mail,
+    siteUrl,
+    alertEmail: str(raw, "ALERT_EMAIL") ?? null,
+    downloadUrl: str(raw, "DOWNLOAD_URL") ?? `${siteUrl}/download/mac`,
+    signingSeed: need("LICENSE_SIGNING_KEY"),
+    licensePublicKey: str(raw, "LICENSE_PUBLIC_KEY") ?? null,
+    devPublicKeys: (str(raw, "DEV_LICENSE_PUBKEYS") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  };
+}
+
+/**
+ * Imports the signing key and checks it: malformed is refused; in production its
+ * public key must equal LICENSE_PUBLIC_KEY (what release builds embed) and must
+ * not be a dev key.
+ */
+export async function loadSigningKey(e: BillingEnv): Promise<CryptoKey> {
+  let key: CryptoKey;
+  try {
+    key = await importSigningKey(parseSeed(e.signingSeed));
+  } catch {
+    throw new ConfigError("LICENSE_SIGNING_KEY is malformed");
+  }
+  const pub = await publicKeyOf(key);
+  if (e.env === "production") {
+    if (!e.licensePublicKey) throw new ConfigError("LICENSE_PUBLIC_KEY is required in production");
+    if (pub !== e.licensePublicKey)
+      throw new ConfigError("LICENSE_SIGNING_KEY does not match LICENSE_PUBLIC_KEY");
+  }
+  if (e.env === "production" && e.devPublicKeys.includes(pub))
+    throw new ConfigError("a dev signing key is refused in production");
+  return key;
+}

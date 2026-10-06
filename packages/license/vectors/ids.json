@@ -1,0 +1,29 @@
+{
+  "ids": [
+    {
+      "name": "zeros",
+      "bytes_hex": "00000000000000000000000000000000",
+      "encoded": "00000000000000000000000000"
+    },
+    {
+      "name": "counting",
+      "bytes_hex": "000102030405060708090a0b0c0d0e0f",
+      "encoded": "00041061050r3gg28a1c60t3gf"
+    },
+    {
+      "name": "ones",
+      "bytes_hex": "ffffffffffffffffffffffffffffffff",
+      "encoded": "7zzzzzzzzzzzzzzzzzzzzzzzzz"
+    },
+    {
+      "name": "mixed",
+      "bytes_hex": "8f3a2b1c00ff7e01a5c3e9104d2f6b88",
+      "encoded": "4f78nhr07zfr0tbgz9216jytw8"
+    }
+  ],
+  "api_key": {
+    "key": "cvt_live_0123456789abcdefghjkmnpqrstvwxyz",
+    "prefix": "cvt_live_01234567",
+    "sha256_hex": "b0d849e7d142d6c4a0b257bf74ece88f0638e9e08af2f4338330569978df09ab"
+  }
+}

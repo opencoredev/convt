@@ -1,0 +1,10 @@
+# apps/web/.dev.vars is written by scripts/dev-web.sh from .convt-dev/services.env.
+# Never commit .dev.vars. Production values are Worker vars and secrets (see
+# docs/p6-accounts-plan.md, "Accounts and secrets Leo creates later").
+ENV=development
+BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_SECRET=generated-by-scripts-db-sh
+MAIL_TRANSPORT=mailpit
+MAIL_FROM=convt <hello@convt.test>
+MAILPIT_URL=http://127.0.0.1:8025
+OAUTH_MOCK_URL=http://127.0.0.1:4100

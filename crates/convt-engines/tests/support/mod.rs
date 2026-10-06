@@ -77,7 +77,23 @@ pub struct Fixture {
 
 impl Fixture {
     pub fn make(root: &Path, format: &'static Format) -> Check<Self> {
-        let dir = root.join(format.id);
+        Self::make_variant(root, format, false)
+    }
+
+    /// Generate AV1 from PNG frames with libaom, without consulting the input decoder.
+    pub fn make_av1_video(root: &Path, format: &'static Format) -> Check<Self> {
+        if !matches!(format.id, "mp4" | "webm" | "mkv") {
+            return Err(format!("unsupported AV1 fixture container: {}", format.id));
+        }
+        Self::make_variant(root, format, true)
+    }
+
+    fn make_variant(root: &Path, format: &'static Format, av1: bool) -> Check<Self> {
+        let dir = root.join(if av1 {
+            format!("{}-av1", format.id)
+        } else {
+            format.id.to_owned()
+        });
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let path = dir.join(format!("sample.{}", format.extension()));
         let mut fixture = Self {
@@ -180,7 +196,15 @@ impl Fixture {
                 image::imageops::flip_horizontal(&pixels)
                     .save(dir.join("frame-2.png"))
                     .map_err(|e| e.to_string())?;
-                let mut cmd = Command::new(tool("ffmpeg").ok_or("ffmpeg missing")?);
+                let encoder = if av1 {
+                    std::env::var_os("CONVT_MATRIX_AV1_FFMPEG")
+                        .map(PathBuf::from)
+                        .or_else(|| tool("ffmpeg"))
+                        .ok_or("AV1 fixture generator missing; set CONVT_MATRIX_AV1_FFMPEG to a trusted FFmpeg with libaom-av1")?
+                } else {
+                    tool("ffmpeg").ok_or("ffmpeg missing")?
+                };
+                let mut cmd = Command::new(encoder);
                 cmd.args(["-v", "error", "-y", "-framerate", "2", "-i"])
                     .arg(dir.join("frame-%d.png"))
                     .args([
@@ -193,30 +217,63 @@ impl Fixture {
                         "-r",
                         "12",
                     ]);
-                match format.id {
-                    "webm" => {
-                        cmd.args([
-                            "-c:v",
-                            "libvpx-vp9",
-                            "-deadline",
-                            "realtime",
-                            "-cpu-used",
-                            "8",
-                            "-c:a",
-                            "libopus",
-                        ]);
-                    }
-                    "avi" => {
-                        cmd.args(["-c:v", "mpeg4", "-c:a", "libmp3lame"]);
-                    }
-                    _ => {
-                        cmd.args(["-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac"]);
+                if av1 {
+                    cmd.args([
+                        "-c:v",
+                        "libaom-av1",
+                        "-cpu-used",
+                        "8",
+                        "-crf",
+                        "18",
+                        "-b:v",
+                        "0",
+                        "-c:a",
+                        if format.id == "webm" {
+                            "libopus"
+                        } else {
+                            "aac"
+                        },
+                    ]);
+                } else {
+                    match format.id {
+                        "webm" => {
+                            cmd.args([
+                                "-c:v",
+                                "libvpx-vp9",
+                                "-deadline",
+                                "realtime",
+                                "-cpu-used",
+                                "8",
+                                "-c:a",
+                                "libopus",
+                            ]);
+                        }
+                        "avi" => {
+                            cmd.args(["-c:v", "mpeg4", "-c:a", "libmp3lame"]);
+                        }
+                        _ => {
+                            cmd.args(["-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac"]);
+                        }
                     }
                 }
                 command(
                     cmd.args(["-pix_fmt", "yuv420p", "-threads", "1"])
                         .arg(&fixture.path),
-                )?;
+                ).map_err(|e| if av1 {
+                    format!("AV1 {} fixture generation failed: install a trusted FFmpeg with the libaom-av1 encoder (and AAC/Opus audio encoders), or set CONVT_MATRIX_AV1_FFMPEG to that binary (separate from the shipped CONVT_FFMPEG decoder). Decoder availability must not skip this case: {e}", format.id)
+                } else { e })?;
+                if av1 {
+                    let info = probe(&fixture.path)?;
+                    if !info["streams"].as_array().is_some_and(|streams| {
+                        streams.iter().any(|stream| {
+                            stream["codec_type"] == "video" && stream["codec_name"] == "av1"
+                        })
+                    }) {
+                        return Err(format!(
+                            "AV1 fixture generator produced the wrong codec: {info}"
+                        ));
+                    }
+                }
                 fixture.duration = Some(1.0);
                 fixture.audio = true;
             }
@@ -364,11 +421,13 @@ pub fn image_magic(path: &Path, id: &str) -> Check<()> {
             return Err("wrong TGA header".into());
         }
     } else if matches!(id, "avif" | "heic") {
-        if data.get(4..8) != Some(b"ftyp")
-            || !data
-                .windows(4)
-                .take(16)
-                .any(|w| w == if id == "heic" { b"heic" } else { b"avif" })
+        // `heix` is 10-bit HEVC, which 16-bit inputs become.
+        let brands: &[&[u8]] = if id == "heic" {
+            &[b"heic", b"heix"]
+        } else {
+            &[b"avif"]
+        };
+        if data.get(4..8) != Some(b"ftyp") || !data.windows(4).take(16).any(|w| brands.contains(&w))
         {
             return Err("wrong AVIF brand".into());
         }

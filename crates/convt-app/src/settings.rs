@@ -24,8 +24,16 @@ pub struct Settings {
     pub menu_bar_icon: bool,
     /// The first-run window has been shown.
     pub first_run_done: bool,
-    /// The email of the convt.app account a `convt://signin` link reported.
-    pub account: Option<String>,
+    /// The UTC day (`YYYY-MM-DD`) the app last asked convt.app for the
+    /// current Pro key, so launches renew at most once a day.
+    pub license_checked: Option<String>,
+    /// Check convt.app once a day for a newer build. On by default.
+    pub update_checks: bool,
+    /// The UTC day (`YYYY-MM-DD`) of the last update check.
+    pub update_checked: Option<String>,
+    /// The highest update manifest `sequence` accepted, so an older signed
+    /// manifest can't be replayed to hide a newer release.
+    pub update_sequence: u64,
     /// What Add files converts each kind of file to.
     pub defaults: Defaults,
     /// Automation rules. Only stored for now: nothing runs them yet.
@@ -41,7 +49,10 @@ impl Default for Settings {
             reveal_when_done: false,
             menu_bar_icon: true,
             first_run_done: false,
-            account: None,
+            license_checked: None,
+            update_checks: true,
+            update_checked: None,
+            update_sequence: 0,
             defaults: Defaults::default(),
             automations: crate::placeholder::example_automations(),
         }
@@ -221,7 +232,7 @@ mod tests {
             concurrency: Some(2),
             notifications: false,
             first_run_done: true,
-            account: Some("a@example.com".into()),
+            license_checked: Some("2026-10-05".into()),
             ..Settings::default()
         };
         s.defaults.set(Kind::Images, format_by_id("png").unwrap());
@@ -231,7 +242,12 @@ mod tests {
         assert_eq!(s.concurrency(), 2);
         assert!(matches!(s.output(), Output::Dir(_)));
 
-        std::fs::write(&path, "notifications = false\nfuture_key = 1\n").unwrap();
+        // Unknown keys, such as `account` from before desktop sign-in, are ignored.
+        std::fs::write(
+            &path,
+            "notifications = false\nfuture_key = 1\naccount = \"a@b.c\"\n",
+        )
+        .unwrap();
         let s = Settings::load(&path).unwrap();
         assert!(!s.notifications && s.output_dir.is_none());
         assert!(matches!(s.output(), Output::Beside));

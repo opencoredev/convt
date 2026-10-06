@@ -1,11 +1,15 @@
-import type { Mac } from "#/lib/types";
+import { useRouter } from "@tanstack/react-router";
 
-import { usePlaceholderAction } from "./notice";
+import type { Mac } from "#/lib/types";
+import { endSession } from "#/server/account-fns";
+
+import { useNotice } from "./notice";
 import { SectionTitle, TextButton } from "./ui";
 
 /** The "Macs" list on the overview and licenses pages. */
 export function MacList({ macs }: { macs: Mac[] }) {
-  const placeholder = usePlaceholderAction();
+  const notice = useNotice();
+  const router = useRouter();
 
   return (
     <section aria-labelledby="macs-title" className="flex flex-col pt-4">
@@ -33,10 +37,17 @@ export function MacList({ macs }: { macs: Mac[] }) {
                 Seen {mac.lastSeen}
               </span>
               <span className="row-span-2 text-right sm:w-20 sm:shrink-0">
-                {/* PLACEHOLDER: signing out a Mac needs the account API. */}
                 <TextButton
                   tone="ink"
-                  onClick={() => placeholder(`Signing out ${mac.name}`)}
+                  onClick={async () => {
+                    try {
+                      await endSession({ data: { id: mac.id, type: "device" } });
+                      notice(`Signed out ${mac.name}.`);
+                      await router.invalidate();
+                    } catch {
+                      notice(`Couldn't sign out ${mac.name}. Try again.`);
+                    }
+                  }}
                   aria-label={`Sign out ${mac.name}`}
                 >
                   Sign out

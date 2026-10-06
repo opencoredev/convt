@@ -1,0 +1,23 @@
+{
+  "name": "@convt/billing-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "bun test test",
+    "check-types": "tsc --noEmit",
+    "deploy": "test -s ../../.convt-dev/license.pub || { echo 'deploy: .convt-dev/license.pub is missing; the dev-key guard needs it' >&2; exit 1; } && wrangler deploy --var DEV_LICENSE_PUBKEYS:$(cat ../../.convt-dev/license.pub)"
+  },
+  "dependencies": {
+    "@convt/billing": "workspace:*",
+    "@convt/db": "workspace:*",
+    "@convt/mail": "workspace:*",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "@types/pg": "8.23.1",
+    "typescript": "^6.0.2",
+    "wrangler": "^4.70.0"
+  }
+}

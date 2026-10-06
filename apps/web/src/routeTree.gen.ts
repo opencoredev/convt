@@ -11,16 +11,36 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as SiteRouteImport } from './routes/_site'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AppShellRouteImport } from './routes/_app/_shell'
-import { Route as AppPrivacyRouteImport } from './routes/_app/privacy'
-import { Route as AppTermsRouteImport } from './routes/_app/terms'
+import { Route as AppDeviceRouteImport } from './routes/_app/device'
+import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
+import { Route as SiteContactRouteImport } from './routes/_site/contact'
+import { Route as SiteDownloadRouteImport } from './routes/_site/download'
+import { Route as SiteFormatsRouteImport } from './routes/_site/formats'
+import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
+import { Route as SiteTermsRouteImport } from './routes/_site/terms'
+import { Route as CheckoutDesktopRouteImport } from './routes/checkout/desktop'
+import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
 import { Route as AppShellAccountRouteImport } from './routes/_app/_shell/account'
+import { Route as AppCheckoutSuccessRouteImport } from './routes/_app/checkout/success'
 import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
 import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/check-email'
+import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
+import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/verify-email'
+import { Route as SiteDocsApiRouteImport } from './routes/_site/docs/api'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
+import { Route as ApiDeviceSignOutRouteImport } from './routes/api/device/sign-out'
+import { Route as ApiDeviceTokenRouteImport } from './routes/api/device/token'
 import { Route as AppShellDashboardIndexRouteImport } from './routes/_app/_shell/dashboard/index'
 import { Route as AppShellDashboardApiRouteImport } from './routes/_app/_shell/dashboard/api'
 import { Route as AppShellDashboardBillingRouteImport } from './routes/_app/_shell/dashboard/billing'
 import { Route as AppShellDashboardLicensesRouteImport } from './routes/_app/_shell/dashboard/licenses'
+import { Route as AppShellDashboardApiConvertRouteImport } from './routes/_app/_shell/dashboard/api_.convert'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -31,24 +51,83 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SiteRoute = SiteRouteImport.update({
+  id: '/_site',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppShellRoute = AppShellRouteImport.update({
   id: '/_shell',
   getParentRoute: () => AppRoute,
 } as any)
-const AppPrivacyRoute = AppPrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
+const AppDeviceRoute = AppDeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
   getParentRoute: () => AppRoute,
 } as any)
-const AppTermsRoute = AppTermsRouteImport.update({
+const SiteChangelogRoute = SiteChangelogRouteImport.update({
+  id: '/changelog',
+  path: '/changelog',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteContactRoute = SiteContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteDownloadRoute = SiteDownloadRouteImport.update({
+  id: '/download',
+  path: '/download',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteFormatsRoute = SiteFormatsRouteImport.update({
+  id: '/formats',
+  path: '/formats',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SitePrivacyRoute = SitePrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteTermsRoute = SiteTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => SiteRoute,
+} as any)
+const CheckoutDesktopRoute = CheckoutDesktopRouteImport.update({
+  id: '/checkout/desktop',
+  path: '/checkout/desktop',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutProRoute = CheckoutProRouteImport.update({
+  id: '/checkout/pro',
+  path: '/checkout/pro',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppShellAccountRoute = AppShellAccountRouteImport.update({
   id: '/account',
   path: '/account',
   getParentRoute: () => AppShellRoute,
+} as any)
+const AppCheckoutSuccessRoute = AppCheckoutSuccessRouteImport.update({
+  id: '/checkout/success',
+  path: '/checkout/success',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppSignInIndexRoute = AppSignInIndexRouteImport.update({
   id: '/sign-in/',
@@ -59,6 +138,41 @@ const AppSignInCheckEmailRoute = AppSignInCheckEmailRouteImport.update({
   id: '/sign-in/check-email',
   path: '/sign-in/check-email',
   getParentRoute: () => AppRoute,
+} as any)
+const AppSignInVerifyRoute = AppSignInVerifyRouteImport.update({
+  id: '/sign-in/verify',
+  path: '/sign-in/verify',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSignInVerifyEmailRoute = AppSignInVerifyEmailRouteImport.update({
+  id: '/sign-in/verify-email',
+  path: '/sign-in/verify-email',
+  getParentRoute: () => AppRoute,
+} as any)
+const SiteDocsApiRoute = SiteDocsApiRouteImport.update({
+  id: '/docs/api',
+  path: '/docs/api',
+  getParentRoute: () => SiteRoute,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDeviceLicenseRoute = ApiDeviceLicenseRouteImport.update({
+  id: '/api/device/license',
+  path: '/api/device/license',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDeviceSignOutRoute = ApiDeviceSignOutRouteImport.update({
+  id: '/api/device/sign-out',
+  path: '/api/device/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDeviceTokenRoute = ApiDeviceTokenRouteImport.update({
+  id: '/api/device/token',
+  path: '/api/device/token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppShellDashboardIndexRoute = AppShellDashboardIndexRouteImport.update({
   id: '/dashboard/',
@@ -82,90 +196,222 @@ const AppShellDashboardLicensesRoute =
     path: '/dashboard/licenses',
     getParentRoute: () => AppShellRoute,
   } as any)
+const AppShellDashboardApiConvertRoute =
+  AppShellDashboardApiConvertRouteImport.update({
+    id: '/dashboard/api_/convert',
+    path: '/dashboard/api/convert',
+    getParentRoute: () => AppShellRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/privacy': typeof AppPrivacyRoute
-  '/terms': typeof AppTermsRoute
+  '/pricing': typeof PricingRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/device': typeof AppDeviceRoute
+  '/changelog': typeof SiteChangelogRoute
+  '/contact': typeof SiteContactRoute
+  '/download': typeof SiteDownloadRoute
+  '/formats': typeof SiteFormatsRoute
+  '/privacy': typeof SitePrivacyRoute
+  '/terms': typeof SiteTermsRoute
+  '/checkout/desktop': typeof CheckoutDesktopRoute
+  '/checkout/pro': typeof CheckoutProRoute
   '/account': typeof AppShellAccountRoute
+  '/checkout/success': typeof AppCheckoutSuccessRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
+  '/sign-in/verify': typeof AppSignInVerifyRoute
+  '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/docs/api': typeof SiteDocsApiRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/license': typeof ApiDeviceLicenseRoute
+  '/api/device/sign-out': typeof ApiDeviceSignOutRoute
+  '/api/device/token': typeof ApiDeviceTokenRoute
   '/sign-in/': typeof AppSignInIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
   '/dashboard/': typeof AppShellDashboardIndexRoute
+  '/dashboard/api/convert': typeof AppShellDashboardApiConvertRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/privacy': typeof AppPrivacyRoute
-  '/terms': typeof AppTermsRoute
+  '/pricing': typeof PricingRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/device': typeof AppDeviceRoute
+  '/changelog': typeof SiteChangelogRoute
+  '/contact': typeof SiteContactRoute
+  '/download': typeof SiteDownloadRoute
+  '/formats': typeof SiteFormatsRoute
+  '/privacy': typeof SitePrivacyRoute
+  '/terms': typeof SiteTermsRoute
+  '/checkout/desktop': typeof CheckoutDesktopRoute
+  '/checkout/pro': typeof CheckoutProRoute
   '/account': typeof AppShellAccountRoute
+  '/checkout/success': typeof AppCheckoutSuccessRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
+  '/sign-in/verify': typeof AppSignInVerifyRoute
+  '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/docs/api': typeof SiteDocsApiRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/license': typeof ApiDeviceLicenseRoute
+  '/api/device/sign-out': typeof ApiDeviceSignOutRoute
+  '/api/device/token': typeof ApiDeviceTokenRoute
   '/sign-in': typeof AppSignInIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
   '/dashboard': typeof AppShellDashboardIndexRoute
+  '/dashboard/api/convert': typeof AppShellDashboardApiConvertRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/_site': typeof SiteRouteWithChildren
+  '/pricing': typeof PricingRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/_shell': typeof AppShellRouteWithChildren
-  '/_app/privacy': typeof AppPrivacyRoute
-  '/_app/terms': typeof AppTermsRoute
+  '/_app/device': typeof AppDeviceRoute
+  '/_site/changelog': typeof SiteChangelogRoute
+  '/_site/contact': typeof SiteContactRoute
+  '/_site/download': typeof SiteDownloadRoute
+  '/_site/formats': typeof SiteFormatsRoute
+  '/_site/privacy': typeof SitePrivacyRoute
+  '/_site/terms': typeof SiteTermsRoute
+  '/checkout/desktop': typeof CheckoutDesktopRoute
+  '/checkout/pro': typeof CheckoutProRoute
   '/_app/_shell/account': typeof AppShellAccountRoute
+  '/_app/checkout/success': typeof AppCheckoutSuccessRoute
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
+  '/_app/sign-in/verify': typeof AppSignInVerifyRoute
+  '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/_site/docs/api': typeof SiteDocsApiRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/license': typeof ApiDeviceLicenseRoute
+  '/api/device/sign-out': typeof ApiDeviceSignOutRoute
+  '/api/device/token': typeof ApiDeviceTokenRoute
   '/_app/sign-in/': typeof AppSignInIndexRoute
   '/_app/_shell/dashboard/api': typeof AppShellDashboardApiRoute
   '/_app/_shell/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/_app/_shell/dashboard/licenses': typeof AppShellDashboardLicensesRoute
   '/_app/_shell/dashboard/': typeof AppShellDashboardIndexRoute
+  '/_app/_shell/dashboard/api_/convert': typeof AppShellDashboardApiConvertRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/pricing'
+    | '/robots.txt'
+    | '/sitemap.xml'
+    | '/device'
+    | '/changelog'
+    | '/contact'
+    | '/download'
+    | '/formats'
     | '/privacy'
     | '/terms'
+    | '/checkout/desktop'
+    | '/checkout/pro'
     | '/account'
+    | '/checkout/success'
     | '/sign-in/check-email'
+    | '/sign-in/verify'
+    | '/sign-in/verify-email'
+    | '/docs/api'
+    | '/api/auth/$'
+    | '/api/device/license'
+    | '/api/device/sign-out'
+    | '/api/device/token'
     | '/sign-in/'
     | '/dashboard/api'
     | '/dashboard/billing'
     | '/dashboard/licenses'
     | '/dashboard/'
+    | '/dashboard/api/convert'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/pricing'
+    | '/robots.txt'
+    | '/sitemap.xml'
+    | '/device'
+    | '/changelog'
+    | '/contact'
+    | '/download'
+    | '/formats'
     | '/privacy'
     | '/terms'
+    | '/checkout/desktop'
+    | '/checkout/pro'
     | '/account'
+    | '/checkout/success'
     | '/sign-in/check-email'
+    | '/sign-in/verify'
+    | '/sign-in/verify-email'
+    | '/docs/api'
+    | '/api/auth/$'
+    | '/api/device/license'
+    | '/api/device/sign-out'
+    | '/api/device/token'
     | '/sign-in'
     | '/dashboard/api'
     | '/dashboard/billing'
     | '/dashboard/licenses'
     | '/dashboard'
+    | '/dashboard/api/convert'
   id:
     | '__root__'
     | '/'
     | '/_app'
+    | '/_site'
+    | '/pricing'
+    | '/robots.txt'
+    | '/sitemap.xml'
     | '/_app/_shell'
-    | '/_app/privacy'
-    | '/_app/terms'
+    | '/_app/device'
+    | '/_site/changelog'
+    | '/_site/contact'
+    | '/_site/download'
+    | '/_site/formats'
+    | '/_site/privacy'
+    | '/_site/terms'
+    | '/checkout/desktop'
+    | '/checkout/pro'
     | '/_app/_shell/account'
+    | '/_app/checkout/success'
     | '/_app/sign-in/check-email'
+    | '/_app/sign-in/verify'
+    | '/_app/sign-in/verify-email'
+    | '/_site/docs/api'
+    | '/api/auth/$'
+    | '/api/device/license'
+    | '/api/device/sign-out'
+    | '/api/device/token'
     | '/_app/sign-in/'
     | '/_app/_shell/dashboard/api'
     | '/_app/_shell/dashboard/billing'
     | '/_app/_shell/dashboard/licenses'
     | '/_app/_shell/dashboard/'
+    | '/_app/_shell/dashboard/api_/convert'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  SiteRoute: typeof SiteRouteWithChildren
+  PricingRoute: typeof PricingRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  CheckoutDesktopRoute: typeof CheckoutDesktopRoute
+  CheckoutProRoute: typeof CheckoutProRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDeviceLicenseRoute: typeof ApiDeviceLicenseRoute
+  ApiDeviceSignOutRoute: typeof ApiDeviceSignOutRoute
+  ApiDeviceTokenRoute: typeof ApiDeviceTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -184,6 +430,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_site': {
+      id: '/_site'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof SiteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/_shell': {
       id: '/_app/_shell'
       path: ''
@@ -191,19 +465,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppShellRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/privacy': {
-      id: '/_app/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof AppPrivacyRouteImport
+    '/_app/device': {
+      id: '/_app/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof AppDeviceRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/terms': {
-      id: '/_app/terms'
+    '/_site/changelog': {
+      id: '/_site/changelog'
+      path: '/changelog'
+      fullPath: '/changelog'
+      preLoaderRoute: typeof SiteChangelogRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/contact': {
+      id: '/_site/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof SiteContactRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/download': {
+      id: '/_site/download'
+      path: '/download'
+      fullPath: '/download'
+      preLoaderRoute: typeof SiteDownloadRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/formats': {
+      id: '/_site/formats'
+      path: '/formats'
+      fullPath: '/formats'
+      preLoaderRoute: typeof SiteFormatsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/privacy': {
+      id: '/_site/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof SitePrivacyRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/terms': {
+      id: '/_site/terms'
       path: '/terms'
       fullPath: '/terms'
-      preLoaderRoute: typeof AppTermsRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof SiteTermsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/checkout/desktop': {
+      id: '/checkout/desktop'
+      path: '/checkout/desktop'
+      fullPath: '/checkout/desktop'
+      preLoaderRoute: typeof CheckoutDesktopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout/pro': {
+      id: '/checkout/pro'
+      path: '/checkout/pro'
+      fullPath: '/checkout/pro'
+      preLoaderRoute: typeof CheckoutProRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/_shell/account': {
       id: '/_app/_shell/account'
@@ -211,6 +534,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/account'
       preLoaderRoute: typeof AppShellAccountRouteImport
       parentRoute: typeof AppShellRoute
+    }
+    '/_app/checkout/success': {
+      id: '/_app/checkout/success'
+      path: '/checkout/success'
+      fullPath: '/checkout/success'
+      preLoaderRoute: typeof AppCheckoutSuccessRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/sign-in/': {
       id: '/_app/sign-in/'
@@ -225,6 +555,55 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in/check-email'
       preLoaderRoute: typeof AppSignInCheckEmailRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/sign-in/verify': {
+      id: '/_app/sign-in/verify'
+      path: '/sign-in/verify'
+      fullPath: '/sign-in/verify'
+      preLoaderRoute: typeof AppSignInVerifyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sign-in/verify-email': {
+      id: '/_app/sign-in/verify-email'
+      path: '/sign-in/verify-email'
+      fullPath: '/sign-in/verify-email'
+      preLoaderRoute: typeof AppSignInVerifyEmailRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_site/docs/api': {
+      id: '/_site/docs/api'
+      path: '/docs/api'
+      fullPath: '/docs/api'
+      preLoaderRoute: typeof SiteDocsApiRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/device/license': {
+      id: '/api/device/license'
+      path: '/api/device/license'
+      fullPath: '/api/device/license'
+      preLoaderRoute: typeof ApiDeviceLicenseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/device/sign-out': {
+      id: '/api/device/sign-out'
+      path: '/api/device/sign-out'
+      fullPath: '/api/device/sign-out'
+      preLoaderRoute: typeof ApiDeviceSignOutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/device/token': {
+      id: '/api/device/token'
+      path: '/api/device/token'
+      fullPath: '/api/device/token'
+      preLoaderRoute: typeof ApiDeviceTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/_shell/dashboard/': {
       id: '/_app/_shell/dashboard/'
@@ -254,6 +633,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppShellDashboardLicensesRouteImport
       parentRoute: typeof AppShellRoute
     }
+    '/_app/_shell/dashboard/api_/convert': {
+      id: '/_app/_shell/dashboard/api_/convert'
+      path: '/dashboard/api/convert'
+      fullPath: '/dashboard/api/convert'
+      preLoaderRoute: typeof AppShellDashboardApiConvertRouteImport
+      parentRoute: typeof AppShellRoute
+    }
   }
 }
 
@@ -263,6 +649,7 @@ interface AppShellRouteChildren {
   AppShellDashboardBillingRoute: typeof AppShellDashboardBillingRoute
   AppShellDashboardLicensesRoute: typeof AppShellDashboardLicensesRoute
   AppShellDashboardIndexRoute: typeof AppShellDashboardIndexRoute
+  AppShellDashboardApiConvertRoute: typeof AppShellDashboardApiConvertRoute
 }
 
 const AppShellRouteChildren: AppShellRouteChildren = {
@@ -271,6 +658,7 @@ const AppShellRouteChildren: AppShellRouteChildren = {
   AppShellDashboardBillingRoute: AppShellDashboardBillingRoute,
   AppShellDashboardLicensesRoute: AppShellDashboardLicensesRoute,
   AppShellDashboardIndexRoute: AppShellDashboardIndexRoute,
+  AppShellDashboardApiConvertRoute: AppShellDashboardApiConvertRoute,
 }
 
 const AppShellRouteWithChildren = AppShellRoute._addFileChildren(
@@ -279,35 +667,72 @@ const AppShellRouteWithChildren = AppShellRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppShellRoute: typeof AppShellRouteWithChildren
-  AppPrivacyRoute: typeof AppPrivacyRoute
-  AppTermsRoute: typeof AppTermsRoute
+  AppDeviceRoute: typeof AppDeviceRoute
+  AppCheckoutSuccessRoute: typeof AppCheckoutSuccessRoute
   AppSignInCheckEmailRoute: typeof AppSignInCheckEmailRoute
+  AppSignInVerifyRoute: typeof AppSignInVerifyRoute
+  AppSignInVerifyEmailRoute: typeof AppSignInVerifyEmailRoute
   AppSignInIndexRoute: typeof AppSignInIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppShellRoute: AppShellRouteWithChildren,
-  AppPrivacyRoute: AppPrivacyRoute,
-  AppTermsRoute: AppTermsRoute,
+  AppDeviceRoute: AppDeviceRoute,
+  AppCheckoutSuccessRoute: AppCheckoutSuccessRoute,
   AppSignInCheckEmailRoute: AppSignInCheckEmailRoute,
+  AppSignInVerifyRoute: AppSignInVerifyRoute,
+  AppSignInVerifyEmailRoute: AppSignInVerifyEmailRoute,
   AppSignInIndexRoute: AppSignInIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface SiteRouteChildren {
+  SiteChangelogRoute: typeof SiteChangelogRoute
+  SiteContactRoute: typeof SiteContactRoute
+  SiteDownloadRoute: typeof SiteDownloadRoute
+  SiteFormatsRoute: typeof SiteFormatsRoute
+  SitePrivacyRoute: typeof SitePrivacyRoute
+  SiteTermsRoute: typeof SiteTermsRoute
+  SiteDocsApiRoute: typeof SiteDocsApiRoute
+}
+
+const SiteRouteChildren: SiteRouteChildren = {
+  SiteChangelogRoute: SiteChangelogRoute,
+  SiteContactRoute: SiteContactRoute,
+  SiteDownloadRoute: SiteDownloadRoute,
+  SiteFormatsRoute: SiteFormatsRoute,
+  SitePrivacyRoute: SitePrivacyRoute,
+  SiteTermsRoute: SiteTermsRoute,
+  SiteDocsApiRoute: SiteDocsApiRoute,
+}
+
+const SiteRouteWithChildren = SiteRoute._addFileChildren(SiteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  SiteRoute: SiteRouteWithChildren,
+  PricingRoute: PricingRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
+  CheckoutDesktopRoute: CheckoutDesktopRoute,
+  CheckoutProRoute: CheckoutProRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDeviceLicenseRoute: ApiDeviceLicenseRoute,
+  ApiDeviceSignOutRoute: ApiDeviceSignOutRoute,
+  ApiDeviceTokenRoute: ApiDeviceTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

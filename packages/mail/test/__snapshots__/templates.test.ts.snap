@@ -1,0 +1,90 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`templates license_issued for Desktop 1`] = `
+"Thanks for buying convt Desktop. Here is your license key:
+
+eyJpZCI6ImxpY18xIn0.c2ln
+
+Open in convt: convt://activate?key=eyJpZCI6ImxpY18xIn0.c2ln
+
+That link opens the convt app and asks you to confirm. You can also paste the key in the app under Settings, or run convt license activate with it.
+
+This key works forever with every build released up to Oct 5, 2027, and includes 12 months of updates.
+
+Download convt: https://convt.app/download/mac
+
+Your licenses: https://convt.app/dashboard/licenses
+
+Keep this email. Anyone with the key can activate convt.
+"
+`;
+
+exports[`templates license_issued for Pro 1`] = `
+"Thanks for buying convt Pro. Here is your license key:
+
+a.b
+
+Open in convt: convt://activate?key=a.b
+
+That link opens the convt app and asks you to confirm. You can also paste the key in the app under Settings, or run convt license activate with it.
+
+This key covers every build released up to Nov 5, 2026. While you're subscribed, a new key appears on your dashboard each billing period.
+
+Download convt: https://convt.app/download/mac
+
+Your licenses: https://convt.app/dashboard/licenses
+
+Keep this email. Anyone with the key can activate convt.
+"
+`;
+
+exports[`templates trial_ending, renewal_failed and the digest 1`] = `
+{
+  "html": "<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media (prefers-color-scheme: dark){body{background:#141414 !important;color:#ededeb !important}.key{border-color:#3a3a38 !important;background:#1d1d1c !important}a{color:#4cc38a !important}}</style></head><body style="margin:0;padding:24px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#1c1c1a;background:#ffffff"><div style="max-width:520px"><p style="margin:0 0 20px;font-size:17px;font-weight:600;letter-spacing:-0.02em">convt</p><p style="margin:0 0 14px">Your free trial of convt Pro ends on Oct 12, 2026.</p><p style="margin:0 0 14px">Then your card is charged $12.00 a month, and you get your Pro license key for the desktop app.</p><p style="margin:0 0 14px">If you don&#39;t want to continue, cancel before then. Nothing is charged and the trial simply ends.</p><p style="margin:0 0 14px"><a href="https://convt.app/dashboard/billing" style="color:#1a7f4b;font-weight:600">Manage your plan</a></p></div></body></html>",
+  "subject": "Your convt Pro trial ends Oct 12, 2026",
+  "text": 
+"Your free trial of convt Pro ends on Oct 12, 2026.
+
+Then your card is charged $12.00 a month, and you get your Pro license key for the desktop app.
+
+If you don't want to continue, cancel before then. Nothing is charged and the trial simply ends.
+
+Manage your plan: https://convt.app/dashboard/billing
+"
+,
+}
+`;
+
+exports[`templates trial_ending, renewal_failed and the digest 2`] = `
+{
+  "html": "<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media (prefers-color-scheme: dark){body{background:#141414 !important;color:#ededeb !important}.key{border-color:#3a3a38 !important;background:#1d1d1c !important}a{color:#4cc38a !important}}</style></head><body style="margin:0;padding:24px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#1c1c1a;background:#ffffff"><div style="max-width:520px"><p style="margin:0 0 20px;font-size:17px;font-weight:600;letter-spacing:-0.02em">convt</p><p style="margin:0 0 14px">The payment for your convt Pro renewal didn&#39;t go through. We&#39;ll try again over the next few days.</p><p style="margin:0 0 14px">Your current license key keeps working for every build it covers, but you won&#39;t get a new key until the payment goes through.</p><p style="margin:0 0 14px">Update your card to fix it. Open Billing and choose Manage billing.</p><p style="margin:0 0 14px"><a href="https://convt.app/dashboard/billing" style="color:#1a7f4b;font-weight:600">Billing</a></p></div></body></html>",
+  "subject": "We couldn't charge your card for convt",
+  "text": 
+"The payment for your convt Pro renewal didn't go through. We'll try again over the next few days.
+
+Your current license key keeps working for every build it covers, but you won't get a new key until the payment goes through.
+
+Update your card to fix it. Open Billing and choose Manage billing.
+
+Billing: https://convt.app/dashboard/billing
+"
+,
+}
+`;
+
+exports[`templates trial_ending, renewal_failed and the digest 3`] = `
+{
+  "html": "<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media (prefers-color-scheme: dark){body{background:#141414 !important;color:#ededeb !important}.key{border-color:#3a3a38 !important;background:#1d1d1c !important}a{color:#4cc38a !important}}</style></head><body style="margin:0;padding:24px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#1c1c1a;background:#ffffff"><div style="max-width:520px"><p style="margin:0 0 20px;font-size:17px;font-weight:600;letter-spacing:-0.02em">convt</p><p style="margin:0 0 14px">The billing reconciler found these on Oct 5, 2026.</p><ul style="margin:0 0 14px;padding-left:18px"><li>rejected_events: 1</li></ul><ul style="margin:0 0 14px;padding-left:18px"><li>rejected_event whe_1: unknown_price</li></ul><p style="margin:0 0 14px">Ids only: look them up in the database or in Polar and Resend by id. No keys or bodies are included.</p></div></body></html>",
+  "subject": "convt billing: 1 to look at (2026-10-05)",
+  "text": 
+"The billing reconciler found these on Oct 5, 2026.
+
+- rejected_events: 1
+
+- rejected_event whe_1: unknown_price
+
+Ids only: look them up in the database or in Polar and Resend by id. No keys or bodies are included.
+"
+,
+}
+`;
