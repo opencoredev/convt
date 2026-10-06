@@ -19,7 +19,7 @@ export const pageTitle = (c: Conversion) =>
   `Convert ${titleOf(c)} on your computer, without uploading · convt`;
 
 export const pageDescription = (c: Conversion) =>
-  `${c.why} convt converts ${formats[c.from].label} to ${formats[c.to].label} on your own computer, so nothing gets uploaded.`;
+  `${c.why} It all runs on your own computer, so nothing gets uploaded.`;
 
 export const hubTitle = "Convert files on your computer, without uploading · convt";
 export const hubDescription = `Image, video, audio and document conversions that run on your own computer: HEIC to JPG, MOV to MP4, PDF to JPG, DOCX to PDF and more. ${registry.formats.length} formats, nothing uploaded.`;
