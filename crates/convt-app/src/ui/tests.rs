@@ -1771,6 +1771,8 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
     }
 }
 
+// Unix permission bits make the folder unreadable; Windows has no equivalent here.
+#[cfg(unix)]
 #[test]
 fn an_unreadable_folder_does_not_hide_the_others() {
     use std::os::unix::fs::PermissionsExt;
@@ -1904,7 +1906,11 @@ fn retry_keeps_the_options_and_folder_a_conversion_asked_for(cx: &mut TestAppCon
     let Outcome::Done(outputs) = &retried.outcome else {
         panic!("the retry failed: {:?}", retried.outcome);
     };
-    assert_eq!(outputs[0].parent(), Some(out.as_path()));
+    // Compare canonical paths: on macOS the temp dir is /var, a symlink to /private/var.
+    assert_eq!(
+        outputs[0].parent().map(|p| p.canonicalize().unwrap()),
+        Some(out.canonicalize().unwrap())
+    );
     let (w, h) = image::image_dimensions(&outputs[0]).unwrap();
     assert_eq!((w, h), (2, 2), "the size option was dropped");
 }

@@ -88,18 +88,3 @@ export function DownloadIcon() {
     </svg>
   );
 }
-
-export function ConvertIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
-      <path
-        d="M2 4h7M7 2l2 2-2 2M10 8H3M5 6 3 8l2 2"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

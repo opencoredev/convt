@@ -1,3 +1,4 @@
+import { Mark } from "#/components/logo";
 import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
@@ -63,7 +64,10 @@ export function Footer() {
       <Container className="flex flex-col gap-14 pt-16 pb-12 md:pt-24">
         <div className="flex flex-col gap-10 md:flex-row md:justify-between">
           <div className="flex max-w-[320px] flex-col gap-3 md:w-[320px] md:shrink-0">
-            <p className="text-[20px]/[24px] font-semibold tracking-[-0.03em] text-ink">convt</p>
+            <p className="flex items-center gap-2.5 text-[20px]/[24px] font-semibold tracking-[-0.03em] text-ink">
+              <Mark size={22} />
+              convt
+            </p>
             <p className="text-[14px]/[21px] text-ink-2">
               Local file conversion for macOS, Windows and Linux. Open source under AGPL-3.0.
             </p>

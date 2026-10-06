@@ -392,6 +392,8 @@ fn reject_root_symlinks(root: &Path) -> anyhow::Result<()> {
 /// Every ancestor must prevent other users from replacing the next
 /// component. With `root`, the last component must also be a trusted pack
 /// directory; without, it is checked as an ancestor.
+// `last_is_root` only matters for the Unix ownership checks.
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn check_path(root: &Path, last_is_root: bool) -> anyhow::Result<()> {
     let absolute = if root.is_absolute() {
         root.to_owned()
@@ -1574,12 +1576,11 @@ mod tests {
         String::from_utf8(request).unwrap()
     }
 
+    // Only the Unix permission tests ask.
+    #[cfg(unix)]
     fn not_root() -> bool {
-        #[cfg(unix)]
         // SAFETY: geteuid has no arguments or memory access requirements.
-        return unsafe { libc::geteuid() } != 0;
-        #[cfg(not(unix))]
-        true
+        unsafe { libc::geteuid() != 0 }
     }
 
     #[cfg(unix)]

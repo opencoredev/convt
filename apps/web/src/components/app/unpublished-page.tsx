@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
+import { Mark } from "#/components/logo";
+
 import { cx, focusRing } from "./ui";
 
 /** Stand-in for a page that is linked from the site but not written yet. */
@@ -9,10 +11,11 @@ export function UnpublishedPage({ title }: { title: string }) {
       <Link
         to="/"
         className={cx(
-          "self-start rounded-sm text-lg/5.5 font-semibold tracking-[-0.02em]",
+          "flex items-center gap-2 self-start rounded-sm text-lg/5.5 font-semibold tracking-[-0.02em]",
           focusRing,
         )}
       >
+        <Mark />
         convt
       </Link>
       <main className="flex max-w-[380px] flex-1 flex-col justify-center gap-6">

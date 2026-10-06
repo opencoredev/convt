@@ -17,7 +17,8 @@ pub enum Role {
     /// This process is the app. Call [`Primary::listen`] once the UI can
     /// take requests.
     Primary(Primary),
-    /// The running app took the request.
+    /// The running app took the request. Only the Unix socket path forwards today.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Forwarded,
 }
 

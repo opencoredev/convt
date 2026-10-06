@@ -10,6 +10,12 @@ fn main() -> anyhow::Result<()> {
         .block_on(run(args))
 }
 
+// Off Linux the sandbox commands that read `args` and the process sandbox variant are
+// compiled out, which leaves `args` unused and Docker the only `Sandbox`.
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(unused_variables, irrefutable_let_patterns)
+)]
 async fn run(args: Vec<String>) -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     if let Some(action) = args.first().map(String::as_str)
