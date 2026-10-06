@@ -15,6 +15,16 @@ export const GITHUB_URL = "https://github.com/opencoredev/convt";
  */
 export const LAUNCHED = false;
 
+/** The convt post on Product Hunt, linked from the landing page badge. */
+export const PRODUCT_HUNT_URL =
+  "https://www.producthunt.com/products/convt?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-convt-2";
+
+/**
+ * The landing page is prerendered static HTML, so the browser decides when the Product
+ * Hunt badge appears: from 3 am Eastern (EDT) on 7 October 2026.
+ */
+export const PRODUCT_HUNT_FROM = Date.parse("2026-10-07T03:00:00-04:00");
+
 /** PLACEHOLDER: no status page exists yet. Every status link on the site reads this. */
 export const STATUS_URL = "https://status.convt.app";
 
