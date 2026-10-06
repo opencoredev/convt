@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use windows::Win32::Foundation::*;
 use windows::Win32::System::Com::*;
 use windows::Win32::System::LibraryLoader::*;
+use windows::Win32::System::Ole::*;
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 use windows::Win32::UI::Shell::*;
 use windows::core::*;
@@ -139,9 +140,10 @@ fn probe(path: &Path) -> Option<Vec<String>> {
         .then_some(targets)
 }
 
-#[implement(IExplorerCommand)]
+#[implement(IExplorerCommand, IObjectWithSite)]
 struct ExplorerCommand {
     target: Option<String>,
+    site: Mutex<Option<IUnknown>>,
     selection: Mutex<Vec<PathBuf>>,
     children: Mutex<Vec<String>>,
 }
@@ -149,8 +151,51 @@ impl ExplorerCommand {
     fn root() -> Self {
         Self {
             target: None,
+            site: Mutex::new(None),
             selection: Mutex::new(vec![]),
             children: Mutex::new(vec![]),
+        }
+    }
+}
+impl IObjectWithSite_Impl for ExplorerCommand_Impl {
+    fn SetSite(&self, site: Ref<IUnknown>) -> Result<()> {
+        *self.site.lock().map_err(|_| error())? = site.cloned();
+        Ok(())
+    }
+    fn GetSite(&self, iid: *const GUID, out: *mut *mut c_void) -> Result<()> {
+        if iid.is_null() || out.is_null() {
+            return Err(Error::from_hresult(E_POINTER));
+        }
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+        let site = self.site.lock().map_err(|_| error())?;
+        unsafe { site.as_ref().ok_or_else(error)?.query(iid, out).ok() }
+    }
+}
+impl ExplorerCommand_Impl {
+    fn selected_paths(&self) -> Result<Vec<PathBuf>> {
+        let paths = self.selection.lock().map_err(|_| error())?.clone();
+        if !paths.is_empty() {
+            return Ok(paths);
+        }
+        // Some shell hosts enumerate before passing an item array to GetTitle
+        // or GetState. Query the site's current view only during construction;
+        // Invoke always uses the array supplied by the shell or this snapshot.
+        let site = self
+            .site
+            .lock()
+            .map_err(|_| error())?
+            .clone()
+            .ok_or_else(error)?;
+        let services: IServiceProvider = site.cast()?;
+        unsafe {
+            let browser: IShellBrowser = services.QueryService(&SID_STopLevelBrowser)?;
+            let view = browser.QueryActiveShellView()?;
+            let items: IShellItemArray = view.GetItemObject(SVGIO_SELECTION)?;
+            let paths = files((&items).into())?;
+            *self.selection.lock().map_err(|_| error())? = paths.clone();
+            Ok(paths)
         }
     }
 }
@@ -237,7 +282,7 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
         })
     }
     fn EnumSubCommands(&self) -> Result<IEnumExplorerCommand> {
-        let paths = self.selection.lock().map_err(|_| error())?.clone();
+        let paths = self.selected_paths()?;
         let lists: Vec<_> = paths.iter().map(|p| targets(p)).collect();
         let targets = crate::common_targets(&lists);
         let commands = targets
@@ -245,6 +290,7 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
             .map(|target| {
                 ExplorerCommand {
                     target: Some(target.clone()),
+                    site: Mutex::new(None),
                     selection: Mutex::new(paths.clone()),
                     children: Mutex::new(vec![]),
                 }

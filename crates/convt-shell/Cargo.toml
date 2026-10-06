@@ -8,5 +8,5 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_System_Threading"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Ole", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_System_Threading"] }
 windows-core = "0.62.2"
