@@ -1,50 +1,135 @@
 <!doctype html>
 <html lang="en" class="dark">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{title}}</title>
-<meta name="description" content="{{description}}">
-<link rel="canonical" href="{{canonical}}">
-<link rel="alternate" type="text/markdown" href="{{markdown}}">
-<link rel="icon" href="/favicon.ico" sizes="48x48">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta property="og:title" content="{{title}}">
-<meta property="og:description" content="{{description}}">
-<meta property="og:type" content="website">
-<meta property="og:url" content="{{canonical}}">
-<meta property="og:site_name" content="convt">
-<meta property="og:image" content="https://convt.app/og.png">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0a0b0b">
-<link rel="preload" href="{{geist}}" as="font" type="font/woff2" crossorigin>
-<style>
-  @font-face { font-family: Geist; src: url("{{geist}}") format("woff2"); font-weight: 100 900; font-display: swap; }
-  :root { color-scheme: dark; }
-  body { margin: 0; background: #0a0b0b; color: #c4c9c6; font: 16px/1.65 Geist, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
-  header, main, footer { max-width: 680px; margin: 0 auto; padding: 0 20px; }
-  header { padding-top: 24px; padding-bottom: 24px; }
-  header a { color: #edefee; font-weight: 600; font-size: 17px; letter-spacing: -0.02em; text-decoration: none; }
-  main { padding-top: 32px; padding-bottom: 64px; }
-  h1 { color: #edefee; font-size: 40px; line-height: 1.1; letter-spacing: -0.04em; font-weight: 500; margin: 0 0 24px; }
-  h2 { color: #edefee; font-size: 20px; letter-spacing: -0.02em; font-weight: 500; margin: 40px 0 8px; }
-  p, ul { margin: 0 0 16px; }
-  ul { padding-left: 20px; }
-  li { margin-bottom: 6px; }
-  strong { color: #edefee; font-weight: 600; }
-  code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; color: #d6ddd9; }
-  a { color: #4cc283; text-underline-offset: 3px; }
-  a:focus-visible { outline: 2px solid #4cc283; outline-offset: 2px; border-radius: 2px; }
-  footer { padding-top: 24px; padding-bottom: 48px; border-top: 1px solid #232726; color: #838985; font-size: 13px; display: flex; gap: 20px; flex-wrap: wrap; }
-  footer a { color: #838985; }
-</style>
-</head>
-<body>
-<header><a href="/">convt</a></header>
-<main>
-{{content}}
-</main>
-<footer><span>© 2026 convt</span><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/llms.txt">llms.txt</a></footer>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    <meta name="description" content="{{description}}" />
+    <link rel="canonical" href="{{canonical}}" />
+    <link rel="alternate" type="text/markdown" href="{{markdown}}" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:title" content="{{title}}" />
+    <meta property="og:description" content="{{description}}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="{{canonical}}" />
+    <meta property="og:site_name" content="convt" />
+    <meta property="og:image" content="https://convt.app/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0a0b0b" />
+    <link rel="preload" href="{{geist}}" as="font" type="font/woff2" crossorigin />
+    <style>
+      @font-face {
+        font-family: Geist;
+        src: url("{{geist}}") format("woff2");
+        font-weight: 100 900;
+        font-display: swap;
+      }
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        background: #0a0b0b;
+        color: #c4c9c6;
+        font:
+          16px/1.65 Geist,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      header,
+      main,
+      footer {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 0 20px;
+      }
+      header {
+        padding-top: 24px;
+        padding-bottom: 24px;
+      }
+      header a {
+        color: #edefee;
+        font-weight: 600;
+        font-size: 17px;
+        letter-spacing: -0.02em;
+        text-decoration: none;
+      }
+      main {
+        padding-top: 32px;
+        padding-bottom: 64px;
+      }
+      h1 {
+        color: #edefee;
+        font-size: 40px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+        font-weight: 500;
+        margin: 0 0 24px;
+      }
+      h2 {
+        color: #edefee;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+        font-weight: 500;
+        margin: 40px 0 8px;
+      }
+      p,
+      ul {
+        margin: 0 0 16px;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      li {
+        margin-bottom: 6px;
+      }
+      strong {
+        color: #edefee;
+        font-weight: 600;
+      }
+      code {
+        font:
+          14px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        color: #d6ddd9;
+      }
+      a {
+        color: #4cc283;
+        text-underline-offset: 3px;
+      }
+      a:focus-visible {
+        outline: 2px solid #4cc283;
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      footer {
+        padding-top: 24px;
+        padding-bottom: 48px;
+        border-top: 1px solid #232726;
+        color: #838985;
+        font-size: 13px;
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      footer a {
+        color: #838985;
+      }
+    </style>
+  </head>
+  <body>
+    <header><a href="/">convt</a></header>
+    <main>{{content}}</main>
+    <footer>
+      <span>© 2026 convt</span><a href="/about">About</a><a href="/privacy">Privacy</a
+      ><a href="/llms.txt">llms.txt</a>
+    </footer>
+  </body>
 </html>
