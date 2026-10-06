@@ -6,7 +6,13 @@
 import type { CatalogProduct } from "./catalog";
 import type { CheckoutRefusal, CheckoutResult } from "./checkout";
 
-export type ActionReason = "not_found" | "declined" | "provider_error" | "bad_cap" | "trial";
+export type ActionReason =
+  | "not_found"
+  | "declined"
+  | "provider_error"
+  | "bad_cap"
+  | "trial"
+  | "discount";
 
 export interface BillingRpc {
   health(): Promise<{ ok: boolean; problems: string[] }>;

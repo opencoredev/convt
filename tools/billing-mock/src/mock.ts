@@ -145,6 +145,8 @@ type Ord = {
 };
 type Sub = {
   id: string;
+  /** Set only by tests through mutateQuietly; the flows never apply a discount. */
+  discountId?: string | null;
   createdAt: string;
   modifiedAt: string | null;
   product: ProductKey;
@@ -524,7 +526,7 @@ export function createBillingMock(options: MockOptions) {
       resumes_at: null,
       customer_id: s.customerId,
       product_id: p.productId,
-      discount_id: null,
+      discount_id: s.discountId ?? null,
       checkout_id: s.checkoutId,
       seats: null,
       units: null,
