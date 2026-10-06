@@ -90,6 +90,54 @@ impl FfmpegEngine {
     }
 }
 
+/// FFmpeg writes the extracted frame's (possibly scaled) pixel ratio in pHYs.
+/// Read that generated PNG before decoding discards its metadata; this also
+/// follows FFmpeg's chosen stream without running another subprocess.
+fn png_pixel_aspect(path: &Path) -> Option<(u16, u16)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut signature = [0; 8];
+    file.read_exact(&mut signature).ok()?;
+    if signature != *b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    loop {
+        let mut header = [0; 8];
+        file.read_exact(&mut header).ok()?;
+        let len = u32::from_be_bytes(header[..4].try_into().ok()?);
+        match &header[4..] {
+            b"pHYs" if len == 9 => {
+                let mut data = [0; 9];
+                file.read_exact(&mut data).ok()?;
+                let num = u32::from_be_bytes(data[..4].try_into().ok()?);
+                let den = u32::from_be_bytes(data[4..8].try_into().ok()?);
+                if num == 0 || den == 0 {
+                    return None;
+                }
+                let (mut a, mut b) = (num, den);
+                while b != 0 {
+                    (a, b) = (b, a % b);
+                }
+                let (num, den) = (num / a, den / a);
+                // JFIF has only 16-bit density fields. Scaled frames can need
+                // larger ratios; retain their proportions to the nearest
+                // representable density instead of falling back to 1:1.
+                let scale = f64::from(num.max(den)).max(f64::from(u16::MAX));
+                let fit = |value| {
+                    (f64::from(value) * f64::from(u16::MAX) / scale)
+                        .round()
+                        .max(1.) as u16
+                };
+                return Some((fit(num), fit(den)));
+            }
+            b"IDAT" | b"IEND" => return None,
+            _ => {
+                file.seek(SeekFrom::Current(i64::from(len) + 4)).ok()?;
+            }
+        }
+    }
+}
+
 impl Default for FfmpegEngine {
     fn default() -> Self {
         Self::new()
@@ -292,8 +340,9 @@ impl Engine for FfmpegEngine {
                 engine: "ffmpeg",
                 message: e.to_string(),
             })?;
+            let pixel_aspect = png_pixel_aspect(&frame);
             let _ = std::fs::remove_file(&frame);
-            crate::image::encode(img, to, ctx.options, &output)?;
+            crate::image::encode_with_pixel_aspect(img, to, ctx.options, &output, pixel_aspect)?;
         } else if to == "png" {
             crate::image::background_png(&output, ctx.options)?;
         }

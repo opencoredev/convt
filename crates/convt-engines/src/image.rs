@@ -151,6 +151,16 @@ pub(crate) fn flatten(img: DynamicImage, color: [u8; 3]) -> DynamicImage {
 /// Encodes `img` as `to` into `output`, after [`apply_background`]. The writer is flushed explicitly: dropping a `BufWriter` swallows write errors, which would let a
 /// truncated file through to publishing.
 pub(crate) fn encode(img: DynamicImage, to: &str, options: &Options, output: &Path) -> Result<()> {
+    encode_with_pixel_aspect(img, to, options, output, None)
+}
+
+pub(crate) fn encode_with_pixel_aspect(
+    img: DynamicImage,
+    to: &str,
+    options: &Options,
+    output: &Path,
+    pixel_aspect: Option<(u16, u16)>,
+) -> Result<()> {
     let img = apply_background(img, to, options)?;
     // These encoders accept only 8-bit pixels. ICO requires RGBA PNG data,
     // even when its source is RGB. Keep higher precision for PNG and TIFF.
@@ -171,8 +181,16 @@ pub(crate) fn encode(img: DynamicImage, to: &str, options: &Options, output: &Pa
     let quality = options.quality;
     let mut w = BufWriter::new(File::create(output)?);
     match to {
-        "jpeg" => DynamicImage::ImageRgb8(img.to_rgb8())
-            .write_with_encoder(JpegEncoder::new_with_quality(&mut w, quality.unwrap_or(90))),
+        "jpeg" => {
+            let mut encoder = JpegEncoder::new_with_quality(&mut w, quality.unwrap_or(90));
+            if let Some((num, den)) = pixel_aspect {
+                encoder.set_pixel_density(image::codecs::jpeg::PixelDensity {
+                    density: (num, den),
+                    unit: image::codecs::jpeg::PixelDensityUnit::PixelAspectRatio,
+                });
+            }
+            DynamicImage::ImageRgb8(img.to_rgb8()).write_with_encoder(encoder)
+        }
         "avif" => img.write_with_encoder(AvifEncoder::new_with_speed_quality(
             &mut w,
             4,

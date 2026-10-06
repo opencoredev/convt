@@ -257,3 +257,100 @@ fn video_frames_take_the_background() {
         "{gif}"
     );
 }
+
+#[test]
+fn jpeg_video_frames_keep_the_pixel_aspect_ratio() {
+    let Some(ffmpeg) = convt_engines::ffmpeg::ffmpeg_path() else {
+        eprintln!("SKIP pixel aspect ratio: FFmpeg missing");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("anamorphic.mov");
+    let status = std::process::Command::new(ffmpeg)
+        .args([
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=red:s=720x576:d=1",
+            "-vf",
+            "setsar=16/15",
+            "-c:v",
+            "qtrle",
+        ])
+        .arg(&input)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    for (max_size, expected) in [(None, [0, 16, 0, 15]), (Some(319), [1, 84, 1, 63])] {
+        let out = dir.path().join(format!("out-{max_size:?}"));
+        std::fs::create_dir(&out).unwrap();
+        let job = Job {
+            output: Output::Dir(out),
+            options: Options {
+                max_size,
+                ..Options::default()
+            },
+            ..Job::new(&input, format_by_id("jpeg").unwrap())
+        };
+        let files = registry().run(&job, &|_| {}, &Cancel::new()).unwrap();
+        let jpeg = std::fs::read(&files[0]).unwrap();
+        let jfif = jpeg.windows(5).position(|w| w == b"JFIF\0").unwrap();
+        assert_eq!(jpeg[jfif + 7], 0, "density represents pixel aspect ratio");
+        assert_eq!(&jpeg[jfif + 8..jfif + 12], &expected);
+    }
+}
+
+#[test]
+fn scaled_jpeg_frames_keep_ratios_larger_than_jfif_density_fields() {
+    let Some(ffmpeg) = convt_engines::ffmpeg::ffmpeg_path() else {
+        eprintln!("SKIP large pixel aspect ratio: FFmpeg missing");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("wide.mov");
+    assert!(
+        std::process::Command::new(ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=red:s=1920x1080:d=0.1",
+                "-vf",
+                "setsar=16/15",
+                "-c:v",
+                "qtrle"
+            ])
+            .arg(&input)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let out = dir.path().join("out");
+    std::fs::create_dir(&out).unwrap();
+    let job = Job {
+        output: Output::Dir(out),
+        options: Options {
+            max_size: Some(1279),
+            ..Options::default()
+        },
+        ..Job::new(&input, format_by_id("jpeg").unwrap())
+    };
+    let files = registry().run(&job, &|_| {}, &Cancel::new()).unwrap();
+    let jpeg = std::fs::read(&files[0]).unwrap();
+    let jfif = jpeg.windows(5).position(|w| w == b"JFIF\0").unwrap();
+    let num = u16::from_be_bytes(jpeg[jfif + 8..jfif + 10].try_into().unwrap());
+    let den = u16::from_be_bytes(jpeg[jfif + 10..jfif + 12].try_into().unwrap());
+    let img = image::open(&files[0]).unwrap();
+    let display_ratio =
+        f64::from(img.width()) / f64::from(img.height()) * f64::from(num) / f64::from(den);
+    assert!(
+        (display_ratio - 256. / 135.).abs() < 0.0001,
+        "display ratio: {display_ratio}"
+    );
+}
