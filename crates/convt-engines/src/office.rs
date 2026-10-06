@@ -100,7 +100,7 @@ impl Engine for OfficeEngine {
                 "--outdir",
             ])
             .arg(outdir.path())
-            .arg(input);
+            .arg(std::path::absolute(input)?);
         crate::run_tool("libreoffice", cmd, ctx, |_| {})?;
         let produced: Vec<PathBuf> = std::fs::read_dir(outdir.path())?
             .map(|e| e.map(|e| e.path()))

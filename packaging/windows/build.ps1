@@ -48,6 +48,11 @@ Expand-Archive "$Cache/lessmsi.zip" "$Work/lessmsi" -Force
 if ($LASTEXITCODE -ne 0) { throw 'LibreOffice MSI extraction failed' }
 $Office = Get-ChildItem "$Work/office" -Recurse -Filter soffice.com | Select-Object -First 1
 if (-not $Office) { throw 'LibreOffice executable missing' }
+# The document launcher excludes convt's directory from PATH. Office needs its
+# own runtime closure even on a PC without Visual Studio/VC Redistributable.
+$RuntimeDlls = Get-ChildItem "$Out/*" -Include 'msvcp*.dll','vcruntime*.dll','concrt*.dll','vccorlib*.dll'
+if (-not $RuntimeDlls) { throw 'Document pack CRT closure missing' }
+$RuntimeDlls | Copy-Item -Destination $Office.Directory.FullName
 rustc --edition=2024 -C opt-level=2 -C link-arg=/Brepro "$PSScriptRoot/document-launcher.rs" -o "$Work/soffice.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Document launcher build failed' }
 $Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" "$Out/documents.tar.gz"

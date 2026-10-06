@@ -82,6 +82,7 @@ fn main() {
         Command::new(program.join("soffice.com"))
             .args(env::args_os().skip(1))
             .env("PATH", path)
+            .current_dir(&program)
             .creation_flags(0x08000000)
             .status()
     })();
