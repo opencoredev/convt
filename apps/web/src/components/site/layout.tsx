@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
+import { Mark } from "#/components/logo";
 import { routes } from "#/lib/site";
 
 import { footerColumns, headerLinks } from "./links";
@@ -41,8 +42,12 @@ function SiteHeader() {
       <div className={cx(siteColumn, "flex items-center justify-between gap-4 py-4")}>
         <a
           href="/"
-          className={cx("rounded-sm text-[17px]/5.5 font-semibold tracking-[-0.02em]", focusRing)}
+          className={cx(
+            "flex items-center gap-2 rounded-sm text-[17px]/5.5 font-semibold tracking-[-0.02em]",
+            focusRing,
+          )}
         >
+          <Mark />
           convt
         </a>
         <nav aria-label="Main" className="hidden md:block">
@@ -125,7 +130,10 @@ function SiteFooter() {
       <div className={cx(siteColumn, "flex flex-col gap-12 pt-14 pb-10")}>
         <div className="flex flex-col gap-10 md:flex-row md:justify-between">
           <div className="flex max-w-[320px] flex-col gap-2.5">
-            <p className="text-lg/5.5 font-semibold tracking-[-0.02em]">convt</p>
+            <p className="flex items-center gap-2 text-lg/5.5 font-semibold tracking-[-0.02em]">
+              <Mark />
+              convt
+            </p>
             <p className="text-sm/[21px] text-ink-2">
               Local file conversion for macOS, Windows and Linux. Open source under AGPL-3.0.
             </p>

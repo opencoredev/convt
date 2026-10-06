@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { Mark } from "#/components/logo";
 import { signOut } from "#/lib/auth-client";
 import { links } from "#/lib/config";
 import type { Account } from "#/lib/types";
@@ -32,10 +33,11 @@ export function AppShell({ account, children }: { account: Account; children: Re
             <Link
               to="/"
               className={cx(
-                "rounded-sm text-[17px]/5.5 font-semibold tracking-[-0.02em]",
+                "flex items-center gap-2 rounded-sm text-[17px]/5.5 font-semibold tracking-[-0.02em]",
                 focusRing,
               )}
             >
+              <Mark />
               convt
             </Link>
             <span aria-hidden="true" className="text-sm/4.5 text-separator">

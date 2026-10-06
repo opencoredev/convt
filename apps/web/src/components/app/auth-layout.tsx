@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { Mark } from "#/components/logo";
 import { links } from "#/lib/config";
 
 import { cx, focusRing } from "./ui";
@@ -26,10 +27,11 @@ export function AuthLayout({
         <Link
           to="/"
           className={cx(
-            "self-start rounded-sm text-lg/5.5 font-semibold tracking-[-0.02em]",
+            "flex items-center gap-2 self-start rounded-sm text-lg/5.5 font-semibold tracking-[-0.02em]",
             focusRing,
           )}
         >
+          <Mark />
           convt
         </Link>
         <main className="flex w-full max-w-[380px] flex-col gap-6">{children}</main>

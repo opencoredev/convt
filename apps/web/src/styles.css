@@ -25,6 +25,10 @@
   --green: #127a47;
   --green-tint: #eef7f2;
   --error: #b3261e;
+  /* The logo mark (components/logo.tsx, public/favicon.svg). */
+  --mark-green-top: #1fb36c;
+  --mark-green-bottom: #127a47;
+  --mark-overlap: #0b5c34;
   color-scheme: light;
 }
 
@@ -41,6 +45,9 @@
   --green: #3fcb84;
   --green-tint: #12261b;
   --error: #f2786d;
+  --mark-green-top: #46d08b;
+  --mark-green-bottom: #1fa463;
+  --mark-overlap: #a6f0c8;
   color-scheme: dark;
 }
 

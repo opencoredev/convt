@@ -2,6 +2,8 @@
   <Package Name="convt" Manufacturer="Convt" Version="$(var.Version)" UpgradeCode="BAE8028B-1352-4B85-B1C7-A10B7EA54D08" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer version of convt is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="convt.ico" SourceFile="$(sys.SOURCEFILEDIR)convt.ico" />
+    <Property Id="ARPPRODUCTICON" Value="convt.ico" />
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="convt">
       </Directory>

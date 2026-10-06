@@ -1,4 +1,6 @@
-import { Container, ConvertIcon } from "./ui";
+import { Mark } from "#/components/logo";
+
+import { Container } from "./ui";
 
 const engines = [
   {
@@ -58,9 +60,7 @@ export function Engines() {
           <div aria-hidden="true" className="bg-land-glow absolute inset-0 bg-top" />
           <div className="relative flex flex-col items-center px-5 py-10 sm:px-8 min-[1120px]:h-[520px] min-[1120px]:justify-center min-[1120px]:p-0">
             <div className="flex items-center gap-2.5 rounded-xl bg-land-well py-2.5 pr-4 pl-3 shadow-[0_0_0_1px_#4cc28373,0_0_24px_#4cc2832e]">
-              <div className="bg-land-green flex size-[22px] shrink-0 items-center justify-center rounded-md">
-                <ConvertIcon />
-              </div>
+              <Mark size={22} />
               <span className="font-mono text-[13px]/[16px] text-white">convt</span>
               <span className="font-mono text-[12px]/[16px] text-land-muted">picks the engine</span>
             </div>

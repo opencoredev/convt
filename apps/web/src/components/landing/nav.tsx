@@ -1,3 +1,4 @@
+import { Mark } from "#/components/logo";
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
@@ -18,10 +19,11 @@ export function Nav() {
           <a
             href="/"
             className={cx(
-              "rounded-sm text-[17px]/[22px] font-semibold tracking-[-0.02em] text-ink",
+              "flex items-center gap-2 rounded-sm text-[17px]/[22px] font-semibold tracking-[-0.02em] text-ink",
               focusRing,
             )}
           >
+            <Mark />
             convt
           </a>
         </div>
