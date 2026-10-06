@@ -1,7 +1,9 @@
 import type { ComponentProps, ReactNode } from "react";
 
+// outline-hidden, not outline-none: in Tailwind v4 outline-none sets the outline style to
+// none, which the focus-visible width and color below cannot bring back.
 export const focusRing =
-  "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green";
+  "outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green";
 
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
