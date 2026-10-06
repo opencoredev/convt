@@ -1576,12 +1576,11 @@ mod tests {
         String::from_utf8(request).unwrap()
     }
 
+    // Only the Unix permission tests ask.
+    #[cfg(unix)]
     fn not_root() -> bool {
-        #[cfg(unix)]
         // SAFETY: geteuid has no arguments or memory access requirements.
-        return unsafe { libc::geteuid() } != 0;
-        #[cfg(not(unix))]
-        true
+        unsafe { libc::geteuid() != 0 }
     }
 
     #[cfg(unix)]
