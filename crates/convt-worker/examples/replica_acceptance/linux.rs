@@ -658,7 +658,7 @@ async fn cancellation(
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+pub async fn main() -> Result<()> {
     ensure!(cfg!(target_os = "linux"), "acceptance requires Linux");
     ensure!(
         unsafe { libc::geteuid() } == 0,
