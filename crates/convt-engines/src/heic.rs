@@ -192,7 +192,20 @@ fn load() -> std::result::Result<Library, String> {
         .chain(LIB_NAMES.iter().map(PathBuf::from));
     for path in candidates {
         // SAFETY: loading libheif runs only its library initialisers.
-        match unsafe { Library::new(&path) } {
+        #[cfg(windows)]
+        let loaded = unsafe {
+            // Restrict dependent DLLs to this trusted library directory and
+            // System32; never consult the conversion's working directory/PATH.
+            let flags = if path.is_absolute() {
+                0x100 | 0x800
+            } else {
+                0x200 | 0x800
+            };
+            libloading::os::windows::Library::load_with_flags(&path, flags).map(Library::from)
+        };
+        #[cfg(not(windows))]
+        let loaded = unsafe { Library::new(&path) };
+        match loaded {
             Ok(lib) => return Ok(lib),
             Err(e) => last = e.to_string(),
         }

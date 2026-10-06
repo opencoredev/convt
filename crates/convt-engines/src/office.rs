@@ -83,19 +83,24 @@ impl Engine for OfficeEngine {
         let profile = tempfile::tempdir()?;
         let outdir = tempfile::tempdir()?;
         let mut cmd = Command::new(soffice);
-        cmd.arg(format!(
-            "-env:UserInstallation=file://{}",
-            profile.path().display()
-        ))
-        .args([
-            "--headless",
-            "--norestore",
-            "--convert-to",
-            filter(ctx.step),
-            "--outdir",
-        ])
-        .arg(outdir.path())
-        .arg(input);
+        // Windows drive letters, spaces and non-ASCII paths need a real file
+        // URL too. An invalid profile URL can make concurrent jobs share Office's
+        // default profile and silently hand work to another process.
+        let profile_url =
+            url::Url::from_directory_path(profile.path()).map_err(|()| Error::EngineFailed {
+                engine: "libreoffice",
+                message: "Cannot form a private LibreOffice profile URL".into(),
+            })?;
+        cmd.arg(format!("-env:UserInstallation={profile_url}"))
+            .args([
+                "--headless",
+                "--norestore",
+                "--convert-to",
+                filter(ctx.step),
+                "--outdir",
+            ])
+            .arg(outdir.path())
+            .arg(input);
         crate::run_tool("libreoffice", cmd, ctx, |_| {})?;
         let produced: Vec<PathBuf> = std::fs::read_dir(outdir.path())?
             .map(|e| e.map(|e| e.path()))

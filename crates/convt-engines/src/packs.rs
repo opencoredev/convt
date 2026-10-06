@@ -16,7 +16,7 @@ const MAX_EXTRACTED: u64 = 4 * 1024 * 1024 * 1024;
 /// Release CI supplies these compile-time values for each platform. One placeholder,
 /// deliberately unusable until both a real URL and a pinned digest are configured.
 pub fn documents_source() -> Source {
-    Source {
+    let mut source = Source {
         url: option_env!("CONVT_DOCUMENT_PACK_URL")
             .unwrap_or("https://documents.invalid/PLACEHOLDER/documents.tar.gz")
             .into(),
@@ -26,7 +26,17 @@ pub fn documents_source() -> Source {
         version: option_env!("CONVT_DOCUMENT_PACK_VERSION")
             .unwrap_or("unconfigured")
             .into(),
+    };
+    if source.url == "bundle:documents.tar.gz" {
+        source.url = std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.parent()
+                    .map(|dir| format!("file://{}", dir.join("documents.tar.gz").display()))
+            })
+            .unwrap_or_else(|| "file://missing-bundled-document-pack".into());
     }
+    source
 }
 
 /// Whether this build carries a usable pin and a configured download URL.
@@ -324,9 +334,11 @@ fn trusted_metadata(path: &Path) -> anyhow::Result<fs::Metadata> {
             );
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    crate::windows_acl::trusted(path, false)?;
+    #[cfg(not(any(unix, windows)))]
     bail!("document-pack ownership verification is not supported on this platform");
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Ok(metadata)
 }
 
@@ -406,6 +418,11 @@ fn check_path(root: &Path, last_is_root: bool) -> anyhow::Result<()> {
             bail!("document-pack root must not contain parent traversal");
         }
         path.push(component);
+        #[cfg(windows)]
+        if matches!(component, Component::Prefix(_)) {
+            // C: alone is drive-relative; inspect it only once RootDir is appended.
+            continue;
+        }
         match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 bail!("document-pack symlink forbidden: {}", path.display());
@@ -435,10 +452,19 @@ fn check_path(root: &Path, last_is_root: bool) -> anyhow::Result<()> {
                         }
                     }
                 }
-                #[cfg(not(unix))]
+                #[cfg(windows)]
+                crate::windows_acl::trusted(&path, !(path == absolute && last_is_root))?;
+                #[cfg(not(any(unix, windows)))]
                 bail!("document-pack ownership verification is not supported on this platform");
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                #[cfg(windows)]
+                if let Some(parent) = path.parent().filter(|parent| parent.exists()) {
+                    // Creating siblings is safe for an existing child only. A
+                    // missing next component requires a private parent first.
+                    crate::windows_acl::trusted(parent, false)?;
+                }
+            }
             Err(error) => return Err(error.into()),
         }
     }

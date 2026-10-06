@@ -19,6 +19,8 @@ pub mod paths;
 #[cfg(feature = "pdfium")]
 pub mod pdfium;
 pub mod svg;
+#[cfg(windows)]
+mod windows_acl;
 
 static CLOUD_SUPERVISED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
