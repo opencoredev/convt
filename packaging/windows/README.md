@@ -8,7 +8,7 @@ $env:SOURCE_DATE_EPOCH = '1791244800'
 ./packaging/windows/installer.ps1
 ```
 
-`build.ps1` verifies every downloaded or cached archive against `inputs.lock.json`, builds the patched codecs, repackages the official LibreOffice MSI, and compiles convt with that document archive's digest. It writes `packaging/out/windows/payload`. An existing payload is refused; move a previous owned build aside before rebuilding. `installer.ps1` installs WiX 6.0.2 into the checkout's cache and produces a per-user MSI under `packaging/out/windows`.
+`build.ps1` verifies every downloaded or cached archive against `inputs.lock.json`, builds the patched codecs, repackages the official LibreOffice MSI, and compiles convt with that document archive's digest. It writes `packaging/out/windows/payload`. An existing payload is refused; move the previous owned `packaging/out/windows` directory aside before rebuilding. `installer.ps1` installs WiX 6.0.2 into the checkout's cache and produces a per-user MSI under `packaging/out/windows`.
 
 The MSI installs into `%LOCALAPPDATA%\Programs\convt` and adds a Start menu shortcut. It needs no machine-wide LibreOffice or codec installation. Images, SVG, PDF, video and audio engines find their dependencies beside the installed executable. Run `convt.exe pack install documents` to explicitly install the bundled, pinned document archive into the user's convt data directory. Pack removal leaves a system LibreOffice untouched. Uninstalling the MSI removes its payload and shortcut and preserves user data.
 
