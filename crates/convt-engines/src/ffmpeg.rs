@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use convt_core::{Ctx, Engine, Error, Options, Result, Step, VideoCodec};
+use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, VideoCodec};
 
 const VIDEO_IN: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
 const VIDEO_OUT: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
@@ -185,12 +185,10 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
             push(&["-vf", &vf, "-an"]);
             return args;
         }
-        "png" | "jpeg" => {
+        // Still frames are always written as PNG, keeping any alpha; convert()
+        // then encodes the target through the image engine.
+        "png" => {
             push(&["-frames:v", "1", "-update", "1"]);
-            if to == "jpeg" {
-                let qv = q.map_or(2, |q| 2 + (100 - u32::from(q)) * 29 / 99);
-                push(&["-q:v", &qv.to_string()]);
-            }
             if let Some(m) = o.max_size {
                 let vf = format!(
                     "scale='min(iw,{m})':'min(ih,{m})':force_original_aspect_ratio=decrease"
@@ -261,13 +259,25 @@ impl Engine for FfmpegEngine {
             ctx.indeterminate();
         }
         let output = ctx.artifact(out_dir, 0);
+        let to = ctx.step.to.id;
+        if to == "gif" && matches!(ctx.options.background, Some(Background::Color(_))) {
+            return Err(Error::InvalidOption(
+                "a background color isn't supported for video to GIF yet".into(),
+            ));
+        }
+        // A still frame goes through the image encoder like any other image,
+        // so it gets the same quality, size and background handling (FFmpeg's
+        // JPEG encoder dropped alpha to black).
+        let still = matches!(to, "png" | "jpeg");
+        let frame = out_dir.join("frame.png");
+        let written = if still { &frame } else { &output };
         let mut cmd = Command::new(ffmpeg);
         cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
             .args(LOCAL_INPUT_ARGS)
             .args(["-progress", "pipe:1", "-nostats", "-i"])
             .arg(local_path(input))
-            .args(output_args(ctx.step.to.id, ctx.options))
-            .arg(&output);
+            .args(output_args(if still { "png" } else { to }, ctx.options))
+            .arg(written);
         crate::run_tool("ffmpeg", cmd, ctx, |line| {
             let us = line
                 .strip_prefix("out_time_us=")
@@ -276,6 +286,14 @@ impl Engine for FfmpegEngine {
                 ctx.progress((us / total) as f32);
             }
         })?;
+        if still {
+            let img = image::open(&frame).map_err(|e| Error::EngineFailed {
+                engine: "ffmpeg",
+                message: e.to_string(),
+            })?;
+            let _ = std::fs::remove_file(&frame);
+            crate::image::encode(img, to, ctx.options, &output)?;
+        }
         Ok(vec![output])
     }
 }
@@ -303,14 +321,6 @@ mod tests {
         let mp3 = output_args("mp3", &o).join(" ");
         assert!(mp3.contains("-b:a 96k") && !mp3.contains("-q:a"), "{mp3}");
         assert!(!output_args("png", &o).join(" ").contains("scale"));
-        let best = output_args(
-            "jpeg",
-            &Options {
-                quality: Some(100),
-                ..Options::default()
-            },
-        );
-        assert!(best.join(" ").contains("-q:v 2"));
     }
 
     #[test]

@@ -82,6 +82,18 @@ pub(crate) fn apply_background(
     }
 }
 
+/// Applies a chosen background color to the PNG at `path` in place, for
+/// engines that hand PNG to or from an outside tool (macOS `sips`). Anything
+/// but a color leaves the file alone, since PNG keeps transparency.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
+    if !matches!(options.background, Some(Background::Color(_))) {
+        return Ok(());
+    }
+    let img = image::open(path).map_err(failed)?;
+    encode(img, "png", options, path)
+}
+
 /// The error for asking a format without transparency to keep it.
 pub(crate) fn no_transparency(to: &str) -> String {
     let name = format_by_id(to).map_or(to, |f| f.name);
@@ -145,6 +157,8 @@ pub(crate) fn encode(img: DynamicImage, to: &str, options: &Options, output: &Pa
     // even when its source is RGB. Keep higher precision for PNG and TIFF.
     let img = match to {
         "ico" | "gif" | "qoi" | "avif" | "webp" => DynamicImage::ImageRgba8(img.to_rgba8()),
+        // The BMP encoder writes RGBA alpha but drops gray-alpha's.
+        "bmp" if img.color().has_alpha() => DynamicImage::ImageRgba8(img.to_rgba8()),
         "png"
             if matches!(
                 img,
@@ -199,6 +213,45 @@ mod tests {
         let files = ImageEngine.convert(&ctx, src, out.path()).unwrap();
         assert_eq!(files.len(), 1);
         image::open(&files[0]).unwrap()
+    }
+
+    #[test]
+    fn background_png_flattens_in_place_only_for_a_color() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("a.png");
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 0, 0]))
+            .save(&png)
+            .unwrap();
+        background_png(&png, &Options::default()).unwrap();
+        assert_eq!(
+            image::open(&png).unwrap().to_rgba8().get_pixel(0, 0).0[3],
+            0
+        );
+        let white = Options {
+            background: Some(Background::WHITE),
+            ..Options::default()
+        };
+        background_png(&png, &white).unwrap();
+        assert_eq!(
+            image::open(&png).unwrap().to_rgba8().get_pixel(0, 0).0,
+            [255; 4]
+        );
+    }
+
+    #[test]
+    fn gray_alpha_keeps_transparency_in_bmp() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("a.bmp");
+        let gray = DynamicImage::ImageLumaA8(image::GrayAlphaImage::from_pixel(
+            2,
+            2,
+            image::LumaA([0, 0]),
+        ));
+        encode(gray, "bmp", &Options::default(), &out).unwrap();
+        assert_eq!(
+            image::open(&out).unwrap().to_rgba8().get_pixel(0, 0).0[3],
+            0
+        );
     }
 
     #[test]

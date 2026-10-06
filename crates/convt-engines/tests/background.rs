@@ -209,3 +209,51 @@ fn pdf_pages_render_onto_the_background() {
     assert!(near(pixel(&black[0], 1, 1), [0, 0, 0]));
     assert!(convert(&src, "jpeg", Some(Background::Transparent)).is_err());
 }
+
+/// A one-second MOV with an alpha channel: transparent, with a green box in
+/// the middle. `None` when FFmpeg or its QuickTime Animation encoder is missing.
+fn alpha_video(dir: &Path) -> Option<PathBuf> {
+    let ffmpeg = convt_engines::ffmpeg::ffmpeg_path()?;
+    let path = dir.join("alpha.mov");
+    let ok = std::process::Command::new(ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg("color=c=red@0.0:s=64x48:r=10,format=rgba,drawbox=x=16:y=12:w=32:h=24:color=green@1:t=fill")
+        .args(["-t", "1", "-c:v", "qtrle"])
+        .arg(&path)
+        .status()
+        .is_ok_and(|s| s.success());
+    ok.then_some(path)
+}
+
+#[test]
+fn video_frames_take_the_background() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(src) = alpha_video(dir.path()) else {
+        eprintln!("SKIP video background: FFmpeg with qtrle missing");
+        return;
+    };
+    if registry()
+        .plan(format_by_id("mov").unwrap(), format_by_id("jpeg").unwrap())
+        .is_err()
+    {
+        eprintln!("SKIP video background: no MOV to JPEG route");
+        return;
+    }
+    let jpeg = convert(&src, "jpeg", None).unwrap();
+    assert!(
+        near(pixel(&jpeg[0], 1, 1), [255, 255, 255]),
+        "{:?}",
+        pixel(&jpeg[0], 1, 1)
+    );
+    let orange = convert(&src, "jpeg", Some("#ff8800".parse().unwrap())).unwrap();
+    assert!(near(pixel(&orange[0], 1, 1), [255, 136, 0]));
+    let png = convert(&src, "png", None).unwrap();
+    assert_eq!(pixel(&png[0], 1, 1)[3], 0, "PNG frames keep transparency");
+    let black = convert(&src, "png", Some(Background::BLACK)).unwrap();
+    assert_eq!(pixel(&black[0], 1, 1), [0, 0, 0, 255]);
+    let gif = convert(&src, "gif", Some(Background::WHITE)).unwrap_err();
+    assert!(
+        gif.to_string().contains("isn't supported for video to GIF"),
+        "{gif}"
+    );
+}

@@ -296,7 +296,7 @@ impl QuickView {
         if audio_applies(to) {
             options.strip_audio = self.strip_audio;
         }
-        if background_applies(to) {
+        if background_applies(to, &self.files) {
             options.background = shown_background(to, self.background);
         }
         options
@@ -698,7 +698,7 @@ impl QuickView {
                 p,
             )
         });
-        let background = background_applies(to).then(|| {
+        let background = background_applies(to, &self.files).then(|| {
             let toggle = cx.entity().downgrade();
             let pick = cx.entity().downgrade();
             let current = shown_background(to, self.background);
@@ -710,11 +710,7 @@ impl QuickView {
             if let Some(custom) = current.filter(|c| !choices.contains(c)) {
                 choices.push(custom);
             }
-            let default = if to.keeps_transparency() {
-                Background::Transparent
-            } else {
-                Background::WHITE
-            };
+            let default = default_background(to, &self.files);
             row_label(
                 "Background",
                 theme::select(
@@ -986,9 +982,29 @@ fn codec_applies(to: &Format) -> bool {
     matches!(to.id, "mp4" | "mov" | "mkv")
 }
 
-/// Whether `to` is an image, for the Background control.
-fn background_applies(to: &Format) -> bool {
+/// The source formats of `files`, by extension.
+fn sources(files: &[PathBuf]) -> impl Iterator<Item = &'static Format> + '_ {
+    files
+        .iter()
+        .filter_map(|f| convt_core::format_by_extension(f))
+}
+
+/// Whether the Background control applies: image targets, except GIF from
+/// video, where the engines don't take a background color yet.
+fn background_applies(to: &Format, files: &[PathBuf]) -> bool {
     to.category == Category::Image
+        && !(to.id == "gif" && sources(files).any(|f| f.category == Category::Video))
+}
+
+/// What the Background control shows with nothing picked: what the engines
+/// do by default. Formats without transparency get white, and so do PDF
+/// pages, which render on white like a PDF viewer shows them.
+fn default_background(to: &Format, files: &[PathBuf]) -> Background {
+    if !to.keeps_transparency() || sources(files).any(|f| f.id == "pdf") {
+        Background::WHITE
+    } else {
+        Background::Transparent
+    }
 }
 
 /// The background to convert with: Transparent picked for a format that

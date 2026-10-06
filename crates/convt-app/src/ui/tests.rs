@@ -1681,6 +1681,41 @@ fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    // Targets come from the extension, so the contents don't matter here.
+    let pdf = f.dir.path().join("page.pdf");
+    std::fs::write(&pdf, "not really a pdf").unwrap();
+    let (window, view) = f.quick(cli(vec![pdf], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if targets.iter().any(|t| t.id == "png") {
+        // PDF pages render on white unless Transparent is picked.
+        click(cx, window, "to-png");
+        assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+        click(cx, window, "background");
+        assert!(shown(cx, window, "background-transparent"));
+    } else {
+        eprintln!("skipping PDF: PDFium missing");
+    }
+
+    let clip = f.dir.path().join("clip.mov");
+    std::fs::write(&clip, "not really a movie").unwrap();
+    let (window, view) = f.quick(cli(vec![clip], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if !targets.iter().any(|t| t.id == "gif") {
+        eprintln!("skipping video: FFmpeg missing");
+        return;
+    }
+    // GIF from video takes no background color; a still frame does.
+    click(cx, window, "to-gif");
+    assert!(!shown(cx, window, "background"));
+    if targets.iter().any(|t| t.id == "jpeg") {
+        click(cx, window, "to-jpeg");
+        assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
+    }
+}
+
+#[gpui_kit::test]
 fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     // Targets come from the extension, so the contents don't matter here.
