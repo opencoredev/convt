@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "changelog": [
+    "@changesets/changelog-github",
+    {
+      "repo": "opencoredev/convt",
+      "disableThanks": true
+    }
+  ],
+  "commit": false,
+  "fixed": [["@convt/desktop", "@convt/cli", "@convt/web"]],
+  "linked": [],
+  "access": "restricted",
+  "baseBranch": "main",
+  "ignore": [],
+  "updateInternalDependencies": "patch",
+  "bumpVersionsWithWorkspaceProtocolOnly": true,
+  "privatePackages": {
+    "version": true,
+    "tag": false
+  }
+}
