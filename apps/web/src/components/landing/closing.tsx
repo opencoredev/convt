@@ -1,7 +1,7 @@
-import { routes } from "#/lib/site";
+import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
-import { ButtonLink, Container, cx, focusRing } from "./ui";
+import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
 export function CallToAction() {
   return (
@@ -23,23 +23,37 @@ export function CallToAction() {
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">
-          <ButtonLink
-            variant="primary"
-            href={`${routes.download}?os=macos`}
-            className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
-          >
-            Download for macOS
-          </ButtonLink>
-          <ButtonLink
-            variant="secondary"
-            href={`${routes.download}#platforms`}
-            className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
-          >
-            Windows and Linux
-          </ButtonLink>
+          {LAUNCHED ? (
+            <DownloadActions />
+          ) : (
+            <ComingSoon className="h-11 rounded-[10px] px-5 text-[15px]/[18px]">
+              Coming soon to macOS, Windows and Linux
+            </ComingSoon>
+          )}
         </div>
       </section>
     </Container>
+  );
+}
+
+function DownloadActions() {
+  return (
+    <>
+      <ButtonLink
+        variant="primary"
+        href={`${routes.download}?os=macos`}
+        className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
+      >
+        Download for macOS
+      </ButtonLink>
+      <ButtonLink
+        variant="secondary"
+        href={`${routes.download}#platforms`}
+        className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
+      >
+        Windows and Linux
+      </ButtonLink>
+    </>
   );
 }
 
@@ -54,37 +68,40 @@ export function Footer() {
               Local file conversion for macOS, Windows and Linux. Open source under AGPL-3.0.
             </p>
           </div>
-          <div className="flex flex-wrap gap-x-20 gap-y-10">
-            {footerColumns.map((column) => (
-              <nav
-                key={column.title}
-                aria-labelledby={`footer-${column.title}`}
-                className="flex flex-col gap-3"
-              >
-                <h2
-                  id={`footer-${column.title}`}
-                  className="font-mono text-[12px]/[16px] font-normal text-land-muted uppercase"
+          {/* Every footer page needs the full site, so the coming-soon page has none. */}
+          {LAUNCHED && (
+            <div className="flex flex-wrap gap-x-20 gap-y-10">
+              {footerColumns.map((column) => (
+                <nav
+                  key={column.title}
+                  aria-labelledby={`footer-${column.title}`}
+                  className="flex flex-col gap-3"
                 >
-                  {column.title}
-                </h2>
-                <ul className="flex flex-col gap-3">
-                  {column.links.map((link) => (
-                    <li key={link.label}>
-                      <a
-                        href={link.href}
-                        className={cx(
-                          "rounded-sm text-[14px]/[18px] text-ink transition-colors hover:text-ink-2",
-                          focusRing,
-                        )}
-                      >
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            ))}
-          </div>
+                  <h2
+                    id={`footer-${column.title}`}
+                    className="font-mono text-[12px]/[16px] font-normal text-land-muted uppercase"
+                  >
+                    {column.title}
+                  </h2>
+                  <ul className="flex flex-col gap-3">
+                    {column.links.map((link) => (
+                      <li key={link.label}>
+                        <a
+                          href={link.href}
+                          className={cx(
+                            "rounded-sm text-[14px]/[18px] text-ink transition-colors hover:text-ink-2",
+                            focusRing,
+                          )}
+                        >
+                          {link.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-2 border-t border-line pt-6 sm:flex-row sm:justify-between">
           <p className="text-[13px]/[16px] text-land-muted">© 2026 convt</p>

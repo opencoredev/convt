@@ -9,6 +9,7 @@
     "dev": "vite dev --port 3000",
     "generate-routes": "tsr generate",
     "build": "bun scripts/generate-content.ts && vite build",
+    "build:landing": "bash scripts/build-landing.sh",
     "generate-content": "bun scripts/generate-content.ts",
     "preview": "vite preview",
     "deploy": "bun run build && wrangler deploy",

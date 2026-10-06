@@ -1,12 +1,13 @@
-import { GITHUB_URL, routes } from "#/lib/site";
+import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
-import { ButtonLink, Container, cx, focusRing } from "./ui";
+import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
 const links = [
   { label: "Formats", href: "#formats" },
   { label: "Pricing", href: "#pricing" },
   { label: "API", href: "#api" },
-  { label: "GitHub", href: GITHUB_URL },
+  // The repo is private until launch.
+  ...(LAUNCHED ? [{ label: "GitHub", href: GITHUB_URL }] : []),
 ];
 
 export function Nav() {
@@ -42,22 +43,34 @@ export function Nav() {
           </ul>
         </nav>
         <div className="flex items-center justify-end gap-2 md:w-[200px] md:shrink-0">
-          <ButtonLink
-            variant="secondary"
-            href={routes.signIn}
-            className="rounded-lg px-3 py-[7px] text-[14px]/[18px]"
-          >
-            Sign in
-          </ButtonLink>
-          <ButtonLink
-            variant="primary"
-            href={routes.download}
-            className="rounded-lg px-3 py-[7px] text-[14px]/[18px] shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_1px_2px_#0a3c2340,0_2px_6px_#0a3c231f]!"
-          >
-            Download
-          </ButtonLink>
+          {LAUNCHED ? (
+            <NavActions />
+          ) : (
+            <ComingSoon className="rounded-lg px-3 py-[7px] text-[14px]/[18px]" />
+          )}
         </div>
       </Container>
     </header>
+  );
+}
+
+function NavActions() {
+  return (
+    <>
+      <ButtonLink
+        variant="secondary"
+        href={routes.signIn}
+        className="rounded-lg px-3 py-[7px] text-[14px]/[18px]"
+      >
+        Sign in
+      </ButtonLink>
+      <ButtonLink
+        variant="primary"
+        href={routes.download}
+        className="rounded-lg px-3 py-[7px] text-[14px]/[18px] shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_1px_2px_#0a3c2340,0_2px_6px_#0a3c231f]!"
+      >
+        Download
+      </ButtonLink>
+    </>
   );
 }

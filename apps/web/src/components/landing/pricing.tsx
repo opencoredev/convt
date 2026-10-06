@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-import { BUY_DESKTOP_URL, buyProUrl, routes } from "#/lib/site";
+import { BUY_DESKTOP_URL, LAUNCHED, buyProUrl, routes } from "#/lib/site";
 
-import { ButtonLink, Container, cx, focusRing } from "./ui";
+import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
 export function Pricing() {
   return (
@@ -87,13 +87,17 @@ function DesktopPlan() {
           "Batch folders and presets",
         ]}
       />
-      <ButtonLink
-        variant="secondary"
-        href={BUY_DESKTOP_URL}
-        className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
-      >
-        Get Desktop License
-      </ButtonLink>
+      {LAUNCHED ? (
+        <ButtonLink
+          variant="secondary"
+          href={BUY_DESKTOP_URL}
+          className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
+        >
+          Get Desktop License
+        </ButtonLink>
+      ) : (
+        <ComingSoon className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]" />
+      )}
     </div>
   );
 }
@@ -134,13 +138,17 @@ function ProPlan() {
           "Every future update included",
         ]}
       />
-      <ButtonLink
-        variant="primary"
-        href={buyProUrl(yearly ? "year" : "month")}
-        className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
-      >
-        Get convt Pro
-      </ButtonLink>
+      {LAUNCHED ? (
+        <ButtonLink
+          variant="primary"
+          href={buyProUrl(yearly ? "year" : "month")}
+          className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
+        >
+          Get convt Pro
+        </ButtonLink>
+      ) : (
+        <ComingSoon className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]" />
+      )}
     </div>
   );
 }
@@ -247,13 +255,19 @@ function ApiCard() {
           </p>
         </div>
         <div className="flex">
-          <ButtonLink
-            variant="secondary"
-            href={routes.apiDocs}
-            className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]"
-          >
-            Read the docs
-          </ButtonLink>
+          {LAUNCHED ? (
+            <ButtonLink
+              variant="secondary"
+              href={routes.apiDocs}
+              className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]"
+            >
+              Read the docs
+            </ButtonLink>
+          ) : (
+            <ComingSoon className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]">
+              Docs coming soon
+            </ComingSoon>
+          )}
         </div>
       </div>
       <div className="flex min-w-0 flex-col rounded-[10px] bg-land-code shadow-[inset_0_0_0_1px_#232726] lg:w-[440px] lg:shrink-0">

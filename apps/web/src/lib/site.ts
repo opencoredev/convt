@@ -7,6 +7,14 @@ export const SITE_NAME = "convt";
 
 export const GITHUB_URL = "https://github.com/opencoredev/convt";
 
+/**
+ * False while convt.app is a coming-soon page: there are no public builds, accounts or
+ * checkout yet, and the repo is private. The landing page then swaps every download,
+ * sign-in, checkout and docs link for a "Coming soon" label and hides the footer links.
+ * Flip to true when downloads and accounts ship.
+ */
+export const LAUNCHED = false;
+
 /** PLACEHOLDER: no status page exists yet. Every status link on the site reads this. */
 export const STATUS_URL = "https://status.convt.app";
 

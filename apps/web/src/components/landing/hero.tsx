@@ -1,6 +1,6 @@
-import { GITHUB_URL, routes } from "#/lib/site";
+import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
-import { ButtonLink, Container, DownloadIcon } from "./ui";
+import { ButtonLink, ComingSoon, Container, DownloadIcon } from "./ui";
 
 export function Hero() {
   return (
@@ -14,25 +14,39 @@ export function Hero() {
           Images, video, audio and documents, converted on your own computer. Nothing gets uploaded.
         </p>
         <div className="flex flex-wrap justify-center gap-2.5 pt-2.5">
-          <ButtonLink
-            variant="primary"
-            href={`${routes.download}?os=macos`}
-            className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
-          >
-            <DownloadIcon />
-            Download for macOS
-          </ButtonLink>
-          <ButtonLink
-            variant="secondary"
-            href={GITHUB_URL}
-            className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
-          >
-            Star on GitHub
-          </ButtonLink>
+          {LAUNCHED ? (
+            <HeroActions />
+          ) : (
+            <ComingSoon className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]">
+              Coming soon to macOS, Windows and Linux
+            </ComingSoon>
+          )}
         </div>
       </div>
       <ConvertPanel />
     </Container>
+  );
+}
+
+function HeroActions() {
+  return (
+    <>
+      <ButtonLink
+        variant="primary"
+        href={`${routes.download}?os=macos`}
+        className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
+      >
+        <DownloadIcon />
+        Download for macOS
+      </ButtonLink>
+      <ButtonLink
+        variant="secondary"
+        href={GITHUB_URL}
+        className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
+      >
+        Star on GitHub
+      </ButtonLink>
+    </>
   );
 }
 

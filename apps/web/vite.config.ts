@@ -7,6 +7,8 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 
+const landingOnly = process.env.CONVT_LANDING_ONLY === "1";
+
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
@@ -21,7 +23,15 @@ const config = defineConfig({
     // CSRF is checked by our own request middleware (src/server/request.ts): every
     // request that is not GET or HEAD needs this site's Origin or
     // Sec-Fetch-Site: same-origin, server functions included.
-    tanstackStart({ serverFns: { disableCsrfMiddlewareWarning: true } }),
+    tanstackStart({
+      serverFns: { disableCsrfMiddlewareWarning: true },
+      // `bun run build:landing` prerenders only the home page to static HTML for the
+      // coming-soon deploy on Vercel (see LAUNCHED in src/lib/site.ts).
+      ...(landingOnly && {
+        prerender: { enabled: true, autoStaticPathsDiscovery: false, crawlLinks: false },
+        pages: [{ path: "/" }],
+      }),
+    }),
     viteReact(),
   ],
 });

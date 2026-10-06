@@ -39,6 +39,26 @@ export function ButtonLink({
   );
 }
 
+/** Stands in for a button whose destination is not live yet. Same box, not clickable. */
+export function ComingSoon({
+  className,
+  children = "Coming soon",
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <span
+      className={cx(
+        "inline-flex shrink-0 cursor-default items-center justify-center gap-2 font-medium whitespace-nowrap bg-sunken text-ink-2 shadow-land-secondary select-none",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">
