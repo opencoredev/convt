@@ -233,7 +233,7 @@ pub(crate) fn trusted(path: &Path, ancestor: bool) -> anyhow::Result<()> {
                 return Err(std::io::Error::last_os_error().into());
             }
             let header = &*ace.cast::<ACE_HEADER>();
-            if ancestor && u32::from(header.AceFlags) & INHERIT_ONLY_ACE != 0 {
+            if u32::from(header.AceFlags) & INHERIT_ONLY_ACE != 0 {
                 continue;
             }
             match header.AceType {
