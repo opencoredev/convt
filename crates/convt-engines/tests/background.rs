@@ -491,3 +491,38 @@ fn tagged_video_frames_keep_png_color_metadata_and_jpeg_colors() {
         );
     }
 }
+
+#[test]
+fn colored_grayscale_png_frames_keep_sixteen_bit_precision() {
+    let Some(ffmpeg) = convt_engines::ffmpeg::ffmpeg_path() else {
+        eprintln!("SKIP grayscale precision: FFmpeg missing");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("gray.mkv");
+    assert!(
+        std::process::Command::new(ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=gray:s=16x16:d=0.1,format=gray16le",
+                "-c:v",
+                "ffv1"
+            ])
+            .arg(&input)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let plain = convert(&input, "png", None).unwrap();
+    let colored = convert(&input, "png", Some(Background::BLACK)).unwrap();
+    let before = image::open(&plain[0]).unwrap();
+    let after = image::open(&colored[0]).unwrap();
+    assert_eq!(before.color(), image::ColorType::L16);
+    assert_eq!(after.color(), before.color());
+    assert_eq!(after.to_luma16(), before.to_luma16());
+}

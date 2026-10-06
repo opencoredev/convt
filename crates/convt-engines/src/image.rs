@@ -98,9 +98,22 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
     info.source_chromaticities = source.chromaticities();
     info.srgb = source.srgb;
     info.icc_profile = source.icc_profile.clone();
-    info.color_type = png::ColorType::Rgb;
     let bytes = match img {
+        DynamicImage::ImageLuma16(gray) => {
+            info.color_type = png::ColorType::Grayscale;
+            info.bit_depth = png::BitDepth::Sixteen;
+            gray.into_raw()
+                .into_iter()
+                .flat_map(u16::to_be_bytes)
+                .collect()
+        }
+        DynamicImage::ImageLuma8(gray) => {
+            info.color_type = png::ColorType::Grayscale;
+            info.bit_depth = png::BitDepth::Eight;
+            gray.into_raw()
+        }
         DynamicImage::ImageRgb16(rgb) => {
+            info.color_type = png::ColorType::Rgb;
             info.bit_depth = png::BitDepth::Sixteen;
             rgb.into_raw()
                 .into_iter()
@@ -108,6 +121,7 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
                 .collect()
         }
         _ => {
+            info.color_type = png::ColorType::Rgb;
             info.bit_depth = png::BitDepth::Eight;
             img.to_rgb8().into_raw()
         }
