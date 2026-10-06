@@ -4,6 +4,7 @@ use std::io::Read;
 use std::os::windows::{ffi::OsStringExt, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::*;
@@ -15,6 +16,20 @@ use windows::Win32::UI::Shell::*;
 use windows::core::*;
 
 pub const CLSID: GUID = GUID::from_u128(0x710fb9a8_c47e_4b39_9cfa_e273ab1b78f8);
+static OBJECTS: AtomicUsize = AtomicUsize::new(0);
+static SERVER_LOCKS: AtomicUsize = AtomicUsize::new(0);
+struct ModuleLease;
+impl ModuleLease {
+    fn new() -> Self {
+        OBJECTS.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+impl Drop for ModuleLease {
+    fn drop(&mut self) {
+        OBJECTS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 const PROBE_LIMIT: Duration = Duration::from_secs(2);
 const CACHE_TTL: Duration = Duration::from_secs(30);
 
@@ -142,6 +157,7 @@ fn probe(path: &Path) -> Option<Vec<String>> {
 
 #[implement(IExplorerCommand, IObjectWithSite)]
 struct ExplorerCommand {
+    _lease: ModuleLease,
     target: Option<String>,
     site: Mutex<Option<IUnknown>>,
     selection: Mutex<Vec<PathBuf>>,
@@ -150,6 +166,7 @@ struct ExplorerCommand {
 impl ExplorerCommand {
     fn root() -> Self {
         Self {
+            _lease: ModuleLease::new(),
             target: None,
             site: Mutex::new(None),
             selection: Mutex::new(vec![]),
@@ -289,6 +306,7 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
             .iter()
             .map(|target| {
                 ExplorerCommand {
+                    _lease: ModuleLease::new(),
                     target: Some(target.clone()),
                     site: Mutex::new(None),
                     selection: Mutex::new(paths.clone()),
@@ -298,6 +316,7 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
             })
             .collect();
         Ok(Enumerator {
+            _lease: ModuleLease::new(),
             commands,
             cursor: Mutex::new(0),
         }
@@ -307,6 +326,7 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
 
 #[implement(IEnumExplorerCommand)]
 struct Enumerator {
+    _lease: ModuleLease,
     commands: Vec<IExplorerCommand>,
     cursor: Mutex<usize>,
 }
@@ -355,6 +375,7 @@ impl IEnumExplorerCommand_Impl for Enumerator_Impl {
     }
     fn Clone(&self) -> Result<IEnumExplorerCommand> {
         Ok(Enumerator {
+            _lease: ModuleLease::new(),
             commands: self.commands.clone(),
             cursor: Mutex::new(*self.cursor.lock().map_err(|_| error())?),
         }
@@ -363,7 +384,9 @@ impl IEnumExplorerCommand_Impl for Enumerator_Impl {
 }
 
 #[implement(IClassFactory)]
-struct Factory;
+struct Factory {
+    _lease: ModuleLease,
+}
 impl IClassFactory_Impl for Factory_Impl {
     fn CreateInstance(
         &self,
@@ -383,7 +406,14 @@ impl IClassFactory_Impl for Factory_Impl {
         let command: IExplorerCommand = ExplorerCommand::root().into();
         unsafe { command.query(iid, out).ok() }
     }
-    fn LockServer(&self, _: BOOL) -> Result<()> {
+    fn LockServer(&self, lock: BOOL) -> Result<()> {
+        if lock.as_bool() {
+            SERVER_LOCKS.fetch_add(1, Ordering::SeqCst);
+        } else {
+            let _ = SERVER_LOCKS.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                count.checked_sub(1)
+            });
+        }
         Ok(())
     }
 }
@@ -403,13 +433,20 @@ unsafe extern "system" fn DllGetClassObject(
         if *class != CLSID {
             return CLASS_E_CLASSNOTAVAILABLE;
         }
-        let factory: IClassFactory = Factory.into();
+        let factory: IClassFactory = Factory {
+            _lease: ModuleLease::new(),
+        }
+        .into();
         factory.query(iid, out)
     }
 }
-// Keep this tiny DLL loaded for its host's lifetime. Unloading while a COM
-// object/probe worker is alive would invalidate code; no global raw refcounts.
+// COM may release the DLL only after every object and server lock is gone.
+// Probe workers join before the owning command returns.
 #[unsafe(no_mangle)]
 extern "system" fn DllCanUnloadNow() -> HRESULT {
-    S_FALSE
+    if OBJECTS.load(Ordering::SeqCst) == 0 && SERVER_LOCKS.load(Ordering::SeqCst) == 0 {
+        S_OK
+    } else {
+        S_FALSE
+    }
 }
