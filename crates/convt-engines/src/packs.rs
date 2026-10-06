@@ -1823,6 +1823,26 @@ mod tests {
         assert_eq!(fs::metadata(&partial).unwrap().len(), 3 * 1024 * 1024);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn missing_pack_parents_require_private_existing_parent() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("missing").join("packs");
+        check_path(&root, true).unwrap();
+        let result = std::process::Command::new("icacls")
+            .arg(temp.path())
+            .args(["/grant", "*S-1-1-0:(AD)"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+        let error = check_path(&root, true).unwrap_err();
+        assert!(
+            error.to_string().contains("writable by another principal"),
+            "{error:#}"
+        );
+        assert!(!root.parent().unwrap().exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn the_data_folder_is_made_private_only_behind_safe_folders() {
