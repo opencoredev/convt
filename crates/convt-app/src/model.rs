@@ -252,9 +252,9 @@ pub struct AppState {
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
     batch: Batch,
-    /// Jobs from silent conversions (a target picked in the file manager's
-    /// menu). They write next to the original and give no feedback beyond the
-    /// tray spinner: no notification, no reveal.
+    /// Jobs from silent conversions (a target picked in a background menu).
+    /// Explorer requests that ask to show progress are tracked like normal
+    /// batches so the Activity window gets a summary and reveal behavior.
     silent: HashSet<JobId>,
     /// What [`Self::apply`] would have revealed, in tests.
     #[cfg(test)]
@@ -487,7 +487,14 @@ impl AppState {
             ));
         }
         // "In place" means next to the original, whatever Settings says.
-        let ids = self.queue_jobs(&expanded.files, to, &options, Output::Beside, true, cx)?;
+        let ids = self.queue_jobs(
+            &expanded.files,
+            to,
+            &options,
+            Output::Beside,
+            !request.show_progress,
+            cx,
+        )?;
         if cx.windows().is_empty() {
             // Nothing else keeps the app open, so quit once the files are done.
             self.quit_when_idle = true;
