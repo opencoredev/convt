@@ -14,10 +14,10 @@
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
   },
-  // PLACEHOLDER id: Leo creates the Hyperdrive config (caching disabled) for the
-  // Railway database as convt_web and puts its id here. Locally, Wrangler and the
-  // Vite plugin read CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "00000000000000000000000000000000" }],
+  // Hyperdrive "convt-web-production": Railway Postgres as convt_web, caching disabled,
+  // Railway's certificate verified. Locally, Wrangler and the Vite plugin read
+  // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "cdd19f8f1a364892a7eb643fc91724e7" }],
   // convt-billing's RPC entrypoint: checkout, results, plan changes, the portal,
   // the spend cap and deletion. The site holds no billing secret.
   "services": [{ "binding": "BILLING", "service": "convt-billing", "entrypoint": "BillingRpc" }],
@@ -29,13 +29,12 @@
       "vars": {
         "ENV": "staging",
         "SALES": "desktop",
-        // PLACEHOLDER: fill the account's workers.dev subdomain before deploying.
-        "BETTER_AUTH_URL": "https://convt-web-staging.<subdomain>.workers.dev",
+        "BETTER_AUTH_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
       },
-      // PLACEHOLDER: staging convt_web Hyperdrive, caching disabled.
-      "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "00000000000000000000000000000002" }],
+      // Hyperdrive "convt-web-staging", caching disabled.
+      "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "0ba8c3fa16c14bfaa15cc18f78c54995" }],
       "services": [
         { "binding": "BILLING", "service": "convt-billing-staging", "entrypoint": "BillingRpc" },
       ],

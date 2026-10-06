@@ -14,19 +14,20 @@
     "BILLING_CATALOG": "production",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
-    // PLACEHOLDER: Leo's address for the daily billing digest.
-    "ALERT_EMAIL": "",
-    // PLACEHOLDER: the public half of the production signing key (P11 embeds it).
-    "LICENSE_PUBLIC_KEY": "",
+    // Leo's address for the daily billing digest.
+    "ALERT_EMAIL": "leodoesdev@gmail.com",
+    // The public half of the production signing key; release builds embed the same
+    // key as CONVT_LICENSE_PUBKEY.
+    "LICENSE_PUBLIC_KEY": "FifI4kZfp25-La18pwNa4CJ751s4hDP68D60bp9rQoY",
   },
   // Only the webhook path is public; the site reaches everything else through its
   // service binding to the BillingRpc entrypoint.
   "routes": [{ "pattern": "convt.app/webhooks/*", "zone_name": "convt.app" }],
   "workers_dev": false,
-  // PLACEHOLDER id: a Hyperdrive config for the Railway database as convt_billing,
-  // caching disabled. Locally the Vite plugin and Wrangler read
+  // Hyperdrive "convt-billing-production": Railway Postgres as convt_billing, caching
+  // disabled, Railway's certificate verified. Locally the Vite plugin and Wrangler read
   // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_BILLING.
-  "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "00000000000000000000000000000001" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "31daf0d7233e484ca7a6cedc0b5c0445" }],
   "triggers": {
     // Outbox drain and deletions every minute; the reconciler every 15 minutes;
     // the daily check at 03:17 UTC.
@@ -40,16 +41,15 @@
       "vars": {
         "ENV": "staging",
         "BILLING_CATALOG": "sandbox",
-        // PLACEHOLDER: the staging web Worker's origin.
-        "SITE_URL": "https://convt-web-staging.<subdomain>.workers.dev",
+        "SITE_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
-        "ALERT_EMAIL": "",
-        // PLACEHOLDER: staging's public signing key, separate from production.
-        "LICENSE_PUBLIC_KEY": "",
+        "ALERT_EMAIL": "leodoesdev@gmail.com",
+        // Staging's own signing key, separate from production.
+        "LICENSE_PUBLIC_KEY": "KtufCO-UrY5lb7CcO7vsyqDd-Mh2Da9bcbD4rBZ0hPY",
       },
-      // PLACEHOLDER: staging convt_billing Hyperdrive, caching disabled.
-      "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "00000000000000000000000000000003" }],
+      // Hyperdrive "convt-billing-staging", caching disabled.
+      "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "c59ed0ee6c8b4dcab137d1549e5984d5" }],
       "triggers": { "crons": ["* * * * *", "*/10 * * * *", "*/15 * * * *", "17 3 * * *"] },
     },
   },
