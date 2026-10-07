@@ -2,11 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { AnalyticsOptOut } from "#/components/site/analytics-opt-out";
 import { TextLink } from "#/components/site/layout";
-import { LegalPage, List, Placeholder, type LegalSection } from "#/components/site/legal";
+import { LegalPage, List, type LegalSection } from "#/components/site/legal";
 import { PRIVACY_EMAIL, legal, routes, seo } from "#/lib/site";
 
-// DRAFT pending Leo's legal review. Keep it matched to what the product does:
-// docs/plan.md (P8, P9, P11) and docs/document-pack.md describe every network call.
+// Keep it matched to what the product does: docs/plan.md (P8, P9, P11) and
+// docs/document-pack.md describe every network call. Who runs convt comes from `legal`
+// in lib/site.ts.
 
 export const Route = createFileRoute("/_site/privacy")({
   head: () =>
@@ -21,10 +22,10 @@ export const Route = createFileRoute("/_site/privacy")({
       title="Privacy policy"
       summary={
         <p>
-          convt converts files on your own computer. The app has no analytics or tracking, and your
-          files stay on your machine unless you choose to convert one in the cloud. The convt.app
-          website uses PostHog analytics to count visits, which you can turn off. This policy covers
-          the convt app, the command line tool, convt.app and the convt API.
+          convt converts files on your own computer. Your files stay on your machine unless you
+          choose to convert one in the cloud. The convt.app website uses PostHog analytics to count
+          visits, which you can turn off. This policy covers the convt app, the command line tool,
+          convt.app and the convt API.
         </p>
       }
       sections={sections}
@@ -40,9 +41,7 @@ const sections: LegalSection[] = [
     title: "Who we are",
     body: (
       <p>
-        convt is run by <Placeholder>{legal.entity}</Placeholder>,{" "}
-        <Placeholder>{legal.address}</Placeholder> ("we"). We are the controller of the personal
-        data described here. Write to{" "}
+        The controller of the personal data described here is {legal.entity} ("we"). Write to{" "}
         <TextLink href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</TextLink> with any question
         about it.
       </p>
@@ -55,8 +54,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           Conversions run on your computer. The app and the <code>convt</code> command never upload
-          a file, and contain no analytics, crash reporting or advertising code. The trial and your
-          license key are stored on your computer and checked offline.
+          a file, and contain no advertising code. The trial and your license key are stored on your
+          computer and checked offline.
         </p>
         <p>The app connects to the internet only in these cases:</p>
         <List
@@ -151,9 +150,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           convt.app uses <span className={strong}>PostHog</span> to see which pages people visit and
-          how they move through the site, so we can tell what works and fix what does not. It runs
-          only on the website, never in the app or the command line tool. PostHog processes the data
-          for us in the United States.
+          how they move through the site, so we can tell what works and fix what does not. PostHog
+          processes the data for us in the United States.
         </p>
         <p>When analytics are on, each page you open sends PostHog:</p>
         <List
@@ -253,9 +251,15 @@ const sections: LegalSection[] = [
           complain to your local data protection authority.
         </p>
         <p>
-          We process account and purchase data to provide what you signed up for or bought, and
-          security data for our legitimate interest in keeping the service safe.{" "}
-          <Placeholder>[Legal bases and international transfer mechanism to confirm]</Placeholder>
+          We process account, purchase and cloud conversion data to provide what you signed up for
+          or bought, security data for our legitimate interest in keeping the service safe, and
+          order and invoice records because tax and accounting law requires them.
+        </p>
+        <p>
+          Our providers may process data outside the country where you live, including in the United
+          States. Where data leaves the EU, the UK or Switzerland, it is protected by the safeguards
+          the law provides, such as the European Commission's standard contractual clauses or the
+          EU-US Data Privacy Framework.
         </p>
       </>
     ),
