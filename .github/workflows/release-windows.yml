@@ -119,7 +119,12 @@ jobs:
             & "$Dir/convt.exe" "$Work/$($Case[0])" --to $Case[1] -o "$Work/out-$($Case[1])"
             if ($LASTEXITCODE -ne 0) { throw "convt $($Case[0]) to $($Case[1]) failed" }
           }
-          Get-ChildItem "$Work/out-*" -Recurse -File | ForEach-Object { "$($_.Name) $($_.Length) bytes"; & "$Dir/ffprobe.exe" -v error -show_entries stream=codec_name -of csv=p=0 $_.FullName }
+          $Expected = @{ 'out-mp4/clip.mp4' = 'h264,aac'; 'out-webm/clip.webm' = 'vp9,opus'; 'out-mp3/tone.mp3' = 'mp3'; 'out-ogg/tone.ogg' = 'vorbis' }
+          foreach ($Name in $Expected.Keys) {
+            $Codecs = (& "$Dir/ffprobe.exe" -v error -show_entries stream=codec_name -of csv=p=0 "$Work/$Name") -join ','
+            "$Name $((Get-Item "$Work/$Name").Length) bytes: $Codecs"
+            if ($Codecs -ne $Expected[$Name]) { throw "$Name has codecs '$Codecs', expected '$($Expected[$Name])'" }
+          }
       - name: Archive the Windows corresponding source
         shell: pwsh
         env:
