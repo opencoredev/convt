@@ -106,6 +106,24 @@ pub(crate) fn steps(from: &[&str], to: &[&str]) -> impl Iterator<Item = convt_co
     })
 }
 
+/// CREATE_NO_WINDOW. GUI conversions must not flash a console for ffmpeg,
+/// LibreOffice, sips, or any other child the engines start.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// On Windows, start the child without a console window. No-op elsewhere.
+#[cfg_attr(
+    not(windows),
+    allow(clippy::needless_pass_by_ref_mut, unused_variables)
+)]
+pub fn hide_console(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 /// Runs a tool to completion, feeding each stdout line to `on_line`. Kills
 /// the tool (and anything it spawned, on Unix) when the job is cancelled.
 /// A non-zero exit becomes `EngineFailed` with the tail of stderr.
@@ -136,8 +154,7 @@ fn run_tool_attempt(
     if !CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst) {
         std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     }
-    #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x08000000);
+    hide_console(&mut cmd);
     let mut child = cmd.spawn()?;
     let mut stderr = child.stderr.take().expect("piped");
     let (err_tx, err_rx) = mpsc::channel();
@@ -319,5 +336,21 @@ mod tests {
         let (r, _, took) = sh("sleep 30", &cancel);
         assert!(matches!(r, Err(Error::Cancelled)), "{r:?}");
         assert!(took < Duration::from_secs(5), "{took:?}");
+    }
+}
+
+#[cfg(test)]
+mod hide_console_tests {
+    use super::*;
+
+    #[test]
+    fn hide_console_is_safe_to_call() {
+        hide_console(&mut Command::new("true"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn create_no_window_matches_the_win32_flag() {
+        assert_eq!(CREATE_NO_WINDOW, 0x0800_0000);
     }
 }

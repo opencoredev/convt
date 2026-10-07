@@ -182,6 +182,17 @@ class DesktopEntries(Fixture):
         result = subprocess.run(["desktop-file-validate", str(entry)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_app_entry_does_not_need_a_terminal(self):
+        self.assertIn("\nTerminal=false\n", install.app_entry())
+
+    @unittest.skipUnless(shutil.which("desktop-file-validate"), "needs desktop-file-validate")
+    def test_packaged_desktop_is_valid_without_a_terminal(self):
+        desktop = HERE.parent.parent / "packaging/linux/convt.desktop"
+        text = desktop.read_text()
+        self.assertIn("\nTerminal=false\n", text)
+        result = subprocess.run(["desktop-file-validate", str(desktop)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 class Thunar(Fixture):
     def test_commands_survive_thunar_and_sh(self):

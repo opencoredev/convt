@@ -89,6 +89,11 @@ jobs:
       - name: Test (desktop)
         if: matrix.suite == 'desktop'
         run: cargo test -p convt-app
+      - name: Windows GUI subsystem
+        if: runner.os == 'Windows' && matrix.suite == 'desktop'
+        run: |
+          cargo build -p convt-app --release
+          ./packaging/windows/smoke.ps1 -AppExe target/release/convt-app.exe
 
   release-scripts:
     name: Release scripts
@@ -106,6 +111,8 @@ jobs:
           python-version: "3.12"
       - name: Source archive and audit unit tests
         run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - name: Windows packaging unit tests
+        run: python3 -m unittest discover -s packaging/windows -p 'test_*.py' -v
 
   web:
     name: Web

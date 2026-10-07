@@ -71,6 +71,9 @@ jobs:
       - name: Package unsigned per-user MSI
         shell: pwsh
         run: ./packaging/windows/installer.ps1
+      - name: Smoke the GUI subsystem
+        shell: pwsh
+        run: ./packaging/windows/smoke.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release-review
