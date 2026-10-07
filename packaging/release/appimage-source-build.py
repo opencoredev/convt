@@ -5,6 +5,8 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
+import urllib.request
 from pathlib import Path
 import subprocess
 import uuid
@@ -26,6 +28,16 @@ def main():
         path = cache / source["cache"]
         if not path.resolve().is_relative_to(cache):
             raise ValueError("Source escapes cache")
+        if not path.exists():
+            # A fresh checkout (CI) has no cache yet: fetch the pinned input.
+            path.parent.mkdir(parents=True, exist_ok=True)
+            partial = path.with_name(path.name + ".download")
+            with urllib.request.urlopen(source["url"], timeout=120) as response, partial.open("wb") as out:
+                shutil.copyfileobj(response, out)
+            if hashlib.sha256(partial.read_bytes()).hexdigest() != source["sha256"]:
+                partial.unlink()
+                raise ValueError(f"Downloaded source hash mismatch: {source['name']}")
+            partial.replace(path)
         if hashlib.sha256(path.read_bytes()).hexdigest() != source["sha256"]:
             raise ValueError(f"Source input hash mismatch: {source['name']}")
     expected_apks = {s["name"] for s in lock["sources"] if s.get("role") == "build-apk"}
