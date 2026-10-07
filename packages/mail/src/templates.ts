@@ -150,6 +150,40 @@ export function renewalFailed(input: RenewalFailedInput): Rendered {
   ]);
 }
 
+export type DownloadLinkInput = {
+  downloadUrl: string;
+  /** Deletes the address from the launch list. */
+  unsubscribeUrl: string;
+  /** The launch discount while it runs; omitted once it has ended. */
+  offer?: { code: string; terms: string; endsLabel: string };
+};
+
+/**
+ * Sent when a phone visitor asks for the download link (not through the outbox).
+ * Asking also joins the launch list, so it ends with the unsubscribe link.
+ */
+export function downloadLink(input: DownloadLinkInput): Rendered {
+  const offer: Block[] = input.offer
+    ? [
+        {
+          p: `Use code ${input.offer.code} at checkout for ${input.offer.terms}. The code works through ${input.offer.endsLabel}.`,
+        },
+      ]
+    : [];
+  return render("Your convt download link", [
+    { p: "Here's the download link you asked for. Open it on your computer:" },
+    { link: { href: input.downloadUrl, label: "Download convt" } },
+    {
+      p: "convt converts images, video, audio and documents on your own computer, with a right-click. Every download starts a 7-day free trial.",
+    },
+    ...offer,
+    {
+      p: "You got this because someone entered this address on convt.app, which also added it to the convt launch list. You can leave the list at any time, and we delete the address.",
+    },
+    { link: { href: input.unsubscribeUrl, label: "Unsubscribe and delete my address" } },
+  ]);
+}
+
 export type AlertDigestInput = {
   /** `YYYY-MM-DD`. */
   date: string;

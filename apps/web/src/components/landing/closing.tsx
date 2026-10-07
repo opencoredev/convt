@@ -1,4 +1,5 @@
 import { Mark } from "#/components/logo";
+import { useMobileDownloadIntercept } from "#/components/mobile-download/mobile-download";
 import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
@@ -40,11 +41,13 @@ export function CallToAction() {
 
 function DownloadActions() {
   const label = useDownloadCtaLabel();
+  const mobile = useMobileDownloadIntercept("landing");
   return (
     <>
       <ButtonLink
         variant="primary"
         href={routes.download}
+        onClick={mobile.onClick}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
         {label}
@@ -56,6 +59,7 @@ function DownloadActions() {
       >
         All platforms
       </ButtonLink>
+      {mobile.dialog}
     </>
   );
 }

@@ -18,6 +18,7 @@ import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AppShellRouteImport } from './routes/_app/_shell'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
+import { Route as AppUnsubscribeRouteImport } from './routes/_app/unsubscribe'
 import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDownloadRouteImport } from './routes/_site/download'
@@ -83,6 +84,11 @@ const AppShellRoute = AppShellRouteImport.update({
 const AppDeviceRoute = AppDeviceRouteImport.update({
   id: '/device',
   path: '/device',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUnsubscribeRoute = AppUnsubscribeRouteImport.update({
+  id: '/unsubscribe',
+  path: '/unsubscribe',
   getParentRoute: () => AppRoute,
 } as any)
 const SiteChangelogRoute = SiteChangelogRouteImport.update({
@@ -216,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
+  '/unsubscribe': typeof AppUnsubscribeRoute
   '/changelog': typeof SiteChangelogRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
+  '/unsubscribe': typeof AppUnsubscribeRoute
   '/changelog': typeof SiteChangelogRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
@@ -284,6 +292,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/_shell': typeof AppShellRouteWithChildren
   '/_app/device': typeof AppDeviceRoute
+  '/_app/unsubscribe': typeof AppUnsubscribeRoute
   '/_site/changelog': typeof SiteChangelogRoute
   '/_site/contact': typeof SiteContactRoute
   '/_site/download': typeof SiteDownloadRoute
@@ -318,6 +327,7 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/sitemap.xml'
     | '/device'
+    | '/unsubscribe'
     | '/changelog'
     | '/contact'
     | '/download'
@@ -350,6 +360,7 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/sitemap.xml'
     | '/device'
+    | '/unsubscribe'
     | '/changelog'
     | '/contact'
     | '/download'
@@ -385,6 +396,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_app/_shell'
     | '/_app/device'
+    | '/_app/unsubscribe'
     | '/_site/changelog'
     | '/_site/contact'
     | '/_site/download'
@@ -491,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/device'
       fullPath: '/device'
       preLoaderRoute: typeof AppDeviceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/unsubscribe': {
+      id: '/_app/unsubscribe'
+      path: '/unsubscribe'
+      fullPath: '/unsubscribe'
+      preLoaderRoute: typeof AppUnsubscribeRouteImport
       parentRoute: typeof AppRoute
     }
     '/_site/changelog': {
@@ -689,6 +708,7 @@ const AppShellRouteWithChildren = AppShellRoute._addFileChildren(
 interface AppRouteChildren {
   AppShellRoute: typeof AppShellRouteWithChildren
   AppDeviceRoute: typeof AppDeviceRoute
+  AppUnsubscribeRoute: typeof AppUnsubscribeRoute
   AppCheckoutSuccessRoute: typeof AppCheckoutSuccessRoute
   AppSignInCheckEmailRoute: typeof AppSignInCheckEmailRoute
   AppSignInVerifyRoute: typeof AppSignInVerifyRoute
@@ -699,6 +719,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppShellRoute: AppShellRouteWithChildren,
   AppDeviceRoute: AppDeviceRoute,
+  AppUnsubscribeRoute: AppUnsubscribeRoute,
   AppCheckoutSuccessRoute: AppCheckoutSuccessRoute,
   AppSignInCheckEmailRoute: AppSignInCheckEmailRoute,
   AppSignInVerifyRoute: AppSignInVerifyRoute,
@@ -747,3 +768,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

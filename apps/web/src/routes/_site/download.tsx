@@ -3,6 +3,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 
 import { cx } from "#/components/app/ui";
+import {
+  MobileEmailNote,
+  useMobileDownloadIntercept,
+} from "#/components/mobile-download/mobile-download";
 import { DownloadButton, Sha } from "#/components/site/download";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
 import {
@@ -15,6 +19,7 @@ import {
   type Os,
   type Slot,
 } from "#/lib/platform";
+import { mobileCss, mobileFromUserAgent } from "#/lib/mobile";
 import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
 import { fetchLatestManifest } from "#/server/latest-release";
 import { routes, seo } from "#/lib/site";
@@ -38,6 +43,10 @@ const detectOs = createServerFn({ method: "GET" }).handler(() =>
   osFromUserAgent(getRequestHeader("user-agent") ?? ""),
 );
 
+const detectMobile = createServerFn({ method: "GET" }).handler(() =>
+  mobileFromUserAgent(getRequestHeader("user-agent") ?? ""),
+);
+
 export const Route = createFileRoute("/_site/download")({
   validateSearch: (search: Record<string, unknown>): { os?: Os } =>
     isOs(search.os) ? { os: search.os } : {},
@@ -49,6 +58,10 @@ export const Route = createFileRoute("/_site/download")({
       deps.os ??
       (typeof window === "undefined" ? await detectOs() : osFromUserAgent(navigator.userAgent)),
     release: await loadRelease(),
+    mobile:
+      typeof window === "undefined"
+        ? await detectMobile()
+        : mobileFromUserAgent(navigator.userAgent),
   }),
   head: () =>
     seo({
@@ -61,10 +74,18 @@ export const Route = createFileRoute("/_site/download")({
 });
 
 function DownloadPage() {
-  const { os, release } = Route.useLoaderData();
+  const { os, release, mobile } = Route.useLoaderData();
   const published = release.slots.some((s) => s.artifact);
+  // On a phone, an installer tap opens the download-link card instead.
+  const intercept = useMobileDownloadIntercept("download");
   return (
-    <div className={cx(siteColumn, "flex flex-col gap-16 pt-12 pb-20 md:gap-20 md:pt-16")}>
+    <div
+      className={cx(siteColumn, "flex flex-col gap-16 pt-12 pb-20 md:gap-20 md:pt-16")}
+      onClickCapture={(event) => {
+        if (event.target instanceof Element && event.target.closest("a[download]"))
+          intercept.onClick(event);
+      }}
+    >
       <div className="flex flex-col gap-6">
         <PageHeader
           eyebrow={release.version ? `Version ${release.version}` : "Download"}
@@ -84,7 +105,18 @@ function DownloadPage() {
         )}
       </div>
 
-      {os ? <Recommended os={os} /> : <NoDesktop />}
+      {mobile !== "no" && <MobileEmailNote source="download" touchOnly={mobile === "maybe"} />}
+      <div
+        className={
+          mobile === "yes"
+            ? mobileCss.any.hide
+            : mobile === "maybe"
+              ? mobileCss.touch.hide
+              : undefined
+        }
+      >
+        {os ? <Recommended os={os} /> : <NoDesktop />}
+      </div>
 
       <section
         aria-labelledby="platforms-title"
@@ -100,6 +132,7 @@ function DownloadPage() {
           ))}
         </div>
       </section>
+      {intercept.dialog}
     </div>
   );
 }

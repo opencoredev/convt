@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AuthLayout } from "#/components/app/auth-layout";
 import { useNotice } from "#/components/app/notice";
+import { useMobileDownloadIntercept } from "#/components/mobile-download/mobile-download";
 import { PrimaryButton, SecondaryLink, TextButton, cx, focusRing } from "#/components/app/ui";
 import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
@@ -285,11 +286,17 @@ function Actions({
   primary: { href: string; label: string };
   secondary?: { href: string; label: string };
 }) {
+  const mobile = useMobileDownloadIntercept("checkout_success");
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <SecondaryLink href={primary.href} className="px-3.5 py-2">
+      <SecondaryLink
+        href={primary.href}
+        onClick={primary.href === links.download ? mobile.onClick : undefined}
+        className="px-3.5 py-2"
+      >
         {primary.label}
       </SecondaryLink>
+      {mobile.dialog}
       {secondary ? (
         <a
           href={secondary.href}

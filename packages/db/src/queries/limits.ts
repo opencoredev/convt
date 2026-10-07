@@ -24,3 +24,11 @@ export async function consumeSendBucket(
     returning count`);
   return Number(res.rows[0].count);
 }
+
+/**
+ * Ends a send bucket's window now, so the next consumeSendBucket starts it again at 1.
+ * For a bucket counted before work that then failed.
+ */
+export async function releaseSendBucket(db: Db, key: string, now: Date): Promise<void> {
+  await db.execute(sql`update otp_send_limits set expires_at = ${now} where key = ${key}`);
+}

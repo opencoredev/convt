@@ -41,3 +41,19 @@ test("sign-in mail uses Sequenzy HTML, preserves its key on retry, and escapes t
     globalThis.fetch = originalFetch;
   }
 });
+
+test("the log transport never prints the recipient's address", async () => {
+  const lines: string[] = [];
+  const info = console.info;
+  console.info = (line: string) => void lines.push(line);
+  try {
+    await sendMail(
+      { transport: "log", from: "convt <hello@convt.test>" },
+      { to: "someone@convt.test", subject: "Hi", text: "Hi", idempotencyKey: "k" },
+    );
+  } finally {
+    console.info = info;
+  }
+  expect(lines.join("\n")).not.toContain("someone");
+  expect(lines.join("\n")).toContain("***@convt.test");
+});

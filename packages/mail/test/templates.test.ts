@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   alertDigest,
+  downloadLink,
   escapeHtml,
   licenseIssued,
   renewalFailed,
@@ -104,5 +105,31 @@ describe("templates", () => {
     ];
     for (const m of all) expect(`${m.subject}${m.text}`).not.toContain("—");
     expect(templateVersion).toBe(2);
+  });
+});
+
+describe("download link", () => {
+  test("with the launch offer", () => {
+    const m = downloadLink({
+      downloadUrl: `${site}/download`,
+      unsubscribeUrl: `${site}/unsubscribe#t=abc`,
+      offer: { code: "PRODUCTHUNT", terms: "30% off <Desktop>", endsLabel: "31 October 2026" },
+    });
+    expect(m.subject).toBe("Your convt download link");
+    expect(m.text).toContain(`Download convt: ${site}/download`);
+    expect(m.text).toContain("Use code PRODUCTHUNT at checkout for 30% off <Desktop>.");
+    expect(m.html).toContain("30% off &#60;Desktop&#62;");
+    expect(m.html).not.toContain("<Desktop>");
+  });
+
+  test("without an offer, no code", () => {
+    const m = downloadLink({
+      downloadUrl: `${site}/download`,
+      unsubscribeUrl: `${site}/unsubscribe#t=abc`,
+    });
+    expect(m.text).not.toContain("code");
+    expect(m.text).toContain(`Unsubscribe and delete my address: ${site}/unsubscribe#t=abc`);
+    expect(m.html).toContain(`href="${site}/unsubscribe#t=abc"`);
+    expect(m.html).toContain(`href="${site}/download"`);
   });
 });
