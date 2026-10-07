@@ -255,9 +255,11 @@ def derive(tree, vendor):
         for directory in moved:
             shutil.move(str(stash / directory.name), directory)
         receipt_dir.mkdir(parents=True)
+        # Keep only deterministic probe fields. Cargo stderr order/paths vary
+        # across rebuilds even after path substitution (run 37621664130).
         dump(receipt_dir / 'remove-sdk-only-probe.json', {
             'command': 'cargo build --offline --locked --release --target ' + TARGET + ' -p convt-cli -p convt-app',
-            'empty_cargo_home': True, 'exit_code': probe.returncode, 'stderr': probe.stderr.replace(str(tree), '$SOURCE').replace(str(home), '$EMPTY_CARGO_HOME')})
+            'empty_cargo_home': True, 'exit_code': probe.returncode})
         dump(receipt_dir / 'original-unit-graph.json', canonical_graph(before, tree))
         pins = tomllib.loads((tree / 'Cargo.lock').read_text())['package']
         originals = {}
