@@ -1,7 +1,22 @@
-name: Release macOS (manual, universal)
+name: Build release macos
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      source_date_epoch:
+        required: true
+        type: string
+      dry_run:
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
+      version:
+        description: Synced release version (must match this commit)
+        required: true
+        type: string
       source_date_epoch:
         description: Release UTC Unix timestamp
         required: true
@@ -14,6 +29,7 @@ permissions:
   contents: read
 jobs:
   macos:
+    # Apple silicon only: the release ships a single arm64 slice.
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -23,12 +39,66 @@ jobs:
       CONVT_LICENSE_STORE: file
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check requested version and trusted branch
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = false ]; then test "$GITHUB_REF" = refs/heads/main; fi
+          if [ "$DRY_RUN" = false ]; then
+            test "$CONVT_LICENSE_PUBKEY" = FifI4kZfp25-La18pwNa4CJ751s4hDP68D60bp9rQoY
+          fi
+          test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Require an Apple silicon runner
+        run: test "$(uname -m)" = arm64
+      - name: Install pinned source-build tools
+        run: brew install meson ninja pkg-config
+      # The source build takes most of the job. Its cache key covers every
+      # input; bundle.sh still re-runs the receipt checks on a restored build.
+      - name: Restore the source FFmpeg build
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: packaging/.cache/macos-source-built-arm64
+          key: macos-ffmpeg-arm64-${{ hashFiles('packaging/release/macos-source-ffmpeg.lock.json', 'packaging/release/macos-source-ffmpeg-build.sh', 'packaging/macos/ffmpeg-input.py') }}
+      - name: Build and qualify source FFmpeg for arm64
+        env:
+          CONVT_BUNDLE_CACHE: ${{ github.workspace }}/packaging/.cache
+          CONVT_BUILD_JOBS: "4"
+          CACHE_HIT: ${{ steps.ffmpeg-cache.outputs.cache-hit }}
+        run: |
+          python3 packaging/release/pdfium-source-verify.py --fetch packaging/release/macos-source-ffmpeg.lock.json
+          # bundle.sh installs the PDFium compiler-runtime notices from these pinned sources.
+          python3 - <<'PY'
+          import importlib.util, json
+          spec = importlib.util.spec_from_file_location('verify', 'packaging/release/pdfium-source-verify.py')
+          verify = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(verify)
+          lock = json.load(open('packaging/release/pdfium-source.lock.json'))
+          wanted = {notice['source_cache_filename'] for notice in lock['supplemental_source_notices']}
+          for item in lock['sources']:
+              if item['cache_filename'] in wanted:
+                  path = verify.cache_path(item)
+                  if not path.exists():
+                      verify.fetch(item, path)
+                  verify.verify(item, path)
+          PY
+          if [ "$CACHE_HIT" != true ]; then
+            bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64
+          fi
+          /usr/bin/python3 packaging/macos/ffmpeg-input.py \
+            "$CONVT_BUNDLE_CACHE/macos-source-built-arm64" arm64 \
+            packaging/release/macos-source-ffmpeg.lock.json "$RUNNER_TEMP/arm64-notices"
       - name: Import Developer ID certificate
         if: ${{ !inputs.dry_run }}
         env:
@@ -43,14 +113,14 @@ jobs:
           security import "$RUNNER_TEMP/certificate.p12" -k "$RUNNER_TEMP/release.keychain-db" -P "$PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/release.keychain-db"
           security list-keychains -d user -s "$RUNNER_TEMP/release.keychain-db"
-      - name: Build universal app and signed notarized image
+      - name: Build arm64 app and signed notarized image
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           CONVT_SIGN_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-          CONVT_MAC_ARCHS: arm64 x86_64
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ vars.APPLE_API_ISSUER_ID }}
+          CONVT_MAC_ARCHS: arm64
           CONVT_MAC_OUT: packaging/out/macos
           CONVT_NOTARY_PROFILE: convt-release
         run: |
@@ -61,19 +131,41 @@ jobs:
             bash packaging/macos/dmg.sh packaging/out/macos/convt.app
           else
             export CONVT_LICENSE_ENFORCE=1
-            xcrun notarytool store-credentials "$CONVT_NOTARY_PROFILE" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --keychain "$RUNNER_TEMP/release.keychain-db"
+            test -n "$APPLE_API_KEY_P8"
+            api_key="$RUNNER_TEMP/convt-api-key.p8"
+            # Accept the .p8 as PEM text or as base64 of the file. The umask
+            # stays in this subshell so the app bundle keeps normal permissions.
+            (
+              umask 077
+              if printf '%s' "$APPLE_API_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+                printf '%s\n' "$APPLE_API_KEY_P8" > "$api_key"
+              else
+                printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$api_key"
+              fi
+            )
+            grep -q 'BEGIN PRIVATE KEY' "$api_key"
+            xcrun notarytool store-credentials "$CONVT_NOTARY_PROFILE" --key "$api_key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --keychain "$RUNNER_TEMP/release.keychain-db"
             bash packaging/macos/release.sh
+            rm -f "$api_key"
           fi
-          lipo -verify_arch arm64 x86_64 packaging/out/macos/convt.app/Contents/MacOS/convt-app
+          test "$(lipo -archs packaging/out/macos/convt.app/Contents/MacOS/convt-app)" = arm64
           codesign --verify --deep --strict --verbose=2 packaging/out/macos/convt.app
           # Standardize the filename consumed by the release manifest generator.
-          cp packaging/out/macos/convt-*-universal.dmg packaging/out/convt-macos-universal.dmg
+          cp packaging/out/macos/convt-*-arm64.dmg packaging/out/convt-macos-arm64.dmg
+          if [ "$DRY_RUN" = false ]; then
+            xcrun stapler validate packaging/out/macos/convt.app
+            xcrun stapler validate packaging/out/convt-macos-arm64.dmg
+            spctl --assess --type execute --verbose=2 packaging/out/macos/convt.app
+            spctl --assess --type open --context context:primary-signature --verbose=2 packaging/out/convt-macos-arm64.dmg
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-release-review
-          path: packaging/out/
+          path: packaging/out/convt-macos-arm64.dmg
+          if-no-files-found: error
       - name: Remove certificate and keychain
         if: always()
         run: |
+          rm -f "$RUNNER_TEMP/convt-api-key.p8"
           rm -f "$RUNNER_TEMP/certificate.p12"
           if [ -f "$RUNNER_TEMP/release.keychain-db" ]; then security delete-keychain "$RUNNER_TEMP/release.keychain-db"; fi

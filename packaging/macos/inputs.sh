@@ -12,8 +12,10 @@
 #           the bundle, and release.sh refuses such a bundle.
 FFMPEG_VERSION=9.0.2
 FFMPEG_SOURCE_arm64=source
-# NOT READY: no x86_64 source build yet.
-FFMPEG_SOURCE_x86_64=riedl
+# The x86_64 source build is selected when its receipt passes ffmpeg-input.py.
+# Until then the source gate fails closed; the historical Riedl values remain
+# only as pinned local fallback data for explicitly unsourced test bundles.
+FFMPEG_SOURCE_x86_64=source
 FFMPEG_URL_x86_64=https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2
 FFMPEG_SHA256_x86_64=7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4
 FFPROBE_SHA256_x86_64=2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd

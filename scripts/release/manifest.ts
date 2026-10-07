@@ -132,12 +132,16 @@ if (cmd === "keygen") {
     throw Error("set SOURCE_DATE_EPOCH and a positive CONVT_MANIFEST_SEQUENCE");
   const expires = Number(process.env.CONVT_MANIFEST_EXPIRES ?? issued + 90 * 86400);
   if (!Number.isSafeInteger(expires) || expires <= issued) throw Error("invalid manifest expiry");
+  // GitHub releases use v-prefixed tags; the standalone download host uses bare versions.
+  const urlVersion = process.env.CONVT_RELEASE_URL_VERSION ?? version;
+  if (urlVersion !== version && urlVersion !== `v${version}`)
+    throw Error("CONVT_RELEASE_URL_VERSION must equal VERSION or vVERSION");
   const names = readdirSync(dir).sort();
   function artifact(name: string, platform: string, kind: string) {
     return {
       platform,
       kind,
-      url: `${base.replace(/\/$/, "")}/${encodeURIComponent(version)}/${encodeURIComponent(name)}`,
+      url: `${base.replace(/\/$/, "")}/${encodeURIComponent(urlVersion)}/${encodeURIComponent(name)}`,
       size: statSync(resolve(dir, name)).size,
       sha256: hash(resolve(dir, name)),
     };
@@ -157,8 +161,8 @@ if (cmd === "keygen") {
     } else if (name.includes("linux-x86_64") && name.endsWith(".tar.gz")) {
       platform = "linux-x86_64";
       kind = "tar.gz";
-    } else if (/macos-universal.*\.(dmg|zip)$/.test(name)) {
-      platform = "macos-universal";
+    } else if (/macos-arm64.*\.(dmg|zip)$/.test(name)) {
+      platform = "macos-arm64";
       kind = name.split(".").at(-1)!;
     } else if (/windows-x86_64.*\.(msi|exe|zip)$/.test(name)) {
       platform = "windows-x86_64";

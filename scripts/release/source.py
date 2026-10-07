@@ -72,11 +72,16 @@ def archive(tree, output, version, epoch, verification):
     closure=helper.collect(tree,output/'convt',cache,epoch)
     gaps=closure['gaps']
     components=json.loads((tree/'packaging/linux/license-components.lock.json').read_text())
+    platform_gaps = closure.get('platform_gaps', {})
+    covered_platforms = ['linux-x86_64']
+    if not platform_gaps.get('macos-arm64'):
+        covered_platforms.append('macos-arm64')
     audit={'schema_version':1,'distribution_ready':not gaps,
            'tree_sha256':json.loads((tree/'release-tree.json').read_text())['tree_sha256'],
-           'covered_platforms':['linux-x86_64'],'platform_gaps':closure.get('platform_gaps',{}),
+           'covered_platforms':covered_platforms,'platform_gaps':platform_gaps,
            'native_sources':closure['sources'],'build_recipes':['packaging/linux/container-build.sh','packaging/linux/build-ffmpeg.sh','packaging/linux/libheif-explicit-init.patch'],
            'rust_sources':'third-party/rust','rust_inventory':closure['rust_inventory'],
+           'rust_inventories':closure.get('rust_inventories', []),
            'validated_closures':closure['checks'],'components':components,'gaps':gaps}
     (tree/'corresponding-source.json').write_text(json.dumps(audit,indent=2)+'\n')
     (output/'source-audit.json').write_text(json.dumps(audit,indent=2)+'\n')

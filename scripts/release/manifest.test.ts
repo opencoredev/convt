@@ -147,8 +147,8 @@ test("readiness requires empty gaps and source coverage for every artifact platf
         {
           distribution_ready: true,
           gaps: [],
-          covered_platforms: ["linux-x86_64", "macos-universal"],
-          platform_gaps: { "macos-universal": ["unmatched x265"] },
+          covered_platforms: ["linux-x86_64", "macos-arm64"],
+          platform_gaps: { "macos-arm64": ["unmatched x265"] },
         },
         true,
         false,
@@ -158,7 +158,7 @@ test("readiness requires empty gaps and source coverage for every artifact platf
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, "convt-linux-x86_64.tar.gz"), "payload");
       writeFileSync(join(dir, "convt-0.1.0-source.tar.gz"), "sources");
-      if (mac) writeFileSync(join(dir, "convt-macos-universal.zip"), "Mac payload");
+      if (mac) writeFileSync(join(dir, "convt-macos-arm64.zip"), "Mac payload");
       writeFileSync(join(dir, "source-audit.json"), JSON.stringify(audit));
       const result = run(["generate", dir, "0.1.0", "2026-10-07", "https://downloads.convt.app"], {
         SOURCE_DATE_EPOCH: "1791331200",

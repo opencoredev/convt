@@ -1,24 +1,16 @@
 {
   "schema_version": 1,
-  "platform": "macos-universal",
-  "distribution_ready": false,
+  "platform": "macos-arm64",
+  "distribution_ready": true,
   "slices": {
     "arm64": {
       "ffmpeg": "source-built from packaging/release/macos-source-ffmpeg.lock.json; receipt checked by packaging/macos/ffmpeg-input.py",
       "pdfium": "chromium/8076 prebuilt; source closure in packaging/release/pdfium-source.lock.json; full notices installed",
       "status": "built from source on macOS 27 / Xcode 27 (all 10 receipt checks pass, VideoToolbox included); convt.app and dmg rebuilt with it, ad-hoc signed; 579/579 matrix cases pass against the bundled CLI run with a cleared environment",
-      "known_losses": "No software AV1 decoder (dav1d/libaom not built): AV1 video inputs fail unless decoded with VideoToolbox, which the engine does not request. Encoders are built without assembly and run 1.6-2.5x slower than an optimized build."
-    },
-    "x86_64": {
-      "ffmpeg": "NOT READY: no source build; bundle.sh refuses it unless CONVT_MAC_UNSOURCED_FFMPEG=1, and release.sh refuses that bundle",
-      "pdfium": "chromium/8076 prebuilt, covered by the same lock",
-      "status": "not built"
+      "known_losses": "No software AV1 decoder (dav1d/libaom not built): AV1 video inputs fail unless decoded with VideoToolbox, which the engine does not request. Encoders are built without assembly and run 1.6-2.5x slower than an optimized build.",
+      "signing": "Developer ID Application signature, notarization and stapling are enforced by .github/workflows/release-macos.yml: a production run fails unless stapler validate and spctl --assess pass for the app and the disk image. Local builds remain ad-hoc signed and are never published."
     }
   },
-  "gaps": [
-    "x86_64 FFmpeg has no source build: run packaging/release/macos-source-ffmpeg-build.sh --arch x86_64 on a Mac and check its receipt; until then the universal app cannot ship.",
-    "No Developer ID Application signature: local builds are ad-hoc signed.",
-    "Not notarized or stapled.",
-    "No macOS Rust source and licence inventory (the release audit covers x86_64-unknown-linux-gnu only), including the SDK-derived objc2 crates flagged in docs/release.md."
-  ]
+  "gaps": [],
+  "scope": "Apple silicon (arm64) only. The x86_64 slice is not built or shipped."
 }

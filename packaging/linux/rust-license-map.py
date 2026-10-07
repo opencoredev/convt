@@ -28,10 +28,8 @@ def digest(data):
 
 def metadata(cargo, target=None):
     scope_receipt = Path('third-party/linux-source-scope/receipt.json')
-    if scope_receipt.is_file():
+    if scope_receipt.is_file() and target is None:
         linux_target = json.loads(scope_receipt.read_text())['target']
-        if target and target != linux_target:
-            raise ValueError('Linux source derivation cannot inventory a macOS source closure')
         target = linux_target
     command = [cargo, 'metadata', '--offline', '--locked', '--format-version', '1']
     if target:
@@ -217,8 +215,22 @@ def collect(package, supplements):
     holders = sorted({line.strip(' /*#\t') for notice in notices + headers for line in notice['text'].splitlines()
                       if re.search(r'copyright\s*(?:\(c\)|©|[12][0-9]{3})', line, re.I)})
     incomplete_notices = []
+    resolved_mac_notice = False
+    blocker_path = RELEASE_ROOT / 'rust-notice-blockers.json'
+    if blocker_path.exists():
+        resolved_mac_notice = (package['name'], package['version']) in {
+            (row['name'], row['version'])
+            for row in json.loads(blocker_path.read_text()).get('blockers', [])
+            if row.get('resolved')
+        }
+    retained_upstream_notices = []
     if supplement and not supplement.get('notice_complete', True):
         incomplete_notices, notices = notices, []
+        if resolved_mac_notice:
+            # The upstream file is retained verbatim, while canonical SPDX
+            # terms are added below from the hash-pinned SPDX source lock.
+            retained_upstream_notices = incomplete_notices
+            incomplete_notices = []
     declaration = None
     reproduced = False
     # Explicit upstream ambiguity overrides a valid manifest identifier.
@@ -238,6 +250,12 @@ def collect(package, supplements):
                             'status': 'Exact upstream manifest; licence grant identifies reproduced canonical SPDX terms'})
             notices.extend(canonical)
             reproduced = True
+    if retained_upstream_notices:
+        # The incomplete upstream file only counts beside reproduced canonical terms.
+        if reproduced:
+            notices.extend(retained_upstream_notices)
+        else:
+            incomplete_notices = retained_upstream_notices
     complete = bool(notices)
     if complete:
         notices.extend({**header, 'source_path': header['source_path'] + ' (notice comment blocks)'} for header in headers)

@@ -1,10 +1,11 @@
 cask "convt" do
   version "@version@"
-  sha256 "@macos-universal.dmg.sha256@"
-  url "@macos-universal.dmg.url@"
+  sha256 "@macos-arm64.dmg.sha256@"
+  url "@macos-arm64.dmg.url@"
   name "convt"
   desc "Local file conversion"
   homepage "https://convt.app"
+  depends_on arch: :arm64
   depends_on macos: ">= :ventura"
   app "convt.app"
 end

@@ -99,7 +99,7 @@ fn artifact(a: &Artifact, source: bool) -> bool {
             matches!(
                 (a.platform.as_str(), a.kind.as_str()),
                 ("linux-x86_64", "tar.gz" | "AppImage" | "deb" | "rpm")
-                    | ("macos-universal", "dmg" | "zip")
+                    | ("macos-arm64", "dmg" | "zip")
                     | ("windows-x86_64", "msi" | "exe" | "zip")
             )
         }
@@ -314,16 +314,10 @@ mod tests {
         assert_eq!(s.uncovered.unwrap().version, "0.3.0");
         assert!(s.covered_artifact.is_some());
         assert!(
-            m.select(
-                "0.1.0",
-                "2026-10-01",
-                "2026-10-03",
-                "macos-universal",
-                "dmg"
-            )
-            .unwrap()
-            .covered
-            .is_none()
+            m.select("0.1.0", "2026-10-01", "2026-10-03", "macos-arm64", "dmg")
+                .unwrap()
+                .covered
+                .is_none()
         );
     }
     #[test]

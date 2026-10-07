@@ -1,0 +1,182 @@
+name: Release
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/desktop/**
+      - tools/cli/**
+      - apps/desktop/package.json
+      - tools/cli/package.json
+      - apps/web/package.json
+      - Cargo.toml
+      - Cargo.lock
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: tenki-standard-medium-4c-8g
+    timeout-minutes: 15
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
+      epoch: ${{ steps.version.outputs.epoch }}
+      history_url: ${{ steps.version.outputs.history_url }}
+      initial_release: ${{ steps.version.outputs.initial_release }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Read synchronized version and reject existing tags
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          version=$(python3 scripts/release/sync-version.py --check)
+          if [ "$EVENT_NAME" = push ]; then
+            if [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+              echo 'Cannot compare the initial branch push; use a reviewed manual release.' >&2
+              exit 1
+            fi
+            if git cat-file -e "$BEFORE:apps/desktop/package.json" 2>/dev/null; then
+              previous=$(git show "$BEFORE:apps/desktop/package.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+            else
+              # The first Changesets rollout introduces the desktop package metadata.
+              previous=$(git show "$BEFORE:Cargo.toml" | python3 -c 'import tomllib,sys; print(tomllib.loads(sys.stdin.read())["workspace"]["package"]["version"])')
+            fi
+            if [ "$previous" = "$version" ]; then
+              echo publish=false >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          if git rev-parse --verify --quiet "refs/tags/v$version"; then
+            echo "Refusing existing tag v$version" >&2
+            exit 1
+          fi
+          python3 scripts/release/notes.py > "$RUNNER_TEMP/release-notes.md"
+          latest=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')
+          if [ -n "$latest" ]; then
+            # Downloading and authenticating history is done by the Linux builder and publisher.
+            history_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$latest/update-manifest.json"
+            echo "history_url=$history_url" >> "$GITHUB_OUTPUT"
+            echo initial_release=false >> "$GITHUB_OUTPUT"
+          else
+            echo initial_release=true >> "$GITHUB_OUTPUT"
+          fi
+          printf 'publish=true\nversion=%s\nepoch=%s\n' "$version" "$(date -u +%s)" >> "$GITHUB_OUTPUT"
+  linux:
+    needs: preflight
+    if: needs.preflight.outputs.publish == 'true'
+    uses: ./.github/workflows/release-linux.yml
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      source_date_epoch: ${{ needs.preflight.outputs.epoch }}
+      history_url: ${{ needs.preflight.outputs.history_url }}
+      initial_release: ${{ needs.preflight.outputs.initial_release == 'true' }}
+      dry_run: false
+    secrets: inherit
+  macos:
+    needs: preflight
+    if: needs.preflight.outputs.publish == 'true'
+    uses: ./.github/workflows/release-macos.yml
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      source_date_epoch: ${{ needs.preflight.outputs.epoch }}
+      dry_run: false
+    secrets: inherit
+  windows:
+    needs: preflight
+    # Windows is an optional, non-blocking release artifact.
+    if: needs.preflight.outputs.publish == 'true'
+    uses: ./.github/workflows/release-windows.yml
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      source_date_epoch: ${{ needs.preflight.outputs.epoch }}
+      dry_run: false
+    secrets: inherit
+  publish:
+    if: always() && needs.preflight.outputs.publish == 'true' && needs.linux.result == 'success' && needs.macos.result == 'success'
+    needs: [preflight, linux, macos, windows]
+    runs-on: tenki-standard-large-8c-16g
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.preflight.outputs.epoch }}
+      RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
+      CONVT_UPDATE_PUBKEY: ${{ vars.CONVT_UPDATE_PUBKEY }}
+      CONVT_RELEASE_URL_VERSION: v${{ needs.preflight.outputs.version }}
+      CARGO_BUILD_JOBS: "4"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: cargo fetch --locked
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-release-review"
+          path: downloaded
+      - name: Assemble public assets
+        env:
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+        run: |
+          if [ "$WINDOWS_RESULT" = success ]; then
+            python3 scripts/release/assemble.py downloaded release "$RELEASE_VERSION" --include-windows
+          else
+            python3 scripts/release/assemble.py downloaded release "$RELEASE_VERSION"
+          fi
+      - name: Generate and sign the complete manifest
+        env:
+          HISTORY_URL: ${{ needs.preflight.outputs.history_url }}
+          UPDATE_SIGNING_KEY: ${{ secrets.CONVT_UPDATE_SIGNING_KEY }}
+        run: |
+          test -n "$CONVT_LICENSE_PUBKEY"
+          test -n "$CONVT_UPDATE_PUBKEY"
+          test -n "$UPDATE_SIGNING_KEY"
+          key=$(mktemp)
+          chmod 600 "$key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
+          if [ -n "$HISTORY_URL" ]; then
+            curl --location --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
+            bun run release:manifest unpack-history "$RUNNER_TEMP/history-signed.json" "$RUNNER_TEMP/history.json"
+            export CONVT_RELEASE_HISTORY="$RUNNER_TEMP/history.json"
+          fi
+          date=$(date -u -d "@$SOURCE_DATE_EPOCH" +%F)
+          bun run release:manifest generate release "$RELEASE_VERSION" "$date" "https://github.com/$GITHUB_REPOSITORY/releases/download" ${CONVT_RELEASE_HISTORY:+"$CONVT_RELEASE_HISTORY"}
+          python3 -c 'import json; m=json.load(open("release/release-manifest.json")); assert m["distribution_ready"], "Corresponding source does not cover every platform; refusing publication"'
+          bun run release:manifest sign release/release-manifest.json "$key" release/update-manifest.json
+          bun run release:manifest verify release/release-manifest.json release/update-manifest.json
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check again immediately before the only external publication step.
+          git fetch --tags origin
+          if git rev-parse --verify --quiet "refs/tags/v$RELEASE_VERSION"; then
+            echo "Refusing existing tag v$RELEASE_VERSION" >&2
+            exit 1
+          fi
+          python3 scripts/release/notes.py > "$RUNNER_TEMP/release-notes.md"
+          if ! find release -maxdepth 1 -name '*.msi' -print -quit | grep -q .; then
+            printf '\nThe Windows MSI is not part of this release; its optional build did not pass. macOS is Developer ID signed and notarized; Linux packages are unsigned.\n' >> "$RUNNER_TEMP/release-notes.md"
+          else
+            printf '\nThe Windows per-user MSI and Linux packages are unsigned. macOS is Developer ID signed and notarized.\n' >> "$RUNNER_TEMP/release-notes.md"
+          fi
+          gh release create "v$RELEASE_VERSION" release/* --target "$GITHUB_SHA" \
+            --title "convt $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
