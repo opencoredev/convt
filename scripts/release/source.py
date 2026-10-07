@@ -90,7 +90,9 @@ def archive(tree, output, version, epoch, verification):
     # their original notices, source headers and Cargo checksums.
     archive_path = output/f'convt-{version}-source.tar.gz'
     tar = subprocess.Popen(['tar','--sort=name',f'--mtime=@{epoch}','--owner=0','--group=0','--numeric-owner','--exclude=*/__pycache__',
-                            '--exclude=*/.cache', '-C',str(tree.parent),'-cf','-',tree.name], stdout=subprocess.PIPE)
+                            '--exclude=*/.cache',
+                            # Build output from audits run inside the tree is not source.
+                            f'--exclude={tree.name}/target', '-C',str(tree.parent),'-cf','-',tree.name], stdout=subprocess.PIPE)
     with archive_path.open('wb') as stream:
         gzip = subprocess.run(['gzip','-n'], stdin=tar.stdout, stdout=stream)
     tar.stdout.close()
