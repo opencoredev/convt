@@ -36,7 +36,15 @@ jobs:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
     steps:
       - uses: actions/checkout@v5
+      # Keyed on the lock and recipe: a hit is the output of the same pinned
+      # sources, image and toolchain. Caches never cross from branches to main.
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ffmpeg-build
+          key: windows-ffmpeg-${{ hashFiles('packaging/windows/ffmpeg-source.lock.json', 'packaging/windows/build-ffmpeg.sh', 'packaging/windows/build-ffmpeg-inside.sh') }}
       - name: Build FFmpeg from pinned sources
+        if: steps.cache.outputs.cache-hit != 'true'
         run: CONVT_BUILD_JOBS=4 bash packaging/windows/build-ffmpeg.sh "$RUNNER_TEMP/ffmpeg-cache" "$RUNNER_TEMP/ffmpeg-build"
       - uses: actions/upload-artifact@v4
         with:
