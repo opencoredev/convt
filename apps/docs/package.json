@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun scripts/generate-formats.ts && blume dev",
-    "build": "bun scripts/generate-formats.ts && blume build",
+    "dev": "bun scripts/generate.ts && blume dev",
+    "build": "bun scripts/generate.ts && blume build",
     "preview": "blume preview",
     "doctor": "blume doctor",
-    "validate": "bun scripts/generate-formats.ts && blume validate",
+    "validate": "bun scripts/generate.ts && blume validate",
     "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {

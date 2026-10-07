@@ -12,8 +12,10 @@ import { convertFile } from "./convt.mjs";
 
 const [dir, to, concurrency = "4"] = process.argv.slice(2);
 const workers = Number(concurrency);
-// 120 requests a minute per key: poll each job every `workers` seconds so all
-// jobs together poll about once a second.
+if (!Number.isInteger(workers) || workers < 1)
+  throw new Error("concurrency must be a positive integer");
+// Poll each job every `workers` seconds so concurrent polls stay near 1/s.
+// create, start, download and retries are paced in convt.mjs.
 const pollMs = workers * 1000;
 const files = (await readdir(dir, { withFileTypes: true }))
   .filter((entry) => entry.isFile())
@@ -48,7 +50,7 @@ photos/b.heic -> b.webp
 
 ## Stay under the rate limit
 
-Your key gets 120 requests a minute, or 2 a second. The script polls each job every N seconds when it runs N at a time, so polling stays near 1 request a second whatever the concurrency, with room left for the create, start and download calls. Raising the concurrency speeds up the folder but makes each job's result arrive a little later.
+Your key gets 120 requests a minute, or 2 a second. The [Node helper](/examples/node-script) puts every create, start, poll, download, cancel and retry through one shared queue, so a folder of small files cannot burst past that limit. This script also polls each job every N seconds when it runs N at a time, so polling does not crowd out the other calls. Raising the concurrency speeds up the folder but makes each job's result arrive a little later.
 
 Two files with the same name and different extensions, such as `a.png` and `a.heic`, both save as `a.webp`. Convert them into separate folders if that matters.
 

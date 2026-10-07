@@ -8,11 +8,21 @@ description: A reusable convert() for Node with format detection, retries, a tim
 ```js convt.mjs lineNumbers expandable
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const API = process.env.CONVT_API ?? "{{api}}";
 const KEY = process.env.CONVT_API_KEY;
 const FINISHED = ["succeeded", "failed", "cancelled"];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// 120 job-route requests a minute per key. One queue covers create, start,
+// poll, download, cancel and retries so a batch cannot burst past the limit.
+const RATE_GAP_MS = 510;
+let nextSlot = Promise.resolve();
+function pace() {
+  const wait = nextSlot;
+  nextSlot = wait.then(() => sleep(RATE_GAP_MS));
+  return wait;
+}
 
 export class ConvtError extends Error {
   constructor(code, message, status) {
@@ -24,6 +34,7 @@ export class ConvtError extends Error {
 
 async function request(path, { method = "GET", body, signal } = {}) {
   for (let attempt = 0; ; attempt++) {
+    await pace();
     const res = await fetch(API + path, {
       method,
       signal,
@@ -114,7 +125,7 @@ export async function convertFile(path, to, options = {}) {
 }
 
 // node convt.mjs photo.png webp
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [path, to] = process.argv.slice(2);
   if (!path || !to) {
     console.error("usage: node convt.mjs <file> <target-format>");
@@ -147,4 +158,5 @@ await convertFile("clip.mov", "mp4");
 - **Timeout.** The whole conversion gives up after 11 minutes by default.
 - **Cleanup.** Any failure after the job exists cancels it, so you are not left with an open reservation.
 - **Output names.** The API names outputs `input.<ext>`. `convertFile()` saves them under the input's name, so `report.pdf` to PNG writes `report.png`, `report-2.png` and so on.
+- **Rate limit.** Every job-route call, including retries, waits its turn in one shared 510 ms queue so a folder of small files stays under 120 requests a minute. Signed uploads, signed downloads and `GET /v1/formats` are not counted and are not queued.
 - **Polling rate.** Pass `{ pollMs }` as the third argument to `convertFile()` to poll less often when several jobs run at once.

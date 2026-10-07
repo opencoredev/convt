@@ -41,7 +41,8 @@ if [ "$STATUS" != succeeded ]; then
 fi
 
 # Outputs are named input.<ext>; save them under the input's own name.
-STEM=$(basename "${FILE%.*}")
+STEM=$(basename "$FILE")
+[[ $STEM == *.* ]] && STEM=${STEM%.*}
 api "$API/v1/jobs/$JOB/download" | jq -r '.outputs[] | "\(.name)\t\(.url)"' |
   while IFS=$'\t' read -r NAME URL; do
     NAME=$(basename "$NAME")

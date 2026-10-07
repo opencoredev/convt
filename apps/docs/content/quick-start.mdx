@@ -32,39 +32,48 @@ async function call(path, init = {}) {
 
 const file = await readFile("photo.png");
 
-// 1. Reserve a job for this exact file size.
-const { job, upload_url } = await call("/v1/jobs", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    input_format: "png",
-    target_format: "webp",
-    input_bytes: file.byteLength,
-  }),
-});
+let job;
+try {
+  // 1. Reserve a job for this exact file size.
+  const reserved = await call("/v1/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input_format: "png",
+      target_format: "webp",
+      input_bytes: file.byteLength,
+    }),
+  });
+  job = reserved.job;
+  const { upload_url } = reserved;
 
-// 2. Upload the bytes. The signed URL needs no Authorization header.
-const put = await fetch(upload_url, { method: "PUT", body: file });
-if (!put.ok) throw new Error(`upload failed with ${put.status}`);
+  // 2. Upload the bytes. The signed URL needs no Authorization header.
+  const put = await fetch(upload_url, { method: "PUT", body: file });
+  if (!put.ok) throw new Error(`upload failed with ${put.status}`);
 
-// 3. Start the job, then poll once a second until it finishes.
-let current = await call(`/v1/jobs/${job.id}/start`, { method: "POST" });
-while (!["succeeded", "failed", "cancelled"].includes(current.status)) {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  current = await call(`/v1/jobs/${job.id}`);
-}
-if (current.status !== "succeeded") {
-  throw new Error(`job ${current.status}: ${current.error_code}`);
-}
+  // 3. Start the job, then poll once a second until it finishes.
+  let current = await call(`/v1/jobs/${job.id}/start`, { method: "POST" });
+  while (!["succeeded", "failed", "cancelled"].includes(current.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    current = await call(`/v1/jobs/${job.id}`);
+  }
+  if (current.status !== "succeeded") {
+    throw new Error(`job ${current.status}: ${current.error_code}`);
+  }
 
-// 4. Download every output. Outputs are named input.webp (input-2.webp
-// for page 2, and so on), so rename them after your own file.
-const { outputs } = await call(`/v1/jobs/${job.id}/download`);
-for (const output of outputs) {
-  const res = await fetch(output.url);
-  const name = output.name.replace(/^input/, "photo");
-  await writeFile(name, Buffer.from(await res.arrayBuffer()));
-  console.log(`saved ${name}`);
+  // 4. Download every output. Outputs are named input.webp (input-2.webp
+  // for page 2, and so on), so rename them after your own file.
+  const { outputs } = await call(`/v1/jobs/${job.id}/download`);
+  for (const output of outputs) {
+    const res = await fetch(output.url);
+    if (!res.ok) throw new Error(`download failed with ${res.status}`);
+    const name = output.name.replace(/^input/, "photo");
+    await writeFile(name, Buffer.from(await res.arrayBuffer()));
+    console.log(`saved ${name}`);
+  }
+} catch (error) {
+  if (job) await call(`/v1/jobs/${job.id}/cancel`, { method: "POST" }).catch(() => {});
+  throw error;
 }
 ```
 
@@ -86,6 +95,8 @@ RESERVED=$(curl -sS --fail-with-body "$API/v1/jobs" -H "$AUTH" \
   -d "{\"input_format\":\"png\",\"target_format\":\"webp\",\"input_bytes\":$BYTES}")
 JOB=$(jq -r .job.id <<< "$RESERVED")
 UPLOAD_URL=$(jq -r .upload_url <<< "$RESERVED")
+# Release the reservation if upload, start, poll or download fails.
+trap 'curl -sS -X POST "$API/v1/jobs/$JOB/cancel" -H "$AUTH" > /dev/null || true' ERR
 
 # 2. Upload the bytes. The signed URL needs no Authorization header.
 curl -sS --fail-with-body -X PUT -T "$FILE" "$UPLOAD_URL"

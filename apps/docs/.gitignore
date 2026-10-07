@@ -5,3 +5,4 @@ dist/
 .wrangler/
 .env.local
 content/reference/formats.mdx
+openapi/servers.yaml

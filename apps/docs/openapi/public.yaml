@@ -3,8 +3,9 @@ info:
   title: convt public docs
   version: 1.0.0
 # The server's spec (crates/convt-server/openapi.json) stays the source of truth for
-# paths and schemas. This overlay adds the prose, tags, examples and the interim host
-# the docs need. It applies on every build, so spec changes flow through.
+# paths and schemas. This overlay adds the prose, tags and examples. The live host
+# comes from api-host.ts via the generated servers overlay. It applies on every
+# build, so spec changes flow through.
 actions:
   - target: $.info
     update:
@@ -14,17 +15,10 @@ actions:
 
         Every job route takes a `cvt_live_` API key as a Bearer token. Create keys in the [dashboard](https://convt.app/dashboard/api). Each successful job is billed once; failed and cancelled jobs are free.
 
-        `api.convt.app` does not resolve yet. Until it does, call `https://convt-api-production.up.railway.app`. The paths, keys and responses are the same on both hosts.
+        Until `api.convt.app` resolves, use the first server listed in this spec. The paths, keys and responses are the same on both hosts.
 
-  - target: $.servers
-    remove: true
   - target: $
     update:
-      servers:
-        - url: https://convt-api-production.up.railway.app
-          description: Production (interim host until api.convt.app resolves)
-        - url: https://api.convt.app
-          description: Production (planned, not live yet)
       tags:
         - name: Jobs
           description: Reserve, upload, start, poll, cancel and download a conversion. Every route needs a `cvt_live_` key.

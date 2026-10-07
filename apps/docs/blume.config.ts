@@ -1,9 +1,6 @@
 import { defineConfig } from "blume";
 import { openapi } from "blume/reference";
-
-// api.convt.app does not resolve yet (CNV-36). Until it does, every sample and the
-// Try it panel use the Railway host. Switch this one value when DNS is live.
-const apiBase = "https://convt-api-production.up.railway.app";
+import { apiBase, finalApi } from "./api-host.ts";
 
 export default defineConfig({
   title: "convt docs",
@@ -13,7 +10,7 @@ export default defineConfig({
   content: { root: "content" },
   variables: {
     api: apiBase,
-    "final-api": "https://api.convt.app",
+    "final-api": finalApi,
   },
   theme: {
     accent: { light: "#17834d", dark: "#3fcb84" },
@@ -38,7 +35,7 @@ export default defineConfig({
     openapi({
       route: "/api",
       spec: "../../crates/convt-server/openapi.json",
-      overlays: ["./openapi/public.yaml"],
+      overlays: ["./openapi/public.yaml", "./openapi/servers.yaml"],
       codeSamples: ["curl", "node", "js", "python"],
     }),
   ],

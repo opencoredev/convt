@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../../crates/convt-server/openapi.json",
+        "../../crates/convt-server/cloud-formats.json"
+      ]
+    }
+  }
+}
