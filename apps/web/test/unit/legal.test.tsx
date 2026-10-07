@@ -37,7 +37,9 @@ test("the terms name convt as seller, Polar as merchant of record and Florida la
   const text = render(Terms).replace(/<[^>]*>/g, "");
   expect(text).toContain("you and convt (");
   expect(text).toContain("Polar (polar.sh) as merchant of record");
+  expect(text).toContain("handles payment, sales tax and VAT, and invoicing");
   expect(text).toContain("within 14 days");
+  expect(text).toContain("A refund in full revokes the license key");
   expect(text).toContain("governed by the laws of the State of Florida, USA");
   expect(text).toContain("courts located in Florida");
   expect(text).toContain("mandatory law of the country where you live");
@@ -47,4 +49,8 @@ test("the terms name convt as seller, Polar as merchant of record and Florida la
 test("the privacy policy does not claim the app has no analytics or crash reporting", () => {
   const text = render(Privacy).replace(/<[^>]*>/g, "");
   expect(text).not.toMatch(/no analytics|crash reporting|never in the app/i);
+  // The controller is named by trading name only: no person and no postal address.
+  expect(text).toContain(
+    "The controller of the personal data described here is convt (&quot;we&quot;). Write to privacy@convt.app",
+  );
 });
