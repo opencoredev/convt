@@ -29,6 +29,13 @@
       "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/MPL-2.0.json",
       "sha256": "b909c2b38d4ab47ab70dd45327bb6e547a4dc8fd2ea4877ca083f12effbe294f",
       "license_text_sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+    },
+    {
+      "license_id": "Zlib",
+      "path": "rust-spdx/Zlib.json",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/Zlib.json",
+      "sha256": "45c90d9b46d5d13276c1d5a577f05ea442dc3d5afde9d5e80d3869c6ca438c28",
+      "license_text_sha256": "bfb1112d49db5b1daecdfef24bd7e2f3ea0bafb33aa67aa0ab51e2bf8407c03d"
     }
   ]
 }
