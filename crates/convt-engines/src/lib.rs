@@ -14,6 +14,9 @@ pub mod ffmpeg;
 pub mod heic;
 pub mod image;
 pub mod office;
+mod orientation;
+#[cfg(test)]
+mod orientation_tests;
 pub mod packs;
 pub mod paths;
 #[cfg(feature = "pdfium")]

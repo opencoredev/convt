@@ -138,6 +138,62 @@ impl LibheifEngine {
         encoder(lib, format).is_ok()
     }
 
+    /// Writes an Exif orientation tag onto an existing HEIC/AVIF, without
+    /// adding `irot`/`imir`. Tests use this to prove EXIF-only files rotate
+    /// once, and that a matching EXIF next to `irot` does not rotate twice.
+    #[cfg(test)]
+    pub(crate) fn write_exif_orientation(&self, path: &Path, orientation: u8) -> Result<()> {
+        let lib = self
+            .lib
+            .as_ref()
+            .map_err(|reason| Error::EngineUnavailable {
+                engine: "libheif",
+                reason: reason.clone(),
+            })?;
+        let file = CString::new(path.as_os_str().as_encoded_bytes())
+            .map_err(|_| failed("path contains a NUL byte"))?;
+        let tiff = crate::orientation::tiff_orientation(orientation);
+        unsafe {
+            let alloc: Symbol<unsafe extern "C" fn() -> *mut Opaque> =
+                sym(lib, b"heif_context_alloc\0")?;
+            let ctx = Guard {
+                ptr: alloc(),
+                free: sym(lib, b"heif_context_free\0")?,
+            };
+            if ctx.ptr.is_null() {
+                return Err(failed("could not allocate a context"));
+            }
+            let read: Symbol<
+                unsafe extern "C" fn(*mut Opaque, *const c_char, *const Opaque) -> HeifError,
+            > = sym(lib, b"heif_context_read_from_file\0")?;
+            read(ctx.ptr, file.as_ptr(), std::ptr::null()).check()?;
+            let primary: Symbol<unsafe extern "C" fn(*mut Opaque, *mut *mut Opaque) -> HeifError> =
+                sym(lib, b"heif_context_get_primary_image_handle\0")?;
+            let mut handle = Guard {
+                ptr: std::ptr::null_mut(),
+                free: sym(lib, b"heif_image_handle_release\0")?,
+            };
+            primary(ctx.ptr, &mut handle.ptr).check()?;
+            let add: Symbol<
+                unsafe extern "C" fn(*mut Opaque, *const Opaque, *const c_void, c_int) -> HeifError,
+            > = match sym(lib, b"heif_context_add_exif_metadata\0") {
+                Ok(f) => f,
+                Err(_) => return Err(failed("libheif has no heif_context_add_exif_metadata")),
+            };
+            add(
+                ctx.ptr,
+                handle.ptr,
+                tiff.as_ptr().cast(),
+                c_int::try_from(tiff.len()).map_err(failed)?,
+            )
+            .check()?;
+            let write: Symbol<unsafe extern "C" fn(*mut Opaque, *const c_char) -> HeifError> =
+                sym(lib, b"heif_context_write_to_file\0")?;
+            write(ctx.ptr, file.as_ptr()).check()?;
+        }
+        Ok(())
+    }
+
     /// Whether the loaded library has a decoder plugin for this input format.
     pub fn supports_input(&self, id: &str) -> bool {
         let format = match id {
@@ -320,12 +376,63 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
             pixels.extend_from_slice(std::slice::from_raw_parts(data.add(y * stride), row));
         }
         let (w, h) = (w as u32, h as u32);
-        Ok(if alpha {
+        let mut img = if alpha {
             image::RgbaImage::from_raw(w, h, pixels).map(image::DynamicImage::ImageRgba8)
         } else {
             image::RgbImage::from_raw(w, h, pixels).map(image::DynamicImage::ImageRgb8)
         }
-        .expect("buffer matches dimensions"))
+        .expect("buffer matches dimensions");
+        // Default decode options already apply irot/imir. EXIF in a HEIC is
+        // often the same transform (iPhone photos store both). Applying it
+        // again would rotate twice. Only bake EXIF when the container has
+        // no transformative properties.
+        let file = std::fs::read(input).unwrap_or_default();
+        if crate::orientation::heif_display_orientation(&file).is_none()
+            && let Some(exif) = heif_handle_exif_orientation(lib, handle.ptr)
+                .or_else(|| crate::orientation::heif_exif_orientation(&file))
+        {
+            img.apply_orientation(exif);
+        }
+        Ok(img)
+    }
+}
+
+fn heif_handle_exif_orientation(
+    lib: &Library,
+    handle: *mut Opaque,
+) -> Option<image::metadata::Orientation> {
+    // SAFETY: signatures match libheif/heif.h. The handle is alive for this call.
+    unsafe {
+        let count: Symbol<unsafe extern "C" fn(*const Opaque, *const c_char) -> c_int> =
+            sym(lib, b"heif_image_handle_get_number_of_metadata_blocks\0").ok()?;
+        let filter = CString::new("Exif").ok()?;
+        let n = count(handle, filter.as_ptr());
+        if n <= 0 {
+            return None;
+        }
+        let list: Symbol<
+            unsafe extern "C" fn(*const Opaque, *const c_char, *mut u32, c_int) -> c_int,
+        > = sym(lib, b"heif_image_handle_get_list_of_metadata_block_IDs\0").ok()?;
+        let mut ids = vec![0u32; n as usize];
+        list(handle, filter.as_ptr(), ids.as_mut_ptr(), n);
+        let size_of: Symbol<unsafe extern "C" fn(*const Opaque, u32) -> usize> =
+            sym(lib, b"heif_image_handle_get_metadata_size\0").ok()?;
+        let get: Symbol<unsafe extern "C" fn(*const Opaque, u32, *mut u8) -> HeifError> =
+            sym(lib, b"heif_image_handle_get_metadata\0").ok()?;
+        for id in ids {
+            let size = size_of(handle, id);
+            if size == 0 || size > 1 << 20 {
+                continue;
+            }
+            let mut buf = vec![0u8; size];
+            if get(handle, id, buf.as_mut_ptr()).check().is_err() {
+                continue;
+            }
+            if let Some(ori) = crate::orientation::orientation_from_exif_bytes(&buf) {
+                return Some(ori);
+            }
+        }
+        None
     }
 }
 
@@ -990,6 +1097,7 @@ impl Engine for ImageIoEngine {
         ran?;
         if format == "png" {
             crate::image::background_png(&output, ctx.options)?;
+            crate::orientation::finish_heif_output(input, &output, "png", ctx.options)?;
         }
         Ok(vec![output])
     }
