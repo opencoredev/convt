@@ -347,8 +347,8 @@ impl QuickView {
             Ok(jobs) => jobs,
             Err(e) => {
                 // When the license state stops conversions, the banner says
-                // why; anything else (such as a trial that couldn't be
-                // recorded) is shown here.
+                // why; anything else (such as a document pack being
+                // removed) is shown here.
                 if self.app.read(cx).license.allows_conversion() {
                     self.error = Some(e);
                 }

@@ -1,12 +1,19 @@
 //! License keys are a base64 JSON payload plus an Ed25519 signature, joined by
 //! a dot. The app checks them offline against a public key baked into the
-//! build (see `build.rs`). A license unlocks every build dated on or before
-//! its `updates_until`; those builds keep working forever.
+//! build (see `build.rs`). A Desktop or Pro license unlocks every build dated
+//! on or before its `updates_until`; those builds keep working forever.
+//!
+//! A trial is a key too, with plan `trial`, signed by convt.app when a
+//! signed-in desktop app starts one. Its `updates_until` is the last day the
+//! trial works, judged against today's date rather than the build's. Builds
+//! from before trial keys reject the plan as malformed, so a trial key never
+//! passes for a paid one.
 //!
 //! The [`client`] module, behind the `client` feature, holds what the app,
-//! the CLI and the OS menus share: the trial, the stored key and the check
+//! the CLI and the OS menus share: the stored key, the trial and the check
 //! before a conversion. [`account`], behind the same feature, is desktop
-//! sign-in and Pro renewal, the only code here that uses the network.
+//! sign-in, starting the trial and key renewal, the only code here that uses
+//! the network.
 
 #[cfg(feature = "client")]
 pub mod account;
@@ -27,7 +34,8 @@ pub struct License {
     /// Issue date, `YYYY-MM-DD`.
     pub issued: String,
     /// Builds dated on or before this day are covered, `YYYY-MM-DD`. For Pro
-    /// keys this is the paid-through date.
+    /// keys this is the paid-through date. For a trial it is the last day
+    /// the trial works, whatever the build.
     pub updates_until: String,
 }
 
@@ -36,6 +44,8 @@ pub struct License {
 pub enum Plan {
     Desktop,
     Pro,
+    /// A free trial from convt.app. Never a paid plan.
+    Trial,
 }
 
 impl Plan {
@@ -43,7 +53,13 @@ impl Plan {
         match self {
             Plan::Desktop => "Desktop",
             Plan::Pro => "Pro",
+            Plan::Trial => "Trial",
         }
+    }
+
+    /// Whether this plan was paid for: Desktop or Pro.
+    pub fn is_paid(self) -> bool {
+        self != Plan::Trial
     }
 }
 
@@ -104,6 +120,16 @@ pub fn verify(token: &str, key: &VerifyingKey) -> Result<License, Error> {
 }
 
 impl License {
+    /// For a trial key, the days it has left on day number `today`,
+    /// counting today: 1 on its last day, 0 or less once it ended. `None`
+    /// for a paid key.
+    pub fn trial_days_left(&self, today: i64) -> Option<i64> {
+        if self.plan.is_paid() {
+            return None;
+        }
+        Some(date::to_days(&self.updates_until)? - today + 1)
+    }
+
     /// Whether a build dated `build_date` (`YYYY-MM-DD`) is covered.
     /// ISO dates compare correctly as strings.
     pub fn covers_build(&self, build_date: &str) -> Result<(), Error> {
@@ -212,6 +238,32 @@ mod tests {
         assert!(serde_json::from_str::<License>(&lifetime).is_err());
         let open_ended = json.replace("\"2027-10-02\"", "null");
         assert!(serde_json::from_str::<License>(&open_ended).is_err());
+    }
+
+    #[test]
+    fn trial_keys_count_days_not_builds() {
+        let key = keypair();
+        let trial = License {
+            plan: Plan::Trial,
+            issued: "2026-10-01".into(),
+            updates_until: "2026-10-07".into(),
+            ..license()
+        };
+        let token = sign(&trial, &key);
+        // The plan travels as "trial" and verifies like any key.
+        let json = B64
+            .decode(token.split_once('.').unwrap().0)
+            .map(|b| String::from_utf8(b).unwrap())
+            .unwrap();
+        assert!(json.contains(r#""plan":"trial""#), "{json}");
+        let trial = verify(&token, &key.verifying_key()).unwrap();
+        assert!(!trial.plan.is_paid());
+        assert_eq!(trial.plan.name(), "Trial");
+        let day = |d| date::to_days(d).unwrap();
+        assert_eq!(trial.trial_days_left(day("2026-10-01")), Some(7));
+        assert_eq!(trial.trial_days_left(day("2026-10-07")), Some(1));
+        assert_eq!(trial.trial_days_left(day("2026-10-08")), Some(0));
+        assert_eq!(license().trial_days_left(day("2026-10-01")), None);
     }
 
     #[test]

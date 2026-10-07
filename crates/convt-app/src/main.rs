@@ -98,7 +98,8 @@ fn run(primary: instance::Primary, first: Request) {
         cx.set_global(Shared(state.clone()));
         cx.on_window_closed(last_window_closed).detach();
         // One of the two network calls the app makes by itself: while signed in, at
-        // most once a day, ask convt.app for the current Pro key.
+        // most once a day (or right away when the clock went back under a
+        // trial), ask convt.app for the current license key.
         state.update(cx, |s, cx| s.renew_on_launch(cx));
         // The other: when update checks are on, at most once a day, fetch the
         // signed list of releases.

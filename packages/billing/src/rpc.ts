@@ -53,6 +53,21 @@ export interface BillingRpc {
    * it for a signed-in desktop device, with the user id from the device token.
    */
   currentProKey(userId: string): Promise<{ key: string; updatesUntil: string } | null>;
+  /**
+   * CNV-56: the account's desktop trial, started at `now` if it has none.
+   * `storedDeviceHash` is the site's peppered hash (64 lowercase hex), never the
+   * app's own. `device_used`: this computer started another account's trial.
+   */
+  startTrial(
+    userId: string,
+    storedDeviceHash: string,
+    now: Date,
+  ): Promise<{ ok: true; key: string; endsAt: Date } | { ok: false; reason: "device_used" }>;
+  /**
+   * CNV-56: the key the app should hold. The best unrevoked paid key of either plan,
+   * else a trial token for a Pro subscription in its trial, else null.
+   */
+  currentKey(userId: string, now: Date): Promise<{ key: string; updatesUntil: string } | null>;
 }
 
 export type { CheckoutRefusal, CheckoutResult, CatalogProduct };

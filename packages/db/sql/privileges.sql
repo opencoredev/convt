@@ -211,3 +211,9 @@ grant update (updated_at) on subscriptions to convt_server, convt_web;
 --> statement-breakpoint
 -- Billing owns sign-in housekeeping before the cloud server is deployed.
 grant select, delete on verifications, rate_limits, otp_send_limits to convt_billing;
+--> statement-breakpoint
+-- CNV-56 (0006): only convt-billing creates and reads desktop trials.
+grant select, insert on trials to convt_billing;
+--> statement-breakpoint
+-- startTrial reads which computers got an account's trial.
+grant select (user_id, device_hash) on devices to convt_billing;

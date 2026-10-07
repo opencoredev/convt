@@ -7,7 +7,7 @@ import {
   googleEmailIsAuthoritative,
   githubEmailIsAuthoritative,
 } from "../../src/server/authoritative";
-import { readEnv } from "../../src/server/env";
+import { devDeviceHashSecret, readEnv } from "../../src/server/env";
 import { isSameOriginRequest } from "../../src/server/origin";
 import { redact, redactText } from "../../src/server/redact";
 
@@ -179,6 +179,23 @@ describe("readEnv", () => {
   test("a missing or short secret is refused", () => {
     expect(() => readEnv({ BETTER_AUTH_URL: "https://convt.app" })).toThrow(/SECRET/);
     expect(() => readEnv({ ...base, BETTER_AUTH_SECRET: "short" })).toThrow(/SECRET/);
+  });
+  test("DEVICE_HASH_SECRET: unset turns the trial off in production, a dev value elsewhere", () => {
+    const prod = { ...base, ENV: "production" };
+    expect(readEnv(prod).deviceHashSecret).toBeNull();
+    expect(readEnv({ ...prod, DEVICE_HASH_SECRET: "s".repeat(32) }).deviceHashSecret).toBe(
+      "s".repeat(32),
+    );
+    expect(() => readEnv({ ...prod, DEVICE_HASH_SECRET: "short" })).toThrow(/DEVICE_HASH_SECRET/);
+    expect(() => readEnv({ ...prod, DEVICE_HASH_SECRET: devDeviceHashSecret })).toThrow(
+      /development value/,
+    );
+    expect(() =>
+      readEnv({ ...base, ENV: "staging", DEVICE_HASH_SECRET: devDeviceHashSecret }),
+    ).toThrow(/development value/);
+    const dev = { ...base, ENV: "development", BETTER_AUTH_URL: "http://localhost:3000" };
+    expect(readEnv(dev).deviceHashSecret).toBe(devDeviceHashSecret);
+    expect(readEnv({ ...dev, ENV: "test" }).deviceHashSecret).toBe(devDeviceHashSecret);
   });
 });
 

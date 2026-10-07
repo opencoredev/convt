@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use convt_core::{Background, Ctx, Engine, Options, Preset, Registry, VideoCodec, format_by_id};
-use convt_license::account::{Api, ApiError, Session, challenge_of};
+use convt_license::account::{Api, ApiError, KeyReply, Session, TrialReply, challenge_of};
 use convt_license::client::{self, KeyStore};
 use convt_license::{License, Plan};
 use ed25519_dalek::SigningKey;
@@ -84,8 +84,15 @@ struct TestApi {
     exchanges: AtomicUsize,
     renewals: AtomicUsize,
     sign_outs: AtomicUsize,
+    trials: AtomicUsize,
     exchange: Mutex<Result<Session, ApiError>>,
     key: Mutex<Result<Option<String>, ApiError>>,
+    /// What `start_trial` answers.
+    trial: Mutex<Result<String, ApiError>>,
+    /// The device hashes `start_trial` got.
+    hashes: Mutex<Vec<String>>,
+    /// The clock convt.app reports with each answer.
+    now: Mutex<Option<i64>>,
     /// The last code and verifier the app traded.
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
@@ -98,8 +105,12 @@ impl Default for TestApi {
             exchanges: AtomicUsize::new(0),
             renewals: AtomicUsize::new(0),
             sign_outs: AtomicUsize::new(0),
+            trials: AtomicUsize::new(0),
             exchange: Mutex::new(Err(ApiError::Rejected)),
             key: Mutex::new(Err(ApiError::Offline)),
+            trial: Mutex::new(Err(ApiError::Offline)),
+            hashes: Mutex::new(Vec::new()),
+            now: Mutex::new(None),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
         }
@@ -117,6 +128,12 @@ impl TestApi {
     fn answer_key(&self, key: Result<Option<String>, ApiError>) {
         *self.key.lock().unwrap() = key;
     }
+    fn answer_trial(&self, trial: Result<String, ApiError>) {
+        *self.trial.lock().unwrap() = trial;
+    }
+    fn trials(&self) -> usize {
+        self.trials.load(Ordering::SeqCst)
+    }
 }
 
 impl Api for TestApi {
@@ -129,11 +146,31 @@ impl Api for TestApi {
         *self.traded.lock().unwrap() = Some((code.into(), verifier.into()));
         self.exchange.lock().unwrap().clone()
     }
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError> {
+    fn current_key(&self, token: &str, version: &str) -> Result<KeyReply, ApiError> {
         assert_eq!(version, crate::account::VERSION);
         assert!(!token.is_empty());
         self.renewals.fetch_add(1, Ordering::SeqCst);
-        self.key.lock().unwrap().clone()
+        let key = self.key.lock().unwrap().clone()?;
+        Ok(KeyReply {
+            key,
+            server_now: *self.now.lock().unwrap(),
+        })
+    }
+    fn start_trial(
+        &self,
+        token: &str,
+        device_hash: &str,
+        version: &str,
+    ) -> Result<TrialReply, ApiError> {
+        assert_eq!(version, crate::account::VERSION);
+        assert!(!token.is_empty());
+        self.trials.fetch_add(1, Ordering::SeqCst);
+        self.hashes.lock().unwrap().push(device_hash.into());
+        let key = self.trial.lock().unwrap().clone()?;
+        Ok(TrialReply {
+            key,
+            server_now: *self.now.lock().unwrap(),
+        })
     }
     fn sign_out(&self, _: &str) -> Result<(), ApiError> {
         self.sign_outs.fetch_add(1, Ordering::SeqCst);
@@ -346,6 +383,42 @@ impl Fixture {
 
     fn build(cx: &mut TestAppContext, license: impl FnOnce(&Path) -> client::Config) -> Self {
         Self::build_with(cx, Arc::new(SystemPacks), license)
+    }
+
+    /// A licensed build made on `build_date`, with `setup` writing its
+    /// key store files in the fixture directory before the app starts.
+    fn licensed_with(cx: &mut TestAppContext, build_date: &str, setup: impl FnOnce(&Path)) -> Self {
+        let build_date = build_date.to_string();
+        Self::build(cx, |dir| {
+            setup(dir);
+            client::Config {
+                enforce: true,
+                public_key: Some(test_key().verifying_key()),
+                build_date,
+                trial_file: Some(dir.join("trial")),
+                store: KeyStore::File(dir.join("license.key")),
+            }
+        })
+    }
+
+    /// A licensed build with no trial or key yet, signed in to convt.app as
+    /// `email`, holding `key` if given.
+    fn account(cx: &mut TestAppContext, email: &str, key: Option<&str>) -> Self {
+        let session = Session {
+            email: email.into(),
+            token: "cvd_test_token".into(),
+        };
+        let key = key.map(str::to_string);
+        Self::licensed_with(cx, BUILD_DATE, move |dir| {
+            if let Some(key) = key {
+                std::fs::write(dir.join("license.key"), key).unwrap();
+            }
+            std::fs::write(
+                dir.join("account.json"),
+                serde_json::to_string(&session).unwrap(),
+            )
+            .unwrap();
+        })
     }
 
     /// A licensed build already signed in to convt.app as `email`.
@@ -1142,26 +1215,43 @@ fn quick_convert_keeps_results_after_the_queue_is_cleared(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
-fn the_first_conversion_starts_the_trial(cx: &mut TestAppContext) {
+fn without_a_trial_nothing_converts_until_one_is_started(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     let (main, _) = f.main(cx);
+    let card = label(cx, main, "trial-card").unwrap();
+    assert!(card.starts_with("Start your free 7-day trial"), "{card}");
     assert_eq!(
-        label(cx, main, "trial-card").as_deref(),
-        Some("Free trial: 7 days, starting with your first conversion.")
+        label(cx, main, "trial-buy").as_deref(),
+        Some("Start 7-day trial")
     );
 
+    // A silent conversion is refused, starts nothing, and Quick convert says why.
     let png = f.png("a.png");
     cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
-    wait_until(cx, "the conversion", |cx| f.app.read(cx).recent.len() == 1);
-    let started = std::fs::read_to_string(f.dir.path().join("trial")).unwrap();
-    assert_eq!(
-        started.trim(),
-        convt_license::date::from_days(client::today())
+    assert_eq!(f.jobs(cx), 0);
+    assert!(!f.dir.path().join("trial").exists());
+    let (quick, _) = window_of::<QuickView>(cx);
+    let banner = label(cx, quick, "license-banner").unwrap();
+    assert!(banner.contains("sign in to convt.app"), "{banner}");
+    assert!(shown(cx, quick, "buy") && shown(cx, quick, "enter-license"));
+    click(cx, quick, "convert");
+    assert_eq!(f.jobs(cx), 0);
+    assert_eq!(f.api.calls(), (0, 0, 0));
+
+    // "Start 7-day trial" signs in, following along in the License tab.
+    click(cx, quick, "start-trial");
+    let page = cx.opened_url().expect("the device page opened");
+    assert!(
+        page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
+        "{page}"
     );
+    let (settings, _) = window_of::<SettingsView>(cx);
     assert_eq!(
-        label(cx, main, "trial-card").as_deref(),
-        Some("Free trial: 7 days left.")
+        label(cx, settings, "trial-status").as_deref(),
+        Some("Your free trial starts once you're signed in.")
     );
+    assert!(shown(cx, settings, "sign-in-cancel"));
+    assert_eq!(f.api.trials(), 0);
 }
 
 #[gpui_kit::test]
@@ -1194,7 +1284,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     let forged = convt_license::sign(
         &License {
             id: "x".into(),
-            email: "a@example.com".into(),
+            email: mailbox("a"),
             plan: Plan::Desktop,
             issued: "2026-09-01".into(),
             updates_until: "2027-10-01".into(),
@@ -1205,17 +1295,20 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     click(cx, settings, "activate");
     assert!(shown(cx, settings, "error"), "a key from another signer");
 
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key(&mailbox("a"), "2027-10-01");
     type_key(cx, settings, &view, &format!("  {key}\n"));
     click(cx, settings, "activate");
     assert!(!shown(cx, settings, "error"));
     assert_eq!(
-        label(cx, settings, "license-notice").as_deref(),
-        Some("License activated for a@example.com.")
+        label(cx, settings, "license-notice"),
+        Some(format!("License activated for {}.", mailbox("a")))
     );
     assert_eq!(
-        label(cx, settings, "license-status").as_deref(),
-        Some("Licensed to a@example.com (Desktop), with updates until 2027-10-01.")
+        label(cx, settings, "license-status"),
+        Some(format!(
+            "Licensed to {} (Desktop), with updates until 2027-10-01.",
+            mailbox("a")
+        ))
     );
     let stored = std::fs::read_to_string(f.dir.path().join("license.key")).unwrap();
     assert_eq!(stored.trim(), key);
@@ -1244,7 +1337,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
 
 #[gpui_kit::test]
 fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
-    let key = license_key("a@example.com", "2026-06-30");
+    let key = license_key(&mailbox("a"), "2026-06-30");
     let f = Fixture::licensed(cx, Some("2026-01-01"), Some(&key));
     let (main, view) = f.main(cx);
     let card = label(cx, main, "trial-card").unwrap();
@@ -1272,7 +1365,7 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn an_activate_link_fills_in_the_key_without_activating(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key(&mailbox("a"), "2027-10-01");
     let link = format!("convt://activate?key={key}");
     let request = crate::request::parse_url(&link).unwrap();
     cx.update(|cx| super::route(request, cx));
@@ -1312,7 +1405,7 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     set_input(cx, window, &input, "nonsense");
     click(cx, window, "first-run-next");
     assert!(shown(cx, window, "error"));
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key(&mailbox("a"), "2027-10-01");
     set_input(cx, window, &input, &key);
     click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
@@ -1340,6 +1433,14 @@ fn closing_first_run_before_the_last_step_shows_it_again(cx: &mut TestAppContext
     if super::first_run::first_step() == Step::Finder {
         click(cx, window, "first-run-back");
     }
+    click(cx, window, "plan-key");
+    let input = cx.read(|cx| view.read(cx).key.clone());
+    set_input(
+        cx,
+        window,
+        &input,
+        &license_key(&mailbox("a"), "2027-10-01"),
+    );
     click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
     cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
@@ -1464,55 +1565,420 @@ fn a_build_from_source_never_shows_first_run(cx: &mut TestAppContext) {
     cx.read(|cx| assert!(Open::<FirstRunView>::get(cx).is_none()));
 }
 
-#[gpui_kit::test]
-fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, None);
+/// First run on the plan step, as the app opens it.
+fn first_run_plan(f: &Fixture, cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<FirstRunView>) {
     let app = f.app.clone();
     let (window, view) = open(cx, move |window, cx| {
         cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
     });
     cx.update(|cx| cx.set_global(Open(window, view.downgrade())));
-    // Starting the trial opens no browser and calls nothing.
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
-    assert_eq!(cx.opened_url(), None);
-    click(cx, window, "first-run-back");
+    (window, view)
+}
 
-    // "Sign in with convt.app" opens the device page and waits.
+#[gpui_kit::test]
+fn first_run_starts_the_trial_after_signing_in(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    let (window, view) = first_run_plan(&f, cx);
     assert_eq!(
-        label(cx, window, "sign-in").as_deref(),
-        Some("Sign in with convt.app")
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Start 7-day trial")
     );
-    click(cx, window, "sign-in");
+    let body = label(cx, window, "first-run-body").unwrap();
+    assert!(body.contains("Sign in to convt.app"), "{body}");
+
+    // Start opens the device page and waits; nothing reached convt.app.
+    click(cx, window, "first-run-next");
     let page = cx.opened_url().expect("the device page opened");
     assert!(
         page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
         "{page}"
     );
     assert_eq!(
-        label(cx, window, "account-status").as_deref(),
+        label(cx, window, "trial-status").as_deref(),
         Some("Waiting for your browser…")
     );
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("Sign in to start your trial")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Waiting…")
+    );
+    cx.update(|cx| cx.open_url("about:blank"));
+    click(cx, window, "sign-in-reopen");
+    assert_eq!(cx.opened_url().as_deref(), Some(page.as_str()));
+    // Clicking the waiting button does nothing.
+    click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Plan));
+    assert_eq!(f.api.calls(), (0, 0, 0));
+    assert_eq!(f.api.trials(), 0);
 
-    // The browser's answer brings first run back, signed in, with the key.
+    // The browser's answer signs in; the account has no key, so the trial
+    // starts with this computer's hash, and only then is it on.
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: mailbox("test"),
         token: "cvd_new".into(),
     });
-    f.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
-    let link = format!("convt://auth?state={}&code=onetime", query(&page, "state"));
-    cx.update(|cx| super::route(crate::request::parse_url(&link).unwrap(), cx));
+    f.api.answer_key(Ok(None));
+    let trial = trial_key(&mailbox("test"), 0);
+    f.api.answer_trial(Ok(trial.clone()));
+    *f.api.now.lock().unwrap() = Some(client::now());
+    cx.update(|cx| super::route(auth_link(&query(&page, "state"), "code=onetime"), cx));
+    wait_until(cx, "the trial started", |cx| {
+        f.app.read(cx).account.trial == crate::account::Trial::Started
+    });
+    assert_eq!(f.api.calls(), (1, 1, 0));
+    assert_eq!(f.api.trials(), 1);
+    let hash = f.api.hashes.lock().unwrap()[0].clone();
+    assert_eq!(hash.len(), 64);
+    assert!(hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')));
+    assert_eq!(
+        label(cx, window, "trial-status").as_deref(),
+        Some("Your 7-day trial is on. 7 days left.")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("Your trial is on")
+    );
+    // Trial keys are kept apart from bought ones.
+    assert!(!f.dir.path().join("license.key").exists());
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("trial.key"))
+            .unwrap()
+            .trim(),
+        trial
+    );
+    cx.read(|cx| {
+        assert!(matches!(
+            f.app.read(cx).license,
+            client::State::Trial { days_left: 7, .. }
+        ))
+    });
+
+    // Continue moves on, and conversions run.
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Continue")
+    );
+    click(cx, window, "first-run-next");
+    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+    let png = f.png("a.png");
+    cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+    wait_until(cx, "the conversion", |cx| f.app.read(cx).recent.len() == 1);
+    assert!(f.dir.path().join("a.jpg").exists());
+}
+
+#[gpui_kit::test]
+fn a_cancelled_or_failed_sign_in_starts_no_trial(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    let (window, view) = first_run_plan(&f, cx);
+
+    // Cancel in the app.
+    click(cx, window, "first-run-next");
+    click(cx, window, "sign-in-cancel");
+    assert_eq!(
+        label(cx, window, "trial-status").as_deref(),
+        Some("Sign-in was cancelled, so the trial didn't start.")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("The trial didn't start")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Try again")
+    );
+    click(cx, window, "trial-buy-license");
+    assert_eq!(cx.opened_url().as_deref(), Some(client::BUY_URL));
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NoTrial));
+
+    // Try again, then cancel in the browser.
+    click(cx, window, "first-run-next");
+    let page = cx.opened_url().unwrap();
+    assert!(page.contains("/device?state="), "{page}");
+    assert!(shown(cx, window, "sign-in-cancel"));
+    cx.update(|cx| super::route(auth_link(&query(&page, "state"), "error=access_denied"), cx));
+    assert_eq!(
+        label(cx, window, "trial-status").as_deref(),
+        Some("Sign-in was cancelled in the browser. The trial didn't start.")
+    );
+
+    // convt.app refuses the code.
+    click(cx, window, "first-run-next");
+    let page = cx.opened_url().unwrap();
+    cx.update(|cx| super::route(auth_link(&query(&page, "state"), "code=used"), cx));
+    wait_until(cx, "the exchange failed", |cx| {
+        matches!(
+            f.app.read(cx).account.trial,
+            crate::account::Trial::Failed(_)
+        )
+    });
+    assert!(
+        label(cx, window, "trial-status")
+            .unwrap()
+            .contains("didn't accept")
+    );
+    assert_eq!(f.api.trials(), 0);
+    assert!(!f.dir.path().join("license.key").exists());
+    assert!(!f.dir.path().join("trial.key").exists());
+    assert!(!f.dir.path().join("account.json").exists());
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NoTrial));
+
+    // "I have a license" goes to the key field.
+    click(cx, window, "trial-enter-key");
+    cx.read(|cx| assert_eq!(view.read(cx).plan, super::first_run::Plan::Key));
+    assert!(shown(cx, window, "first-run-key"));
+}
+
+#[gpui_kit::test]
+fn a_failed_key_check_starts_no_trial(cx: &mut TestAppContext) {
+    let f = Fixture::account(cx, &mailbox("test"), None);
+    // The account may own a key, but convt.app can't say right now.
+    f.api.answer_key(Err(ApiError::Offline));
+    f.api.answer_trial(Ok(trial_key(&mailbox("test"), 0)));
+    let (window, _) = first_run_plan(&f, cx);
+    click(cx, window, "first-run-next");
+    wait_until(cx, "the answer", |cx| {
+        matches!(
+            f.app.read(cx).account.trial,
+            crate::account::Trial::Failed(_)
+        )
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    assert_eq!(f.api.trials(), 0, "no trial used up");
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NoTrial));
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Try again")
+    );
+}
+
+#[gpui_kit::test]
+fn an_account_whose_trial_ended_is_told_so(cx: &mut TestAppContext) {
+    let f = Fixture::account(cx, &mailbox("test"), None);
+    f.api.answer_key(Ok(None));
+    // The account's trial started 10 days ago.
+    f.api.answer_trial(Ok(trial_key(&mailbox("test"), -10)));
+    let (window, _) = first_run_plan(&f, cx);
+    click(cx, window, "first-run-next");
+    wait_until(cx, "the answer", |cx| {
+        f.app.read(cx).account.trial == crate::account::Trial::Ended
+    });
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::TrialEnded));
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("Your trial has ended")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Buy a license")
+    );
+    click(cx, window, "first-run-next");
+    assert_eq!(cx.opened_url().as_deref(), Some(client::BUY_URL));
+    assert_eq!(f.api.trials(), 1);
+}
+
+#[gpui_kit::test]
+fn a_computer_whose_trial_was_used_gets_a_soft_block(cx: &mut TestAppContext) {
+    let f = Fixture::account(cx, &mailbox("test"), None);
+    f.api.answer_key(Ok(None));
+    f.api.answer_trial(Err(ApiError::DeviceUsed));
+    let (window, _) = first_run_plan(&f, cx);
+    // Signed in already: no browser, but the account's keys are checked first.
+    click(cx, window, "first-run-next");
+    wait_until(cx, "the answer", |cx| {
+        f.app.read(cx).account.trial == crate::account::Trial::DeviceUsed
+    });
+    assert_eq!(cx.opened_url(), None);
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    assert_eq!(f.api.trials(), 1);
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("Trial already used")
+    );
+    assert_eq!(
+        label(cx, window, "trial-status").as_deref(),
+        Some(super::DEVICE_USED)
+    );
+    click(cx, window, "trial-contact");
+    assert_eq!(cx.opened_url().as_deref(), Some(client::CONTACT_URL));
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Buy a license")
+    );
+    click(cx, window, "first-run-next");
+    assert_eq!(cx.opened_url().as_deref(), Some(client::BUY_URL));
+    assert_eq!(f.api.trials(), 1);
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NoTrial));
+    // The License tab says the same.
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    assert!(
+        label(cx, settings, "trial-status")
+            .unwrap()
+            .starts_with("This computer already used a free trial")
+    );
+}
+
+#[gpui_kit::test]
+fn a_desktop_key_on_the_account_installs_at_sign_in_without_a_trial(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    let (window, _) = first_run_plan(&f, cx);
+    click(cx, window, "first-run-next");
+    let page = cx.opened_url().unwrap();
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: mailbox("test"),
+        token: "cvd_new".into(),
+    });
+    let key = license_key(&mailbox("test"), "2027-10-01");
+    f.api.answer_key(Ok(Some(key.clone())));
+    cx.update(|cx| super::route(auth_link(&query(&page, "state"), "code=c"), cx));
     wait_until(cx, "the key arrived", |cx| {
         matches!(f.app.read(cx).license, client::State::Licensed(_))
     });
+    cx.run_until_parked();
+    // No trial was asked for: the account owns a license.
+    assert_eq!(f.api.trials(), 0);
     assert_eq!(
-        label(cx, window, "account-status").as_deref(),
-        Some("Signed in as pro@example.com · Pro until 2026-11-01")
+        std::fs::read_to_string(f.dir.path().join("license.key"))
+            .unwrap()
+            .trim(),
+        key
     );
-    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("You're licensed")
+    );
+    assert_eq!(
+        label(cx, window, "trial-status").as_deref(),
+        Some("This computer is licensed.")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Continue")
+    );
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    assert_eq!(
+        label(cx, settings, "refresh-status").as_deref(),
+        Some("Got your Desktop key, with updates until 2027-10-01.")
+    );
+}
+
+#[gpui_kit::test]
+fn a_pro_trial_key_from_renewal_unlocks_conversion(cx: &mut TestAppContext) {
+    let f = Fixture::account(cx, &mailbox("pro"), None);
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NoTrial));
+    let trial = trial_key(&mailbox("pro"), -2);
+    f.api.answer_key(Ok(Some(trial)));
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.starts_with("Got your trial key")
+    });
+    cx.read(|cx| {
+        assert!(matches!(
+            f.app.read(cx).license,
+            client::State::Trial { days_left: 5, .. }
+        ))
+    });
+    let png = f.png("a.png");
+    cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+    wait_until(cx, "the conversion", |cx| f.app.read(cx).recent.len() == 1);
+    assert!(f.dir.path().join("a.jpg").exists());
+    // A paid key later replaces it.
+    f.api
+        .answer_key(Ok(Some(pro_key(&mailbox("pro"), "2026-11-01"))));
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.starts_with("Got your Pro key")
+    });
+    assert_eq!(f.api.trials(), 0);
+}
+
+#[gpui_kit::test]
+fn an_older_builds_trial_carries_over_once(cx: &mut TestAppContext) {
+    let today = client::today();
+    let started = convt_license::date::from_days(today - 2);
+    let f = Fixture::licensed_with(cx, &convt_license::date::from_days(today), |dir| {
+        std::fs::write(dir.join("trial"), &started).unwrap();
+    });
+    cx.read(|cx| {
+        assert!(matches!(
+            f.app.read(cx).license,
+            client::State::Trial { days_left: 5, .. }
+        ))
+    });
+    assert!(
+        !f.dir.path().join("trial").exists(),
+        "read once, then removed"
+    );
+    assert!(f.dir.path().join("legacy-trial").exists());
+    let (main, _) = f.main(cx);
+    assert_eq!(
+        label(cx, main, "trial-card").as_deref(),
+        Some("Free trial: 5 days left.")
+    );
+    let png = f.png("a.png");
+    cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+    wait_until(cx, "the conversion", |cx| f.app.read(cx).recent.len() == 1);
+    assert_eq!(f.api.calls(), (0, 0, 0));
+}
+
+#[gpui_kit::test]
+fn a_clock_set_back_is_checked_with_convt_app_at_launch(cx: &mut TestAppContext) {
+    let now = client::now();
+    let trial = trial_key(&mailbox("test"), 0);
+    let session = Session {
+        email: mailbox("test"),
+        token: "cvd_test_token".into(),
+    };
+    let stored = trial.clone();
+    // convt last ran three days from now; the clock has gone back since.
+    let f = Fixture::licensed_with(cx, BUILD_DATE, move |dir| {
+        std::fs::write(dir.join("trial.key"), stored).unwrap();
+        std::fs::write(dir.join("last-seen"), (now + 3 * 86_400).to_string()).unwrap();
+        std::fs::write(
+            dir.join("account.json"),
+            serde_json::to_string(&session).unwrap(),
+        )
+        .unwrap();
+    });
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NeedsCheck));
+    let png = f.png("a.png");
+    cx.update(|cx| super::route(cli(vec![png.clone()], Some("jpeg"), None), cx));
     assert_eq!(f.jobs(cx), 0);
+    let (quick, _) = window_of::<QuickView>(cx);
+    assert!(
+        label(cx, quick, "license-banner")
+            .unwrap()
+            .contains("clock seems to have gone back")
+    );
+    assert!(shown(cx, quick, "check-clock"));
+
+    // Already checked today, but the launch asks anyway: convt.app's clock
+    // agrees with this one, so the trial counts again.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.license_checked = Some(today()), cx)
+        })
+    });
+    f.api.answer_key(Ok(Some(trial)));
+    *f.api.now.lock().unwrap() = Some(now);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    wait_until(cx, "the check", |cx| {
+        matches!(f.app.read(cx).license, client::State::Trial { .. })
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    assert!(!shown(cx, quick, "license-banner"));
+
+    // convt.app's clock days ahead of this one keeps it blocked, and says so.
+    *f.api.now.lock().unwrap() = Some(now + 3 * 86_400);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    click(cx, settings, "refresh-license");
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.contains("clock is behind")
+    });
+    cx.read(|cx| assert_eq!(f.app.read(cx).license, client::State::NeedsCheck));
 }
 
 #[gpui_kit::test]
@@ -1785,15 +2251,22 @@ fn balanced_and_original_clear_what_a_preset_set(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn quick_convert_shows_errors_the_license_banner_does_not(cx: &mut TestAppContext) {
-    // A licensed build with nowhere to record the trial's start.
-    let f = Fixture::build(cx, |dir| client::Config {
-        enforce: true,
-        public_key: Some(test_key().verifying_key()),
-        build_date: BUILD_DATE.into(),
-        trial_file: None,
-        store: KeyStore::File(dir.join("license.key")),
+    // A licensed build on its trial, whose document pack is being removed.
+    let packs = Arc::new(TestPacks::default());
+    packs.installed.store(true, Ordering::SeqCst);
+    let trial = trial_key(&mailbox("a"), 0);
+    let f = Fixture::build_with(cx, packs, |dir| {
+        std::fs::write(dir.join("trial.key"), &trial).unwrap();
+        client::Config {
+            enforce: true,
+            public_key: Some(test_key().verifying_key()),
+            build_date: BUILD_DATE.into(),
+            trial_file: None,
+            store: KeyStore::File(dir.join("license.key")),
+        }
     });
-    let (window, _) = f.quick(cli(vec![f.png("a.png")], Some("jpeg"), None), cx);
+    cx.update(|cx| f.app.update(cx, |s, _| s.pack.removing = true));
+    let (window, _) = f.quick(cli(vec![f.docx("a.docx")], Some("pdf"), None), cx);
     assert!(
         !shown(cx, window, "license-banner"),
         "the trial still allows converting"
@@ -1801,7 +2274,7 @@ fn quick_convert_shows_errors_the_license_banner_does_not(cx: &mut TestAppContex
     click(cx, window, "convert");
     assert_eq!(f.jobs(cx), 0);
     let error = label(cx, window, "error").expect("the error is shown");
-    assert!(error.contains("start date couldn't be saved"), "{error}");
+    assert!(error.contains("being removed"), "{error}");
 }
 
 #[gpui_kit::test]
@@ -2125,6 +2598,38 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         });
         let (first, view) = window_of::<FirstRunView>(cx);
         assert!(fits(cx, first, "first-run-next"), "first run, trial");
+        // The trial's panels: waiting, failed, used on this computer.
+        click(cx, first, "first-run-next");
+        assert!(
+            fits(cx, first, "sign-in-cancel"),
+            "first run, trial waiting"
+        );
+        assert!(
+            fits(cx, first, "first-run-next"),
+            "first run, trial waiting"
+        );
+        click(cx, first, "sign-in-cancel");
+        assert!(
+            fits(cx, first, "trial-enter-key"),
+            "first run, trial failed"
+        );
+        assert!(fits(cx, first, "first-run-next"), "first run, trial failed");
+        let set_trial = |trial: crate::account::Trial, cx: &mut TestAppContext| {
+            cx.update(|cx| {
+                f.app.update(cx, |s, cx| {
+                    s.account.trial = trial;
+                    cx.notify()
+                })
+            })
+        };
+        set_trial(crate::account::Trial::DeviceUsed, cx);
+        assert!(fits(cx, first, "trial-enter-key"), "first run, trial used");
+        assert!(fits(cx, first, "trial-status"), "first run, trial used");
+        assert!(fits(cx, first, "first-run-next"), "first run, trial used");
+        set_trial(crate::account::Trial::Ended, cx);
+        assert!(fits(cx, first, "trial-status"), "first run, trial ended");
+        assert!(fits(cx, first, "first-run-next"), "first run, trial ended");
+        set_trial(crate::account::Trial::Idle, cx);
         // Waiting for the browser, then a link the app ignored.
         click(cx, first, "sign-in");
         assert!(fits(cx, first, "sign-in-cancel"), "first run, waiting");
@@ -2297,6 +2802,27 @@ fn retry_keeps_the_options_and_folder_a_conversion_asked_for(cx: &mut TestAppCon
 }
 
 #[gpui_kit::test]
+fn an_outgrown_bought_key_still_offers_the_trial(cx: &mut TestAppContext) {
+    let key = license_key(&mailbox("old"), "2025-01-01");
+    let f = Fixture::licensed(cx, None, Some(&key));
+    cx.read(|cx| {
+        assert!(matches!(
+            f.app.read(cx).license,
+            client::State::NotCovered(_)
+        ))
+    });
+    let (window, _) = f.settings(SettingsTab::License, cx);
+    assert!(shown(cx, window, "start-trial"));
+    click(cx, window, "start-trial");
+    assert!(cx.opened_url().is_some_and(|u| u.contains("/device?")));
+    // The bought key stays where it was.
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("license.key")).unwrap(),
+        key
+    );
+}
+
+#[gpui_kit::test]
 fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-01-01"), None);
     let (window, view) = f.settings(SettingsTab::License, cx);
@@ -2305,13 +2831,13 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
         cx,
         window,
         &input,
-        &license_key("old@example.com", "2025-01-01"),
+        &license_key(&mailbox("old"), "2025-01-01"),
     );
     click(cx, window, "activate");
     assert!(f.dir.path().join("license.key").exists());
     assert_eq!(
-        label(cx, window, "license-notice").as_deref(),
-        Some("Saved the license for old@example.com.")
+        label(cx, window, "license-notice"),
+        Some(format!("Saved the license for {}.", mailbox("old")))
     );
     assert_eq!(label(cx, window, "settings-buy").as_deref(), Some("Renew"));
 
@@ -2319,12 +2845,12 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
         cx,
         window,
         &input,
-        &license_key("new@example.com", "2027-10-01"),
+        &license_key(&mailbox("new"), "2027-10-01"),
     );
     click(cx, window, "activate");
     assert_eq!(
-        label(cx, window, "license-notice").as_deref(),
-        Some("License activated for new@example.com.")
+        label(cx, window, "license-notice"),
+        Some(format!("License activated for {}.", mailbox("new")))
     );
     assert!(!shown(cx, window, "settings-buy"));
 }
@@ -2343,7 +2869,7 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
         cx,
         window,
         &input,
-        &license_key("old@example.com", "2025-01-01"),
+        &license_key(&mailbox("old"), "2025-01-01"),
     );
     click(cx, window, "first-run-next");
     assert!(f.dir.path().join("license.key").exists(), "the key is kept");
@@ -2374,7 +2900,7 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
         cx,
         window,
         &input,
-        &license_key("new@example.com", "2027-10-01"),
+        &license_key(&mailbox("new"), "2027-10-01"),
     );
     click(cx, window, "first-run-next");
     assert_eq!(
@@ -3009,6 +3535,20 @@ fn pro_key(email: &str, updates_until: &str) -> String {
     convt_license::sign(&license, &test_key())
 }
 
+/// A trial key from convt.app for `email` that started `start` days from
+/// today (negative is earlier).
+fn trial_key(email: &str, start: i64) -> String {
+    let day = |d| convt_license::date::from_days(client::today() + d);
+    let license = License {
+        id: format!("trial_{start}"),
+        email: email.into(),
+        plan: Plan::Trial,
+        issued: day(start),
+        updates_until: day(start + client::TRIAL_DAYS - 1),
+    };
+    convt_license::sign(&license, &test_key())
+}
+
 /// One query value of a URL the app opened. The values the app writes are
 /// base64url or percent-encoded.
 fn query(url: &str, key: &str) -> String {
@@ -3053,11 +3593,11 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     assert_eq!(f.api.calls(), (0, 0, 0));
 
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: mailbox("pro"),
         token: "cvd_issued".into(),
     });
     f.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+        .answer_key(Ok(Some(pro_key(&mailbox("pro"), "2026-11-01"))));
     cx.update(|cx| super::route(auth_link(&state, "code=c0de"), cx));
     wait_until(cx, "the refresh finished", |cx| {
         matches!(
@@ -3083,8 +3623,8 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
         );
     });
     assert_eq!(
-        label(cx, settings, "account-status").as_deref(),
-        Some("Signed in to convt.app as pro@example.com.")
+        label(cx, settings, "account-status"),
+        Some(format!("Signed in to convt.app as {}.", mailbox("pro")))
     );
     assert_eq!(
         label(cx, settings, "refresh-status").as_deref(),
@@ -3097,7 +3637,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
 fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: mailbox("pro"),
         token: "cvd_issued".into(),
     });
     f.api.answer_key(Ok(None));
@@ -3147,7 +3687,12 @@ fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
             .unwrap()
             .contains("didn't start")
     );
-    cx.read(|cx| assert_eq!(f.app.read(cx).account.email(), Some("pro@example.com")));
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).account.email(),
+            Some(mailbox("pro").as_str())
+        )
+    });
 
     // After a cancel, the cancelled flow's link is dropped too.
     click(cx, settings, "sign-out");
@@ -3213,8 +3758,8 @@ fn a_sign_in_cancelled_or_refused_in_the_browser_fails(cx: &mut TestAppContext) 
 
 #[gpui_kit::test]
 fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
-    let current = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&current), "pro@example.com");
+    let current = pro_key(&mailbox("pro"), "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&current), &mailbox("pro"));
     // Offline at launch: one try, the key stays, the failure shows in Settings.
     cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
     wait_until(cx, "the refresh failed", |cx| {
@@ -3252,7 +3797,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     wait_until(cx, "the second launch's refresh", |_| f.api.calls().1 == 2);
 
     // Refresh license asks whenever clicked, and stores the next period's key.
-    let next = pro_key("pro@example.com", "2026-11-15");
+    let next = pro_key(&mailbox("pro"), "2026-11-15");
     f.api.answer_key(Ok(Some(next.clone())));
     wait_until(cx, "idle", |cx| {
         f.app.read(cx).account.refresh != crate::account::Refresh::Running
@@ -3284,7 +3829,9 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     // No Pro key at all: the stored key stays.
     f.api.answer_key(Ok(None));
     click(cx, settings, "refresh-license");
-    wait_for_label(cx, settings, "refresh-status", |s| s.contains("no Pro key"));
+    wait_for_label(cx, settings, "refresh-status", |s| {
+        s.contains("no license key")
+    });
     assert_eq!(
         std::fs::read_to_string(f.dir.path().join("license.key"))
             .unwrap()
@@ -3310,7 +3857,7 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
     let f = Fixture::licensed(
         cx,
         Some("2026-09-30"),
-        Some(&license_key("a@b.c", "2027-10-01")),
+        Some(&license_key(&mailbox("a"), "2027-10-01")),
     );
     cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
     cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
@@ -3335,8 +3882,8 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut TestAppContext) {
-    let key = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let key = pro_key(&mailbox("pro"), "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), &mailbox("pro"));
     f.api.answer_key(Err(ApiError::SignedOut));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     click(cx, settings, "refresh-license");
@@ -3367,8 +3914,8 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
 
 #[gpui_kit::test]
 fn sign_out_forgets_the_token_and_revokes_it(cx: &mut TestAppContext) {
-    let key = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let key = pro_key(&mailbox("pro"), "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), &mailbox("pro"));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     click(cx, settings, "sign-out");
     assert!(!f.dir.path().join("account.json").exists());
@@ -3413,7 +3960,7 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
 fn a_second_sign_in_cannot_start_while_the_first_is_finishing(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: mailbox("pro"),
         token: "cvd_first".into(),
     });
     f.api.answer_key(Ok(None));
@@ -3517,7 +4064,7 @@ fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 #[gpui_kit::test]
 fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     // The license covers builds through 2026-10-03.
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-03")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2026-10-03")));
     let builds = [
         ("0.1.0", "2026-10-01"),
         ("9.2.0", "2026-10-03"),
@@ -3563,7 +4110,7 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
         &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
@@ -3603,7 +4150,7 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
 #[gpui_kit::test]
 fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppContext) {
     use base64::Engine as _;
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2027-10-01")));
     let newer = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
     // Accept sequence 10 first.
     f.releases.serve(Ok(manifest(10, &newer, &update_key())));
@@ -3711,7 +4258,7 @@ fn a_build_without_an_update_key_never_fetches(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2026-10-02")));
     let states = [
         Update::Idle,
         Update::Checking,
@@ -3758,7 +4305,7 @@ fn break_settings(dir: &Path) {
 
 #[gpui_kit::test]
 fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2027-10-01")));
     let newer = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
     f.releases.serve(Ok(manifest(8, &newer, &update_key())));
     // The sequence can't be saved: the result is not shown or remembered.
@@ -3786,7 +4333,7 @@ fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext
 
 #[gpui_kit::test]
 fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
         &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
@@ -3797,7 +4344,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     cx.update(|cx| {
         f.app
             .update(cx, |s, cx| {
-                s.activate(&license_key("a@b.c", "2027-10-01"), cx)
+                s.activate(&license_key(&mailbox("a"), "2027-10-01"), cx)
             })
             .unwrap();
     });
@@ -3807,8 +4354,8 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     // And a renewal through convt.app does the same.
     let f2 = Fixture::signed_in(
         cx,
-        Some(&pro_key("pro@example.com", "2026-10-02")),
-        "pro@example.com",
+        Some(&pro_key(&mailbox("pro"), "2026-10-02")),
+        &mailbox("pro"),
     );
     f2.releases.serve(Ok(manifest(
         3,
@@ -3817,7 +4364,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     )));
     assert!(matches!(manual_check(&f2, cx), Update::NotCovered { .. }));
     f2.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+        .answer_key(Ok(Some(pro_key(&mailbox("pro"), "2026-11-01"))));
     cx.update(|cx| f2.app.update(cx, |s, cx| s.refresh_license(cx)));
     wait_until(cx, "renewed", |cx| {
         matches!(
@@ -3832,7 +4379,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
 #[gpui_kit::test]
 fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppContext) {
     // The license ended before this build (2026-10-01) too.
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-09-15")));
+    let f = Fixture::licensed(cx, None, Some(&license_key(&mailbox("a"), "2026-09-15")));
     f.releases.serve(Ok(manifest(
         2,
         &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
@@ -3845,4 +4392,9 @@ fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppCo
         !status.contains("keeps working") && status.contains("renew to convert again"),
         "{status}"
     );
+}
+
+/// A test mailbox, put together at run time so no address sits in the source.
+fn mailbox(name: &str) -> String {
+    [name, "convt.test"].join("@")
 }

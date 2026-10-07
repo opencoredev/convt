@@ -246,3 +246,30 @@ export const invoices = pgTable(
     check("invoices_email_normalized", sql`${t.email} = lower(btrim(${t.email}))`),
   ],
 );
+
+/**
+ * The free desktop trial (CNV-56): at most one per account and one per computer.
+ * convt-billing creates it and signs a trial token from it on every request, so no
+ * token or email is stored. Deleting the account sets `user_id` to null and keeps
+ * the row, so the computer cannot start a second trial under a new account.
+ */
+export const trials = pgTable(
+  "trials",
+  {
+    /** Also the `id` inside the signed trial token. */
+    id: text().primaryKey(),
+    userId: text().references(() => users.id, { onDelete: "set null" }),
+    /** HMAC-SHA256 (hex) of the app's device hash under the site's DEVICE_HASH_SECRET. */
+    deviceHash: text(),
+    startedAt: tstz().notNull(),
+    /** Midnight UTC after the trial's last day: the start day plus seven days. */
+    endsAt: tstz().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("trials_user_id_key").on(t.userId),
+    uniqueIndex("trials_device_hash_key").on(t.deviceHash),
+    check("trials_ends_after_start", sql`${t.endsAt} > ${t.startedAt}`),
+    check("trials_device_hash_format", sql`${t.deviceHash} ~ '^[0-9a-f]{64}$'`),
+  ],
+);

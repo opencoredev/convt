@@ -36,7 +36,8 @@ pub struct Paths {
     /// `None` keeps history in memory only.
     pub history: Option<PathBuf>,
     pub presets: Option<PathBuf>,
-    /// The trial file, the key store and whether this build checks licenses.
+    /// The key store, an older build's trial file and whether this build
+    /// checks licenses.
     pub license: client::Config,
     /// The site desktop sign-in and renewal talk to, and how. Tests script
     /// their own [`Api`] so they never reach the network.
@@ -242,7 +243,7 @@ pub struct AppState {
     pub(crate) licensing: Licensing,
     /// Where this machine stands, refreshed whenever it can change.
     pub license: client::State,
-    /// Desktop sign-in and Pro renewal.
+    /// Desktop sign-in, the free trial and key renewal.
     pub account: Account,
     pub(crate) update_config: UpdateConfig,
     /// What the last update check found.

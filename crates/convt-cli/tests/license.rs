@@ -2,10 +2,10 @@
 //! config and data folders and the file key store, so the user's keyring and
 //! trial are never touched.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
-use convt_license::{License, Plan, encode_public_key, sign};
+use convt_license::{License, Plan, date, encode_public_key, sign};
 use ed25519_dalek::SigningKey;
 
 /// A throwaway key for these tests only.
@@ -16,10 +16,31 @@ fn signing_key() -> SigningKey {
 fn key(until: &str) -> String {
     let license = License {
         id: "lic_test".into(),
-        email: "ada@example.com".into(),
+        email: mailbox("ada"),
         plan: Plan::Desktop,
         issued: "2026-01-01".into(),
         updates_until: until.into(),
+    };
+    sign(&license, &signing_key())
+}
+
+/// Today in UTC, as a day number.
+fn today() -> i64 {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    (secs / 86_400) as i64
+}
+
+/// A trial key from convt.app that started today.
+fn trial_key() -> String {
+    let license = License {
+        id: "trial_test".into(),
+        email: mailbox("ada"),
+        plan: Plan::Trial,
+        issued: date::from_days(today()),
+        updates_until: date::from_days(today() + 6),
     };
     sign(&license, &signing_key())
 }
@@ -85,6 +106,12 @@ impl Fixture {
         )
     }
 
+    /// A trial key as the app keeps it, apart from bought keys.
+    fn store_trial_key(&self, key: &str) {
+        std::fs::create_dir_all(self.path("config")).unwrap();
+        std::fs::write(self.path("config/trial.key"), key).unwrap();
+    }
+
     fn end_trial(&self) {
         std::fs::create_dir_all(self.path("data")).unwrap();
         std::fs::write(self.path("data/trial"), "2000-01-01\n").unwrap();
@@ -111,19 +138,54 @@ fn source_builds_convert_without_a_license() {
 }
 
 #[test]
-fn the_first_conversion_starts_the_trial() {
+fn converting_starts_no_trial() {
     let f = Fixture::new();
     let status = f.run(true, &["license", "status"], None);
-    assert!(stdout(&status).contains("starting with your first conversion"));
-    assert!(!Path::new(&f.path("data/trial")).exists());
-
+    assert_eq!(
+        stdout(&status),
+        "No license or trial yet. Start your free trial from the convt app (it needs a \
+         convt.app sign-in), or run `convt license activate <key>`.\n"
+    );
     let out = f.convert(true);
-    assert!(out.status.success(), "{}", stderr(&out));
-    assert!(f.path("data/trial").exists());
+    assert!(!out.status.success());
+    assert!(
+        stderr(&out).contains("Start your free trial from the convt app"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(!f.path("in.jpg").exists());
+    assert!(!f.path("data/trial").exists());
+}
+
+#[test]
+fn a_trial_from_the_app_lets_the_cli_convert() {
+    let f = Fixture::new();
+    f.store_trial_key(&trial_key());
     assert_eq!(
         stdout(&f.run(true, &["license"], None)),
         "Free trial: 7 days left.\n"
     );
+    let out = f.convert(true);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(f.path("in.jpg").exists());
+    // Pasting a trial key isn't how a trial starts.
+    let pasted = f.run(true, &["license", "activate", &trial_key()], None);
+    assert!(!pasted.status.success());
+    assert!(stderr(&pasted).contains("trial key"), "{}", stderr(&pasted));
+}
+
+#[test]
+fn a_clock_set_back_needs_a_check() {
+    let f = Fixture::new();
+    f.store_trial_key(&trial_key());
+    // convt last ran three days from now.
+    let later = (today() + 3) * 86_400;
+    std::fs::write(f.path("config/last-seen"), format!("{later}\n")).unwrap();
+    let status = stdout(&f.run(true, &["license"], None));
+    assert!(status.contains("clock seems to have gone back"), "{status}");
+    let out = f.convert(true);
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("clock"), "{}", stderr(&out));
 }
 
 #[test]
@@ -134,6 +196,12 @@ fn an_ended_trial_stops_conversions_until_activation() {
     assert!(!out.status.success());
     assert!(stderr(&out).contains("trial has ended"), "{}", stderr(&out));
     assert!(!f.path("in.jpg").exists());
+    // An older build's trial file is carried over once, then removed.
+    assert!(!f.path("data/trial").exists());
+    assert_eq!(
+        std::fs::read_to_string(f.path("config/legacy-trial")).unwrap(),
+        "2000-01-07\n"
+    );
     // Listing formats and targets stays free.
     let targets = f.run(true, &["targets", "x.png"], None);
     assert!(targets.status.success());
@@ -152,7 +220,10 @@ fn an_ended_trial_stops_conversions_until_activation() {
     assert!(good.status.success(), "{}", stderr(&good));
     assert_eq!(
         stdout(&good),
-        "Licensed to ada@example.com (Desktop), with updates until 2099-01-01.\n"
+        format!(
+            "Licensed to {} (Desktop), with updates until 2099-01-01.\n",
+            mailbox("ada")
+        )
     );
     let out = f.convert(true);
     assert!(out.status.success(), "{}", stderr(&out));
@@ -174,4 +245,9 @@ fn a_license_that_ended_before_this_build() {
     let out = f.convert(true);
     assert!(!out.status.success());
     assert!(stderr(&out).contains("2000-01-01"), "{}", stderr(&out));
+}
+
+/// A test mailbox, put together at run time so no address sits in the source.
+fn mailbox(name: &str) -> String {
+    [name, "convt.test"].join("@")
 }

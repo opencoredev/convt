@@ -1,27 +1,34 @@
-//! Desktop sign-in and Pro renewal.
+//! Desktop sign-in, the free trial and key renewal.
 //!
-//! Signing in is optional and only matters for Pro: a Desktop key or the
-//! trial never needs an account. Sign-in opens convt.app/device in the
-//! browser with a fresh [`Pending`] flow; the site answers with a
-//! `convt://auth` link, which counts only while that flow is pending (see
-//! `convt_license::account`). The device token goes to the credential store
-//! next to the license key.
+//! The free trial needs a convt.app account. "Start 7-day trial" opens
+//! convt.app/device in the browser with a fresh [`Pending`] flow; the site
+//! answers with a `convt://auth` link, which counts only while that flow is
+//! pending (see `convt_license::account`). The device token goes to the
+//! credential store next to the license key. Once signed in, the app asks
+//! convt.app for the account's key and, when that isn't a paid one, starts
+//! the trial with this computer's device hash ([`Licensing::device_hash`]).
+//! The trial key that comes back is stored like a license key. Cancelling or
+//! failing anywhere along the way starts nothing. A pasted Desktop key never
+//! needs an account.
 //!
-//! While signed in, the app asks convt.app for the account's current Pro key
-//! at launch, at most once a UTC day, and when the user clicks Refresh
-//! license. Apart from the update check (`crate::update`), that is the only
-//! network call the app makes on its own. A key
-//! that comes back is stored without asking, but only when it covers newer
-//! builds than the stored one ([`Licensing::offer_key`]). Offline, or when
-//! the subscription lapsed, the stored key stays.
+//! While signed in, the app asks convt.app for the account's current key
+//! (Desktop, Pro, or the trial of a Pro subscription) at launch, at most once
+//! a UTC day, and when the user clicks Refresh license; at launch it also
+//! asks right away when the clock went back and a trial needs convt.app's
+//! time. Apart from the update check (`crate::update`), that is the only
+//! network call the app makes on its own; starting the trial is a click. A
+//! key that comes back is stored without asking, but only when it gives this
+//! machine more than the stored one ([`Licensing::offer_key`]). Offline, or
+//! when the subscription lapsed, the stored key stays.
 //!
 //! [`Licensing::offer_key`]: convt_license::client::Licensing::offer_key
+//! [`Licensing::device_hash`]: convt_license::client::Licensing::device_hash
 
 use std::sync::Arc;
 use std::time::Instant;
 
-use convt_license::account::{Api, ApiError, Pending, Session};
-use convt_license::client::{ActivateError, Renewed, today};
+use convt_license::account::{Api, ApiError, KeyReply, Pending, Session, TrialReply};
+use convt_license::client::{ActivateError, Renewed, State, today};
 use convt_license::date;
 use gpui_kit::{Context, Task};
 
@@ -39,6 +46,25 @@ pub enum SignIn {
     Waiting,
     /// The link came back; the app is trading the code for a token.
     Finishing,
+    Failed(String),
+}
+
+/// Where starting the free trial stands. The trial itself is the license
+/// state; this is the flow that gets it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Trial {
+    Idle,
+    /// The user asked for the trial; it starts once sign-in finishes.
+    SigningIn,
+    /// Asking convt.app for the trial.
+    Starting,
+    /// The trial key came back and is stored.
+    Started,
+    /// Another account already used the trial on this computer.
+    DeviceUsed,
+    /// This account's trial ran out before. Its expired key is stored.
+    Ended,
+    /// Sign-in or the request failed or was cancelled. Nothing started.
     Failed(String),
 }
 
@@ -60,12 +86,14 @@ pub struct Account {
     page: Option<String>,
     pub session: Option<Session>,
     pub sign_in: SignIn,
+    pub trial: Trial,
     pub refresh: Refresh,
     /// Something to tell the user that isn't the state of a flow, such as a
     /// sign-in link the app ignored.
     pub notice: Option<String>,
     _sign_in_task: Option<Task<()>>,
     _refresh_task: Option<Task<()>>,
+    _trial_task: Option<Task<()>>,
 }
 
 impl Account {
@@ -77,10 +105,12 @@ impl Account {
             page: None,
             session,
             sign_in: SignIn::Idle,
+            trial: Trial::Idle,
             refresh: Refresh::Idle,
             notice: None,
             _sign_in_task: None,
             _refresh_task: None,
+            _trial_task: None,
         }
     }
 
@@ -145,21 +175,21 @@ impl AppState {
     /// Opens convt.app/device in the browser with a new sign-in flow. A flow
     /// already waiting is replaced, so only the newest page's link counts.
     pub fn start_sign_in(&mut self, cx: &mut Context<Self>) {
-        let account = &mut self.account;
         // A link already came back and its code is being traded; a second
         // flow now would race the first one's result.
-        if account.sign_in == SignIn::Finishing {
+        if self.account.sign_in == SignIn::Finishing {
             return;
         }
-        account.notice = None;
+        self.account.notice = None;
         let pending = match Pending::new() {
             Ok(pending) => pending,
             Err(e) => {
-                account.sign_in = SignIn::Failed(format!("Sign-in couldn't start: {e}"));
+                self.sign_in_failed(format!("Sign-in couldn't start: {e}"));
                 cx.notify();
                 return;
             }
         };
+        let account = &mut self.account;
         let page = pending.url(&account.url, &device_name(), os_name(), VERSION);
         account.pending = Some(pending);
         account.page = Some(page.clone());
@@ -186,8 +216,109 @@ impl AppState {
             self.account.pending = None;
             self.account.page = None;
             self.account.sign_in = SignIn::Idle;
+            if self.account.trial == Trial::SigningIn {
+                self.account.trial =
+                    Trial::Failed("Sign-in was cancelled, so the trial didn't start.".into());
+            }
             cx.notify();
         }
+    }
+
+    /// A sign-in that ended without signing in. A trial waiting on it
+    /// doesn't start.
+    fn sign_in_failed(&mut self, message: String) {
+        if self.account.trial == Trial::SigningIn {
+            self.account.trial = Trial::Failed(format!("{message} The trial didn't start."));
+        }
+        self.account.sign_in = SignIn::Failed(message);
+    }
+
+    /// Starts the free trial: signs in first when this computer isn't signed
+    /// in, then asks convt.app for the account's key and, when that isn't a
+    /// paid one, for the trial. Does nothing while conversions are allowed
+    /// or a sign-in is being finished.
+    pub fn start_trial(&mut self, cx: &mut Context<Self>) {
+        if self.license.allows_conversion()
+            || self.account.trial == Trial::Starting
+            || self.account.sign_in == SignIn::Finishing
+        {
+            return;
+        }
+        self.account.notice = None;
+        self.account.trial = Trial::SigningIn;
+        if self.account.session.is_some() {
+            // Signed in already: check for a key the account bought first,
+            // as after a sign-in; `renewed` then asks for the trial.
+            self.refresh_license(cx);
+            return;
+        }
+        self.start_sign_in(cx);
+    }
+
+    /// Asks convt.app for this account's trial on this computer.
+    fn request_trial(&mut self, cx: &mut Context<Self>) {
+        let Some(token) = self.account.session.as_ref().map(|s| s.token.clone()) else {
+            return;
+        };
+        let hash = match self.licensing.device_hash() {
+            Ok(hash) => hash,
+            Err(e) => {
+                self.account.trial = Trial::Failed(format!("The trial couldn't start: {e}"));
+                cx.notify();
+                return;
+            }
+        };
+        self.account.trial = Trial::Starting;
+        let api = self.account.api.clone();
+        self.account._trial_task = Some(background(
+            cx,
+            move || api.start_trial(&token, &hash, VERSION),
+            |state, result, cx| state.trial_reply(result, cx),
+        ));
+        cx.notify();
+    }
+
+    fn trial_reply(&mut self, result: Result<TrialReply, ApiError>, cx: &mut Context<Self>) {
+        self.account.trial = match result {
+            Ok(reply) => {
+                if let Some(now) = reply.server_now {
+                    self.licensing.record_server_time(now);
+                }
+                let offered = self.licensing.offer_key(&reply.key);
+                self.license = self.licensing.state();
+                match (offered, &self.license) {
+                    (Err(ActivateError::Store(e)), _) => {
+                        Trial::Failed(format!("The trial key couldn't be saved: {e}"))
+                    }
+                    (Err(_), _) => {
+                        Trial::Failed("convt.app sent a trial this build doesn't accept.".into())
+                    }
+                    (Ok(_), State::Trial { .. }) => Trial::Started,
+                    // A paid key was already here.
+                    (Ok(_), State::Licensed(_)) => Trial::Idle,
+                    (Ok(_), State::TrialEnded) => Trial::Ended,
+                    (Ok(_), state) => Trial::Failed(state.blocked_reason().unwrap_or_default()),
+                }
+            }
+            Err(ApiError::DeviceUsed) => Trial::DeviceUsed,
+            Err(ApiError::SignedOut) => {
+                self.forget_revoked_session();
+                Trial::Failed(
+                    "This computer was signed out of convt.app. Sign in again to start the trial."
+                        .into(),
+                )
+            }
+            Err(e) => Trial::Failed(format!("The trial didn't start. {e}")),
+        };
+        self.reselect_update();
+        cx.notify();
+    }
+
+    fn forget_revoked_session(&mut self) {
+        if let Err(e) = self.licensing.clear_session() {
+            tracing::warn!(error = %e, "could not forget a revoked sign-in");
+        }
+        self.account.session = None;
     }
 
     /// Handles a `convt://auth` link. It counts only while this app waits
@@ -215,19 +346,19 @@ impl AppState {
         account.page = None;
         account.notice = None;
         if pending.expired(now) {
-            account.sign_in =
-                SignIn::Failed("The sign-in took too long. Start it again from convt.".into());
+            self.sign_in_failed("The sign-in took too long. Start it again from convt.".into());
             cx.notify();
             return Err("expired".into());
         }
         let code = match reply.code {
             Ok(code) => code,
             Err(_) => {
-                account.sign_in = SignIn::Failed("Sign-in was cancelled in the browser.".into());
+                self.sign_in_failed("Sign-in was cancelled in the browser.".into());
                 cx.notify();
                 return Err("cancelled".into());
             }
         };
+        let account = &mut self.account;
         account.sign_in = SignIn::Finishing;
         let api = account.api.clone();
         let verifier = pending.verifier().to_string();
@@ -250,10 +381,11 @@ impl AppState {
             Ok(session) => {
                 self.account.session = Some(session);
                 self.account.sign_in = SignIn::Idle;
-                // Signing in was the user's action; fetch the Pro key now.
+                // Signing in was the user's action; fetch the account's key
+                // now. A trial waiting on the sign-in starts after that.
                 self.refresh_license(cx);
             }
-            Err(e) => self.account.sign_in = SignIn::Failed(e),
+            Err(e) => self.sign_in_failed(e),
         }
         cx.notify();
     }
@@ -271,9 +403,11 @@ impl AppState {
             return;
         }
         self.account.sign_in = SignIn::Idle;
+        self.account.trial = Trial::Idle;
         self.account.refresh = Refresh::Idle;
         self.account.notice = Some("Signed out. The license on this computer stays.".into());
         self.account._refresh_task = None;
+        self.account._trial_task = None;
         // Best effort: the dashboard can sign this computer out too.
         let api = self.account.api.clone();
         self.account._sign_in_task = Some(background(
@@ -288,19 +422,21 @@ impl AppState {
         cx.notify();
     }
 
-    /// The launch check: asks for the current Pro key if signed in and not
-    /// yet asked today (UTC).
+    /// The launch check: asks for the current key if signed in and not yet
+    /// asked today (UTC), or right away when the clock went back and a trial
+    /// needs convt.app's time.
     pub fn renew_on_launch(&mut self, cx: &mut Context<Self>) {
         let today = date::from_days(today());
         if self.account.session.is_some()
-            && self.settings.license_checked.as_deref() != Some(today.as_str())
+            && (self.settings.license_checked.as_deref() != Some(today.as_str())
+                || self.license == State::NeedsCheck)
         {
             self.refresh_license(cx);
         }
     }
 
-    /// Asks convt.app for the current Pro key. Does nothing while signed
-    /// out or while a refresh runs.
+    /// Asks convt.app for the current key. Does nothing while signed out or
+    /// while a refresh runs.
     pub fn refresh_license(&mut self, cx: &mut Context<Self>) {
         let Some(token) = self.account.session.as_ref().map(|s| s.token.clone()) else {
             return;
@@ -321,16 +457,33 @@ impl AppState {
         cx.notify();
     }
 
-    fn renewed(&mut self, result: Result<Option<String>, ApiError>, cx: &mut Context<Self>) {
+    fn renewed(&mut self, result: Result<KeyReply, ApiError>, cx: &mut Context<Self>) {
         let kept = "The license on this computer stays as it is.";
-        self.account.refresh = match result {
+        if let Ok(KeyReply {
+            server_now: Some(now),
+            ..
+        }) = &result
+        {
+            self.licensing.record_server_time(*now);
+        }
+        let failure = result.as_ref().err().map(ApiError::to_string);
+        self.account.refresh = match result.map(|r| r.key) {
             Ok(Some(key)) => match self.licensing.offer_key(&key) {
+                Ok(Renewed::Stored(l)) if l.plan.is_paid() => Refresh::Done(format!(
+                    "Got your {} key, with updates until {}.",
+                    l.plan.name(),
+                    l.updates_until
+                )),
                 Ok(Renewed::Stored(l)) => Refresh::Done(format!(
-                    "Got your Pro key, with updates until {}.",
+                    "Got your trial key. It runs until {}.",
+                    l.updates_until
+                )),
+                Ok(Renewed::Kept(l)) if l.plan.is_paid() => Refresh::Done(format!(
+                    "Your license is up to date, with updates until {}.",
                     l.updates_until
                 )),
                 Ok(Renewed::Kept(l)) => Refresh::Done(format!(
-                    "Your license is up to date, with updates until {}.",
+                    "Your trial is up to date. It runs until {}.",
                     l.updates_until
                 )),
                 Err(ActivateError::Store(e)) => {
@@ -340,20 +493,50 @@ impl AppState {
                     "convt.app sent a key this build doesn't accept. {kept}"
                 )),
             },
-            Ok(None) => Refresh::Done(format!("This account has no Pro key on convt.app. {kept}")),
+            Ok(None) => Refresh::Done(format!(
+                "This account has no license key on convt.app. {kept}"
+            )),
             Err(ApiError::SignedOut) => {
                 // Revoked from the dashboard: forget the token here too.
-                if let Err(e) = self.licensing.clear_session() {
-                    tracing::warn!(error = %e, "could not forget a revoked sign-in");
-                }
-                self.account.session = None;
+                self.forget_revoked_session();
                 Refresh::Failed(format!(
-                    "This computer was signed out of convt.app. Sign in again to keep Pro renewing. {kept}"
+                    "This computer was signed out of convt.app. Sign in again to keep your key renewing. {kept}"
                 ))
             }
             Err(e) => Refresh::Failed(format!("Couldn't refresh the license. {e} {kept}")),
         };
         self.license = self.licensing.state();
+        if self.license == State::NeedsCheck && matches!(self.account.refresh, Refresh::Done(_)) {
+            self.account.refresh = Refresh::Failed(
+                "This computer's clock is behind convt.app's. Set the right date and time, then \
+                 click Refresh license."
+                    .into(),
+            );
+        }
+        // A trial waiting on this sign-in starts now, unless the account
+        // already had a key that converts.
+        if self.account.trial == Trial::SigningIn {
+            match &self.license {
+                State::Licensed(_) => self.account.trial = Trial::Idle,
+                State::Trial { .. } => self.account.trial = Trial::Started,
+                // Without knowing whether the account owns a key, starting
+                // the trial could use it up for nothing.
+                _ if let Some(e) = &failure
+                    && self.account.session.is_some() =>
+                {
+                    self.account.trial = Trial::Failed(format!(
+                        "convt couldn't check this account's license, so the trial didn't start. {e}"
+                    ))
+                }
+                _ if self.account.session.is_some() => self.request_trial(cx),
+                _ => {
+                    self.account.trial = Trial::Failed(
+                        "This computer was signed out of convt.app, so the trial didn't start."
+                            .into(),
+                    )
+                }
+            }
+        }
         // A renewed key may cover an update that needed renewing.
         self.reselect_update();
         cx.notify();

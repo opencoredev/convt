@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import vectors from "../../../crates/convt-license/tests/vectors.json";
 import ids from "../vectors/ids.json";
+import trialVectors from "../vectors/trial.json";
 import {
   apiKeyPrefix,
   base64urlDecode,
@@ -79,6 +80,35 @@ describe("P0 vectors", async () => {
     const seed = hex(vectors.seed_hex);
     expect(parseSeed(`${base64urlEncode(seed)}\n`)).toEqual(seed);
     expect(() => parseSeed("short")).toThrow();
+  });
+});
+
+describe("trial vectors", async () => {
+  const key = await importSigningKey(hex(trialVectors.seed_hex));
+  const vk = await importVerifyKey(trialVectors.public_key_b64url);
+
+  test("they use the P0 test seed", () => {
+    expect(trialVectors.seed_hex).toBe(vectors.seed_hex);
+    expect(trialVectors.public_key_b64url).toBe(vectors.public_key_b64url);
+  });
+
+  for (const c of trialVectors.cases) {
+    test(`sign reproduces and verify accepts: ${c.name}`, async () => {
+      expect(await sign(c.license as License, key)).toBe(c.token);
+      expect(await verify(c.token, vk)).toEqual({ ok: true, license: c.license as License });
+    });
+  }
+
+  test("an unknown plan is malformed even with a valid signature", async () => {
+    const license = { ...trialVectors.cases[0].license, plan: "lifetime" };
+    const payload = base64urlEncode(new TextEncoder().encode(JSON.stringify(license)));
+    const sig = new Uint8Array(
+      await crypto.subtle.sign("Ed25519", key, new TextEncoder().encode(payload)),
+    );
+    expect(await verify(`${payload}.${base64urlEncode(sig)}`, vk)).toEqual({
+      ok: false,
+      error: "malformed",
+    });
   });
 });
 

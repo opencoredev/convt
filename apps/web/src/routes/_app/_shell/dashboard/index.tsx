@@ -35,7 +35,7 @@ function OverviewPage() {
             <p className="text-[13px]/4 text-ink-2">
               {data.license
                 ? "Your license is on this account. Sign in inside the app to unlock it."
-                : "Every format works free for 7 days. No account or card to start."}
+                : "Every format works free for 7 days. Sign in from the app to start, no card needed."}
             </p>
           </div>
           <PrimaryLink href={links.download} className="shrink-0 self-start sm:self-auto">

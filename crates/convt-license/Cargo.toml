@@ -14,15 +14,27 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 # The `client` feature: trial, key storage and the check before converting,
-# plus desktop sign-in and Pro renewal (`account`).
+# plus desktop sign-in, the trial and key renewal (`account`).
+dirs = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
+hmac = { workspace = true, optional = true }
 keyring = { workspace = true, optional = true }
+machine-uid = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 ureq = { version = "=3.1.4", default-features = false, features = ["rustls"], optional = true }
 
 [features]
-client = ["dep:getrandom", "dep:keyring", "dep:sha2", "dep:tracing", "dep:ureq"]
+client = [
+  "dep:dirs",
+  "dep:getrandom",
+  "dep:hmac",
+  "dep:keyring",
+  "dep:machine-uid",
+  "dep:sha2",
+  "dep:tracing",
+  "dep:ureq",
+]
 
 [dev-dependencies]
 getrandom.workspace = true

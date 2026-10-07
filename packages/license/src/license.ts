@@ -4,7 +4,16 @@
 
 import { decode, encode } from "./base64url";
 
-export type Plan = "desktop" | "pro";
+export const plans = ["desktop", "pro", "trial"] as const;
+
+/**
+ * `trial` is the free desktop trial: its `updates_until` is the last UTC day it
+ * works, judged against today's date, not the build date. Builds before the
+ * trial plan reject it as malformed, so it can never pass as a paid key.
+ */
+export type Plan = (typeof plans)[number];
+
+const isPlan = (value: unknown): value is Plan => plans.some((p) => p === value);
 
 /** Field order matters: it must match the Rust struct so tokens are identical. */
 export type License = {
@@ -13,7 +22,10 @@ export type License = {
   plan: Plan;
   /** Issue date, `YYYY-MM-DD`. */
   issued: string;
-  /** Builds dated on or before this day are covered, `YYYY-MM-DD`. */
+  /**
+   * Builds dated on or before this day are covered, `YYYY-MM-DD`. For a trial, the
+   * last day the trial works.
+   */
   updates_until: string;
 };
 
@@ -96,7 +108,7 @@ export async function verify(
     if (
       typeof value.id !== "string" ||
       typeof value.email !== "string" ||
-      (value.plan !== "desktop" && value.plan !== "pro") ||
+      !isPlan(value.plan) ||
       !isDate(value.issued) ||
       !isDate(value.updates_until)
     )

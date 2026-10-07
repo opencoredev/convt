@@ -37,6 +37,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
 import { Route as ApiDeviceSignOutRouteImport } from './routes/api/device/sign-out'
 import { Route as ApiDeviceTokenRouteImport } from './routes/api/device/token'
+import { Route as ApiDeviceTrialRouteImport } from './routes/api/device/trial'
 import { Route as AppShellDashboardIndexRouteImport } from './routes/_app/_shell/dashboard/index'
 import { Route as AppShellDashboardApiRouteImport } from './routes/_app/_shell/dashboard/api'
 import { Route as AppShellDashboardBillingRouteImport } from './routes/_app/_shell/dashboard/billing'
@@ -180,6 +181,11 @@ const ApiDeviceTokenRoute = ApiDeviceTokenRouteImport.update({
   path: '/api/device/token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDeviceTrialRoute = ApiDeviceTrialRouteImport.update({
+  id: '/api/device/trial',
+  path: '/api/device/trial',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppShellDashboardIndexRoute = AppShellDashboardIndexRouteImport.update({
   id: '/dashboard/',
   path: '/dashboard/',
@@ -234,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
+  '/api/device/trial': typeof ApiDeviceTrialRoute
   '/sign-in/': typeof AppSignInIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
+  '/api/device/trial': typeof ApiDeviceTrialRoute
   '/sign-in': typeof AppSignInIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
@@ -302,6 +310,7 @@ export interface FileRoutesById {
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
+  '/api/device/trial': typeof ApiDeviceTrialRoute
   '/_app/sign-in/': typeof AppSignInIndexRoute
   '/_app/_shell/dashboard/api': typeof AppShellDashboardApiRoute
   '/_app/_shell/dashboard/billing': typeof AppShellDashboardBillingRoute
@@ -336,6 +345,7 @@ export interface FileRouteTypes {
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
+    | '/api/device/trial'
     | '/sign-in/'
     | '/dashboard/api'
     | '/dashboard/billing'
@@ -368,6 +378,7 @@ export interface FileRouteTypes {
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
+    | '/api/device/trial'
     | '/sign-in'
     | '/dashboard/api'
     | '/dashboard/billing'
@@ -403,6 +414,7 @@ export interface FileRouteTypes {
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
+    | '/api/device/trial'
     | '/_app/sign-in/'
     | '/_app/_shell/dashboard/api'
     | '/_app/_shell/dashboard/billing'
@@ -426,6 +438,7 @@ export interface RootRouteChildren {
   ApiDeviceLicenseRoute: typeof ApiDeviceLicenseRoute
   ApiDeviceSignOutRoute: typeof ApiDeviceSignOutRoute
   ApiDeviceTokenRoute: typeof ApiDeviceTokenRoute
+  ApiDeviceTrialRoute: typeof ApiDeviceTrialRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -626,6 +639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDeviceTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/device/trial': {
+      id: '/api/device/trial'
+      path: '/api/device/trial'
+      fullPath: '/api/device/trial'
+      preLoaderRoute: typeof ApiDeviceTrialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/_shell/dashboard/': {
       id: '/_app/_shell/dashboard/'
       path: '/dashboard'
@@ -743,7 +763,18 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDeviceLicenseRoute: ApiDeviceLicenseRoute,
   ApiDeviceSignOutRoute: ApiDeviceSignOutRoute,
   ApiDeviceTokenRoute: ApiDeviceTokenRoute,
+  ApiDeviceTrialRoute: ApiDeviceTrialRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

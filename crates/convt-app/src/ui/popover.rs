@@ -363,10 +363,11 @@ fn job_row(entry: &Entry, now: Instant, p: &Palette) -> Div {
 fn license_line(state: &State) -> Option<String> {
     match state {
         State::Unrestricted => None,
-        State::Trial { started: None, .. } => Some("Trial · 7 days".into()),
         State::Trial { days_left: 1, .. } => Some("Trial · last day".into()),
         State::Trial { days_left, .. } => Some(format!("Trial · {days_left} days left")),
+        State::NoTrial => Some("No trial yet".into()),
         State::TrialEnded => Some("Trial ended".into()),
+        State::NeedsCheck => Some("Trial needs a check".into()),
         State::Licensed(_) => Some("Licensed".into()),
         State::NotCovered(_) => Some("Updates ended".into()),
     }

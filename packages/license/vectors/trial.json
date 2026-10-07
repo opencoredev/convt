@@ -1,0 +1,18 @@
+{
+  "comment": "Trial-plan vectors, signed with the same public test seed as crates/convt-license/tests/vectors.json ([7; 32], never for real licenses). A trial started on 2026-10-07 works through 2026-10-13 (start + 6 days).",
+  "public_key_b64url": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+  "seed_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "cases": [
+    {
+      "name": "trial",
+      "license": {
+        "email": "Trial test account",
+        "id": "trl_test_trial",
+        "issued": "2026-10-07",
+        "plan": "trial",
+        "updates_until": "2026-10-13"
+      },
+      "token": "eyJpZCI6InRybF90ZXN0X3RyaWFsIiwiZW1haWwiOiJUcmlhbCB0ZXN0IGFjY291bnQiLCJwbGFuIjoidHJpYWwiLCJpc3N1ZWQiOiIyMDI2LTEwLTA3IiwidXBkYXRlc191bnRpbCI6IjIwMjYtMTAtMTMifQ.YwGxr92hnktE7tf1YHrsRE_E2oFvzAyyb5QYh8dYzjERTCdwcRS7-FF0cmfkj2BYoPnIKbELtoYJLNZggn_TDA"
+    }
+  ]
+}

@@ -9,9 +9,11 @@ import {
   type BillingRpc as Rpc,
   ConfigError,
   createBillingService,
+  currentKey,
   currentProKey,
   createPolarProvider,
   loadCatalog,
+  startTrial,
   loadSigningKey,
   readBillingEnv,
   type BillingEnv,
@@ -185,6 +187,16 @@ export class BillingRpc extends WorkerEntrypoint<Env> implements Rpc {
   /** P8: the Pro key the desktop app renews to. A read; issuance stays with ingest. */
   currentProKey(userId: string) {
     return this.service.withCtx((c) => currentProKey(c.db, userId));
+  }
+  /** CNV-56: the account's desktop trial, started if it has none. */
+  startTrial(userId: string, storedDeviceHash: string, now: Date) {
+    return this.service.withCtx((c) =>
+      startTrial(c, { userId, deviceHash: storedDeviceHash, now }),
+    );
+  }
+  /** CNV-56: the key the desktop app should hold (any paid plan, or a Pro trial). */
+  currentKey(userId: string, now: Date) {
+    return this.service.withCtx((c) => currentKey(c, { userId, now }));
   }
   async requestDeletion(userId: string) {
     const d = await this.service.requestDeletion(userId);

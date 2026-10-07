@@ -18,7 +18,16 @@ export type AppEnv = {
   google: { clientId: string; clientSecret: string } | null;
   /** Public PostHog project key + host for the marketing site. Null when unset. */
   posthog: { key: string; host: string } | null;
+  /**
+   * The pepper for desktop device hashes (CNV-56). Null in production when
+   * DEVICE_HASH_SECRET is unset, which turns /api/device/trial off; elsewhere a
+   * fixed development value stands in.
+   */
+  deviceHashSecret: string | null;
 };
+
+/** The DEVICE_HASH_SECRET outside production. Refused in production. */
+export const devDeviceHashSecret = "convt-dev-device-hash-secret-never-for-production";
 
 export type RawEnv = Record<string, unknown>;
 
@@ -97,6 +106,15 @@ export function readEnv(raw: RawEnv): AppEnv {
   const posthogHost = str(raw, "POSTHOG_HOST") ?? "https://us.i.posthog.com";
   const posthog = posthogKey ? { key: posthogKey, host: posthogHost.replace(/\/$/, "") } : null;
 
+  // Not required to boot: a site deployed before the secret exists keeps serving
+  // everything but /api/device/trial.
+  const deviceSecret = str(raw, "DEVICE_HASH_SECRET");
+  if (deviceSecret !== undefined && deviceSecret.length < 32)
+    throw new Error("DEVICE_HASH_SECRET is shorter than 32 characters");
+  if (production && deviceSecret === devDeviceHashSecret)
+    throw new Error("DEVICE_HASH_SECRET is the development value");
+  const deviceHashSecret = deviceSecret ?? (production ? null : devDeviceHashSecret);
+
   return {
     env: envName,
     sales,
@@ -107,6 +125,7 @@ export function readEnv(raw: RawEnv): AppEnv {
     github: pair("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"),
     google: pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
     posthog,
+    deviceHashSecret,
   };
 }
 

@@ -1585,9 +1585,12 @@ name = "convt-license"
 version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
+ "dirs 6.0.0",
  "ed25519-dalek",
  "getrandom 0.3.4",
+ "hmac 0.12.1",
  "keyring",
+ "machine-uid",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4780,6 +4783,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a1b95cd5421ec55b445b5ae102f5ea0e768de1f82bd3001e11f426c269c3aea"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "machine-uid"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe0d6336d341b10ae80e099b8f3c59f34bf8aef66ef25e83aa98bf2955c0ae7"
+dependencies = [
+ "libc",
+ "windows-registry 0.6.1",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

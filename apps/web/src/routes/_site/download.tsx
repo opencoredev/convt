@@ -65,7 +65,7 @@ function DownloadPage() {
           <p>
             The app, the right-click menu and the{" "}
             <code className="font-mono text-[15px]">convt</code> command line tool in one install.
-            Every download starts a 7-day free trial; no account needed.
+            Sign in to a free convt.app account from the app to start a 7-day trial.
           </p>
         </PageHeader>
         {!published && (

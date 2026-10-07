@@ -14,4 +14,5 @@ export * from "./reconcile";
 export * from "./env";
 export * from "./service";
 export * from "./renewal";
+export * from "./trial";
 export type * from "./rpc";

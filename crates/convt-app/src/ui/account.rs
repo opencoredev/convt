@@ -1,21 +1,22 @@
 //! The convt.app sign-in as Settings and first run show it: signed out,
-//! waiting for the browser, finishing, signed in, failed, and the last
-//! license refresh.
+//! waiting for the browser, finishing, signed in, failed, the last license
+//! refresh, and where starting the free trial stands.
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::theme::{Clickable, Palette, secondary_button, text, text_button};
 use convt_license::Plan;
-use convt_license::client;
+use convt_license::client::{self, BUY_URL, CONTACT_URL};
 
-use crate::account::{Refresh, SignIn};
+use crate::account::{Refresh, SignIn, Trial};
 use crate::model::AppState;
 
 /// What the automatic license refresh sends, for Settings and first run.
-pub const REFRESH_NOTE: &str = "While you're signed in, convt asks convt.app for your current Pro key \
-     once a day at launch and when you click Refresh license. It sends this computer's sign-in \
-     token and the app version, never your files.";
+pub const REFRESH_NOTE: &str = "While you're signed in, convt asks convt.app for your current \
+     license key once a day at launch and when you click Refresh license. It sends this \
+     computer's sign-in token and the app version, never your files. Starting the trial also \
+     sends a one-way hash of this computer's ID, so each computer gets one trial.";
 
 /// A line of text tests can read by `id`.
 fn line(id: &'static str, message: impl Into<SharedString>, color: Hsla) -> Clickable {
@@ -71,6 +72,11 @@ pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 (client::State::Licensed(l), _) if l.plan == Plan::Pro => {
                     format!(" · Pro until {}", l.updates_until)
                 }
+                (client::State::Licensed(_), _) => " · Desktop license".into(),
+                (client::State::Trial { days_left, .. }, _) => match days_left {
+                    1 => " · trial, last day".into(),
+                    n => format!(" · trial, {n} days left"),
+                },
                 (_, Refresh::Running) => " · fetching your key…".into(),
                 _ => String::new(),
             };
@@ -81,7 +87,7 @@ pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
             ))
         }
         (SignIn::Idle, None) => row
-            .child(text(12., 16., p.secondary).child("Have Pro?"))
+            .child(text(12., 16., p.secondary).child("Bought on convt.app?"))
             .child(
                 text_button("sign-in", "Sign in with convt.app", p.green, 12.)
                     .font_weight(FontWeight::MEDIUM)
@@ -107,7 +113,7 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
     let account = &state.account;
     let heading = text(13., 16., p.text)
         .font_weight(FontWeight::SEMIBOLD)
-        .child("Pro renewal");
+        .child("convt.app account");
     let body = div().flex().flex_col().gap(px(10.));
     let body = match (&account.sign_in, account.email()) {
         (SignIn::Waiting, _) => body
@@ -179,9 +185,10 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 .children(refresh)
                 .when(!matches!(failed, SignIn::Failed(_)), |d| {
                     d.child(text(12., 17., p.secondary).child(
-                        "Pro keys last one billing period. Sign in with your convt.app account \
-                         and convt fetches each new key for you. A Desktop license never needs \
-                         an account.",
+                        "Sign in with your convt.app account to get the key you bought \
+                         without pasting it; Start 7-day trial signs you in too. Pro keys last one billing \
+                         period, and convt fetches each new one for you. A pasted license key \
+                         never needs an account.",
                     ))
                 })
                 .child(
@@ -204,6 +211,7 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         .notice
         .clone()
         .map(|n| line("account-notice", n, p.secondary));
+    let trial = trial_line(app, p, cx);
     div()
         .flex()
         .flex_col()
@@ -214,6 +222,7 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         .border_t_1()
         .border_color(p.hairline)
         .child(heading)
+        .children(trial)
         .child(body)
         .children(notice)
         .child(
@@ -223,4 +232,63 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 .aria_label(REFRESH_NOTE)
                 .child(text(12., 17., p.secondary).child(REFRESH_NOTE)),
         )
+}
+
+/// Where starting the trial stands, for the License tab, with what the user
+/// can do next. Nothing while no trial was asked for and none is needed.
+fn trial_line(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Div> {
+    let state = app.read(cx);
+    let buy = || {
+        text_button("trial-buy-license", "Buy a license", p.green, 12.)
+            .on_click(|_, _, cx| cx.open_url(BUY_URL))
+    };
+    let column = || div().flex().flex_col().gap(px(8.));
+    let row = || div().flex().items_center().gap(px(14.));
+    Some(match (&state.account.trial, &state.license) {
+        (Trial::SigningIn, _) => column().child(line(
+            "trial-status",
+            "Your free trial starts once you're signed in.",
+            p.text,
+        )),
+        (Trial::Starting, _) => {
+            column().child(line("trial-status", "Starting your trial…", p.text))
+        }
+        (Trial::Started, client::State::Trial { .. }) => {
+            column().child(line("trial-status", state.license.summary(), p.text))
+        }
+        (Trial::DeviceUsed, _) => column()
+            .child(line("trial-status", super::DEVICE_USED, p.error))
+            .child(
+                row().child(buy()).child(
+                    text_button("trial-contact", "Contact us", p.secondary, 12.)
+                        .on_click(|_, _, cx| cx.open_url(CONTACT_URL)),
+                ),
+            ),
+        (Trial::Ended, _) => column()
+            .child(line(
+                "trial-status",
+                "The free trial on this account has ended. Buy a license to keep converting.",
+                p.error,
+            ))
+            .child(row().child(buy())),
+        (Trial::Failed(e), _) => column()
+            .child(line("trial-status", e.clone(), p.error))
+            .child(
+                row()
+                    .child(
+                        text_button("trial-retry", "Try again", p.green, 12.)
+                            .on_click(on_app(app, AppState::start_trial)),
+                    )
+                    .child(buy()),
+            ),
+        // No trial yet, or a bought key this build has outgrown: one click
+        // starts it, signing in first if needed. A bought key stays stored.
+        (_, client::State::NoTrial | client::State::NotCovered(_)) => column().child(
+            div().flex().child(
+                secondary_button("start-trial", "Start 7-day trial", p)
+                    .on_click(on_app(app, AppState::start_trial)),
+            ),
+        ),
+        _ => return None,
+    })
 }
