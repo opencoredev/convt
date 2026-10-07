@@ -31,9 +31,9 @@ jobs:
         suite: [core, desktop]
         include:
           - os: Linux
-            runner: ubuntu-24.04
+            runner: tenki-standard-large-8c-16g
           - os: macOS
-            runner: macos-14
+            runner: tenki-macos-26-medium
           - os: Windows
             runner: windows-2025
     runs-on: ${{ matrix.runner }}
@@ -106,7 +106,7 @@ jobs:
 
   web:
     name: Web
-    runs-on: ubuntu-24.04
+    runs-on: tenki-standard-medium-4c-8g
     steps:
       - uses: actions/checkout@v5
       - name: Verify dispatched commit
@@ -140,7 +140,7 @@ jobs:
 
   database:
     name: Database integration tests
-    runs-on: ubuntu-24.04
+    runs-on: tenki-standard-large-8c-16g
     services:
       postgres:
         image: postgres:16
