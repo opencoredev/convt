@@ -6,7 +6,7 @@ import { Badge, Card, PageTitle, cx } from "#/components/app/ui";
 import { getLicenses } from "#/lib/account";
 import { plural } from "#/lib/format";
 
-// No artboard exists for this page. It reuses the license card and the Macs list
+// No artboard exists for this page. It reuses the license card and the devices list
 // from the Overview design.
 export const Route = createFileRoute("/_app/_shell/dashboard/licenses")({
   head: () => ({ meta: [{ title: "Licenses · convt" }] }),
@@ -56,8 +56,8 @@ function LicensesPage() {
                   {license.revoked ? null : (
                     <p className="text-[13px]/4 text-ink-2">
                       {license.activeMacs > 0
-                        ? `Active on ${plural(license.activeMacs, "Mac")}`
-                        : "Not active on any Mac"}
+                        ? `Active on ${plural(license.activeMacs, "device")}`
+                        : "Not active on any device"}
                     </p>
                   )}
                 </div>

@@ -6,8 +6,11 @@ import { useNotice } from "#/components/app/notice";
 import { PrimaryButton, SecondaryLink, TextButton, cx, focusRing } from "#/components/app/ui";
 import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
+import { checkoutAside, downloadAction } from "#/lib/checkout-copy";
+import type { Os } from "#/lib/platform";
 import { fetchCheckoutResult } from "#/server/billing-fns";
 import { checkoutGiveUp, type CheckoutView } from "#/server/views";
+import { visitorOs } from "#/server/visitor-os";
 
 // Where the provider sends the buyer back. The page renders with no order data;
 // the key arrives only in the client-side server function call (private, no-store)
@@ -18,6 +21,8 @@ export const Route = createFileRoute("/_app/checkout/success")({
     ...(typeof search.checkout_id === "string" ? { checkout_id: search.checkout_id } : {}),
     ...(typeof search.error === "string" ? { error: search.error } : {}),
   }),
+  // The visitor's OS names the download step; nothing about the order loads here.
+  loader: async () => ({ os: await visitorOs() }),
   head: () => ({
     meta: [{ title: "Checkout · convt" }, { name: "referrer", content: "no-referrer" }],
   }),
@@ -43,26 +48,9 @@ const errors: Record<string, string> = {
   already_enrolled: "This account already has API billing.",
 };
 
-const keyAside = {
-  title: "WHAT'S NEXT",
-  items: [
-    "Download convt for your Mac",
-    "Open the key in the app, or paste it in Settings",
-    "Find it again under Licenses",
-  ],
-};
-
-const trialAside = {
-  title: "WHAT'S NEXT",
-  items: [
-    "Download convt for your Mac",
-    "Open the app and start converting",
-    "Cancel any time from Billing before the first charge",
-  ],
-};
-
 function SuccessPage() {
   const { checkout_id: checkoutId, error } = Route.useSearch();
+  const { os } = Route.useLoaderData();
   const [state, setState] = useState<State>(
     error
       ? { state: "error", reason: error }
@@ -127,9 +115,9 @@ function SuccessPage() {
   }, [checkoutId, error]);
 
   return (
-    <AuthLayout aside={state.state === "trial" ? trialAside : keyAside}>
+    <AuthLayout aside={checkoutAside(state.state === "trial" ? "trial" : "key", os)}>
       <div aria-live="polite" className="flex flex-col gap-6">
-        <Body state={state} />
+        <Body state={state} os={os} />
       </div>
     </AuthLayout>
   );
@@ -146,7 +134,7 @@ function Heading({ children, eyebrow }: { children: React.ReactNode; eyebrow?: s
 
 const lead = "text-sm/5 text-ink-2";
 
-function Body({ state }: { state: State }) {
+function Body({ state, os }: { state: State; os: Os | null }) {
   switch (state.state) {
     case "loading":
     case "pending":
@@ -158,13 +146,13 @@ function Body({ state }: { state: State }) {
         </>
       );
     case "ready":
-      return <Ready state={state} />;
+      return <Ready state={state} os={os} />;
     case "trial":
       return (
         <>
           <Heading eyebrow="CONVT PRO">Your trial has started</Heading>
           <p className={lead}>You can go download the app here.</p>
-          <Actions primary={{ href: links.download, label: "Download convt" }} />
+          <Actions primary={downloadAction(os)} />
         </>
       );
     case "api_enrolled":
@@ -234,7 +222,7 @@ function Body({ state }: { state: State }) {
   }
 }
 
-function Ready({ state }: { state: Extract<CheckoutView, { state: "ready" }> }) {
+function Ready({ state, os }: { state: Extract<CheckoutView, { state: "ready" }>; os: Os | null }) {
   const notice = useNotice();
   const product = state.product === "pro" ? "convt Pro" : "convt Desktop";
   return (
@@ -271,7 +259,7 @@ function Ready({ state }: { state: Extract<CheckoutView, { state: "ready" }> }) 
         <li>Open in convt asks the app to confirm before it adds the key.</li>
       </ul>
       <Actions
-        primary={{ href: links.download, label: "Download convt" }}
+        primary={downloadAction(os)}
         secondary={{ href: "/dashboard/licenses", label: "Go to Licenses" }}
       />
     </>

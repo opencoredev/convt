@@ -6,7 +6,7 @@ import { endSession } from "#/server/account-fns";
 import { useNotice } from "./notice";
 import { SectionTitle, TextButton } from "./ui";
 
-/** The "Macs" list on the overview and licenses pages. */
+/** The "Devices" list on the overview and licenses pages: computers signed in to the app. */
 export function MacList({ macs }: { macs: Mac[] }) {
   const notice = useNotice();
   const router = useRouter();
@@ -14,12 +14,12 @@ export function MacList({ macs }: { macs: Mac[] }) {
   return (
     <section aria-labelledby="macs-title" className="flex flex-col pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-3">
-        <SectionTitle id="macs-title">Macs</SectionTitle>
-        <p className="text-[13px]/4 text-ink-2">Sign out a Mac to move your license.</p>
+        <SectionTitle id="macs-title">Devices</SectionTitle>
+        <p className="text-[13px]/4 text-ink-2">Sign out a device to move your license.</p>
       </div>
       {macs.length === 0 ? (
         <p className="border-y border-line py-3.5 text-sm/4.5 text-ink-2">
-          No Macs yet. Sign in inside the app to add one.
+          No devices yet. Sign in inside the app to add one.
         </p>
       ) : (
         <ul className="border-b border-line">
