@@ -16,10 +16,10 @@ The artifact is unsigned. Public-release builds remain blocked because the full 
 
 ## Public Release MSI
 
-The Release workflow builds with `-VerificationOnly` and publishes an **unsigned**
-per-user MSI when the Windows job succeeds. That MSI is attached to the GitHub
-release and listed on /download without claiming code signing or a complete
-FFmpeg/PDFium corresponding-source closure. `inputs.lock.json` keeps
+The Release workflow builds with `-VerificationOnly` and publishes an
+**unsigned** per-user MSI when the Windows job succeeds. That MSI is attached
+to the GitHub release and listed on /download without claiming code signing or
+a complete FFmpeg/PDFium corresponding-source closure. `inputs.lock.json` keeps
 `distribution_ready=false` until those source archives are collected; Mac and
 Linux publication stays gated on their own audited source closures.
 
