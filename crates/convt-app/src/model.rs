@@ -261,6 +261,10 @@ pub struct AppState {
     pub revealed: Vec<PathBuf>,
     /// Quit once the queue drains if no window is open.
     pub quit_when_idle: bool,
+    /// Whether the Finder extension is on. `None` when this platform has
+    /// none, or macOS has not registered it. Tests set this directly.
+    pub finder_on: Option<bool>,
+    _finder_watch: Option<Task<()>>,
     _drain: Task<()>,
 }
 
@@ -337,6 +341,13 @@ impl AppState {
             #[cfg(test)]
             revealed: Vec::new(),
             quit_when_idle: false,
+            finder_on: None,
+            // Tests set `finder_on` themselves; a live poll would overwrite it.
+            _finder_watch: if cfg!(all(target_os = "macos", not(test))) {
+                Some(crate::finder::watch(cx))
+            } else {
+                None
+            },
             _drain: drain,
         };
         state.reload_presets();

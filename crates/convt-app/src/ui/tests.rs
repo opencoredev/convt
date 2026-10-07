@@ -1280,8 +1280,8 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
-    cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
-    assert!(f.settings_file().contains("first_run_done = true"));
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+    assert!(!f.settings_file().contains("first_run_done = true"));
     let start = super::first_run::first_step();
     // The first screen is step 1, whether or not this platform has the
     // Finder step.
@@ -1306,14 +1306,140 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
     assert!(f.dir.path().join("license.key").exists());
 
-    // "Start converting" closes it and opens the main window.
+    // "Start converting" finishes first run and opens the main window.
     click(cx, window, "first-run-next");
     window_of::<MainView>(cx);
+    cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
+    assert!(f.settings_file().contains("first_run_done = true"));
 
     // A second launch goes straight to the main window.
     let before = cx.update(|cx| cx.windows().len());
     cx.update(|cx| super::route(Request::default(), cx));
     assert_eq!(cx.update(|cx| cx.windows().len()), before);
+}
+
+#[gpui_kit::test]
+fn closing_first_run_before_the_last_step_shows_it_again(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    if super::first_run::first_step() == Step::Finder {
+        click(cx, window, "first-run-back");
+    }
+    click(cx, window, "first-run-next");
+    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+    window
+        .update(cx, |_, window, _| window.remove_window())
+        .unwrap();
+    cx.update(|cx| super::route(Request::default(), cx));
+    window_of::<FirstRunView>(cx);
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+}
+
+#[gpui_kit::test]
+fn the_finder_step_preview_is_not_a_switch(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    let app = f.app.clone();
+    let (window, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
+    });
+    if cfg!(target_os = "macos") {
+        assert_eq!(label(cx, window, "step").as_deref(), Some("STEP 1 OF 3"));
+    }
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("Turn on the Finder menu")
+    );
+    let body = label(cx, window, "first-run-body").expect("body");
+    assert!(body.contains("scroll"), "{body}");
+    assert!(body.contains("Extensions"), "{body}");
+    assert_eq!(
+        label(cx, window, "finder-preview-badge").as_deref(),
+        Some("Preview")
+    );
+    assert_eq!(
+        label(cx, window, "finder-preview-caption").as_deref(),
+        Some("This picture isn't a switch.")
+    );
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Open System Settings")
+    );
+    click(cx, window, "finder-preview");
+    assert_eq!(cx.opened_url(), None);
+    click(cx, window, "first-run-next");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    assert_eq!(
+        label(cx, window, "first-run-next").as_deref(),
+        Some("Continue")
+    );
+
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.finder_on = Some(true);
+            cx.notify();
+        })
+    });
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("The Finder menu is on")
+    );
+}
+
+#[gpui_kit::test]
+fn activity_offers_finder_setup_until_the_extension_is_on(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx);
+            s.finder_on = Some(false);
+        })
+    });
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, _) = window_of::<MainView>(cx);
+    assert!(shown(cx, window, "finder-setup"));
+    assert_eq!(
+        label(cx, window, "enable-finder").as_deref(),
+        Some("Open System Settings")
+    );
+    click(cx, window, "enable-finder");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.finder_on = Some(true);
+            cx.notify();
+        })
+    });
+    assert!(!shown(cx, window, "finder-setup"));
+
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert_eq!(
+        label(cx, settings, "finder-status").as_deref(),
+        Some("On. Right-click a file in Finder to convert.")
+    );
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.finder_on = Some(false);
+            cx.notify();
+        })
+    });
+    let status = label(cx, settings, "finder-status").expect("status");
+    assert!(
+        status.contains("Off") && status.contains("Extensions"),
+        "{status}"
+    );
+    click(cx, settings, "manage-finder");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
 }
 
 #[gpui_kit::test]
@@ -1454,6 +1580,11 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
             let (settings, _) = f.settings(tab, cx);
             assert!(shown(cx, settings, "tab-general"));
         }
+        let app = f.app.clone();
+        let (first, _) = open(cx, move |window, cx| {
+            cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
+        });
+        assert!(shown(cx, first, "finder-preview"));
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
             cx.new(|cx| FirstRunView::new(app, Step::Done, window, cx))
@@ -1900,6 +2031,22 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
             };
             assert!(fits(cx, settings, last), "{tab:?}");
         }
+
+        let app = f.app.clone();
+        cx.update(|cx| {
+            super::show(size(px(420.), px(420.)), "first run", cx, |window, cx| {
+                cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
+            })
+        });
+        let (first, _) = window_of::<FirstRunView>(cx);
+        assert!(
+            fits(cx, first, "finder-preview"),
+            "first run, Finder preview"
+        );
+        assert!(fits(cx, first, "first-run-next"), "first run, Finder");
+        first
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
 
         let app = f.app.clone();
         cx.update(|cx| {

@@ -22,7 +22,9 @@ pub struct Settings {
     pub reveal_when_done: bool,
     /// Show the menu bar (tray) icon where the platform has one.
     pub menu_bar_icon: bool,
-    /// The first-run window has been shown.
+    /// The first-run window was finished (Start converting / Open convt).
+    /// Closing or quitting mid-setup leaves this false so the next launch
+    /// shows first run again.
     pub first_run_done: bool,
     /// The UTC day (`YYYY-MM-DD`) the app last asked convt.app for the
     /// current Pro key, so launches renew at most once a day.

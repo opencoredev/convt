@@ -1,6 +1,8 @@
 //! The first-run window: turn on the Finder menu (macOS only), start the
-//! trial or enter a license, and a last word on how to convert. It shows once,
-//! and only in builds that check licenses.
+//! trial or enter a license, and a last word on how to convert. It shows
+//! until the last step is finished, and only in builds that check licenses.
+//! Closing mid-setup shows it again. Skipping the Finder step still leaves
+//! a recover card on Activity until the extension is on.
 //!
 //! The plan step also offers an optional convt.app sign-in for Pro
 //! subscribers, so their key renews itself (see `crate::account`). The trial
@@ -13,11 +15,8 @@ use gpui_kit::*;
 
 use super::LICENSE_PRICE;
 use super::theme::{self, Palette, mono, primary_button, text, text_button};
+use crate::finder::EXTENSION_SETTINGS;
 use crate::model::AppState;
-
-/// The URL that opens Login Items & Extensions in macOS System Settings.
-const EXTENSION_SETTINGS: &str =
-    "x-apple.systempreferences:com.apple.LoginItems-Settings.extension";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -65,9 +64,6 @@ pub struct FirstRunView {
     pub(super) plan: Plan,
     /// System Settings was opened from the Finder step.
     opened_settings: bool,
-    /// Whether the Finder extension is on, polled while the Finder step shows.
-    pub(super) finder_on: Option<bool>,
-    _finder_watch: Option<Task<()>>,
     pub(super) key: Entity<InputState>,
     pub(super) error: Option<String>,
     _observe: Subscription,
@@ -88,8 +84,6 @@ impl FirstRunView {
             step,
             plan: Plan::Trial,
             opened_settings: false,
-            finder_on: None,
-            _finder_watch: (first_step() == Step::Finder).then(|| watch_finder(cx)),
             key: cx.new(|cx| InputState::new(window, cx).placeholder("License key")),
             error: None,
         }
@@ -109,8 +103,9 @@ impl FirstRunView {
     }
 
     pub(super) fn next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let finder_on = self.app.read(cx).finder_on;
         match self.step {
-            Step::Finder if !self.opened_settings && self.finder_on != Some(true) => {
+            Step::Finder if !self.opened_settings && finder_on != Some(true) => {
                 cx.open_url(EXTENSION_SETTINGS);
                 self.opened_settings = true;
             }
@@ -133,8 +128,12 @@ impl FirstRunView {
                 }
             },
             Step::Done => {
-                // Open the main window first, so the app never sees its last
-                // window close and quits.
+                // Finish first run only here, so closing earlier still shows
+                // it on the next launch. Open the main window first, so the
+                // app never sees its last window close and quits.
+                self.app.update(cx, |s, cx| {
+                    s.update_settings(|s| s.first_run_done = true, cx)
+                });
                 super::show_main(cx);
                 window.remove_window();
                 return;
@@ -149,8 +148,18 @@ impl FirstRunView {
         cx.notify();
     }
 
-    fn finder_art(&self, p: &Palette) -> Div {
+    fn finder_art(&self, on: Option<bool>, p: &Palette) -> impl IntoElement {
+        let caption = if on == Some(true) {
+            "It's on. Come back here and continue."
+        } else {
+            "This picture isn't a switch."
+        };
         div()
+            .id("finder-preview")
+            .test_support()
+            .aria_label("Preview of System Settings. This picture is not a switch.")
+            .occlude()
+            .cursor_default()
             .flex()
             .flex_col()
             .flex_1()
@@ -160,11 +169,37 @@ impl FirstRunView {
             .bg(p.recessed)
             .border_1()
             .border_color(p.recessed_border)
+            .opacity(0.88)
             .child(
-                text(11., 14., p.tertiary)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Login Items & Extensions"),
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        text(11., 14., p.tertiary)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("System Settings"),
+                    )
+                    .child(
+                        div()
+                            .id("finder-preview-badge")
+                            .test_support()
+                            .aria_label("Preview")
+                            .px(px(6.))
+                            .py(px(1.))
+                            .rounded(px(4.))
+                            .bg(p.chip)
+                            .border_1()
+                            .border_color(p.chip_border)
+                            .child(
+                                text(10., 13., p.tertiary)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Preview"),
+                            ),
+                    ),
             )
+            .child(text(11., 14., p.secondary).child("General › Login Items & Extensions"))
+            .child(text(11., 14., p.tertiary).child("↓  Scroll to Extensions"))
             .child(
                 div()
                     .flex()
@@ -189,6 +224,7 @@ impl FirstRunView {
                             .child(text(11., 14., p.secondary).child("Finder extension")),
                     )
                     .child(
+                        // Illustrated only: not theme::switch, no pointer, no click.
                         div()
                             .flex()
                             .items_center()
@@ -196,14 +232,22 @@ impl FirstRunView {
                             .h(px(16.))
                             .p(px(2.))
                             .rounded(px(8.))
-                            .when(self.finder_on == Some(true), |d| d.justify_end())
-                            .bg(if self.finder_on == Some(true) {
+                            .opacity(0.7)
+                            .when(on == Some(true), |d| d.justify_end())
+                            .bg(if on == Some(true) {
                                 p.control_on
                             } else {
                                 p.toggle_off
                             })
                             .child(div().size(px(12.)).rounded(px(6.)).bg(rgb(0xFFFFFF))),
                     ),
+            )
+            .child(
+                div()
+                    .id("finder-preview-caption")
+                    .test_support()
+                    .aria_label(caption)
+                    .child(text(11., 14., p.tertiary).child(caption)),
             )
     }
 
@@ -352,40 +396,6 @@ impl FirstRunView {
     }
 }
 
-/// Checks every second whether the Finder extension is on, so the step
-/// updates when the user comes back from System Settings.
-fn watch_finder(cx: &mut Context<FirstRunView>) -> Task<()> {
-    cx.spawn(async move |this, cx| {
-        loop {
-            let Ok(watching) = this.update(cx, |view, _| view.step == Step::Finder) else {
-                break;
-            };
-            if watching {
-                let on = cx.background_spawn(async { finder_enabled() }).await;
-                let updated = this.update(cx, |view, cx| {
-                    if view.finder_on != on {
-                        view.finder_on = on;
-                        cx.notify();
-                    }
-                });
-                if updated.is_err() {
-                    break;
-                }
-            }
-            cx.background_executor()
-                .timer(std::time::Duration::from_secs(1))
-                .await;
-        }
-    })
-}
-
-fn finder_enabled() -> Option<bool> {
-    #[cfg(target_os = "macos")]
-    return crate::macos::finder_extension_enabled();
-    #[cfg(not(target_os = "macos"))]
-    None
-}
-
 impl Render for FirstRunView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let _ = window;
@@ -408,8 +418,9 @@ impl Render for FirstRunView {
             }
             _ => None,
         };
+        let finder_on = self.app.read(cx).finder_on;
         let (title, body, back, next) = match self.step {
-            Step::Finder if self.finder_on == Some(true) => (
+            Step::Finder if finder_on == Some(true) => (
                 "The Finder menu is on",
                 "Right-click a file in Finder to see Convert with convt. You can turn it off in System Settings.".to_string(),
                 None,
@@ -417,7 +428,7 @@ impl Render for FirstRunView {
             ),
             Step::Finder => (
                 "Turn on the Finder menu",
-                "macOS keeps Finder extensions off until you allow them. Switch on convt, then come back here.".to_string(),
+                "Open System Settings, scroll down to Extensions, and turn on convt. Then come back here.".to_string(),
                 Some("Skip for now"),
                 if self.opened_settings {
                     "Continue"
@@ -453,9 +464,9 @@ impl Render for FirstRunView {
             ),
         };
         let art = match self.step {
-            Step::Finder => self.finder_art(&p),
-            Step::Plan => self.plan_art(&p, cx),
-            Step::Done => self.done_art(&p),
+            Step::Finder => self.finder_art(finder_on, &p).into_any_element(),
+            Step::Plan => self.plan_art(&p, cx).into_any_element(),
+            Step::Done => self.done_art(&p).into_any_element(),
         };
         let step_label = format!("STEP {n} OF {}", Step::count());
         div()
@@ -507,7 +518,12 @@ impl Render for FirstRunView {
                     // window keeps its size.
                     .child(match self.error.clone() {
                         Some(e) => super::error_text(e, &p).into_any_element(),
-                        None => text(13., 19., p.secondary).child(body).into_any_element(),
+                        None => div()
+                            .id("first-run-body")
+                            .test_support()
+                            .aria_label(SharedString::from(body.clone()))
+                            .child(text(13., 19., p.secondary).child(body))
+                            .into_any_element(),
                     })
                     .children(not_covered.is_some().then(|| {
                         div().flex().child(
