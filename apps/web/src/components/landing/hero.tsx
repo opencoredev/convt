@@ -1,3 +1,4 @@
+import { useMobileDownloadIntercept } from "#/components/mobile-download/mobile-download";
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
 import { ProductHuntBadge } from "./product-hunt-badge";
@@ -33,11 +34,13 @@ export function Hero() {
 
 function HeroActions() {
   const label = useDownloadCtaLabel();
+  const mobile = useMobileDownloadIntercept("landing");
   return (
     <>
       <ButtonLink
         variant="primary"
         href={routes.download}
+        onClick={mobile.onClick}
         className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
       >
         <DownloadIcon />
@@ -50,6 +53,7 @@ function HeroActions() {
       >
         Star on GitHub
       </ButtonLink>
+      {mobile.dialog}
     </>
   );
 }

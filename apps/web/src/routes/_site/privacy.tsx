@@ -134,6 +134,11 @@ const sections: LegalSection[] = [
               <span className={strong}>Purchases:</span> your orders, subscriptions, invoices and
               license keys. Card details go to our payment provider and never reach us.
             </>,
+            <>
+              <span className={strong}>Download link:</span> if you ask us to email you the download
+              link from your phone, we use your address to send that one email and keep only a
+              one-way hash of it for about an hour to limit repeat requests.
+            </>,
           ]}
         />
         <p>

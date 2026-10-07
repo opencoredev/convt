@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { headerLinks } from "#/components/site/links";
 import { Mark } from "#/components/logo";
+import { useMobileDownloadIntercept } from "#/components/mobile-download/mobile-download";
 import { fetchSignedInAccount } from "#/lib/auth-client";
 import { LAUNCHED, routes } from "#/lib/site";
 import type { Account } from "#/lib/types";
@@ -110,10 +111,12 @@ function NavActionsSkeleton() {
 }
 
 function NavActions({ account, showDownload }: { account: Account | null; showDownload: boolean }) {
+  const mobile = useMobileDownloadIntercept("landing");
   const download = showDownload ? (
     <ButtonLink
       variant="primary"
       href={routes.download}
+      onClick={mobile.onClick}
       className="rounded-lg px-3 py-[7px] text-[14px]/[18px] shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_1px_2px_#0a3c2340,0_2px_6px_#0a3c231f]!"
     >
       Download
@@ -124,6 +127,7 @@ function NavActions({ account, showDownload }: { account: Account | null; showDo
       <>
         {download}
         <AccountMenu account={account} />
+        {mobile.dialog}
       </>
     );
   }
@@ -137,6 +141,7 @@ function NavActions({ account, showDownload }: { account: Account | null; showDo
         Sign in
       </ButtonLink>
       {download}
+      {mobile.dialog}
     </>
   );
 }
