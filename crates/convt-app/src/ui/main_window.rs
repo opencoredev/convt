@@ -12,6 +12,7 @@ use gpui_kit::*;
 
 use super::theme::{self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text};
 use super::{LICENSE_PRICE, SettingsTab, error_text, file_size, human_size, time_left};
+use crate::automation;
 use crate::clock::Local;
 use crate::finder::EXTENSION_SETTINGS;
 use crate::history::{Outcome, Record};
@@ -571,13 +572,27 @@ impl MainView {
                 let to = format_by_id(&rule.to).map_or(rule.to.clone(), |f| f.name.to_string());
                 let app = self.app.clone();
                 let on = rule.enabled;
+                let copy = rule.copies_to_clipboard();
+                let detail = div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(space::SM))
+                    .child(mono(11., 15., p.secondary).child(automation::source_line(&rule)))
+                    .child({
+                        let app = app.clone();
+                        theme::checkbox(
+                            SharedString::from(format!("automation-{i}-copy")),
+                            "Copy the converted file",
+                            copy,
+                            p,
+                        )
+                        .on_click(move |_, _, cx| {
+                            app.update(cx, |s, cx| s.set_automation_copy(i, !copy, cx))
+                        })
+                    });
                 theme::row(
                     format!("{} → {to}", rule.name),
-                    Some(
-                        mono(11., 15., p.secondary)
-                            .child(format!("{} · {}", rule.source, rule.detail))
-                            .into_any_element(),
-                    ),
+                    Some(detail.into_any_element()),
                     theme::switch(SharedString::from(format!("automation-{i}")), on, false, p)
                         .on_click(move |_, _, cx| {
                             app.update(cx, |s, cx| s.set_automation(i, !on, cx))
@@ -598,16 +613,17 @@ impl MainView {
             .pt(px(space::LG))
             .pb(px(GUTTER))
             .gap(px(space::XL))
-            .child(theme::callout(
-                IconName::Info,
-                Tone::Neutral,
-                theme::callout_words(
-                    "Rules don't run yet",
-                    "Rules are saved here. Running them automatically comes in a later version.",
-                    p,
-                ),
-                p,
-            ))
+            .child(
+                styled(size::SMALL, p.secondary)
+                    .id("automations-intro")
+                    .test_support()
+                    .aria_label(
+                        "When a screenshot or screen recording appears in its folder, convt converts it.",
+                    )
+                    .child(
+                        "When a screenshot or screen recording appears in its folder, convt converts it. Screenshots follow the folder this computer saves them to, which is not always the Desktop. Only that folder is watched, not folders inside it.",
+                    ),
+            )
             .child(
                 div()
                     .flex()

@@ -2,6 +2,8 @@
 //! its files to the running app and exits.
 
 mod account;
+mod automation;
+mod clipboard;
 mod clock;
 mod finder;
 mod history;

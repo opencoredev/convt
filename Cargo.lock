@@ -1494,6 +1494,7 @@ dependencies = [
  "convt-engines",
  "convt-license",
  "convt-update",
+ "dirs 6.0.0",
  "ed25519-dalek",
  "futures",
  "gpui-kit",

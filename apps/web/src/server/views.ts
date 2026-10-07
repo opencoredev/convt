@@ -262,7 +262,7 @@ export function overviewView(input: {
   };
 }
 
-/** All licenses; the active Macs count against the one the app would use. */
+/** All licenses; the active devices count against the one the app would use. */
 export function licensesView(
   subscriptions: SubscriptionRow[],
   licenses: LicenseRow[],
@@ -350,7 +350,7 @@ export function billingView(input: {
     const price = proPrice[interval].total;
     const end = pro.currentPeriodEnd ? formatDate(iso(pro.currentPeriodEnd)) : null;
     const includes =
-      "Includes the desktop app on your Macs, every update while you're subscribed, and API access.";
+      "Includes the desktop app on your computers, every update while you're subscribed, and API access.";
     const ended =
       pro.status === "canceled" ||
       pro.status === "unpaid" ||
@@ -493,6 +493,18 @@ export function browserLabel(userAgent: string | null): string {
 }
 
 const providerLabels = { github: "GitHub", google: "Google" } as const;
+
+/**
+ * The sign-in methods the settings page lists. An unconfigured provider can't be
+ * connected, so it is hidden, but a method already linked stays listed so its owner
+ * can see and remove it. Email always shows.
+ */
+export function visibleMethods(
+  methods: SignInMethod[],
+  available: Record<Exclude<SignInMethod["id"], "email">, boolean>,
+): SignInMethod[] {
+  return methods.filter((m) => m.id === "email" || available[m.id] || m.accountId !== null);
+}
 
 export function settingsView(input: {
   user: UserRow;

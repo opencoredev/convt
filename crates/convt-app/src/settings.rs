@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use convt_core::{Category, Format, Output, format_by_id};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -40,7 +40,7 @@ pub struct Settings {
     pub update_sequence: u64,
     /// What Add files converts each kind of file to.
     pub defaults: Defaults,
-    /// Automation rules. Only stored for now: nothing runs them yet.
+    /// Automation rules. Each enabled rule watches one folder.
     pub automations: Vec<Automation>,
 }
 
@@ -64,9 +64,11 @@ impl Default for Settings {
 }
 
 /// The format Add files picks for each kind of file, by format id.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Defaults {
+    /// Camera and web photos (HEIC, AVIF, WebP, JPEG).
+    pub photos: String,
+    /// Screenshots, transparent images, vectors and other stills.
     pub images: String,
     pub video: String,
     pub audio: String,
@@ -76,7 +78,8 @@ pub struct Defaults {
 impl Default for Defaults {
     fn default() -> Self {
         Self {
-            images: "webp".into(),
+            photos: "jpeg".into(),
+            images: "png".into(),
             video: "mp4".into(),
             audio: "mp3".into(),
             documents: "pdf".into(),
@@ -84,9 +87,40 @@ impl Default for Defaults {
     }
 }
 
+impl<'de> Deserialize<'de> for Defaults {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Raw {
+            images: Option<String>,
+            photos: Option<String>,
+            video: Option<String>,
+            audio: Option<String>,
+            documents: Option<String>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let fresh = Defaults::default();
+        // Files written before the photo / image split stored one `images`
+        // default for every still. Keep that value for both kinds so a
+        // saved WebP (or whatever they picked) is not rewritten.
+        let (photos, images) = match (raw.photos, raw.images) {
+            (Some(photos), images) => (photos, images.unwrap_or(fresh.images)),
+            (None, Some(legacy)) => (legacy.clone(), legacy),
+            (None, None) => (fresh.photos, fresh.images),
+        };
+        Ok(Self {
+            photos,
+            images,
+            video: raw.video.unwrap_or(fresh.video),
+            audio: raw.audio.unwrap_or(fresh.audio),
+            documents: raw.documents.unwrap_or(fresh.documents),
+        })
+    }
+}
+
 /// A kind of file with its own default target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    Photos,
     Images,
     Video,
     Audio,
@@ -94,12 +128,19 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 4] = [Kind::Images, Kind::Video, Kind::Audio, Kind::Documents];
+    pub const ALL: [Kind; 5] = [
+        Kind::Photos,
+        Kind::Images,
+        Kind::Video,
+        Kind::Audio,
+        Kind::Documents,
+    ];
 
     /// The kind a file of `format` belongs to. PDFs have none: they are
     /// already what documents become.
     pub fn of(format: &Format) -> Option<Kind> {
         match format.category {
+            Category::Image | Category::Vector if is_photo_format(format) => Some(Kind::Photos),
             Category::Image | Category::Vector => Some(Kind::Images),
             Category::Video => Some(Kind::Video),
             Category::Audio => Some(Kind::Audio),
@@ -110,8 +151,18 @@ impl Kind {
         }
     }
 
+    /// [`Self::of`], except a screenshot-named photo (HEIC from Cmd+Shift+3)
+    /// uses the Images default so it becomes PNG, not JPEG.
+    pub fn of_file(path: &Path, format: &Format) -> Option<Kind> {
+        match Kind::of(format) {
+            Some(Kind::Photos) if looks_like_screenshot(path) => Some(Kind::Images),
+            other => other,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
+            Kind::Photos => "Photos",
             Kind::Images => "Images",
             Kind::Video => "Video",
             Kind::Audio => "Audio",
@@ -121,6 +172,7 @@ impl Kind {
 
     pub fn id(self) -> &'static str {
         match self {
+            Kind::Photos => "photos",
             Kind::Images => "images",
             Kind::Video => "video",
             Kind::Audio => "audio",
@@ -132,6 +184,7 @@ impl Kind {
 impl Defaults {
     pub fn get(&self, kind: Kind) -> Option<&'static Format> {
         format_by_id(match kind {
+            Kind::Photos => &self.photos,
             Kind::Images => &self.images,
             Kind::Video => &self.video,
             Kind::Audio => &self.audio,
@@ -141,6 +194,7 @@ impl Defaults {
 
     pub fn set(&mut self, kind: Kind, to: &Format) {
         let slot = match kind {
+            Kind::Photos => &mut self.photos,
             Kind::Images => &mut self.images,
             Kind::Video => &mut self.video,
             Kind::Audio => &mut self.audio,
@@ -150,18 +204,102 @@ impl Defaults {
     }
 }
 
-/// A rule such as "Screenshots on the Desktop become WebP".
+/// How a rule decides which new files to convert.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WatchKind {
+    Screenshot,
+    Recording,
+    Folder,
+}
+
+/// A rule such as "Screenshots become PNG".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Automation {
     /// What the rule watches, e.g. "Screenshots".
     pub name: String,
     /// Target format id.
     pub to: String,
-    /// Where it looks, e.g. "Desktop".
+    /// Where it looks, e.g. "Desktop" or "Screenshots". Display and, for
+    /// older files, the folder to resolve.
     pub source: String,
     /// What else it does, e.g. "copy to clipboard".
     pub detail: String,
     pub enabled: bool,
+    /// When set, overrides the kind inferred from [`Self::name`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch: Option<WatchKind>,
+    /// An explicit folder. When set, the system screenshot location is ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<PathBuf>,
+    /// When set, overrides the "copy to clipboard" phrase in [`Self::detail`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy_to_clipboard: Option<bool>,
+}
+
+impl Automation {
+    pub fn watch_kind(&self) -> WatchKind {
+        if let Some(kind) = self.watch {
+            return kind;
+        }
+        let name = self.name.to_ascii_lowercase();
+        if name.contains("screenshot") {
+            WatchKind::Screenshot
+        } else if name.contains("recording") {
+            WatchKind::Recording
+        } else {
+            WatchKind::Folder
+        }
+    }
+
+    pub fn copies_to_clipboard(&self) -> bool {
+        self.copy_to_clipboard.unwrap_or_else(|| {
+            self.detail
+                .to_ascii_lowercase()
+                .contains("copy to clipboard")
+        })
+    }
+
+    /// Whether the engine should look at this rule. A legacy "Exports"
+    /// placeholder without an explicit watch kind or folder is left idle.
+    pub fn is_watched(&self) -> bool {
+        self.enabled
+            && (self.watch.is_some()
+                || self.folder.is_some()
+                || matches!(
+                    self.watch_kind(),
+                    WatchKind::Screenshot | WatchKind::Recording
+                ))
+    }
+}
+
+/// Camera and web photo formats: Add files turns these into JPEG.
+pub fn is_photo_format(format: &Format) -> bool {
+    matches!(format.id, "jpeg" | "heic" | "avif" | "webp")
+}
+
+/// A file name that macOS, Windows or common tools use for a still capture.
+pub fn looks_like_screenshot(path: &Path) -> bool {
+    let Some(name) = path.file_stem().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    name.starts_with("screenshot")
+        || name.starts_with("screen shot")
+        || name.starts_with("cleanshot")
+        || name.starts_with("simulator screen")
+}
+
+/// A file name that macOS or Windows use for a screen recording.
+pub fn looks_like_recording(path: &Path) -> bool {
+    let Some(name) = path.file_stem().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    name.starts_with("screen recording")
+        || name.starts_with("screenrecording")
+        || name.starts_with("recording ")
+        || name.starts_with("recording_")
 }
 
 impl Settings {
@@ -239,7 +377,8 @@ mod tests {
             license_checked: Some("2026-10-05".into()),
             ..Settings::default()
         };
-        s.defaults.set(Kind::Images, format_by_id("png").unwrap());
+        s.defaults.set(Kind::Images, format_by_id("webp").unwrap());
+        s.defaults.set(Kind::Photos, format_by_id("png").unwrap());
         s.automations[0].enabled = false;
         s.save(&path).unwrap();
         assert_eq!(Settings::load(&path).unwrap(), s);
@@ -264,5 +403,37 @@ mod tests {
 
         std::fs::write(&path, "concurrency = \"lots\"").unwrap();
         assert!(Settings::load(&path).is_err());
+    }
+
+    #[test]
+    fn a_saved_images_default_is_not_replaced_by_the_split() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        std::fs::write(&path, "[defaults]\nimages = \"webp\"\nvideo = \"mp4\"\n").unwrap();
+        let s = Settings::load(&path).unwrap();
+        assert_eq!(s.defaults.images, "webp");
+        assert_eq!(s.defaults.photos, "webp");
+        assert_eq!(s.defaults.video, "mp4");
+
+        std::fs::write(&path, "[defaults]\nphotos = \"jpeg\"\nimages = \"png\"\n").unwrap();
+        let s = Settings::load(&path).unwrap();
+        assert_eq!(s.defaults.photos, "jpeg");
+        assert_eq!(s.defaults.images, "png");
+    }
+
+    #[test]
+    fn screenshot_named_photos_use_the_images_default() {
+        let heic = format_by_id("heic").unwrap();
+        let png = format_by_id("png").unwrap();
+        assert_eq!(Kind::of(heic), Some(Kind::Photos));
+        assert_eq!(Kind::of(png), Some(Kind::Images));
+        assert_eq!(
+            Kind::of_file(Path::new("IMG_2041.heic"), heic),
+            Some(Kind::Photos)
+        );
+        assert_eq!(
+            Kind::of_file(Path::new("Screenshot 1.heic"), heic),
+            Some(Kind::Images)
+        );
     }
 }
