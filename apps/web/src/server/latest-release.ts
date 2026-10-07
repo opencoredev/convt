@@ -12,6 +12,16 @@ export const LATEST_UPDATE_MANIFEST_URL = `${GITHUB_URL}/releases/latest/downloa
 
 const assetPrefix = `${GITHUB_URL}/releases/download/`;
 
+/** Whether `url`, once normalized, is a file on one of this repository's releases. */
+function isReleaseAsset(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.href === url && !u.search && !u.hash && u.href.startsWith(assetPrefix);
+  } catch {
+    return false;
+  }
+}
+
 /** The latest release manifest, or null when there is none yet or it can't be read. */
 export async function fetchLatestManifest(): Promise<ReleaseManifest | null> {
   try {
@@ -23,7 +33,7 @@ export async function fetchLatestManifest(): Promise<ReleaseManifest | null> {
     const manifest = parseReleaseManifest(await response.json());
     // Only link files from this repository's releases.
     const urls = manifest.builds.flatMap((b) => [...b.artifacts, b.source].map((a) => a.url));
-    if (!urls.every((u) => u.startsWith(assetPrefix))) return null;
+    if (!urls.every(isReleaseAsset)) return null;
     return manifest;
   } catch (e) {
     console.error("[download] latest release manifest:", e instanceof Error ? e.message : e);

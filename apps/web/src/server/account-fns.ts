@@ -149,8 +149,10 @@ export const fetchAccountSettings = createServerFn({ method: "GET" })
     const providers = availableProviders(appEnv);
     return {
       ...settings,
+      // An unconfigured provider can't be connected, but a method already linked
+      // stays listed so its owner can see and remove it.
       methods: settings.methods.filter(
-        (m) => (m.id !== "github" && m.id !== "google") || providers[m.id],
+        (m) => (m.id !== "github" && m.id !== "google") || providers[m.id] || m.accountId !== null,
       ),
     };
   });

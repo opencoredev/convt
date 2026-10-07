@@ -52,6 +52,8 @@ test("no release yet, or files outside this repository's releases, link nothing"
   expect(await fetchLatestManifest()).toBeNull();
   serve(200, manifest("https://example.com/convt.tar.gz"));
   expect(await fetchLatestManifest()).toBeNull();
+  serve(200, manifest("https://github.com/opencoredev/convt/releases/download/../../../evil/x/a"));
+  expect(await fetchLatestManifest()).toBeNull();
   serve(200, { schema_version: 2 });
   expect(await fetchLatestManifest()).toBeNull();
 });
