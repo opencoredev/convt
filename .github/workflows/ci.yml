@@ -31,9 +31,9 @@ jobs:
         suite: [core, desktop]
         include:
           - os: Linux
-            runner: tenki-standard-large-8c-16g
+            runner: ubuntu-24.04
           - os: macOS
-            runner: tenki-macos-26-medium
+            runner: macos-14
           - os: Windows
             runner: windows-2025
     runs-on: ${{ matrix.runner }}
@@ -106,7 +106,7 @@ jobs:
 
   web:
     name: Web
-    runs-on: tenki-standard-medium-4c-8g
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - name: Verify dispatched commit
@@ -118,11 +118,106 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Cache Bun downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       # apps/docs builds with Blume, which runs on Node 22.19 or newer.
       - uses: actions/setup-node@v5
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
+      - name: TypeScript unit tests
+        run: >-
+          bun test apps/billing/test packages/billing/test/unit packages/db/test/unit
+          packages/license/test packages/mail/test packages/sdk/test
+          tools/billing-mock/test tools/loadtest/test apps/web/test/unit
       - run: bun run check
       - run: bun run check-types
       - run: bun run build
+
+  database:
+    name: Database integration tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: convt_template
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d convt_template"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_PG_HOST: 127.0.0.1
+      TEST_PG_PORT: 5432
+      TEST_TEMPLATE_DB: convt_template
+      TEST_OWNER_PASSWORD: owner-ci-password
+      TEST_WEB_PASSWORD: web-ci-password
+      TEST_SERVER_PASSWORD: server-ci-password
+      TEST_BILLING_PASSWORD: billing-ci-password
+      TEST_PG_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      CONVT_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      CONVT_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/sqlx
+          key: sqlx-cli-${{ runner.os }}-0.9.0
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: database
+      - run: bun install --frozen-lockfile
+      - name: Install SQLx CLI
+        run: |
+          if ! command -v sqlx >/dev/null 2>&1; then
+            cargo install sqlx-cli --version 0.9.0 --locked --no-default-features --features rustls,postgres
+          fi
+      - name: Create database roles
+        run: |
+          PGPASSWORD=postgres psql "postgresql://postgres:postgres@127.0.0.1:5432/$TEST_TEMPLATE_DB" \
+            -v owner_password="$TEST_OWNER_PASSWORD" \
+            -v web_password="$TEST_WEB_PASSWORD" \
+            -v server_password="$TEST_SERVER_PASSWORD" \
+            -v billing_password="$TEST_BILLING_PASSWORD" \
+            -v DBNAME="$TEST_TEMPLATE_DB" \
+            -f packages/db/roles.sql
+      - name: Apply schema
+        env:
+          MIGRATE_DATABASE_URL: postgresql://convt_owner:owner-ci-password@127.0.0.1:5432/convt_template
+        run: bun run db:migrate
+      - name: Build CLI verifier used by billing tests
+        run: cargo build -p convt-cli
+      - name: Billing integration tests
+        run: bun test packages/billing/test/integration
+      - name: Web integration tests
+        run: bun test apps/web/test/integration
+      - name: Database integration tests
+        run: bun test packages/db/test/integration
+      - name: convt-server database tests
+        run: cargo test -p convt-server
+      - name: Database schema and SQLx checks
+        run: bun run db:ci
