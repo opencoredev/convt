@@ -15,6 +15,7 @@ convt-core.workspace = true
 convt-engines.workspace = true
 convt-license = { workspace = true, features = ["client"] }
 convt-update.workspace = true
+dirs.workspace = true
 ed25519-dalek.workspace = true
 futures.workspace = true
 gpui-kit.workspace = true

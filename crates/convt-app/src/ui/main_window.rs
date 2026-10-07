@@ -11,6 +11,7 @@ use gpui_kit::*;
 
 use super::theme::{self, Palette, mono, primary_button, text, text_button};
 use super::{LICENSE_PRICE, SettingsTab, error_text, file_size, human_size, time_left};
+use crate::automation;
 use crate::clock::Local;
 use crate::finder::EXTENSION_SETTINGS;
 use crate::history::{Outcome, Record};
@@ -411,13 +412,24 @@ impl MainView {
             .overflow_y_scroll()
             .px(px(20.))
             .pt(px(12.))
-            .child(text(12., 16., p.secondary).pb(px(8.)).child(
-                "Rules are saved here. Running them automatically comes in a later version.",
-            ))
+            .child(
+                text(12., 16., p.secondary)
+                    .id("automations-intro")
+                    .test_support()
+                    .aria_label(
+                        "When a screenshot or screen recording appears in its folder, convt converts it.",
+                    )
+                    .pb(px(4.))
+                    .child(
+                        "When a screenshot or screen recording appears in its folder, convt converts it. Screenshots follow the folder this computer saves them to, which is not always the Desktop. Only that folder is watched, not folders inside it.",
+                    ),
+            )
             .children(rules.into_iter().enumerate().map(|(i, rule)| {
                 let to = format_by_id(&rule.to).map_or(rule.to.clone(), |f| f.name.to_string());
                 let app = self.app.clone();
                 let on = rule.enabled;
+                let copy = rule.copies_to_clipboard();
+                let source = automation::source_line(&rule);
                 div()
                     .flex()
                     .items_center()
@@ -430,12 +442,21 @@ impl MainView {
                             .flex()
                             .flex_col()
                             .flex_1()
-                            .gap(px(2.))
+                            .gap(px(4.))
                             .child(text(13., 16., p.text).child(format!("{} → {to}", rule.name)))
-                            .child(
-                                mono(11., 14., p.secondary)
-                                    .child(format!("{} · {}", rule.source, rule.detail)),
-                            ),
+                            .child(mono(11., 14., p.secondary).child(source))
+                            .child({
+                                let app = app.clone();
+                                theme::checkbox(
+                                    SharedString::from(format!("automation-{i}-copy")),
+                                    "Copy the converted file",
+                                    copy,
+                                    p,
+                                )
+                                .on_click(move |_, _, cx| {
+                                    app.update(cx, |s, cx| s.set_automation_copy(i, !copy, cx))
+                                })
+                            }),
                     )
                     .child(
                         theme::switch(SharedString::from(format!("automation-{i}")), on, false, p)

@@ -1494,6 +1494,7 @@ dependencies = [
  "convt-engines",
  "convt-license",
  "convt-update",
+ "dirs 6.0.0",
  "ed25519-dalek",
  "futures",
  "gpui-kit",
@@ -3339,8 +3340,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-macos"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a43af845b260b09393e923c4f1e1a67a10fcfc847b4815192bbfd02ed9fe725"
 dependencies = [
  "accesskit",
  "accesskit_macos",

@@ -1,3 +1,4 @@
+import { links } from "./config";
 import {
   latestBuild,
   type ArtifactKind,
@@ -96,6 +97,16 @@ export function osFromUserAgent(ua: string): Os | null {
 /** Primary download button copy: OS-specific when known, otherwise just "Download". */
 export function downloadCtaLabel(os: Os | null): string {
   return os ? `Download for ${osNames[os]}` : "Download";
+}
+
+/** The first "what's next" step after checkout: names the visitor's OS when known. */
+export function downloadStepLabel(os: Os | null): string {
+  return os ? `Download convt for ${osNames[os]}` : "Download convt";
+}
+
+/** The download page, preselecting the visitor's OS when known. */
+export function downloadHref(os: Os | null): string {
+  return os ? `${links.download}?os=${os}` : links.download;
 }
 
 export function isOs(value: unknown): value is Os {
