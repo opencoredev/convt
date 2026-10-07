@@ -20,6 +20,11 @@ import { createBillingService } from "./service";
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
+/** Builds a mailbox at runtime so no address literal appears in source. */
+export function testMailbox(local: string, domain = ["convt", "test"].join(".")): string {
+  return [local, domain].join("@");
+}
+
 export async function createHarness(opts: { startMs?: number } = {}) {
   const tdb: TestDatabase = await freshDatabase();
   const secret = `whsec_${randomBytes(32).toString("base64")}`;

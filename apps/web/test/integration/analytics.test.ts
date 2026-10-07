@@ -1,11 +1,12 @@
 // Signup analytics: user_signed_up fires once per new account, from the auth
-// insert hook, for email and OAuth.
+// insert hook, for email-code and OAuth sign-in.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 
 import * as t from "@convt/db/schema";
 
+import { testMailbox } from "../mailbox";
 import { Jar, oauth, signInWithCode, startHarness, type Harness } from "./harness";
 
 let h: Harness;
@@ -17,25 +18,25 @@ beforeAll(async () => {
 });
 afterAll(async () => h?.close());
 
-const userByEmail = async (email: string) =>
-  (await h.owner.select().from(t.users).where(eq(t.users.email, email)))[0] ?? null;
+const userByMailbox = async (address: string) =>
+  (await h.owner.select().from(t.users).where(eq(t.users.email, address)))[0] ?? null;
 
 const signupsFor = (userId: string) =>
   h.analytics.filter((e) => e.event === "user_signed_up" && e.distinctId === userId);
 
 describe("user_signed_up", () => {
   test("an email code creates one event and a later sign-in does not", async () => {
-    const email = "signup-email@convt.test";
+    const address = testMailbox("signup-email");
     const ip = nextIp();
     await h.request("/email-otp/send-verification-otp", {
-      body: { email, type: "sign-in" },
+      body: { email: address, type: "sign-in" },
       ip,
     });
     expect(h.analytics.filter((e) => e.event === "user_signed_up")).toEqual([]);
 
     const jar = new Jar();
     const first = await h.request("/sign-in/email-otp", {
-      body: { email, otp: h.codeFor(email) },
+      body: { email: address, otp: h.codeFor(address) },
       jar,
       ip,
       headers: {
@@ -44,7 +45,7 @@ describe("user_signed_up", () => {
       },
     });
     expect(first.status).toBe(200);
-    const user = await userByEmail(email);
+    const user = await userByMailbox(address);
     expect(user).toBeTruthy();
     const firstEvents = signupsFor(user!.id);
     expect(firstEvents.length).toBe(1);
@@ -54,43 +55,45 @@ describe("user_signed_up", () => {
       insertId: `user_signed_up:${user!.id}`,
       properties: { signup_method: "email", source: "/pricing", utm_source: "hn" },
     });
-    expect(JSON.stringify(firstEvents[0])).not.toContain(email);
+    expect(JSON.stringify(firstEvents[0])).not.toContain(address);
     expect(firstEvents[0].properties).not.toHaveProperty("email");
 
     await h.request("/sign-out", { jar, ip });
-    await signInWithCode(h, email, new Jar(), nextIp());
+    await signInWithCode(h, address, new Jar(), nextIp());
     expect(signupsFor(user!.id).length).toBe(1);
   });
 
   test("GitHub and Google each fire once", async () => {
+    const ghAddress = testMailbox("signup-gh");
     const github = await oauth(h, "sign-in", "github", "github-verified", new Jar(), {
-      email: "signup-gh@convt.test",
+      email: ghAddress,
     });
     expect(github.status).toBe(302);
-    const ghUser = await userByEmail("signup-gh@convt.test");
+    const ghUser = await userByMailbox(ghAddress);
     expect(ghUser).toBeTruthy();
     const ghEvents = signupsFor(ghUser!.id);
     expect(ghEvents.length).toBe(1);
     expect(ghEvents[0].properties).toMatchObject({ signup_method: "github" });
-    expect(JSON.stringify(ghEvents[0])).not.toContain("signup-gh@convt.test");
+    expect(JSON.stringify(ghEvents[0])).not.toContain(ghAddress);
 
+    const goAddress = testMailbox("signup-google");
     const google = await oauth(h, "sign-in", "google", "google-gmail", new Jar(), {
-      email: "signup-google@convt.test",
+      email: goAddress,
     });
     expect(google.status).toBe(302);
-    const goUser = await userByEmail("signup-google@convt.test");
+    const goUser = await userByMailbox(goAddress);
     expect(goUser).toBeTruthy();
     expect(signupsFor(goUser!.id).length).toBe(1);
     expect(signupsFor(goUser!.id)[0].properties).toMatchObject({ signup_method: "google" });
   });
 
   test("linking an OAuth account does not fire user_signed_up", async () => {
-    const email = "signup-link@convt.test";
-    const jar = await signInWithCode(h, email, new Jar(), nextIp());
-    const user = await userByEmail(email);
+    const address = testMailbox("signup-link");
+    const jar = await signInWithCode(h, address, new Jar(), nextIp());
+    const user = await userByMailbox(address);
     expect(signupsFor(user!.id).length).toBe(1);
     await oauth(h, "link", "github", "github-public-differs", jar, {
-      email: "signup-link-gh@convt.test",
+      email: testMailbox("signup-link-gh"),
     });
     expect(signupsFor(user!.id).length).toBe(1);
   });

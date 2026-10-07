@@ -43,6 +43,9 @@
       "routes": [],
       "vars": {
         "ENV": "staging",
+        // Empty: staging sends no PostHog events.
+        "POSTHOG_KEY": "",
+        "POSTHOG_HOST": "https://us.i.posthog.com",
         "BILLING_CATALOG": "sandbox",
         "SITE_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
@@ -50,9 +53,6 @@
         "ALERT_EMAIL": "leodoesdev@gmail.com",
         // Staging's own signing key, separate from production.
         "LICENSE_PUBLIC_KEY": "KtufCO-UrY5lb7CcO7vsyqDd-Mh2Da9bcbD4rBZ0hPY",
-        // Empty: staging sends no PostHog events.
-        "POSTHOG_KEY": "",
-        "POSTHOG_HOST": "https://us.i.posthog.com",
       },
       // Hyperdrive "convt-billing-staging", caching disabled.
       "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "c59ed0ee6c8b4dcab137d1549e5984d5" }],

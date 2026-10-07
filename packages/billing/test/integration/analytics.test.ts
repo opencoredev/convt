@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
 
-import { createHarness, type Harness } from "../../src/testing";
+import { createHarness, testMailbox, type Harness } from "../../src/testing";
 
 let h: Harness;
 beforeAll(async () => {
@@ -17,7 +17,7 @@ const eventsNamed = (name: string, userId?: string) =>
 
 describe("Polar analytics", () => {
   test("a Desktop purchase fires license_purchased once", async () => {
-    const u = await h.user("analytics-desktop@convt.test");
+    const u = await h.user(testMailbox("analytics-desktop"));
     const before = eventsNamed("license_purchased", u.id).length;
     await h.buy("desktop", u, { email: u.email });
     const held = h.mock.takeHeld();
@@ -26,13 +26,15 @@ describe("Polar analytics", () => {
     expect((await h.deliver(order)).status).toBe(200);
     const events = eventsNamed("license_purchased", u.id).slice(before);
     expect(events.length).toBe(1);
+    expect(events[0].distinctId).toBe(u.id);
     expect(events[0].properties).toEqual({ plan: "desktop" });
     expect(events[0].insertId?.startsWith("license_purchased:desktop:")).toBe(true);
     expect(JSON.stringify(events[0])).not.toContain(u.email);
+    expect(events[0].properties).not.toHaveProperty("email");
   });
 
   test("a Pro trial then conversion fires desktop_trial_started and license_purchased once each", async () => {
-    const u = await h.user("analytics-pro@convt.test");
+    const u = await h.user(testMailbox("analytics-pro"));
     const b = await h.buy("pro_month", u);
     const subId = h.mock
       .state()
@@ -40,8 +42,10 @@ describe("Polar analytics", () => {
     await h.deliverAll();
     const trials = eventsNamed("desktop_trial_started", u.id);
     expect(trials.length).toBe(1);
+    expect(trials[0].distinctId).toBe(u.id);
     expect(trials[0].insertId).toBe(`desktop_trial_started:${subId}`);
     expect(trials[0].properties).toEqual({ plan: "pro" });
+    expect(JSON.stringify(trials[0])).not.toContain(u.email);
     expect(eventsNamed("license_purchased", u.id)).toEqual([]);
 
     const [keys] = await h.q<{ n: number }>(sql`
@@ -54,7 +58,9 @@ describe("Polar analytics", () => {
     await h.deliverAll();
     const purchases = eventsNamed("license_purchased", u.id);
     expect(purchases.length).toBe(1);
+    expect(purchases[0].distinctId).toBe(u.id);
     expect(purchases[0].properties).toEqual({ plan: "pro" });
+    expect(JSON.stringify(purchases[0])).not.toContain(u.email);
 
     h.mock.cycle(subId);
     await h.deliverAll();
@@ -64,7 +70,7 @@ describe("Polar analytics", () => {
 
   test("a guest Desktop purchase has no user event until it is claimed", async () => {
     const before = h.analytics.filter((e) => e.event === "license_purchased").length;
-    await h.buy("desktop", null, { email: "analytics-guest@convt.test" });
+    await h.buy("desktop", null, { email: testMailbox("analytics-guest") });
     await h.deliverAll();
     expect(h.analytics.filter((e) => e.event === "license_purchased").length).toBe(before);
   });

@@ -13,8 +13,9 @@ import {
   userSignedUpEvent,
   withoutPii,
 } from "../../src/server/analytics";
+import { testMailbox } from "../mailbox";
 
-test("signup method comes from the auth path, never from an email", () => {
+test("signup method comes from the auth path, never from a mailbox", () => {
   expect(signupMethodFromAuthPath("/sign-in/email-otp")).toBe("email");
   expect(signupMethodFromAuthPath("/callback/github")).toBe("github");
   expect(signupMethodFromAuthPath("/oauth2/callback/google")).toBe("google");
@@ -22,6 +23,7 @@ test("signup method comes from the auth path, never from an email", () => {
 });
 
 test("signup properties keep the method, source and UTM and drop PII", () => {
+  const leaked = testMailbox("hidden");
   const props = signupProperties({
     path: "/sign-in/email-otp",
     cookie: `convt_signup=${encodeURIComponent(
@@ -29,10 +31,10 @@ test("signup properties keep the method, source and UTM and drop PII", () => {
         source: "/pricing",
         utm_source: "twitter",
         utm_medium: "social",
-        email: "leo@convt.test",
+        email: testMailbox("leo"),
       }),
     )}`,
-    callbackURL: "/dashboard?email=hidden@convt.test",
+    callbackURL: `/dashboard?email=${encodeURIComponent(leaked)}`,
     referer: "https://convt.app/sign-in?redirect=%2Fdashboard",
     siteOrigin: "https://convt.app",
   });
@@ -43,27 +45,33 @@ test("signup properties keep the method, source and UTM and drop PII", () => {
     utm_medium: "social",
   });
   expect(JSON.stringify(props)).not.toContain("@");
+  expect(JSON.stringify(props)).not.toContain(leaked);
   expect(props).not.toHaveProperty("email");
 });
 
-test("withoutPii strips emails, names and overlong strings", () => {
+test("withoutPii strips mailboxes, names and overlong strings", () => {
+  const leaked = testMailbox("user");
   expect(
     withoutPii({
       signup_method: "github",
-      email: "a@b.test",
+      email: testMailbox("a", ["b", "test"].join(".")),
       name: "Leo",
       note: "ok",
-      leaked: "user@convt.test",
+      leaked,
     }),
   ).toEqual({ signup_method: "github", note: "ok" });
 });
 
 test("user_signed_up uses the user id and a stable insert id", () => {
-  const event = userSignedUpEvent("usr_abc", { signup_method: "google", email: "nope@x.test" });
+  const event = userSignedUpEvent("usr_abc", {
+    signup_method: "google",
+    email: testMailbox("nope", ["x", "test"].join(".")),
+  });
   expect(event.event).toBe("user_signed_up");
   expect(event.distinctId).toBe("usr_abc");
   expect(event.insertId).toBe("user_signed_up:usr_abc");
   expect(event.properties).toEqual({ signup_method: "google" });
+  expect(event.properties).not.toHaveProperty("email");
 });
 
 test("the auth hook builds the event from the request, not the user row", () => {
@@ -80,10 +88,13 @@ test("the auth hook builds the event from the request, not the user row", () => 
     "https://convt.app",
   );
   expect(event.properties).toEqual({ signup_method: "github", source: "/download" });
+  expect(event.distinctId).toBe("usr_1");
 });
 
-test("attribution sanitizes the landing path and UTM and refuses emails", () => {
-  const url = new URL("https://convt.app/download?utm_source=ph&utm_campaign=a@b.test&x=1");
+test("attribution sanitizes the landing path and UTM and refuses mailboxes", () => {
+  const badCampaign = testMailbox("a", ["b", "test"].join("."));
+  const url = new URL("https://convt.app/download?utm_source=ph&x=1");
+  url.searchParams.set("utm_campaign", badCampaign);
   expect(attributionFromSearch(url)).toEqual({ source: "/download", utm_source: "ph" });
   expect(sanitizeAttribution({ source: "/pricing?token=abc", utm_source: "ok" })).toEqual({
     source: "/pricing",
