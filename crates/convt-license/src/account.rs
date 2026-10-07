@@ -307,10 +307,9 @@ mod tests {
         assert!(!a.accepts(b.state(), now));
         assert!(!a.accepts("", now));
         assert!(!a.accepts(&a.state()[..42], now));
-        let late = Pending::new()
-            .unwrap()
-            .started_earlier(SIGN_IN_TIMEOUT + Duration::from_secs(1));
-        assert!(!late.accepts(late.state(), Instant::now()));
+        let late = Pending::new().unwrap();
+        let after_timeout = Instant::now() + SIGN_IN_TIMEOUT + Duration::from_secs(1);
+        assert!(!late.accepts(late.state(), after_timeout));
     }
 
     #[test]

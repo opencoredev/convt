@@ -5,7 +5,7 @@
 // means no release yet. See apps/web/README.md.
 // This module has no dependencies so release scripts can import it with Bun.
 
-export type Platform = "linux-x86_64" | "macos-universal" | "windows-x86_64" | "source";
+export type Platform = "linux-x86_64" | "macos-arm64" | "windows-x86_64" | "source";
 export type ArtifactKind = "tar.gz" | "AppImage" | "deb" | "rpm" | "dmg" | "zip" | "msi" | "exe";
 
 export type ManifestArtifact = {
@@ -40,7 +40,7 @@ export type ReleaseManifest = {
   builds: ManifestBuild[];
 };
 
-const platforms: Platform[] = ["linux-x86_64", "macos-universal", "windows-x86_64", "source"];
+const platforms: Platform[] = ["linux-x86_64", "macos-arm64", "windows-x86_64", "source"];
 const kinds: ArtifactKind[] = ["tar.gz", "AppImage", "deb", "rpm", "dmg", "zip", "msi", "exe"];
 
 function fail(path: string, message: string): never {

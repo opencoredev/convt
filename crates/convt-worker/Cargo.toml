@@ -10,7 +10,7 @@ license.workspace = true
 anyhow.workspace = true
 convt-core.workspace = true
 convt-engines.workspace = true
-convt-server = { version = "0.1.0", path = "../convt-server" }
+convt-server = { path = "../convt-server" }
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "json"] }
 tar = { version = "=0.4.44", default-features = false }

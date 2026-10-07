@@ -5,9 +5,11 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def sha(path):
@@ -108,7 +110,66 @@ def collect(tree, payload, cache, epoch):
         # The lock explicitly classifies source gaps separately from untested build environments.
         gaps.extend(g['detail'] if isinstance(g,dict) else g for g in data.get('source_gaps',data.get('remaining_gaps',[])))
         checks.append('PDFium exact revision, dependency archive and notice reproduction hashes')
-    platform_gaps={'macos-universal':mac_gaps(tree)}
+    platform_gaps={'macos-arm64':mac_gaps(tree)}
+    # The Mac bundle uses its own source-built FFmpeg 9.0.2. Retain that
+    # build's exact sources and recipe before the Mac platform can count as covered.
+    if not platform_gaps['macos-arm64']:
+        spec=importlib.util.spec_from_file_location('mac_source_verifier',tree/'packaging/release/pdfium-source-verify.py')
+        mac=importlib.util.module_from_spec(spec);spec.loader.exec_module(mac)
+        mac.CACHE=cache
+        build=json.loads((tree/'packaging/release/macos-source-ffmpeg.lock.json').read_text())['source_build_alternative']
+        if sha(tree/build['build_recipe']['path'])!=build['build_recipe']['sha256']:raise ValueError('macOS FFmpeg build recipe differs from its lock')
+        for item in build['sources']:
+            path=mac.cache_path(item)
+            if not path.exists():mac.fetch(item,path)
+            mac.verify(item,path)
+            sources.append(retain(tree,cache,destination/'macos-ffmpeg',item,'cache_filename'))
+        checks.append('macOS arm64 FFmpeg 9.0.2 source build: every pinned source archive and the hash-pinned recipe retained')
+    # Runs before the Linux derivation removes crates outside the Linux graph.
+    # macOS has a different Cargo feature graph. Keep one target-specific
+    # inventory for each slice beside the archive and verify that the known
+    # SDK-derived objc2 sources are present with their recorded provenance.
+    mac_inventory = []
+    blocker_rows = json.loads((tree/'packaging/release/rust-notice-blockers.json').read_text())['blockers']
+    for target in ('aarch64-apple-darwin', 'x86_64-apple-darwin'):
+        output = tree / f'third-party/rust-license-inventory-{target}.json'
+        subprocess.run([sys.executable, str(tree/'packaging/linux/rust-license-map.py'), str(output),
+                        '--vendor-dir', str(tree/'third-party/rust'), '--target', target], cwd=tree, check=True)
+        data = json.loads(output.read_text())
+        if data.get('targets') != [target]:
+            raise ValueError(f'macOS Rust inventory target mismatch: {target}')
+        inventory = {(p['name'], p['version'], p['manifest_sha256']): p
+                     for p in data.get('source_inventory', [])}
+        missing = []
+        for blocker in blocker_rows:
+            identity = (blocker['name'], blocker['version'], blocker['manifest_sha256'])
+            record = inventory.get(identity)
+            if record is None:
+                missing.append(f"{blocker['name']} {blocker['version']}")
+                continue
+            expected_targets = set(blocker.get('targets', []))
+            if target in expected_targets and target not in record.get('targets', []):
+                missing.append(f"{blocker['name']} {blocker['version']} (target graph)")
+        if missing:
+            raise ValueError(f'macOS Rust inventory omits SDK-derived crates for {target}: {", ".join(sorted(missing))}')
+        mac_inventory.append(str(output.relative_to(tree)))
+    checks.append('Target-specific macOS Rust inventories retain both Apple targets and SDK-derived objc2 sources')
+    # The archive keeps only the Linux crate graph, so the Mac-only part of the
+    # app's graph is absent from it. Any copyleft crate there leaves macOS
+    # without its corresponding source.
+    def crate_graph(target):
+        with tempfile.TemporaryDirectory(prefix='convt-empty-cargo-') as home:
+            result=subprocess.run(['cargo','tree','--offline','--locked','-p','convt-cli','-p','convt-app','--target',target,
+                                   '-e','normal,build','--prefix','none','-f','{p}'],cwd=tree,check=True,capture_output=True,text=True,
+                                  env={**os.environ,'CARGO_HOME':home})
+        return {tuple(line.split(' (')[0].replace(' v',' ',1).split()) for line in result.stdout.splitlines() if line.strip()}
+    licences={(c['name'],c['version']):c['license'] for c in json.loads((tree/'third-party/rust-license-inventory-aarch64-apple-darwin.json').read_text())['source_inventory']}
+    def copyleft(expression):
+        return all(re.search(r'GPL|MPL|EPL|CDDL|OSL|NOASSERTION',alt) for alt in re.split(r'\s+OR\s+|/',expression.strip('() ')))
+    mac_only=crate_graph('aarch64-apple-darwin')-crate_graph('x86_64-unknown-linux-gnu')
+    blocked=sorted(f'{n} {v} ({licences.get((n,v),"NOASSERTION")})' for n,v in mac_only if copyleft(licences.get((n,v),'NOASSERTION')))
+    if blocked:platform_gaps['macos-arm64'].append('Mac-only copyleft or undeclared Rust crates absent from the Linux source archive: '+', '.join(blocked))
+    checks.append(f'{len(mac_only)} Mac-only Rust crates outside the Linux source archive are permissively licensed')
     subprocess.run([sys.executable,str(tree/'scripts/release/linux-source-scope.py'),str(tree)],cwd=tree,check=True)
     checks.append('Linux Cargo unit graph, features, pins and source bytes preserved by archived metadata derivation')
     inventory=tree/'third-party/rust-license-inventory.json'
@@ -118,4 +179,8 @@ def collect(tree, payload, cache, epoch):
     rust=json.loads(inventory.read_text())
     if any(not c['notices'] for c in rust['source_inventory']):raise ValueError('Vendored Rust sources lack complete notices')
     checks.append('Complete vendored Linux Rust source licence inventory, including build dependencies')
-    return {'sources':sources,'checks':checks,'gaps':gaps,'rust_inventory':'third-party/rust-license-inventory.json','platform_gaps':platform_gaps}
+    return {'sources':sources,'checks':checks,'gaps':gaps,
+            'rust_inventory':'third-party/rust-license-inventory.json',
+            'rust_inventories': ['third-party/rust-license-inventory-aarch64-apple-darwin.json',
+                                 'third-party/rust-license-inventory-x86_64-apple-darwin.json'],
+            'platform_gaps':platform_gaps}

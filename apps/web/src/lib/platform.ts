@@ -17,15 +17,15 @@ export const osNames: Record<Os, string> = {
 export const osOrder: Os[] = ["macos", "windows", "linux"];
 
 const osPlatform: Record<Os, Exclude<Platform, "source">> = {
-  macos: "macos-universal",
+  macos: "macos-arm64",
   windows: "windows-x86_64",
   linux: "linux-x86_64",
 };
 
 export const kindLabels: Record<ArtifactKind, { title: string; note: string }> = {
-  dmg: { title: "Disk image (.dmg)", note: "Apple silicon and Intel" },
+  dmg: { title: "Disk image (.dmg)", note: "Apple silicon" },
   exe: { title: "Installer (.exe)", note: "64-bit Windows" },
-  msi: { title: "Installer (.msi)", note: "For managed installs" },
+  msi: { title: "Installer (.msi)", note: "64-bit Windows, installs for you only" },
   zip: { title: "Archive (.zip)", note: "No installer" },
   AppImage: { title: "AppImage", note: "Runs on most distributions" },
   deb: { title: "Debian package (.deb)", note: "Debian, Ubuntu and derivatives" },
@@ -36,7 +36,7 @@ export const kindLabels: Record<ArtifactKind, { title: string; note: string }> =
 /** The downloads each OS always lists, first one offered first. Missing ones say "Coming soon". */
 const expected: Record<Os, ArtifactKind[]> = {
   macos: ["dmg"],
-  windows: ["exe"],
+  windows: ["msi"],
   linux: ["AppImage", "deb", "rpm", "tar.gz"],
 };
 

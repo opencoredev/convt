@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import tarfile
+import gzip
 import tempfile
 import time
 import urllib.request
@@ -43,6 +44,27 @@ def cache_path(item):
     return path
 
 
+def canonicalize(source, output):
+    with tarfile.open(source, 'r|gz') as archive, output.open('wb') as raw, \
+            gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0, compresslevel=9) as stream, \
+            tarfile.open(fileobj=stream, mode='w|', format=tarfile.PAX_FORMAT) as result:
+        for member in archive:
+            member.uid = member.gid = 0
+            member.uname = member.gname = ''
+            member.mtime = 0
+            member.pax_headers = {}
+            result.addfile(member, archive.extractfile(member) if member.isfile() else None)
+
+
+def canonical_release(source, output):
+    """The GitHub release API response minus its counters and timestamps."""
+    release = json.loads(source.read_text())
+    keep = {key: release[key] for key in ('tag_name', 'name', 'target_commitish', 'published_at', 'body')}
+    keep['assets'] = sorted(({key: asset[key] for key in ('name', 'size', 'digest', 'browser_download_url')}
+                             for asset in release['assets']), key=lambda asset: asset['name'])
+    output.write_text(json.dumps(keep, indent=1, sort_keys=True) + '\n')
+
+
 def fetch(item, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='source-fetch-', dir=CACHE) as temporary:
@@ -63,6 +85,16 @@ def fetch(item, path):
                     stream.write(block)
                     if time.monotonic() - start > 180:
                         raise TimeoutError('Source download exceeded 180 seconds')
+        if retrieval.get('type') == 'canonical-gitiles-archive':
+            # Gitiles and codeload regenerate archives on request, so their
+            # bytes drift. Re-tar the members with fixed metadata and hash that.
+            canonical = Path(temporary) / 'canonical.tar.gz'
+            canonicalize(downloaded, canonical)
+            downloaded = canonical
+        elif retrieval.get('type') == 'canonical-github-release':
+            canonical = Path(temporary) / 'canonical.json'
+            canonical_release(downloaded, canonical)
+            downloaded = canonical
         if digest(downloaded) != item['sha256']:
             raise ValueError('Downloaded SHA-256 mismatch: ' + item['cache_filename'])
         downloaded.replace(path)
@@ -193,8 +225,15 @@ def main():
                 continue
             seen.add(item['cache_filename'])
             path = cache_path(item)
-            if not path.exists() and args.fetch:
-                fetch(item, path)
+            if args.fetch:
+                if not path.exists():
+                    fetch(item, path)
+                else:
+                    try:
+                        verify(item, path)
+                    except (ValueError, AssertionError):
+                        # Refresh stale local caches from the locked upstream bytes.
+                        fetch(item, path)
             verify(item, path)
             count += 1
         local_recipe = lock.get('source_build_alternative', {}).get('build_recipe')

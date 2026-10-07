@@ -130,7 +130,7 @@ impl UpdateConfig {
 /// The platform and artifact kind of this install, as the manifest names them.
 fn install_target() -> (&'static str, &'static str) {
     if cfg!(target_os = "macos") {
-        ("macos-universal", "dmg")
+        ("macos-arm64", "dmg")
     } else if cfg!(windows) {
         ("windows-x86_64", "msi")
     } else if std::env::var_os("APPIMAGE").is_some() {
