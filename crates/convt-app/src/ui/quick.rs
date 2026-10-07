@@ -1044,7 +1044,7 @@ impl QuickView {
 /// Space between the window edge and the content.
 const GUTTER: f32 = 24.;
 /// Four format cards to a row.
-const CARD_WIDTH: f32 = 128.;
+const CARD_WIDTH: f32 = 132.;
 const SELECT_WIDTH: f32 = 190.;
 
 /// A titled part of the window.

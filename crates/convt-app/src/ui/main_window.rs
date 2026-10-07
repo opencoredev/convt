@@ -542,7 +542,7 @@ impl MainView {
                         .flex_col()
                         .items_center()
                         .gap(px(6.))
-                        .max_w(px(380.))
+                        .max_w(px(440.))
                         .child(
                             text(15., 20., p.text)
                                 .font_weight(FontWeight::SEMIBOLD)
@@ -695,7 +695,7 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
         ),
         State::TrialEnded => (
             "Trial ended",
-            "0 days left".into(),
+            String::new(),
             1.,
             true,
             format!("Buy license · {LICENSE_PRICE}"),
