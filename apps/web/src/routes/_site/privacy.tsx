@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { AnalyticsOptOut } from "#/components/site/analytics-opt-out";
 import { TextLink } from "#/components/site/layout";
 import { LegalPage, List, Placeholder, type LegalSection } from "#/components/site/legal";
 import { PRIVACY_EMAIL, legal, routes, seo } from "#/lib/site";
@@ -21,8 +22,9 @@ export const Route = createFileRoute("/_site/privacy")({
       summary={
         <p>
           convt converts files on your own computer. The app has no analytics or tracking, and your
-          files stay on your machine unless you choose to convert one in the cloud. This policy
-          covers the convt app, the command line tool, convt.app and the convt API.
+          files stay on your machine unless you choose to convert one in the cloud. The convt.app
+          website uses PostHog analytics to count visits, which you can turn off. This policy covers
+          the convt app, the command line tool, convt.app and the convt API.
         </p>
       }
       sections={sections}
@@ -111,7 +113,7 @@ const sections: LegalSection[] = [
     title: "What we collect on convt.app",
     body: (
       <>
-        <p>We collect only what the account, licensing and billing features need:</p>
+        <p>For accounts, licensing and billing we collect only what those features need:</p>
         <List
           items={[
             <>
@@ -135,10 +137,53 @@ const sections: LegalSection[] = [
           ]}
         />
         <p>
-          The site sets only the cookies it needs to work: the sign-in session and, during a
-          purchase, a short-lived cookie that lets this browser show your new license key. There are
-          no analytics, advertising or third-party tracking cookies.
+          The site sets the cookies it needs to work: the sign-in session and, during a purchase, a
+          short-lived cookie that lets this browser show your new license key. The analytics below
+          add one more. There are no advertising cookies.
         </p>
+      </>
+    ),
+  },
+  {
+    id: "analytics",
+    title: "Website analytics",
+    body: (
+      <>
+        <p>
+          convt.app uses <span className={strong}>PostHog</span> to see which pages people visit and
+          how they move through the site, so we can tell what works and fix what does not. It runs
+          only on the website, never in the app or the command line tool. PostHog processes the data
+          for us in the United States.
+        </p>
+        <p>When analytics are on, each page you open sends PostHog:</p>
+        <List
+          items={[
+            <>
+              <span className={strong}>Page views and clicks:</span> the address of the page,
+              without anything after a <code>?</code> or <code>#</code>, the page you came from, cut
+              the same way, and the links, buttons and form fields you use, but not what you type.
+            </>,
+            <>
+              <span className={strong}>Device and browser:</span> browser, operating system, device
+              type and screen size.
+            </>,
+            <>
+              <span className={strong}>Approximate location:</span> PostHog receives and keeps your
+              IP address, and uses it to estimate your country and city.
+            </>,
+            <>
+              <span className={strong}>A random visitor ID</span> kept in a first-party cookie and
+              local storage, so repeat visits count once. It is not linked to your convt account,
+              your email address or your purchases.
+            </>,
+          ]}
+        />
+        <p>
+          We do not record sessions. To turn analytics off, use the switch below, turn on Global
+          Privacy Control or Do Not Track in your browser, or block PostHog with a content blocker.
+          Once they are off, this browser sends PostHog nothing more.
+        </p>
+        <AnalyticsOptOut />
       </>
     ),
   },
@@ -165,6 +210,10 @@ const sections: LegalSection[] = [
             <>
               <span className={strong}>Railway</span> hosts our Postgres database and the conversion
               servers.
+            </>,
+            <>
+              <span className={strong}>PostHog</span> runs the website analytics described above, in
+              the United States.
             </>,
             <>
               <span className={strong}>GitHub and Google</span> receive a sign-in request only if
