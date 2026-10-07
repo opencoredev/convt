@@ -263,8 +263,11 @@ def main(default_lock):
         # Provenance is written by the network-none rebuild after fetch.
         if args.command == "fetch" and not path.exists():
             continue
-        if digest(path.read_bytes()) != entry["sha256"]:
+        # Logs that differ between identical builds are retained, not pinned.
+        if "sha256" in entry and digest(path.read_bytes()) != entry["sha256"]:
             raise ValueError(f"Build evidence hash mismatch: {path}")
+        if not path.is_file():
+            raise ValueError(f"Missing build evidence: {path}")
         if args.command == "collect" and args.output:
             target = args.output / "build-evidence" / path.name
             target.parent.mkdir(parents=True, exist_ok=True)

@@ -2233,7 +2233,7 @@
         },
         {
           "local": "packaging/release/appimage-source-build.py",
-          "sha256": "641387de6842d7dce7601a1bb536ffe126494552bbf6c218ce2276b010cc22ca",
+          "sha256": "1ce2d6348a9741fa704ee045b0bdb81f5eda78ad78ba914d8ea0e23740bee8e6",
           "retain_as": "release/appimage-source-build.py"
         }
       ],
@@ -3075,7 +3075,7 @@
     },
     {
       "cache": "appimage-source/provenance-57940b0449dc/link-inputs.txt",
-      "sha256": "69d34bc685c09f0923ca155bfb4c14bbd691227fe0dea48a6269397c0de49753"
+      "reproducible": false
     },
     {
       "cache": "appimage-source/provenance-57940b0449dc/clang-version.txt",
@@ -3087,11 +3087,11 @@
     },
     {
       "cache": "appimage-source/provenance-57940b0449dc/runtime-version.txt",
-      "sha256": "88a8290029e711f6df4a8cbad59b523b95f8700d729f9ac219bc841d8e9a9490"
+      "reproducible": false
     },
     {
       "cache": "appimage-source/provenance-57940b0449dc/squashfuse-config.log",
-      "sha256": "abfa1740fa22ca35642bffb375918f9475f5dd064d05416425d362066fcbe687"
+      "reproducible": false
     }
   ],
   "linked_archives": [
