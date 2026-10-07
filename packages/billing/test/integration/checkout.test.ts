@@ -137,4 +137,27 @@ describe("checkout result", () => {
     await h.deliverAll();
     expect((await result(co.id, d.cookieValue)).result.state).toBe("pending");
   });
+
+  test("a pending sync while Polar is incomplete stamps synced_at and re-syncs after the cooldown", async () => {
+    const u = await h.user("resync-trial@convt.test");
+    const created = await h.service.createCheckout({ product: "pro_month", user: u });
+    if (!created.ok) throw new Error("refused");
+    const co = h.mock.checkoutBySecret(created.url.split("/checkout/")[1])!;
+
+    // Polar has no subscription yet: ingest leaves pending, but must not burn the sync.
+    const first = await result(co.id, created.cookieValue, u.id, true);
+    expect(first.result.state).toBe("pending");
+    const [row] = await h.q<{ synced_at: string | null }>(
+      sql`select synced_at from checkouts where id = ${created.checkoutId}`,
+    );
+    expect(row.synced_at).not.toBeNull();
+
+    h.mock.completeCheckout(co.id, "4242", u.email);
+    h.mock.takeHeld();
+    // Polar is now trialing, but the 5s cooldown must skip this pull.
+    expect((await result(co.id, created.cookieValue, u.id, true)).result.state).toBe("pending");
+
+    h.mock.advance(5_000);
+    expect((await result(co.id, created.cookieValue, u.id, true)).result.state).toBe("trial");
+  });
 });

@@ -256,14 +256,20 @@ export async function checkoutResult(
     return none;
   }
 
+  const syncCooldownMs = 5_000;
   let s = await stateOf(ctx, row);
-  if (s.state === "pending" && input.sync && !row.synced_at) {
-    // Once per checkout: pull it from the provider through ingest.
-    await ctx.db.execute(
-      sql`update checkouts set synced_at = ${now}, updated_at = ${now} where id = ${row.id} and synced_at is null`,
-    );
-    await syncCheckout(ctx, row.provider_checkout_id);
-    s = await stateOf(ctx, row);
+  if (s.state === "pending" && input.sync) {
+    const due =
+      !row.synced_at || now.getTime() - row.synced_at.getTime() >= syncCooldownMs;
+    if (due) {
+      // Stamp attempt time for cooldown / concurrent polls, then pull from Polar.
+      await ctx.db.execute(
+        sql`update checkouts set synced_at = ${now}, updated_at = ${now} where id = ${row.id}`,
+      );
+      row.synced_at = now;
+      await syncCheckout(ctx, row.provider_checkout_id);
+      s = await stateOf(ctx, row);
+    }
   }
   if (s.state !== "ready")
     return { result: { state: s.state, product: row.product }, setCookie: null };

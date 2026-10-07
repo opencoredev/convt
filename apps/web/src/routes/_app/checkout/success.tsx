@@ -31,7 +31,7 @@ const callTimeoutMs = 12_000;
 type State =
   | CheckoutView
   | { state: "loading" }
-  | { state: "email" }
+  | { state: "email"; product?: "desktop" | "pro" | "api" | null }
   | { state: "error"; reason: string };
 
 const errors: Record<string, string> = {
@@ -61,10 +61,9 @@ function SuccessPage() {
         ? { state: "loading" }
         : { state: "not_found", product: null },
   );
-  // After the first pending answer, the next call asks convt-billing to sync this
-  // checkout from the provider; it does that at most once per checkout.
+  // After the first pending answer, later polls keep asking convt-billing to sync.
+  // The server rate-limits that pull (5s) while the checkout stays pending.
   const syncNext = useRef(false);
-  const syncDone = useRef(false);
 
   useEffect(() => {
     if (!checkoutId || error) return;
@@ -73,8 +72,7 @@ function SuccessPage() {
     const started = Date.now();
     const poll = async () => {
       try {
-        const sync = syncNext.current && !syncDone.current;
-        if (sync) syncDone.current = true;
+        const sync = syncNext.current;
         // A call that never answers (a dropped connection) must not stall the page.
         const r = await Promise.race([
           fetchCheckoutResult({ data: { checkoutId, sync } }),
@@ -86,18 +84,21 @@ function SuccessPage() {
         if (r.state === "pending") {
           syncNext.current = true;
           if (Date.now() - started > giveUpMs) {
-            setState({ state: "email" });
+            setState({ state: "email", product: r.product });
             return;
           }
           setState(r);
-          timer = setTimeout(poll, syncDone.current ? pollMs : 0);
+          timer = setTimeout(poll, sync ? pollMs : 0);
           return;
         }
         setState(r);
       } catch {
         if (stopped) return;
         if (Date.now() - started > giveUpMs) {
-          setState({ state: "email" });
+          setState((prev) => ({
+            state: "email",
+            product: "product" in prev ? prev.product : null,
+          }));
           return;
         }
         timer = setTimeout(poll, pollMs);
@@ -173,6 +174,34 @@ function Body({ state }: { state: State }) {
         </>
       );
     case "email":
+      if (state.product === "pro") {
+        return (
+          <>
+            <Heading eyebrow="CONVT PRO">Your trial has started</Heading>
+            <p className={lead}>
+              Your trial has started. You can go download the app{" "}
+              <a
+                href={links.download}
+                className={cx(
+                  "font-medium text-green hover:underline hover:underline-offset-2",
+                  focusRing,
+                )}
+              >
+                here
+              </a>
+              .
+            </p>
+            <p className={lead}>
+              Billing shows the trial. The Pro license key arrives with the first paid invoice, not
+              by email now.
+            </p>
+            <Actions
+              primary={{ href: links.download, label: "Download convt" }}
+              secondary={{ href: "/dashboard/billing", label: "Go to Billing" }}
+            />
+          </>
+        );
+      }
       return (
         <>
           <Heading eyebrow="CHECKOUT">Your key is on its way by email</Heading>
