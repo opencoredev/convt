@@ -40,6 +40,42 @@ class Sources(unittest.TestCase):
     audit.retain(tree,cache,tree/'sources',item)
    self.assertFalse((cache/'source.tar').exists())
 
+class CrateGraphLines(unittest.TestCase):
+    def identities(self, *lines):
+        return audit.crate_graph_identities('\n'.join(lines) + '\n')
+
+    def test_colorized_duplicate_marker_is_not_a_third_field(self):
+        # GitHub Actions sets CARGO_TERM_COLOR=always. Cargo 1.95 then prints a
+        # colorized (*) that is not prefixed by " (", which the previous
+        # 2-tuple split treated as a third field.
+        colored = 'objc2-app-kit v0.3.2 \x1b[33m\x1b[2m(*)\x1b[39m\x1b[22m'
+        self.assertEqual(len(colored.split(' (')[0].replace(' v', ' ', 1).split()), 3)
+        self.assertEqual(self.identities(colored), {('objc2-app-kit', '0.3.2')})
+        name, version = next(iter(self.identities(colored)))
+        self.assertEqual((name, version), ('objc2-app-kit', '0.3.2'))
+
+    def test_plain_and_annotated_package_lines(self):
+        self.assertEqual(self.identities(
+            'serde v1.0.210',
+            'serde v1.0.210 (*)',
+            'quote v1.0.40 (proc-macro)',
+            'convt-app v0.2.0 (/tmp/convt-source/crates/convt-app)',
+            'spirv v0.4.0+sdk-1.4.341.0',
+            '',
+            '[build-dependencies]',
+            'objc2-core-audio-types v0.3.2 \x1b[33;2m(*)\x1b[0m',
+        ), {
+            ('serde', '1.0.210'),
+            ('quote', '1.0.40'),
+            ('convt-app', '0.2.0'),
+            ('spirv', '0.4.0+sdk-1.4.341.0'),
+            ('objc2-core-audio-types', '0.3.2'),
+        })
+
+    def test_unrecognized_line_names_the_script_and_value(self):
+        with self.assertRaisesRegex(ValueError, r"source-audit\.py: cannot parse cargo tree package line: 'Zlib OR Apache-2.0 OR MIT'"):
+            audit.parse_crate_graph_line('Zlib OR Apache-2.0 OR MIT')
+
 class MacStatus(unittest.TestCase):
  def status(self,tree,value):
   path=tree/'packaging/macos/release-status.json';path.parent.mkdir(parents=True,exist_ok=True);path.write_text(__import__('json').dumps(value))
