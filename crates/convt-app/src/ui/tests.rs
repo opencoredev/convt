@@ -2259,7 +2259,8 @@ fn a_document_offers_the_pack_and_downloads_only_after_the_click(cx: &mut TestAp
 
     let (window, view) = last_quick_or(cx, &f, &docx);
     click(cx, window, "pack-download");
-    assert_eq!(packs.installs(), 1);
+    // The install runs on its own thread.
+    wait_until(cx, "the download", |_| packs.installs() == 1);
     wait_for_label(cx, window, "pack-done", |s| {
         s.starts_with("Document support")
     });
