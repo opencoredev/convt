@@ -1,14 +1,9 @@
-"""Release workflow layout: GitHub-hosted runners, one cached build, dispatch-only repro."""
+"""Release workflow layout: one cached build, dispatch-only reproducibility."""
 from pathlib import Path
-import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / '.github' / 'workflows'
-PAID_RUNNER = re.compile(
-    r'tenki-|blacksmith-|namespace-|depot-|self-hosted|xlarge|4c-8g|8c-16g',
-    re.I,
-)
 
 
 def workflow(name):
@@ -16,16 +11,6 @@ def workflow(name):
 
 
 class ReleaseWorkflows(unittest.TestCase):
-    def test_no_paid_runner_labels(self):
-        leftovers = []
-        for path in sorted(WORKFLOWS.glob('*.yml')):
-            for line_no, line in enumerate(path.read_text().splitlines(), 1):
-                if line.lstrip().startswith('#'):
-                    continue
-                if PAID_RUNNER.search(line):
-                    leftovers.append(f'{path.name}:{line_no}:{line.strip()}')
-        self.assertEqual(leftovers, [])
-
     def test_linux_release_is_one_cached_build(self):
         text = workflow('release-linux.yml')
         self.assertIn('linux-release-review', text)
@@ -54,7 +39,7 @@ class ReleaseWorkflows(unittest.TestCase):
         self.assertIn('rm "$key"', text)
         self.assertIn('Remove-Item -Recurse -Force target', text)
 
-    def test_macos_release_stays_arm64_on_github_hosted(self):
+    def test_macos_release_stays_arm64(self):
         text = workflow('release-macos.yml')
         self.assertIn('runs-on: macos-15', text)
         self.assertIn('macos-release-review', text)
@@ -71,15 +56,15 @@ class ReleaseWorkflows(unittest.TestCase):
         self.assertIn('cancel-in-progress: true', text)
         self.assertNotIn('Rebuild twice', text)
 
-    def test_umbrella_release_uses_github_hosted(self):
+    def test_umbrella_release_calls_platforms_and_queues(self):
         text = workflow('release.yml')
         self.assertIn('uses: ./.github/workflows/release-linux.yml', text)
         self.assertIn('uses: ./.github/workflows/release-macos.yml', text)
         self.assertIn('uses: ./.github/workflows/release-windows.yml', text)
         self.assertIn('*-release-review', text)
-        self.assertEqual(text.count('runs-on: ubuntu-24.04'), 2)
+        self.assertIn('tenki-standard-medium-4c-8g', text)
+        self.assertIn('tenki-standard-large-8c-16g', text)
         self.assertIn('cancel-in-progress: false', text)
-        self.assertNotIn('tenki-', text)
         self.assertNotIn('Swatinem/rust-cache@v2', text)
 
 
