@@ -21,9 +21,23 @@ $Generator = switch ($Major) {
 $CMake = Get-Command cmake.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 if (-not $CMake) { $CMake = Join-Path $VisualStudio.installationPath 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' }
 if (!(Test-Path $CMake)) { throw 'CMake required (Visual Studio C++ CMake tools or PATH)' }
-$Patch = (Get-Command patch.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
-if (-not $Patch) { $Patch = "$env:ProgramFiles\Git\usr\bin\patch.exe" }
-if (!(Test-Path $Patch)) { throw 'patch.exe required (Git for Windows)' }
+# Prefer Git for Windows' GNU patch. windows-latest puts Strawberry Perl
+# first on PATH; its patch 2.5.9 asserts `hunk` on the x265 debian series
+# (0001-Fix-arm-flags.patch). That ARM CMake tweak is unused on this x64
+# ENABLE_ASSEMBLY=OFF build, but the full Ubuntu series is still applied
+# for the same corresponding-source closure as Linux.
+$GitPatch = Join-Path $env:ProgramFiles 'Git/usr/bin/patch.exe'
+if (Test-Path -LiteralPath $GitPatch) {
+    $Patch = $GitPatch
+} else {
+    $Patch = (Get-Command patch.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
+}
+if (-not $Patch -or -not (Test-Path -LiteralPath $Patch)) {
+    throw 'patch.exe required (Git for Windows)'
+}
+if ($Patch -match '(?i)[\\/]Strawberry[\\/]') {
+    throw "Unusable patch.exe from Strawberry Perl: $Patch. Install Git for Windows."
+}
 function Native($Name, $Subdir, $Options) {
     $Source = Join-Path $Work $Name
     New-Item -ItemType Directory -Force $Source | Out-Null
@@ -47,8 +61,18 @@ function Native($Name, $Subdir, $Options) {
         & $Patch -d $Source -p1 --batch -i "$Repo/packaging/linux/libheif-explicit-init.patch"
         if ($LASTEXITCODE -ne 0) { throw 'Secure libheif patch failed' }
     }
+    if ($Name -eq 'x265') {
+        # x265 3.5 forces CMP0025/CMP0054 to OLD, which CMake 4 (VS 2026) rejects.
+        $CMakeLists = Join-Path $Source 'source/CMakeLists.txt'
+        $Text = [System.IO.File]::ReadAllText($CMakeLists)
+        $Updated = $Text.Replace('SET CMP0025 OLD', 'SET CMP0025 NEW').Replace('SET CMP0054 OLD', 'SET CMP0054 NEW')
+        if ($Updated -ne $Text) {
+            $Utf8 = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllText($CMakeLists, $Updated, $Utf8)
+        }
+    }
     $Build = Join-Path $Source 'build-convt'
-    & $CMake -S (Join-Path $Source $Subdir) -B $Build -G $Generator -A x64 "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" -DCMAKE_INSTALL_LIBDIR=lib @Options
+    & $CMake -S (Join-Path $Source $Subdir) -B $Build -G $Generator -A x64 "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_POLICY_VERSION_MINIMUM=3.5 @Options
     if ($LASTEXITCODE -ne 0) { throw "Configure $Name" }
     & $CMake --build $Build --config Release --parallel 4
     if ($LASTEXITCODE -ne 0) { throw "Build $Name" }
