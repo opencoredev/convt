@@ -21,7 +21,7 @@ import { routes, seo } from "#/lib/site";
 
 // The newest GitHub release's manifest (packaging/release/manifest.schema.json), read
 // on each load. content/release-manifest.json is the fallback when GitHub has none or
-// can't be reached; without either, every download says "Coming soon". The glob
+// can't be reached; without either, every download says "Shipping today". The glob
 // resolves at build time; scripts/generate-content.ts validates the file.
 const files = import.meta.glob("../../../content/release-manifest.json", {
   eager: true,
