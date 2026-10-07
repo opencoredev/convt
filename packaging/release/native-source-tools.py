@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 import urllib.request
 import uuid
 import zipfile
@@ -31,15 +32,27 @@ def cache_file(cache, relative):
     return path
 
 
-def fetch_verified(path, url, expected, label):
+def fetch_verified(path, url, expected, label, attempts=3):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".download")
-    with urllib.request.urlopen(url, timeout=60) as response, temporary.open("wb") as out:
-        shutil.copyfileobj(response, out)
-    if digest(temporary.read_bytes()) != expected:
+    # Mirrors occasionally truncate or substitute a response; only the pinned
+    # bytes are ever accepted, so a retry cannot weaken the check.
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response, temporary.open("wb") as out:
+                shutil.copyfileobj(response, out)
+        except OSError:
+            if attempt == attempts:
+                raise
+            time.sleep(5 * attempt)
+            continue
+        if digest(temporary.read_bytes()) == expected:
+            temporary.replace(path)
+            return
         temporary.unlink()
-        raise ValueError(f"Downloaded source hash mismatch: {label}")
-    temporary.replace(path)
+        if attempt < attempts:
+            time.sleep(5 * attempt)
+    raise ValueError(f"Downloaded source hash mismatch: {label}")
 
 
 def rebuilt_runtime(lock, cache):
