@@ -3,8 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 
 import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
-import { DownloadIcon, Sha } from "#/components/site/download";
-import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
+import { CopySha, DownloadIcon } from "#/components/site/download";
+import { TextLink, siteColumn } from "#/components/site/layout";
 import {
   isOs,
   kindLabels,
@@ -62,8 +62,9 @@ export const Route = createFileRoute("/_site/download")({
   component: DownloadPage,
 });
 
-const sectionTitle = "text-2xl/8 font-semibold tracking-[-0.02em]";
+const sectionTitle = "text-[28px]/9 font-semibold tracking-[-0.03em] text-balance";
 const eyebrow = "font-mono text-[11px]/3.5 text-ink-2 uppercase";
+const card = "rounded-2xl bg-raised shadow-[inset_0_0_0_1px_var(--line)] dark:bg-panel";
 
 /** "2026-10-07" to "7 Oct 2026", without going through a time zone. */
 function formatDate(date: string) {
@@ -72,517 +73,576 @@ function formatDate(date: string) {
   return `${d} ${months[m - 1]} ${y}`;
 }
 
-function archLabel(slot: Slot) {
-  return slot.arch === "universal" ? "Universal" : slot.arch;
+/** ".deb", "AppImage": how a format reads on a button. */
+function kindName(slot: Slot) {
+  return slot.kind === "AppImage" ? slot.kind : `.${slot.kind}`;
 }
 
 const isLive = (release: Release) => release.slots.some((s) => s.artifact);
+const publishedFor = (release: Release, os: Os) =>
+  release.slots.filter((s) => s.os === os && s.artifact);
 
 function DownloadPage() {
-  const { release } = Route.useLoaderData();
-  const live = isLive(release);
   return (
-    <div className={cx(siteColumn, "flex flex-col gap-16 pt-12 pb-20 md:gap-20 md:pt-16")}>
-      <div className="flex flex-col gap-8 md:gap-10">
-        <PageHeader
-          eyebrow={
-            live && release.version
-              ? `Version ${release.version}${release.date ? ` · ${formatDate(release.date)}` : ""}`
-              : "Download"
-          }
-          title="Download convt"
-        >
-          <p>
-            The app, the right-click menu and the{" "}
-            <code className="font-mono text-[15px]">convt</code> command line tool in one install.
-            Every download starts a 7-day free trial; no account needed.
-          </p>
-        </PageHeader>
+    <div className={cx(siteColumn, "flex flex-col gap-20 pt-12 pb-24 md:gap-28 md:pt-20")}>
+      <div className="flex flex-col gap-12 md:gap-16">
         <Hero />
+        <ProductWindow />
       </div>
-      {live ? <AllDownloads /> : <FirstRelease />}
-      {live && <CheckDownload />}
-      <SourceSection />
+      <Platforms />
+      <FirstSteps />
+      <Trust />
     </div>
   );
 }
 
-/** The dithered panel with the picked system's download card. */
 function Hero() {
-  const { os } = Route.useLoaderData();
+  const { release } = Route.useLoaderData();
+  const live = isLive(release);
   return (
     <section
-      aria-label={os ? `convt for ${osNames[os]}` : "Pick your system"}
-      className="dither grid items-center gap-8 overflow-clip rounded-2xl bg-panel p-3 shadow-[inset_0_0_0_1px_var(--line)] sm:p-8 md:min-h-[360px] lg:grid-cols-[480px_minmax(0,1fr)] lg:gap-12"
+      aria-labelledby="download-title"
+      className="flex flex-col items-center gap-6 text-center"
     >
-      <div className="flex w-full max-w-[480px] flex-col gap-5 rounded-xl bg-raised p-5 shadow-note sm:p-6">
-        <OsPicker />
-        {os ? <HeroBody os={os} /> : <NoDesktop />}
+      {live && release.version ? (
+        <a
+          href={routes.changelog}
+          className={cx(
+            "inline-flex items-center gap-2 rounded-full bg-raised py-1 pr-3 pl-1 text-[13px]/5 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)] transition-colors hover:text-ink dark:bg-panel",
+            focusRing,
+          )}
+        >
+          <span className="rounded-full bg-green-tint px-2 font-mono text-[11px]/5 font-medium text-[#157f4a] dark:text-green">
+            v{release.version}
+          </span>
+          {release.date ? `Released ${formatDate(release.date)}` : "Latest release"}
+          <span aria-hidden="true">→</span>
+        </a>
+      ) : (
+        <p className="inline-flex items-center gap-2.5 rounded-full bg-raised py-1 pr-3.5 pl-3 text-[13px]/5 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)] dark:bg-panel">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-green opacity-50 motion-reduce:hidden" />
+            <span className="relative inline-flex size-2 rounded-full bg-green" />
+          </span>
+          First release in final checks
+        </p>
+      )}
+      <div className="flex flex-col items-center gap-4">
+        <h1
+          id="download-title"
+          className="text-[44px]/[48px] font-semibold tracking-[-0.04em] text-balance sm:text-[60px]/[64px]"
+        >
+          Download convt
+        </h1>
+        <p className="max-w-[600px] text-[17px]/[26px] text-pretty text-ink-2 sm:text-[18px]/[28px]">
+          The app, the right-click menu and the{" "}
+          <code className="font-mono text-[0.9em] text-ink">convt</code> command line tool in one
+          install. Every download starts a 7-day free trial, no account needed.
+        </p>
       </div>
-      <InstallPreview />
+      {live ? <LiveAction /> : <PreReleaseAction />}
     </section>
+  );
+}
+
+/** The big button for the visitor's system, its file line, and links to the other systems. */
+function LiveAction() {
+  const { release, os, detected } = Route.useLoaderData();
+  // No build for the picked system (or a phone): offer the first system that has one.
+  const pick = os && publishedFor(release, os).length > 0 ? os : null;
+  const main = pick ? publishedFor(release, pick)[0] : null;
+
+  if (!main) {
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <a
+          href="#platforms"
+          className={cx(
+            "btn-primary inline-flex h-12 items-center justify-center gap-2 rounded-xl px-6 text-[15px]/5 font-medium",
+            focusRing,
+          )}
+        >
+          Choose your system
+          <span aria-hidden="true">↓</span>
+        </a>
+        <p className="max-w-[420px] text-sm/5 text-pretty text-ink-2">
+          {os
+            ? `Version ${release.version} has no ${osNames[os]} build yet. It will appear here as soon as it is published.`
+            : "convt runs on macOS, Windows and Linux. On a phone, convt Pro converts files in the browser."}
+        </p>
+      </div>
+    );
+  }
+
+  const artifact = main.artifact!;
+  const file = fileName(artifact.url);
+  const others = osOrder.filter((o) => o !== pick);
+  return (
+    <div className="flex w-full flex-col items-center gap-4">
+      <PrimaryLink
+        href={artifact.url}
+        download={file}
+        className="h-12 w-full max-w-[320px] gap-2.5 rounded-xl px-6 text-[15px]/5 sm:w-auto"
+      >
+        <DownloadIcon />
+        Download for {osNames[pick!]}
+      </PrimaryLink>
+      <p className="flex max-w-full flex-wrap items-center justify-center gap-x-2.5 gap-y-1 font-mono text-[11.5px]/4 text-ink-2">
+        <span className="max-w-[260px] truncate sm:max-w-none" title={file}>
+          {file}
+        </span>
+        <span aria-hidden="true" className="text-line-strong">
+          ·
+        </span>
+        <span>{formatBytes(artifact.size)}</span>
+        <span aria-hidden="true" className="text-line-strong">
+          ·
+        </span>
+        <CopySha value={artifact.sha256} />
+      </p>
+      <p className="text-[13px]/5 text-ink-2">
+        {pick === detected ? "Not on " + osNames[pick!] + "? " : "On another system? "}
+        {others.map((o, i) => (
+          <span key={o}>
+            {i > 0 && " or "}
+            <Link
+              to="."
+              search={{ os: o }}
+              replace
+              resetScroll={false}
+              className={cx(
+                "rounded-sm font-medium text-ink underline decoration-line-strong underline-offset-[3px] hover:decoration-ink",
+                focusRing,
+              )}
+            >
+              {osNames[o]}
+            </Link>
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}
+
+function PreReleaseAction() {
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
+        <PrimaryLink href={RELEASES_URL} className="h-12 gap-2 rounded-xl px-6 text-[15px]/5">
+          <GitHubIcon />
+          Watch releases on GitHub
+        </PrimaryLink>
+        <SecondaryLink href={routes.pricing} className="h-12 rounded-xl px-5 text-[15px]/5">
+          See pricing
+        </SecondaryLink>
+      </div>
+      <p className="max-w-[440px] text-[13px]/5 text-pretty text-ink-2">
+        Builds for macOS, Windows and Linux appear on this page the moment they are published, each
+        with its checksum and matching source.
+      </p>
+    </div>
   );
 }
 
 /**
- * What one install adds, drawn rather than photographed: the right-click menu and the
- * command line tool. Decorative; the page text says the same thing.
+ * What one install adds, drawn rather than photographed: a folder, the right-click menu
+ * and the command line tool. Decorative; the page text says the same thing.
  */
-function InstallPreview() {
-  const menu = "flex h-7 items-center justify-between gap-6 rounded-md px-2.5 text-[13px]/4";
+function ProductWindow() {
+  const files = [
+    { name: "miso.heic", tone: "photo" },
+    { name: "launch.mov", tone: "#2a2f2c" },
+    { name: "notes.docx", tone: "#2f6fd6" },
+    { name: "intro.wav", tone: "#c2731c" },
+    { name: "logo.svg", tone: "#7a4fd1" },
+    { name: "report.pdf", tone: "#c8382c" },
+  ];
+  const item = "flex h-7 items-center justify-between gap-6 rounded-md px-2.5 text-[13px]/4";
   return (
-    <div aria-hidden="true" className="relative hidden h-[300px] select-none lg:block">
-      <div className="absolute top-2 left-4 flex w-[210px] flex-col rounded-[10px] bg-raised p-1.5 shadow-note">
-        <span className={cx(menu, "text-ink")}>Open</span>
-        <span className={cx(menu, "text-ink")}>Copy</span>
-        <span className="mx-2.5 my-1 h-px bg-divider" />
-        <span className={cx(menu, "bg-[#1f9d5c] font-medium text-white")}>
-          Convert to <span aria-hidden="true">›</span>
-        </span>
-        <span className={cx(menu, "text-ink")}>Rename</span>
-      </div>
-      <div className="absolute top-[86px] left-[218px] flex w-[150px] flex-col rounded-[10px] bg-raised p-1.5 shadow-note">
-        {["WebP", "PNG", "JPEG", "More…"].map((f, i) => (
-          <span
-            key={f}
-            className={cx(
-              menu,
-              i === 0 ? "bg-hover text-ink" : "text-ink",
-              i === 3 && "text-ink-2",
-            )}
-          >
-            {f}
-          </span>
-        ))}
-      </div>
-      <div className="absolute right-0 bottom-2 left-[60px] max-w-[380px] rounded-[10px] bg-code px-4 py-3.5 font-mono text-[12px]/5 text-code-ink shadow-note">
-        <p>
-          <span className="text-[#4cc283]">$</span> convt photo.heic --to webp
-        </p>
-        <p className="text-[#838985]">photo.webp · 612 KB</p>
-      </div>
-    </div>
-  );
-}
-
-/** Links rather than buttons, so each system has its own URL and works before hydration. */
-function OsPicker() {
-  const { os, detected } = Route.useLoaderData();
-  return (
-    <nav
-      aria-label="System"
-      className="flex rounded-lg bg-sunken p-0.5 shadow-[inset_0_0_0_1px_var(--line)]"
+    <div
+      aria-hidden="true"
+      className="dither relative flex justify-center overflow-clip rounded-[20px] bg-panel px-4 pt-10 shadow-[inset_0_0_0_1px_var(--line)] select-none sm:px-10 sm:pt-14"
     >
-      {osOrder.map((item) => {
-        const active = item === os;
-        return (
-          <Link
-            key={item}
-            to="."
-            search={{ os: item }}
-            replace
-            resetScroll={false}
-            aria-current={active ? "page" : undefined}
-            className={cx(
-              "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-[13px]/4 font-medium transition-colors",
-              active ? "bg-raised text-ink shadow-button" : "text-ink-2 hover:text-ink",
-              focusRing,
-            )}
-          >
-            {osNames[item]}
-            {item === detected && (
+      <div className="relative w-full max-w-[860px] rounded-t-xl bg-raised shadow-note">
+        <div className="flex h-10 items-center gap-2 border-b border-divider px-4">
+          <span className="size-3 rounded-full bg-[#ff5f57]" />
+          <span className="size-3 rounded-full bg-[#febc2e]" />
+          <span className="size-3 rounded-full bg-[#28c840]" />
+          <span className="ml-3 text-[13px]/4 font-medium text-ink-2">Downloads</span>
+        </div>
+        <div className="grid grid-cols-3 gap-x-2 gap-y-5 px-4 pt-6 pb-8 sm:grid-cols-6 sm:px-6 sm:pb-44">
+          {files.map((f, i) => (
+            <div key={f.name} className="flex flex-col items-center gap-2">
+              <div
+                className={cx(
+                  "flex h-[64px] w-[52px] items-end justify-center overflow-clip rounded-md pb-1.5 shadow-[0_0_0_1px_rgb(0_0_0/8%),0_1px_2px_rgb(0_0_0/10%)]",
+                  i === 0 && "ring-2 ring-[#1f9d5c] ring-offset-2 ring-offset-raised",
+                )}
+                style={f.tone === "photo" ? undefined : { background: f.tone }}
+              >
+                {f.tone === "photo" ? (
+                  <img src="/landing/miso.jpg" alt="" className="size-full object-cover" />
+                ) : (
+                  <span className="font-mono text-[9px]/3 font-medium text-white/85 uppercase">
+                    {f.name.split(".")[1]}
+                  </span>
+                )}
+              </div>
               <span
-                className="size-1.5 rounded-full bg-green"
-                title="Your system"
-                aria-label="(your system)"
-              />
-            )}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function HeroBody({ os }: { os: Os }) {
-  const { release, detected } = Route.useLoaderData();
-  const slots = release.slots.filter((s) => s.os === os);
-  const published = slots.filter((s) => s.artifact);
-  const [main, ...others] = published;
-  const label = os === detected ? "For your computer" : `For ${osNames[os]}`;
-
-  if (!isLive(release)) {
-    const first = slots[0];
-    return (
-      <>
-        <div className="flex flex-col gap-2">
-          <p className={eyebrow}>{label}</p>
-          <h2 className="text-[22px]/7 font-semibold tracking-[-0.02em]">
-            convt for {osNames[os]}
-          </h2>
-          <p className="text-sm/5 text-ink-2">
-            {slots.length > 1
-              ? `${kindLabels[first.kind].title} and ${slots.length - 1} other formats`
-              : `${kindLabels[first.kind].title} · ${kindLabels[first.kind].note}`}
-          </p>
-          <p className="text-sm/[21px] text-ink-2">
-            The download, its checksum and the matching source appear here when the first release
-            ships.
-          </p>
+                className={cx(
+                  "rounded px-1.5 text-[12px]/[18px]",
+                  i === 0 ? "bg-[#1f9d5c] text-white" : "text-ink-2",
+                )}
+              >
+                {f.name}
+              </span>
+            </div>
+          ))}
         </div>
-        <ReleaseStatus />
-        <div className="flex flex-col gap-2.5 sm:flex-row">
-          <PrimaryLink href={RELEASES_URL} className="h-10 gap-2 sm:flex-1">
-            Follow releases on GitHub
-          </PrimaryLink>
-          <SecondaryLink href={routes.pricing} className="h-10 sm:px-4">
-            See pricing
-          </SecondaryLink>
-        </div>
-      </>
-    );
-  }
-
-  if (!main)
-    return (
-      <div className="flex flex-col gap-2">
-        <p className={eyebrow}>{label}</p>
-        <h2 className="text-[22px]/7 font-semibold tracking-[-0.02em]">convt for {osNames[os]}</h2>
-        <p className="text-sm/[21px] text-ink-2">
-          Version {release.version} has no {osNames[os]} build. It will be listed here as soon as
-          one is published; <TextLink href={RELEASES_URL}>follow releases on GitHub</TextLink> to
-          hear first.
-        </p>
-      </div>
-    );
-
-  const artifact = main.artifact!;
-  const file = fileName(artifact.url);
-  return (
-    <>
-      <div className="flex flex-col gap-1.5">
-        <p className={eyebrow}>{label}</p>
-        <h2 className="text-[22px]/7 font-semibold tracking-[-0.02em]">convt for {osNames[os]}</h2>
-        <p className="text-sm/5 text-ink-2">
-          {kindLabels[main.kind].title} · {archLabel(main)} · {kindLabels[main.kind].note}
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        <PrimaryLink href={artifact.url} download={file} className="h-11 gap-2 text-[15px]/5">
-          <DownloadIcon />
-          Download for {osNames[os]}
-        </PrimaryLink>
-        <p className="flex min-w-0 justify-between gap-3 font-mono text-[11.5px]/4 text-ink-2">
-          <span className="min-w-0 truncate" title={file}>
-            {file}
+        {/* The context menu opens from the selected photo. */}
+        <div className="absolute top-[64px] left-[136px] hidden w-[200px] flex-col rounded-[10px] bg-raised p-1.5 shadow-note sm:flex">
+          <span className={cx(item, "text-ink")}>Open</span>
+          <span className={cx(item, "text-ink")}>Get Info</span>
+          <span className="mx-2.5 my-1 h-px bg-divider" />
+          <span className={cx(item, "bg-[#1f9d5c] font-medium text-white")}>
+            Convert to <span>›</span>
           </span>
-          <span className="shrink-0">{formatBytes(artifact.size)}</span>
-        </p>
-      </div>
-      <Sha value={artifact.sha256} block />
-      {others.length > 0 && (
-        <p className="text-[13px]/5 text-ink-2">
-          Also for {osNames[os]}:{" "}
-          {others.map((slot, i) => (
-            <span key={slot.kind}>
-              {i > 0 && " · "}
-              <TextLink href={`#file-${slot.kind}`} className="font-mono text-xs">
-                {slot.kind === "AppImage" ? slot.kind : `.${slot.kind}`}
-              </TextLink>
+          <span className={cx(item, "text-ink")}>Rename</span>
+          <span className={cx(item, "text-ink")}>Compress</span>
+        </div>
+        <div className="absolute top-[146px] left-[330px] hidden w-[150px] flex-col rounded-[10px] bg-raised p-1.5 shadow-note sm:flex">
+          {["WebP", "PNG", "JPEG", "AVIF"].map((f, i) => (
+            <span key={f} className={cx(item, i === 0 ? "bg-hover text-ink" : "text-ink")}>
+              {f}
             </span>
           ))}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** Pre-release: a quiet status line in the hero card instead of a disabled button. */
-function ReleaseStatus() {
-  return (
-    <div className="flex items-start gap-3 rounded-lg bg-sunken px-3.5 py-3 shadow-[inset_0_0_0_1px_var(--line)]">
-      <span className="relative mt-1.5 flex size-2 shrink-0">
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-green opacity-50 motion-reduce:hidden" />
-        <span className="relative inline-flex size-2 rounded-full bg-green" />
-      </span>
-      <p className="text-[13px]/5 text-ink-2">
-        <span className="font-medium text-ink">First release in preparation.</span> Each build
-        appears on this page as soon as it is published.
-      </p>
+          <span className="mx-2.5 my-1 h-px bg-divider" />
+          <span className={cx(item, "text-ink-2")}>More formats…</span>
+        </div>
+        <div className="absolute right-6 bottom-6 hidden w-[330px] rounded-[10px] bg-code px-4 py-3.5 font-mono text-[12px]/5 text-code-ink shadow-note md:block">
+          <p>
+            <span className="text-[#4cc283]">$</span> convt miso.heic --to webp
+          </p>
+          <p className="text-[#838985]">miso.webp · 612 KB · 0.4s</p>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Phones and unknown systems: convt is desktop software, so point at the web options.
-function NoDesktop() {
-  return (
-    <div className="flex flex-col gap-2">
-      <p className={eyebrow}>Desktop app</p>
-      <h2 className="text-[22px]/7 font-semibold tracking-[-0.02em]">
-        convt runs on your computer
-      </h2>
-      <p className="text-sm/[21px] text-ink-2">
-        Pick a system above to see its download. On a phone, convt Pro converts files in the
-        browser; <TextLink href={routes.pricing}>see pricing</TextLink>.
-      </p>
-    </div>
-  );
-}
-
-/** Pre-release: what the first release contains, as a spec sheet rather than empty buttons. */
-function FirstRelease() {
+/** One card per system: every format with its size and checksum, the visitor's system marked. */
+function Platforms() {
   const { release, detected } = Route.useLoaderData();
+  const live = isLive(release);
   return (
     <section
-      aria-labelledby="first-title"
+      aria-labelledby="platforms-title"
       id="platforms"
-      className="flex scroll-mt-6 flex-col gap-6"
+      className="flex scroll-mt-8 flex-col gap-8"
     >
-      <div className="flex max-w-[680px] flex-col gap-2">
-        <h2 id="first-title" className={sectionTitle}>
-          In the first release
-        </h2>
-        <p className="text-[15px]/6 text-ink-2">
-          One build per system, each listed with its file size and SHA-256 checksum.
-        </p>
-      </div>
-      <div className="flex flex-col overflow-clip rounded-2xl bg-raised shadow-[inset_0_0_0_1px_var(--line)] dark:bg-panel">
-        {osOrder.map((os, i) => (
-          <div
-            key={os}
-            id={os}
-            className={cx(
-              "grid scroll-mt-6 gap-4 p-5 sm:p-6 md:grid-cols-[180px_minmax(0,1fr)] md:gap-8",
-              i > 0 && "border-t border-line",
-            )}
-          >
-            <div className="flex items-center justify-between gap-3 md:flex-col md:items-start md:justify-start md:gap-1.5">
-              <h3 className="text-lg/6 font-semibold">{osNames[os]}</h3>
-              {os === detected && <YourSystem />}
-            </div>
-            <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
-              {release.slots
-                .filter((s) => s.os === os)
-                .map((slot) => (
-                  <li key={slot.kind} className="flex flex-col gap-0.5">
-                    <span className="text-sm/5 font-medium">{kindLabels[slot.kind].title}</span>
-                    <span className="text-[13px]/[18px] text-ink-2">
-                      {archLabel(slot)} · {kindLabels[slot.kind].note}
-                    </span>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <dl className="grid gap-6 border-t border-line pt-6 sm:grid-cols-3 sm:gap-8">
-        <div className="flex flex-col gap-1.5">
-          <dt className={eyebrow}>Checksums</dt>
-          <dd className="text-sm/[21px] text-ink-2">
-            Every file lists its SHA-256, so you can confirm the download is intact.
-          </dd>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <dt className={eyebrow}>Source</dt>
-          <dd className="text-sm/[21px] text-ink-2">
-            Each release ships a source archive built from the same commit.
-          </dd>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <dt className={eyebrow}>Release notes</dt>
-          <dd className="text-sm/[21px] text-ink-2">
-            What changed in each version is on the{" "}
-            <TextLink href={routes.changelog}>changelog</TextLink>.
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
-function YourSystem() {
-  return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[11px]/3.5 text-[#157f4a] dark:text-green">
-      <span className="size-1.5 rounded-full bg-green" aria-hidden="true" />
-      YOUR SYSTEM
-    </span>
-  );
-}
-
-/** Live: every published file, grouped by system, the picked system first. */
-function AllDownloads() {
-  const { release, os, detected } = Route.useLoaderData();
-  const order = os ? [os, ...osOrder.filter((o) => o !== os)] : osOrder;
-  return (
-    <section aria-labelledby="all-title" id="platforms" className="flex scroll-mt-6 flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <h2 id="all-title" className={sectionTitle}>
-          All downloads
+        <h2 id="platforms-title" className={sectionTitle}>
+          Every system, every format
         </h2>
         <p className="text-sm/5 text-ink-2">
-          Version {release.version}
-          {release.date && ` · ${formatDate(release.date)}`} ·{" "}
-          <TextLink href={routes.changelog}>Release notes</TextLink>
+          {live
+            ? `Version ${release.version}${release.date ? ` · ${formatDate(release.date)}` : ""}`
+            : "Listed with size and checksum once published"}
         </p>
       </div>
-      <div className="flex flex-col overflow-clip rounded-2xl bg-raised shadow-[inset_0_0_0_1px_var(--line)] dark:bg-panel">
-        {order.map((platform, i) => {
-          const published = release.slots.filter((s) => s.os === platform && s.artifact);
-          return (
-            <div
-              key={platform}
-              id={platform}
-              className={cx("flex scroll-mt-6 flex-col", i > 0 && "border-t border-line")}
-            >
-              <div className="flex items-center justify-between gap-3 bg-sunken/60 px-5 py-3 sm:px-6">
-                <h3 className="text-[15px]/5 font-semibold">{osNames[platform]}</h3>
-                {platform === detected && <YourSystem />}
-              </div>
-              {published.length === 0 ? (
-                <p className="border-t border-divider px-5 py-4 text-sm/5 text-ink-2 sm:px-6">
-                  No {osNames[platform]} build in version {release.version}.{" "}
-                  <TextLink href={RELEASES_URL} className="font-normal">
-                    Follow releases
-                  </TextLink>
-                </p>
-              ) : (
-                <ul className="flex flex-col">
-                  {published.map((slot) => (
-                    <FileRow key={slot.kind} slot={slot} />
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {osOrder.map((os) => (
+          <PlatformCard key={os} os={os} mine={os === detected} />
+        ))}
       </div>
     </section>
   );
 }
 
-function FileRow({ slot }: { slot: Slot }) {
-  const artifact = slot.artifact!;
-  const file = fileName(artifact.url);
+const osBlurb: Record<Os, string> = {
+  macos: "One universal app for Apple silicon and Intel Macs.",
+  windows: "A per-user installer for 64-bit Windows. No admin rights needed.",
+  linux: "Packages for most distributions, plus an AppImage that runs anywhere.",
+};
+
+function PlatformCard({ os, mine }: { os: Os; mine: boolean }) {
+  const { release } = Route.useLoaderData();
+  const slots = release.slots.filter((s) => s.os === os);
+  const live = isLive(release);
+  return (
+    <article
+      id={os}
+      className={cx(
+        card,
+        "flex min-w-0 scroll-mt-8 flex-col gap-5 p-5 sm:p-6",
+        // Linux lists four formats; it takes the right column beside macOS and Windows.
+        os === "linux" && "lg:col-start-2 lg:row-span-2 lg:row-start-1",
+        mine &&
+          "shadow-[inset_0_0_0_1px_var(--green-line),0_0_0_3px_var(--green-tint)] dark:shadow-[inset_0_0_0_1px_#1f5a3b]",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <OsThumb os={os} />
+        {mine && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-tint px-2 py-0.5 font-mono text-[10.5px]/4 font-medium text-[#157f4a] uppercase dark:text-green">
+            <span className="size-1.5 rounded-full bg-green" aria-hidden="true" />
+            Your system
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <h3 className="text-xl/7 font-semibold tracking-[-0.02em]">{osNames[os]}</h3>
+        <p className="text-sm/5 text-pretty text-ink-2">{osBlurb[os]}</p>
+      </div>
+      <ul className="mt-auto flex flex-col border-t border-divider">
+        {slots.map((slot, i) => (
+          <FormatRow key={slot.kind} slot={slot} primary={i === 0} live={live} />
+        ))}
+      </ul>
+    </article>
+  );
+}
+
+function FormatRow({ slot, primary, live }: { slot: Slot; primary: boolean; live: boolean }) {
+  const { release } = Route.useLoaderData();
+  const artifact = slot.artifact;
+  const file = artifact ? fileName(artifact.url) : null;
   return (
     <li
       id={`file-${slot.kind}`}
-      className="grid scroll-mt-6 gap-3 border-t border-divider px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6 sm:px-6"
+      className="flex min-h-[60px] items-center justify-between gap-3 border-b border-divider py-3 last:border-b-0 last:pb-0"
     >
-      <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-sm/5 font-medium">{kindLabels[slot.kind].title}</span>
-          <span className="text-[13px]/[18px] text-ink-2">
-            {archLabel(slot)} · {formatBytes(artifact.size)} · {kindLabels[slot.kind].note}
-          </span>
-        </div>
-        <span className="truncate font-mono text-[11.5px]/4 text-ink" title={file}>
-          {file}
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+          <span className="text-sm/5 font-medium">{kindName(slot)}</span>
+          {artifact ? (
+            <>
+              <span className="font-mono text-[11.5px]/4 text-ink-2">
+                {formatBytes(artifact.size)}
+              </span>
+              <CopySha value={artifact.sha256} />
+            </>
+          ) : (
+            <span className="font-mono text-[11.5px]/4 text-ink-3">
+              {live ? `Not in ${release.version}` : "Not published yet"}
+            </span>
+          )}
         </span>
-        <Sha value={artifact.sha256} />
+        <span className="text-[13px]/[18px] text-pretty text-ink-2">
+          {kindLabels[slot.kind].note}
+        </span>
       </div>
-      <SecondaryLink
-        href={artifact.url}
-        download={file}
-        className="h-9 gap-1.5 justify-self-start px-3.5 sm:justify-self-end"
-      >
-        <DownloadIcon className="size-3.5" />
-        Download
-      </SecondaryLink>
+      {artifact &&
+        (primary ? (
+          <PrimaryLink
+            href={artifact.url}
+            download={file!}
+            aria-label={`Download ${kindName(slot)} for ${osNames[slot.os]}`}
+            className="h-9 shrink-0 gap-1.5 px-3.5 text-[13px]/4"
+          >
+            <DownloadIcon className="size-3.5" />
+            Download
+          </PrimaryLink>
+        ) : (
+          <SecondaryLink
+            href={artifact.url}
+            download={file!}
+            aria-label={`Download ${kindName(slot)} for ${osNames[slot.os]}`}
+            className="h-9 shrink-0 gap-1.5 px-3.5"
+          >
+            <DownloadIcon className="size-3.5" />
+            Download
+          </SecondaryLink>
+        ))}
     </li>
   );
 }
 
+/** A tiny window in each system's style instead of borrowed logos. */
+function OsThumb({ os }: { os: Os }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-[44px] w-[64px] flex-col overflow-clip rounded-md bg-sunken shadow-[inset_0_0_0_1px_var(--line-strong)]"
+    >
+      {os === "macos" && (
+        <div className="flex h-3 items-center gap-[3px] px-1.5">
+          <span className="size-[5px] rounded-full bg-[#ff5f57]" />
+          <span className="size-[5px] rounded-full bg-[#febc2e]" />
+          <span className="size-[5px] rounded-full bg-[#28c840]" />
+        </div>
+      )}
+      {os === "windows" && (
+        <div className="flex h-3 items-center justify-end gap-[5px] px-1.5 text-ink-2">
+          <span className="h-px w-[5px] bg-current" />
+          <span className="size-[5px] border border-current" />
+          <span className="relative size-[6px] before:absolute before:top-1/2 before:left-0 before:h-px before:w-full before:rotate-45 before:bg-current after:absolute after:top-1/2 after:left-0 after:h-px after:w-full after:-rotate-45 after:bg-current" />
+        </div>
+      )}
+      {os === "linux" && (
+        <div className="flex h-3 items-center justify-between bg-code px-1.5">
+          <span className="h-[3px] w-4 rounded-full bg-white/25" />
+          <span className="size-[5px] rounded-full bg-white/25" />
+        </div>
+      )}
+      <div
+        className={cx(
+          "flex-1",
+          os === "linux" ? "bg-code px-1.5 pt-1" : "border-t border-line px-1.5 pt-1.5",
+        )}
+      >
+        {os === "linux" ? (
+          <span className="font-mono text-[8px]/[10px] text-[#4cc283]">
+            $ <span className="inline-block h-[7px] w-[4px] translate-y-px bg-code-ink/70" />
+          </span>
+        ) : (
+          <div className="flex gap-1">
+            <span className="h-[18px] w-3 rounded-[2px] bg-line-strong" />
+            <span className="h-[18px] w-3 rounded-[2px] bg-[#1f9d5c]" />
+            <span className="h-[18px] w-3 rounded-[2px] bg-line-strong" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const installStep: Record<Os, string> = {
+  macos: "Open the .dmg and drag convt into Applications.",
+  windows: "Run the installer. It sets up convt for your account, no admin rights needed.",
+  linux: "Install the .deb or .rpm, or make the AppImage executable and run it.",
+};
+
+/** What happens after the download, so the page ends at "it works", not at a file. */
+function FirstSteps() {
+  const { os } = Route.useLoaderData();
+  const steps = [
+    {
+      title: "Install",
+      body: os ? installStep[os] : "Open the download for your system and install it.",
+    },
+    {
+      title: "Right-click any file",
+      body: "Choose Convert to in the menu. Images, video, audio and documents all work.",
+    },
+    {
+      title: "Pick a format",
+      body: "The converted file lands next to the original. Nothing leaves your computer.",
+    },
+  ];
+  return (
+    <section aria-labelledby="steps-title" className="flex flex-col gap-8">
+      <h2 id="steps-title" className={sectionTitle}>
+        Converting in under a minute
+      </h2>
+      <ol className="grid gap-px overflow-clip rounded-2xl bg-line shadow-[0_0_0_1px_var(--line)] md:grid-cols-3">
+        {steps.map((step, i) => (
+          <li key={step.title} className="flex flex-col gap-3 bg-raised p-6 dark:bg-panel">
+            <span className="flex size-7 items-center justify-center rounded-full bg-sunken font-mono text-xs/4 font-medium text-ink shadow-[inset_0_0_0_1px_var(--line-strong)]">
+              {i + 1}
+            </span>
+            <h3 className="text-base/6 font-semibold">{step.title}</h3>
+            <p className="text-sm/[21px] text-pretty text-ink-2">{step.body}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 const verifyCommands: Record<Os, { label: string; command: (file: string) => string }> = {
-  macos: { label: "macOS (Terminal)", command: (f) => `shasum -a 256 ${f}` },
-  windows: { label: "Windows (PowerShell)", command: (f) => `Get-FileHash ${f}` },
+  macos: { label: "macOS, in Terminal", command: (f) => `shasum -a 256 ${f}` },
+  windows: { label: "Windows, in PowerShell", command: (f) => `Get-FileHash ${f}` },
   linux: { label: "Linux", command: (f) => `sha256sum ${f}` },
 };
 
-/** Live only: how to compare a checksum, with the real file names filled in. */
-function CheckDownload() {
+/** Checksums, source and privacy as three short claims; the commands fold away. */
+function Trust() {
   const { release, os } = Route.useLoaderData();
+  const source = release.source;
   const order = os ? [os, ...osOrder.filter((o) => o !== os)] : osOrder;
   const rows = order.flatMap((platform) => {
     const slot = release.slots.find((s) => s.os === platform && s.artifact);
     return slot ? [{ platform, file: fileName(slot.artifact!.url) }] : [];
   });
   return (
-    <section aria-labelledby="verify-title" className="grid gap-8 md:grid-cols-2 md:gap-12">
-      <div className="flex flex-col gap-3">
-        <h2 id="verify-title" className={sectionTitle}>
-          Check your download
-        </h2>
-        <p className="text-[15px]/6 text-ink-2">
-          Run the command for your system in the folder you saved the file to, then compare the
-          result with the SHA-256 listed above. If they differ, delete the file and download it
-          again.
+    <section
+      aria-label="Verify, source and privacy"
+      className="grid gap-10 border-t border-line pt-12 md:grid-cols-3 md:gap-12"
+    >
+      <div className="flex flex-col gap-2">
+        <p className={eyebrow}>Checksums</p>
+        <p className="text-sm/[21px] text-pretty text-ink-2">
+          Every file lists its SHA-256. Copy it from the download and compare it with your copy.
         </p>
-        <p className="text-[15px]/6 text-ink-2">
-          Documents (Word, Excel and PowerPoint files) use an optional document pack. The app offers
-          it the first time you select one, and downloads it only when you click Install.
-        </p>
+        {rows.length > 0 && (
+          <details className="group mt-1">
+            <summary
+              className={cx(
+                "inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm/5 font-medium text-[#157f4a] dark:text-green [&::-webkit-details-marker]:hidden",
+                focusRing,
+              )}
+            >
+              How to check a download
+              <span aria-hidden="true" className="transition-transform group-open:rotate-90">
+                ›
+              </span>
+            </summary>
+            <dl className="mt-3 flex min-w-0 flex-col gap-2.5 font-mono text-[12px]/5">
+              {rows.map(({ platform, file }) => (
+                <div key={platform} className="flex flex-col gap-1">
+                  <dt className="font-sans text-xs/4 text-ink-2">
+                    {verifyCommands[platform].label}
+                  </dt>
+                  <dd className="overflow-x-auto rounded-lg bg-code px-3 py-2 whitespace-nowrap text-code-ink">
+                    {verifyCommands[platform].command(file)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        )}
       </div>
-      <dl className="flex min-w-0 flex-col gap-3 font-mono text-[12.5px]/5">
-        {rows.map(({ platform, file }) => (
-          <div key={platform} className="flex flex-col gap-1.5">
-            <dt className="text-xs/4 text-ink-2">{verifyCommands[platform].label}</dt>
-            <dd className="overflow-x-auto rounded-lg bg-code px-3.5 py-2.5 whitespace-nowrap text-code-ink shadow-[inset_0_0_0_1px_var(--code-ring)]">
-              {verifyCommands[platform].command(file)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <div className="flex flex-col gap-2">
+        <p className={eyebrow}>Source code</p>
+        <p className="text-sm/[21px] text-pretty text-ink-2">
+          convt is free software under the{" "}
+          <TextLink href={`${GITHUB_URL}/blob/main/LICENSE`}>GNU AGPL-3.0</TextLink>.{" "}
+          {source
+            ? "The source archive is built from the same commit as these downloads."
+            : "Each release publishes a source archive built from the same commit as its downloads."}
+        </p>
+        {source ? (
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <TextLink href={source.url} download={fileName(source.url)} className="text-sm/5">
+              Download source · {formatBytes(source.size)}
+            </TextLink>
+            <CopySha value={source.sha256} />
+          </p>
+        ) : (
+          <TextLink href={GITHUB_URL} className="mt-1 self-start text-sm/5">
+            View on GitHub
+          </TextLink>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        <p className={eyebrow}>Private by design</p>
+        <p className="text-sm/[21px] text-pretty text-ink-2">
+          Conversions run on your computer, offline. Documents use an optional pack the app offers
+          the first time you need it.
+        </p>
+        <TextLink href={routes.changelog} className="mt-1 self-start text-sm/5">
+          Release notes
+        </TextLink>
+      </div>
     </section>
   );
 }
 
-function SourceSection() {
-  const { release } = Route.useLoaderData();
-  const source = release.source;
+function GitHubIcon() {
   return (
-    <section
-      aria-labelledby="source-title"
-      className="flex flex-col gap-6 border-t border-line pt-12"
-    >
-      <div className="flex max-w-[680px] flex-col gap-3">
-        <h2 id="source-title" className={sectionTitle}>
-          Source code
-        </h2>
-        <p className="text-[15px]/6 text-ink-2">
-          convt is free software under the{" "}
-          <TextLink href={`${GITHUB_URL}/blob/main/LICENSE`}>GNU AGPL-3.0</TextLink>.{" "}
-          {source
-            ? "This archive is built from the same commit as the downloads above, with the build scripts and the source of every bundled component."
-            : "The code is public today. Each release will also publish a source archive built from the same commit as its downloads."}
-        </p>
-      </div>
-      <div className="flex flex-col gap-3 rounded-2xl bg-raised px-5 py-4 shadow-[inset_0_0_0_1px_var(--line)] sm:flex-row sm:items-center sm:justify-between sm:gap-6 dark:bg-panel">
-        <div className="flex min-w-0 flex-col gap-1">
-          <span className="truncate text-sm/5 font-medium">
-            {source ? fileName(source.url) : "opencoredev/convt"}
-          </span>
-          <span className="text-[13px]/[18px] text-ink-2">
-            {source
-              ? `Version ${release.version} · ${formatBytes(source.size)}`
-              : "Repository, issues and release history on GitHub"}
-          </span>
-          {source && <Sha value={source.sha256} />}
-        </div>
-        {source ? (
-          <SecondaryLink
-            href={source.url}
-            download={fileName(source.url)}
-            className="h-9 shrink-0 gap-1.5 self-start px-3.5 sm:self-auto"
-          >
-            <DownloadIcon className="size-3.5" />
-            Download source
-          </SecondaryLink>
-        ) : (
-          <SecondaryLink href={GITHUB_URL} className="h-9 shrink-0 self-start px-3.5 sm:self-auto">
-            View on GitHub
-          </SecondaryLink>
-        )}
-      </div>
-    </section>
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
   );
 }
