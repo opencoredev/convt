@@ -72,9 +72,13 @@ def archive(tree, output, version, epoch, verification):
     closure=helper.collect(tree,output/'convt',cache,epoch)
     gaps=closure['gaps']
     components=json.loads((tree/'packaging/linux/license-components.lock.json').read_text())
+    platform_gaps = closure.get('platform_gaps', {})
+    covered_platforms = ['linux-x86_64']
+    if not platform_gaps.get('macos-universal'):
+        covered_platforms.append('macos-universal')
     audit={'schema_version':1,'distribution_ready':not gaps,
            'tree_sha256':json.loads((tree/'release-tree.json').read_text())['tree_sha256'],
-           'covered_platforms':['linux-x86_64'],'platform_gaps':closure.get('platform_gaps',{}),
+           'covered_platforms':covered_platforms,'platform_gaps':platform_gaps,
            'native_sources':closure['sources'],'build_recipes':['packaging/linux/container-build.sh','packaging/linux/build-ffmpeg.sh','packaging/linux/libheif-explicit-init.patch'],
            'rust_sources':'third-party/rust','rust_inventory':closure['rust_inventory'],
            'rust_inventories':closure.get('rust_inventories', []),

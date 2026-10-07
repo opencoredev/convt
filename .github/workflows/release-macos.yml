@@ -65,6 +65,17 @@ jobs:
           test "$(uname -m)" = arm64
           arch -x86_64 /usr/bin/true
           test "$(arch -x86_64 /usr/bin/uname -m)" = x86_64
+      - name: Build and qualify source FFmpeg for both slices
+        env:
+          CONVT_BUNDLE_CACHE: ${{ github.workspace }}/packaging/.cache
+          CONVT_BUILD_JOBS: "4"
+        run: |
+          python3 packaging/release/pdfium-source-verify.py --fetch packaging/release/macos-source-ffmpeg.lock.json
+          bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64
+          arch -x86_64 bash packaging/release/macos-source-ffmpeg-build.sh --arch x86_64
+          arch -x86_64 /usr/bin/python3 packaging/macos/ffmpeg-input.py \
+            "$CONVT_BUNDLE_CACHE/macos-source-built-x86_64" x86_64 \
+            packaging/release/macos-source-ffmpeg.lock.json "$RUNNER_TEMP/x86_64-notices"
       - name: Import Developer ID certificate
         if: ${{ !inputs.dry_run }}
         env:
