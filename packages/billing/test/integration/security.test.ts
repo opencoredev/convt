@@ -174,12 +174,11 @@ describe("business checks", () => {
         /currency/,
       ],
       [
-        "a checkout we did not create",
+        "a Pro reason on a Desktop product",
         (d) => {
-          d.checkout_id = "co_foreign";
-          d.metadata = {};
+          d.billing_reason = "subscription_cycle";
         },
-        /foreign_checkout/,
+        /amount: a Desktop order with reason/,
       ],
     ];
     for (const [name, mutate, reason] of cases) {
