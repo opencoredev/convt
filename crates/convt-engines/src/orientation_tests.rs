@@ -12,7 +12,7 @@ use image::{DynamicImage, RgbImage, RgbaImage};
 
 use super::orientation::{
     decoder_orientation, heif_display_orientation, heif_exif_orientation, inject_heif_exif,
-    inject_heif_transforms, jpeg_with_orientation, open_stored, strip_heif_transforms,
+    inject_heif_transforms, jpeg_with_orientation, open_stored,
 };
 
 const W: u32 = 64;
@@ -192,15 +192,13 @@ fn encode_heic(dir: &Path) -> Option<PathBuf> {
         }
     }
     let path = convert(&png, "heic");
-    let cleaned = strip_heif_transforms(&std::fs::read(&path).unwrap())
-        .unwrap_or_else(|e| panic!("strip HEIF transforms: {e}"));
-    std::fs::write(&path, &cleaned).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
     println!(
         "HEIC fixture: {} ({} bytes), irot/imir={:?}, EXIF={:?}",
         path.display(),
-        cleaned.len(),
-        heif_display_orientation(&cleaned).map(Orientation::to_exif),
-        heif_exif_orientation(&cleaned).map(Orientation::to_exif)
+        bytes.len(),
+        heif_display_orientation(&bytes).map(Orientation::to_exif),
+        heif_exif_orientation(&bytes).map(Orientation::to_exif)
     );
     Some(path)
 }

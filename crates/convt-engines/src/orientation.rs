@@ -495,6 +495,38 @@ pub(crate) fn inject_heif_transforms(
     if irot.is_none() && imir.is_none() {
         return Ok(data.to_vec());
     }
+    let mut out = data.to_vec();
+    let mut irot = irot;
+    let mut imir = imir;
+    if let Some(ipco) = find_located(&out, b"ipco") {
+        let mut patches = Vec::new();
+        walk_located(
+            &out[ipco.payload..ipco.end],
+            ipco.payload,
+            false,
+            &mut |loc, typ| {
+                if typ == *b"irot"
+                    && loc.payload < loc.end
+                    && let Some(angle) = irot.take()
+                {
+                    patches.push((loc.payload, angle & 3));
+                }
+                if typ == *b"imir"
+                    && loc.payload < loc.end
+                    && let Some(axis) = imir.take()
+                {
+                    patches.push((loc.payload, axis & 1));
+                }
+            },
+        );
+        for (at, val) in patches {
+            out[at] = val;
+        }
+    }
+    if irot.is_none() && imir.is_none() {
+        return Ok(out);
+    }
+    let data = out;
     let mut extra = Vec::new();
     if let Some(angle) = irot {
         extra.extend_from_slice(&heif_box(b"irot", &[angle & 3]));
@@ -502,10 +534,10 @@ pub(crate) fn inject_heif_transforms(
     if let Some(axis) = imir {
         extra.extend_from_slice(&heif_box(b"imir", &[axis & 1]));
     }
-    let ipco = find_located(data, b"ipco").ok_or_else(|| failed("HEIF file has no ipco box"))?;
-    let ipma = find_located(data, b"ipma").ok_or_else(|| failed("HEIF file has no ipma box"))?;
-    let iprp = find_located(data, b"iprp").ok_or_else(|| failed("HEIF file has no iprp box"))?;
-    let meta = find_located(data, b"meta").ok_or_else(|| failed("HEIF file has no meta box"))?;
+    let ipco = find_located(&data, b"ipco").ok_or_else(|| failed("HEIF file has no ipco box"))?;
+    let ipma = find_located(&data, b"ipma").ok_or_else(|| failed("HEIF file has no ipma box"))?;
+    let iprp = find_located(&data, b"iprp").ok_or_else(|| failed("HEIF file has no iprp box"))?;
+    let meta = find_located(&data, b"meta").ok_or_else(|| failed("HEIF file has no meta box"))?;
     if ipma.offset < ipco.end {
         return Err(failed("ipma precedes ipco"));
     }
