@@ -29,7 +29,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          bun run release:version
+          bunx --bun @changesets/cli version
+          python3 scripts/release/sync-version.py
           if [ -n "$(git status --porcelain)" ]; then
             echo changed=true >> "$GITHUB_OUTPUT"
           fi

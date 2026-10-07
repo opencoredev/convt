@@ -57,7 +57,7 @@ Compare unsigned artifacts first. `scripts/release/sign-linux.sh UNSIGNED SIGNED
 
 The uploader stages immutable version objects. It does not move a stable update pointer. Publish immutable artifacts and their matching source first, verify the objects and signatures, then atomically replace the stable manifests. Never delete a covered historical release. Publish source links from the download page, About and server API for the matching build. The web, app and server owners implement those consumers.
 
-The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows uses Azure workload identity and Trusted Signing for nested binaries before building and signing the installer. The Windows lock remains fail-closed until its native dependencies have verified pins, sources and notices. Successful authentication or signing alone does not bypass publication gates.
+The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows is optional and remains excluded until its native dependencies, source notices and installer signing gates pass. Successful authentication or signing alone does not bypass publication gates.
 
 ## Launch checklist
 
@@ -68,7 +68,6 @@ The three manual GitHub Actions workflows are written locally. They are not push
 - Provision the public GitHub repository, R2 release bucket and download domain. Leo owns bucket creation and DNS approval.
 - Store scoped R2 S3 credentials as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Set `CONVT_R2_ACCOUNT_ID` and `CONVT_R2_BUCKET` for the uploader. Keep these credentials outside the checkout; no live upload has been verified.
 - Provision Apple Developer membership, Developer ID Application certificate with private key, team ID and App Store Connect API key. GitHub secrets: APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_PASSWORD, APPLE_KEYCHAIN_PASSWORD and APPLE_API_KEY_P8. Variables: APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID, APPLE_API_KEY_ID and APPLE_API_ISSUER_ID.
-- Provision Azure Trusted Signing account and certificate profile plus an Entra application with GitHub OIDC federation and signing permission. Variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT and AZURE_SIGNING_CERTIFICATE_PROFILE.
 - Set CONVT_UPDATE_SIGNING_KEY and CONVT_REPO_SIGNING_KEY secrets; CONVT_LICENSE_PUBKEY, CONVT_UPDATE_PUBKEY and CONVT_REPO_SIGNING_KEY_ID variables. Do not put the license signing seed in release CI.
 - Verify signatures and source links, sign Linux repository metadata, review generated Homebrew/winget manifests, and retain all matching sources beside binaries.
 - Refresh manifest expiry on schedule and test covered, uncovered, expired and rollback states before moving stable pointers.

@@ -225,8 +225,15 @@ def main():
                 continue
             seen.add(item['cache_filename'])
             path = cache_path(item)
-            if not path.exists() and args.fetch:
-                fetch(item, path)
+            if args.fetch:
+                if not path.exists():
+                    fetch(item, path)
+                else:
+                    try:
+                        verify(item, path)
+                    except (ValueError, AssertionError):
+                        # Refresh stale local caches from the locked upstream bytes.
+                        fetch(item, path)
             verify(item, path)
             count += 1
         local_recipe = lock.get('source_build_alternative', {}).get('build_recipe')

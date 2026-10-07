@@ -33,6 +33,7 @@ if mac:
   desc "Local file conversion"
   homepage "https://convt.app"
   depends_on macos: ">= :ventura"
+  depends_on arch: :arm64
   app "convt.app"
 end
 ''')

@@ -4,4 +4,4 @@ Run `bun run changeset` in a feature PR and describe what users will notice. Cho
 
 The Version packages workflow keeps one `chore(release): version packages` PR on `changeset-release/main`. It consumes pending changesets, writes changelogs, synchronizes every Rust workspace crate and updates both lockfiles. Merging that PR starts the release pipeline. Nothing is published to npm and Changesets creates no package tags.
 
-See [the release guide](../docs/releases.md) for runners, signing credentials, publication gates and the website manifest update.
+See [the release guide](../docs/release.md) for runners, signing credentials, publication gates and the website manifest update.
