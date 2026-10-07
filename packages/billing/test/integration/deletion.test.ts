@@ -83,6 +83,22 @@ describe("account deletion", () => {
     expect((await status(d.id)).status).toBe("done");
   });
 
+  test("granted API credit ends with the account, without the provider", async () => {
+    const u = await h.user("delete-grant@convt.test");
+    await h.q(sql`insert into subscriptions (id, provider, provider_subscription_id, user_id, email, kind, status,
+      current_period_start, spend_cap_cents, card_seen_at)
+      values ('sub_delete_grant', 'grant', 'grant_sub_delete_grant', ${u.id}, 'delete-grant@convt.test', 'api', 'active',
+      now(), 2500, now())`);
+    const d = await h.service.requestDeletion(u.id);
+    expect(await h.service.advanceDeletion(d.id)).toBe("done");
+    expect((await h.q(sql`select 1 from users where id = ${u.id}`)).length).toBe(0);
+    const [grant] = await h.q<{ status: string; ended_at: Date | null }>(
+      sql`select status, ended_at from subscriptions where id = 'sub_delete_grant'`,
+    );
+    expect(grant.status).toBe("canceled");
+    expect(grant.ended_at).not.toBeNull();
+  });
+
   test("a provider failure retries and alerts after 24 hours", async () => {
     const u = await withBoth("delete2@convt.test");
     const d = await h.service.requestDeletion(u.id);

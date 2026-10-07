@@ -4,7 +4,7 @@
 // is an API subscription with provider `grant`: active, no period end, and a spend
 // cap equal to the credit, so usage counts against it once and never resets. A
 // second grant to the same account raises the existing cap. The worker never
-// meters grant usage to Polar. Connects as convt_billing with BILLING_DATABASE_URL
+// meters grant usage to Polar. Accounts with API card billing are refused. Connects as convt_billing with BILLING_DATABASE_URL
 // (this checkout's own database by default).
 
 import { connect } from "@convt/db";
@@ -31,6 +31,17 @@ try {
       await tx.execute<{ id: string }>(sql`select id from users where email = ${email}`)
     ).rows[0];
     if (!user) throw new Error(`no account with email ${email}`);
+    // Jobs reserve against the newest API subscription; a grant beside a Polar one
+    // would take its usage off the bill and trip the duplicate checks.
+    const paid = (
+      await tx.execute(sql`
+        select 1 as x from subscriptions
+        where user_id = ${user.id} and kind = 'api' and provider = 'polar'
+          and status not in ('canceled', 'incomplete_expired') and (ended_at is null or ended_at > now())
+        limit 1`)
+    ).rows[0];
+    if (paid)
+      throw new Error(`${email} already has API card billing; credit is for accounts without it`);
     const existing = (
       await tx.execute<{ id: string; spend_cap_cents: number }>(sql`
         select id, spend_cap_cents from subscriptions

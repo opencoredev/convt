@@ -105,6 +105,10 @@ export async function advanceDeletion(ctx: BillingContext, deletionId: string): 
         await fault(ctx, "after-revoke");
       }
     }
+    // Granted API credit has no provider subscription: it ends here, with the account.
+    await ctx.db.execute(sql`
+      update subscriptions set status = 'canceled', canceled_at = ${now}, ended_at = ${now}, updated_at = ${now}
+      where user_id = ${userId} and provider = 'grant' and status not in ('canceled', 'incomplete_expired')`);
     const still = await rows(ctx.db, liveSql(userId, now));
     if (still.length) throw new Error(`${still.length} subscription(s) still live after revoking`);
     await ctx.db.execute(
