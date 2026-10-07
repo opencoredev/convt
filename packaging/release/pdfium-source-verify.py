@@ -3,11 +3,13 @@
 import argparse
 import base64
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import tarfile
+import gzip
 import tempfile
 import time
 import urllib.request
@@ -63,6 +65,24 @@ def fetch(item, path):
                     stream.write(block)
                     if time.monotonic() - start > 180:
                         raise TimeoutError('Source download exceeded 180 seconds')
+        if retrieval.get('type') == 'canonical-gitiles-archive':
+            with tarfile.open(downloaded, 'r:gz') as archive:
+                members = []
+                for member in archive.getmembers():
+                    data = archive.extractfile(member).read() if member.isfile() else None
+                    member.uid = member.gid = 0
+                    member.uname = member.gname = ''
+                    member.mtime = 0
+                    members.append((member, data))
+            canonical = Path(temporary) / 'canonical.tar.gz'
+            compressed = io.BytesIO()
+            with gzip.GzipFile(fileobj=compressed, mode='wb', mtime=0, compresslevel=9) as stream:
+                with tarfile.open(fileobj=stream, mode='w:', format=tarfile.PAX_FORMAT) as archive:
+                    for member, data in members:
+                        member.pax_headers = {}
+                        archive.addfile(member, io.BytesIO(data) if data is not None else None)
+            canonical.write_bytes(compressed.getvalue())
+            downloaded = canonical
         if digest(downloaded) != item['sha256']:
             raise ValueError('Downloaded SHA-256 mismatch: ' + item['cache_filename'])
         downloaded.replace(path)
