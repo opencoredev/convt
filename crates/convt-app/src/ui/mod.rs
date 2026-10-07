@@ -262,9 +262,11 @@ fn describe(preset: &Preset) -> String {
     parts.join(", ")
 }
 
-/// A path with the home folder shortened to `~`.
+/// A path with the home folder shortened to `~`. Windows has no `~`, so
+/// there the path stays whole, even when a Unix shell set `HOME`.
 pub(super) fn tilde(path: &Path) -> String {
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
+    if !cfg!(windows)
+        && let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
         && let Ok(rest) = path.strip_prefix(&home)
     {
         return if rest.as_os_str().is_empty() {
