@@ -16,7 +16,8 @@ use gpui_kit::component::input::InputState;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext as _, Bounds, ClipboardEntry, ElementId, Entity, ImageFormat,
-    Render, SharedString, TestAppContext, Window, WindowBounds, WindowOptions, point, px, size,
+    Pixels, Render, SharedString, TestAppContext, Window, WindowBounds, WindowOptions, point, px,
+    size,
 };
 use tempfile::TempDir;
 
@@ -464,8 +465,20 @@ impl Fixture {
         tab: SettingsTab,
         cx: &mut TestAppContext,
     ) -> (AnyWindowHandle, Entity<SettingsView>) {
+        self.settings_at(tab, px(1040.), px(760.), cx)
+    }
+
+    /// macOS General includes the Finder block, which pushes Support off a
+    /// 760-tall window. Tests that click Copy / Reveal open taller.
+    fn settings_at(
+        &self,
+        tab: SettingsTab,
+        width: Pixels,
+        height: Pixels,
+        cx: &mut TestAppContext,
+    ) -> (AnyWindowHandle, Entity<SettingsView>) {
         let app = self.app.clone();
-        let (window, view) = open(cx, move |window, cx| {
+        let (window, view) = open_at(cx, width, height, move |window, cx| {
             cx.new(|cx| SettingsView::new(app, window, cx))
         });
         view.update(cx, |v, cx| v.set_tab(tab, cx));
@@ -497,11 +510,20 @@ fn open<V: Render>(
     cx: &mut TestAppContext,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V> + 'static,
 ) -> (AnyWindowHandle, Entity<V>) {
+    open_at(cx, px(1040.), px(760.), build)
+}
+
+fn open_at<V: Render>(
+    cx: &mut TestAppContext,
+    width: Pixels,
+    height: Pixels,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V> + 'static,
+) -> (AnyWindowHandle, Entity<V>) {
     cx.update(|cx| {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds {
                 origin: point(px(0.), px(0.)),
-                size: size(px(1040.), px(760.)),
+                size: size(width, height),
             })),
             ..Default::default()
         };
@@ -3790,9 +3812,13 @@ fn clipboard_text(cx: &TestAppContext) -> Option<String> {
 fn copy_logs_puts_a_scrubbed_bundle_on_the_clipboard(cx: &mut TestAppContext) {
     let addr = format!("{}@{}", "someone", "convt.test");
     let f = Fixture::licensed(cx, None, Some(&license_key(&addr, "2027-10-01")));
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, _) = f.settings_at(SettingsTab::General, px(1040.), px(1800.), cx);
     assert!(shown(cx, settings, "copy-logs"));
     assert!(shown(cx, settings, "reveal-log-file"));
+    assert!(
+        fits(cx, settings, "copy-logs"),
+        "Copy logs is below the fold"
+    );
     click(cx, settings, "copy-logs");
     let text = clipboard_text(cx).expect("Copy logs wrote the clipboard");
     assert!(text.starts_with("convt-app "), "{text}");
@@ -3812,7 +3838,7 @@ fn copy_logs_puts_a_scrubbed_bundle_on_the_clipboard(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn reveal_log_file_opens_the_fixture_log_folder(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, _) = f.settings_at(SettingsTab::General, px(1040.), px(1800.), cx);
     click(cx, settings, "reveal-log-file");
     let want = f.dir.path().join("logs");
     cx.read(|cx| {

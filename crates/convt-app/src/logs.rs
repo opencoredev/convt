@@ -6,7 +6,8 @@
 //! kept in memory. [`init`] writes them through the existing `tracing`
 //! subscriber and still prints to stderr.
 //!
-//! Anything that leaves the machine goes through [`crate::crash_report::scrub`].
+//! Paths, credentials and personal data are scrubbed before a line is stored
+//! or written to disk. The clipboard bundle uses those already-clean lines.
 
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -58,16 +59,22 @@ pub struct LogStore {
     lines: Mutex<VecDeque<String>>,
     file: Mutex<Option<File>>,
     path: Option<PathBuf>,
+    rotate_bytes: u64,
 }
 
 impl LogStore {
     pub fn open(dir: Option<&Path>) -> Arc<Self> {
+        Self::open_with(dir, ROTATE_BYTES)
+    }
+
+    pub fn open_with(dir: Option<&Path>, rotate_bytes: u64) -> Arc<Self> {
         let path = dir.map(log_file);
         let file = path.as_ref().and_then(|p| open_log(p).ok());
         Arc::new(Self {
             lines: Mutex::new(VecDeque::new()),
             file: Mutex::new(file),
             path,
+            rotate_bytes,
         })
     }
 
@@ -75,7 +82,12 @@ impl LogStore {
         self.lines.lock().unwrap().iter().cloned().collect()
     }
 
-    pub fn push(&self, line: String) {
+    pub fn push(&self, line: impl Into<String>) {
+        let line = line.into();
+        if line.is_empty() {
+            return;
+        }
+        let line = sanitize(&line);
         if line.is_empty() {
             return;
         }
@@ -88,7 +100,7 @@ impl LogStore {
         }
         if let Some(path) = &self.path {
             let mut file = self.file.lock().unwrap();
-            if write_rotated(&mut file, path, &line).is_err() {
+            if write_rotated(&mut file, path, &line, self.rotate_bytes).is_err() {
                 *file = open_log(path).ok();
             }
         }
@@ -102,17 +114,92 @@ fn open_log(path: &Path) -> io::Result<File> {
     OpenOptions::new().create(true).append(true).open(path)
 }
 
-fn write_rotated(file: &mut Option<File>, path: &Path, line: &str) -> io::Result<()> {
-    let Some(handle) = file.as_mut() else {
-        return Ok(());
+fn rotated_file(path: &Path) -> PathBuf {
+    path.with_extension("log.1")
+}
+
+fn write_rotated(
+    file: &mut Option<File>,
+    path: &Path,
+    line: &str,
+    rotate_bytes: u64,
+) -> io::Result<()> {
+    let needs_rotate = match file.as_ref() {
+        Some(handle) => handle.metadata()?.len() >= rotate_bytes,
+        None => return Ok(()),
     };
-    if handle.metadata()?.len() >= ROTATE_BYTES {
-        let rotated = path.with_extension("log.1");
-        let _ = std::fs::rename(path, rotated);
-        *handle = open_log(path)?;
+    if needs_rotate {
+        if let Some(handle) = file.as_mut() {
+            handle.flush()?;
+        }
+        // Close first: Windows cannot rename a file that still has an open handle.
+        *file = None;
+        let rotated = rotated_file(path);
+        let _ = std::fs::remove_file(&rotated);
+        std::fs::rename(path, &rotated)?;
+        *file = Some(open_log(path)?);
     }
+    let handle = file
+        .as_mut()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "log file closed"))?;
     writeln!(handle, "{line}")?;
     handle.flush()
+}
+
+/// Paths via [`crash_report::scrub`], then emails, tokens and license keys.
+fn sanitize(line: &str) -> String {
+    redact_secrets(&crash_report::scrub(line))
+}
+
+fn redact_secrets(input: &str) -> String {
+    let mut redact_next = false;
+    input
+        .split_whitespace()
+        .map(|word| {
+            if redact_next {
+                redact_next = false;
+                return "<redacted>".into();
+            }
+            if word.eq_ignore_ascii_case("Bearer")
+                || word.eq_ignore_ascii_case("Token")
+                || word.eq_ignore_ascii_case("Basic")
+            {
+                redact_next = true;
+                return word.to_string();
+            }
+            let trimmed = word.trim_matches(|c: char| matches!(c, ',' | ';' | ')' | ']'));
+            let lower = trimmed.to_ascii_lowercase();
+            if trimmed.contains('@')
+                && trimmed
+                    .rsplit_once('@')
+                    .is_some_and(|(_, domain)| domain.contains('.'))
+            {
+                word.replacen(trimmed, "<email>", 1)
+            } else if lower.starts_with("token=")
+                || lower.starts_with("api_key=")
+                || lower.starts_with("x-api-key=")
+                || lower.starts_with("access_token=")
+                || lower.starts_with("refresh_token=")
+                || lower.starts_with("license_key=")
+                || lower.starts_with("secret=")
+                || lower.starts_with("authorization=")
+            {
+                "<credential>=<redacted>".into()
+            } else if lower.starts_with("cvt_")
+                || lower.starts_with("convt_")
+                || (trimmed.len() >= 19
+                    && trimmed.matches('-').count() >= 3
+                    && trimmed
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-'))
+            {
+                "<license-key>".into()
+            } else {
+                word.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Newtype so we can implement `MakeWriter` (orphan rules block `Arc<LogStore>`).
@@ -167,8 +254,9 @@ pub struct BundleInput<'a> {
     pub lines: &'a [String],
 }
 
-/// App version, OS, arch, license state (no keys) and recent log lines,
-/// with paths and secrets scrubbed by [`crash_report::scrub`].
+/// App version, OS, arch, license state (no keys) and recent log lines.
+/// Lines from the store are already sanitized; this still sanitizes so
+/// tests can pass raw lines.
 pub fn format_bundle(input: &BundleInput<'_>) -> String {
     let mut out = String::new();
     out.push_str(&format!("convt-app {}\n", input.version));
@@ -181,7 +269,7 @@ pub fn format_bundle(input: &BundleInput<'_>) -> String {
         out.push_str("(no log lines yet)\n");
     } else {
         for line in input.lines {
-            out.push_str(&crash_report::scrub(line));
+            out.push_str(&sanitize(line));
             out.push('\n');
         }
     }
@@ -333,5 +421,50 @@ mod tests {
         let file = std::fs::read_to_string(log_file(dir.path())).unwrap();
         assert!(file.contains("line 0"));
         assert!(file.contains(&format!("line {}", MEMORY_LINES + 4)));
+    }
+
+    #[test]
+    fn persist_scrubs_paths_and_secrets_before_store_or_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = LogStore::open(Some(dir.path()));
+        let addr = format!("{}@{}", "someone", "convt.test");
+        let secret = format!("{}={}", "token", "api-secret");
+        store.push(format!(
+            "opened /Users/someone/holiday.png {addr} {secret} Bearer hunter2"
+        ));
+        let recent = store.recent().join("\n");
+        let file = std::fs::read_to_string(log_file(dir.path())).unwrap();
+        for text in [&recent, &file] {
+            assert!(!text.contains("someone"), "{text}");
+            assert!(!text.contains("holiday"), "{text}");
+            assert!(!text.contains("api-secret"), "{text}");
+            assert!(!text.contains("hunter2"), "{text}");
+            assert!(!text.contains(&addr), "{text}");
+            assert!(
+                text.contains("<PATH>") || text.contains("<HOME>") || text.contains("<email>"),
+                "{text}"
+            );
+            assert!(
+                text.contains("<credential>=<redacted>") || text.contains("<redacted>"),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn rotation_closes_the_handle_then_renames() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = LogStore::open_with(Some(dir.path()), 40);
+        store.push("aaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        store.push("bbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        store.push("cccccccc");
+        let current = log_file(dir.path());
+        let rotated = rotated_file(&current);
+        assert!(rotated.is_file(), "expected {}", rotated.display());
+        let old = std::fs::read_to_string(&rotated).unwrap();
+        let new = std::fs::read_to_string(&current).unwrap();
+        assert!(old.contains('a') || old.contains('b'), "{old}");
+        assert!(new.contains('c') || new.contains('b'), "{new}");
+        assert_ne!(old, new);
     }
 }
