@@ -84,25 +84,44 @@ pub fn scrub(input: &str) -> String {
     words.join(" ")
 }
 
-fn enabled() -> bool {
-    if std::env::var("DO_NOT_TRACK").ok().as_deref() == Some("1") {
-        return false;
-    }
-    // CNV-55 stores the desktop telemetry toggle in settings.toml. Read the
-    // raw key here so this branch stays mergeable before telemetry.rs lands.
-    if let Some(path) = crate::settings::Settings::path()
-        && let Ok(text) = std::fs::read_to_string(path)
-        && text.lines().any(|line| {
-            let line = line.trim();
-            line.starts_with("telemetry_enabled") && line.contains("false")
+fn do_not_track() -> bool {
+    std::env::var("DO_NOT_TRACK")
+        .map(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "" | "0" | "false" | "no" | "off"
+            )
         })
-    {
+        .unwrap_or(false)
+}
+
+/// This mirrors CNV-55's `telemetry::enabled(setting, enforced)` until that
+/// module lands on main. Keep this small bridge so both reporters use the
+/// same `telemetry` setting and DO_NOT_TRACK behavior during the merge.
+fn telemetry_enabled(setting: bool, enforced: bool) -> bool {
+    setting && enforced && !do_not_track()
+}
+
+fn enabled() -> bool {
+    if do_not_track() {
         return false;
     }
-    if cfg!(debug_assertions) {
-        return std::env::var("CONVT_TELEMETRY").ok().as_deref() == Some("1");
-    }
-    true
+    // CNV-55 owns this key. Read it directly until its telemetry module is
+    // merged; then replace this bridge with `telemetry::enabled(...)`.
+    let setting = crate::settings::Settings::path()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| {
+            text.lines().find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                (key.trim() == "telemetry").then(|| value.trim().parse::<bool>().ok())?
+            })
+        })
+        .flatten()
+        .unwrap_or(true);
+    let enforced = convt_license::ENFORCED
+        || (cfg!(debug_assertions)
+            && std::env::var("CONVT_TELEMETRY").ok().as_deref() == Some("1"));
+    telemetry_enabled(setting, enforced)
 }
 
 fn metadata() -> serde_json::Map<String, serde_json::Value> {
@@ -134,8 +153,8 @@ fn event(kind: &str, value: &str, stack: &str, error_kind: Option<&str>) -> serd
     serde_json::json!({"event":"$exception","api_key":POSTHOG_KEY,"properties":props})
 }
 
-fn send(value: serde_json::Value) -> Result<(), ()> {
-    if !enabled() {
+fn send_with_gate(value: serde_json::Value, allowed: bool) -> Result<(), ()> {
+    if !allowed {
         return Err(());
     }
     let body = serde_json::json!({"batch":[value]});
@@ -149,6 +168,10 @@ fn send(value: serde_json::Value) -> Result<(), ()> {
         .send(body.to_string())
         .map(|_| ())
         .map_err(|_| ())
+}
+
+fn send(value: serde_json::Value) -> Result<(), ()> {
+    send_with_gate(value, enabled())
 }
 
 fn write_crash(
@@ -246,6 +269,13 @@ mod tests {
                 .is_some()
         );
         assert!(value.get("$exception_list").is_none());
+    }
+
+    #[test]
+    fn telemetry_opt_out_suppresses_crash_send() {
+        let allowed = telemetry_enabled(false, true);
+        assert!(!allowed);
+        assert!(send_with_gate(event("panic", "boom", "stack", None), allowed).is_err());
     }
     #[test]
     fn scrubs_platform_paths() {
