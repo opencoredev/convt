@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 
 import { cx } from "#/components/app/ui";
-import { ComingSoon, DownloadButton, Sha } from "#/components/site/download";
+import { DownloadButton, Sha } from "#/components/site/download";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
 import {
   isOs,
@@ -15,9 +15,9 @@ import {
   type Os,
   type Slot,
 } from "#/lib/platform";
-import { fileName, formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
+import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
 import { fetchLatestManifest } from "#/server/latest-release";
-import { GITHUB_URL, routes, seo } from "#/lib/site";
+import { routes, seo } from "#/lib/site";
 
 // The newest GitHub release's manifest (packaging/release/manifest.schema.json), read
 // on each load. content/release-manifest.json is the fallback when GitHub has none or
@@ -54,7 +54,7 @@ export const Route = createFileRoute("/_site/download")({
     seo({
       title: "Download convt for macOS, Windows and Linux",
       description:
-        "convt for macOS (Apple silicon), Windows and Linux (AppImage, .deb, .rpm, tarball), with checksums and the matching source code.",
+        "convt for macOS (Apple silicon), Windows and Linux (AppImage, .deb, .rpm, tarball).",
       path: routes.download,
     }),
   component: DownloadPage,
@@ -100,38 +100,6 @@ function DownloadPage() {
           ))}
         </div>
       </section>
-
-      <section aria-labelledby="verify-title" className="grid gap-8 md:grid-cols-2 md:gap-12">
-        <div className="flex flex-col gap-3">
-          <h2 id="verify-title" className="text-2xl/8 font-semibold tracking-[-0.02em]">
-            Check your download
-          </h2>
-          <p className="text-[15px]/6 text-ink-2">
-            Compare the file's SHA-256 checksum with the one listed above. If they differ, delete
-            the file and download it again.
-          </p>
-          <p className="text-[15px]/6 text-ink-2">
-            Documents (Word, Excel and PowerPoint files) use an optional document pack. The app
-            offers it the first time you select one, and downloads it only when you click Install.
-          </p>
-        </div>
-        <dl className="flex min-w-0 flex-col gap-3 font-mono text-[12.5px]/5">
-          {[
-            ["macOS", "shasum -a 256 convt-*.dmg"],
-            ["Linux", "sha256sum convt-*"],
-            ["Windows (PowerShell)", "Get-FileHash convt-*.msi"],
-          ].map(([label, command]) => (
-            <div key={label} className="flex flex-col gap-1.5">
-              <dt className="text-xs/4 text-ink-2">{label}</dt>
-              <dd className="overflow-x-auto rounded-lg bg-code px-3.5 py-2.5 text-code-ink shadow-[inset_0_0_0_1px_var(--code-ring)]">
-                {command}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <SourceSection />
     </div>
   );
 }
@@ -227,52 +195,6 @@ function PlatformCard({ os, current }: { os: Os; current: boolean }) {
           </li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-function SourceSection() {
-  const { release } = Route.useLoaderData();
-  const source = release.source;
-  return (
-    <section
-      aria-labelledby="source-title"
-      className="flex flex-col gap-6 border-t border-line pt-12"
-    >
-      <div className="flex max-w-[680px] flex-col gap-3">
-        <h2 id="source-title" className="text-2xl/8 font-semibold tracking-[-0.02em]">
-          Source code
-        </h2>
-        <p className="text-[15px]/6 text-ink-2">
-          convt is free software under the{" "}
-          <TextLink href={`${GITHUB_URL}/blob/main/LICENSE`}>GNU AGPL-3.0</TextLink>. Each release
-          publishes a source archive built from the same commit as the downloads above, with the
-          build scripts and the source of every bundled component. The code is also on{" "}
-          <TextLink href={GITHUB_URL}>GitHub</TextLink>.
-        </p>
-      </div>
-      <div className="flex flex-col gap-2 rounded-2xl bg-raised px-5 py-4 shadow-[inset_0_0_0_1px_var(--line)] sm:flex-row sm:items-center sm:justify-between sm:gap-6 dark:bg-panel">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-sm/5 font-medium">
-            {source ? fileName(source.url) : "Source archive"}
-          </span>
-          <span className="text-[13px]/[18px] text-ink-2">
-            {source
-              ? `Version ${release.version} · ${formatBytes(source.size)}`
-              : "Published with each release"}
-          </span>
-          {source && <Sha value={source.sha256} />}
-        </div>
-        {source ? (
-          <TextLink href={source.url} className="shrink-0 self-start text-sm/5 sm:self-auto">
-            Download source
-          </TextLink>
-        ) : (
-          <span className="self-start sm:self-auto">
-            <ComingSoon />
-          </span>
-        )}
-      </div>
     </section>
   );
 }

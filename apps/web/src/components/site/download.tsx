@@ -3,7 +3,7 @@ import { useState } from "react";
 import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
 import { fileName, type ManifestArtifact } from "#/lib/release-manifest";
 
-/** Shown where a build or source archive is not published yet, instead of a link. */
+/** Shown on a download button when that build is not published yet. */
 export function ComingSoon({ large }: { large?: boolean }) {
   return (
     <span
