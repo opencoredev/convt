@@ -2233,7 +2233,7 @@
         },
         {
           "local": "packaging/release/appimage-source-build.py",
-          "sha256": "9867f73776e3930a89d97f569ffe4336564d411c94655b35886e3592a11f82de",
+          "sha256": "641387de6842d7dce7601a1bb536ffe126494552bbf6c218ce2276b010cc22ca",
           "retain_as": "release/appimage-source-build.py"
         }
       ],
