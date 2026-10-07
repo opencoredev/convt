@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use convt_core::{Category, Format, format_by_extension, format_by_id};
-use gpui_kit::{AppContext, Context, Task};
+use gpui_kit::{Context, Task};
 
 use crate::model::AppState;
 use crate::settings::{Automation, WatchKind, looks_like_recording, looks_like_screenshot};
@@ -257,6 +257,7 @@ fn list_dir(dir: &Path) -> std::io::Result<Vec<(PathBuf, u64)>> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScreenshotLocation {
     Folder(PathBuf),
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Clipboard,
     Unknown,
 }
@@ -331,6 +332,7 @@ fn source_dir(source: &str) -> Option<PathBuf> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn existing_or_path(raw: &str) -> Option<PathBuf> {
     let path = expand_tilde(Path::new(raw.trim().trim_matches('"')));
     if path.as_os_str().is_empty() {
@@ -523,15 +525,16 @@ mod tests {
     #[test]
     fn watch_state_primes_then_emits_stable_new_files() {
         let root = tempfile::tempdir().unwrap();
-        let dir = root.path();
-        let shots = rule("Screenshots", "png", WatchKind::Screenshot, dir);
+        let dir = root.path().join("Desktop");
+        std::fs::create_dir(&dir).unwrap();
+        let shots = rule("Screenshots", "png", WatchKind::Screenshot, &dir);
         std::fs::write(dir.join("Screenshot old.bmp"), b"old").unwrap();
         let mut state = WatchState::default();
-        assert!(state.drain_ready(&[shots.clone()]).is_empty());
+        assert!(state.drain_ready(std::slice::from_ref(&shots)).is_empty());
 
         std::fs::write(dir.join("notes.bmp"), b"skip").unwrap();
         std::fs::write(dir.join("Screenshot new.bmp"), b"new").unwrap();
-        assert!(state.drain_ready(&[shots.clone()]).is_empty());
+        assert!(state.drain_ready(std::slice::from_ref(&shots)).is_empty());
         let ready = state.drain_ready(&[shots]);
         assert_eq!(ready.len(), 1);
         assert!(ready[0].1.ends_with("Screenshot new.bmp"));
@@ -543,13 +546,13 @@ mod tests {
         let dir = root.path();
         let rec = rule("Screen recordings", "mp4", WatchKind::Recording, dir);
         let mut state = WatchState::default();
-        assert!(state.drain_ready(&[rec.clone()]).is_empty());
+        assert!(state.drain_ready(std::slice::from_ref(&rec)).is_empty());
 
         let file = dir.join("Screen Recording 1.mov");
         std::fs::write(&file, b"one").unwrap();
-        assert!(state.drain_ready(&[rec.clone()]).is_empty());
+        assert!(state.drain_ready(std::slice::from_ref(&rec)).is_empty());
         std::fs::write(&file, b"longer").unwrap();
-        assert!(state.drain_ready(&[rec.clone()]).is_empty());
+        assert!(state.drain_ready(std::slice::from_ref(&rec)).is_empty());
         let ready = state.drain_ready(&[rec]);
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0].1, file);

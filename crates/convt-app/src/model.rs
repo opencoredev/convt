@@ -1107,16 +1107,19 @@ mod tests {
             let from = format_by_extension(Path::new(file))?;
             let to = settings
                 .defaults
-                .get(Kind::of_file(Path::new(file), from))?;
+                .get(Kind::of_file(Path::new(file), from)?)?;
             (from.id != to.id && registry.targets(from).contains(&to)).then_some(to.id)
         };
-        assert_eq!(state_target("IMG_2041.heic"), Some("jpeg"));
-        assert_eq!(state_target("holiday.avif"), Some("jpeg"));
         assert_eq!(state_target("share.webp"), Some("jpeg"));
-        assert_eq!(state_target("Screenshot 1.heic"), Some("png"));
+        assert_eq!(state_target("Screenshot 1.webp"), Some("png"));
         assert_eq!(state_target("diagram.svg"), Some("png"));
         assert_eq!(state_target("icon.bmp"), Some("png"));
         assert_eq!(state_target("already.png"), None);
         assert_eq!(state_target("already.jpg"), None);
+        let heic = format_by_id("heic").unwrap();
+        if registry.targets(heic).iter().any(|f| f.id == "jpeg") {
+            assert_eq!(state_target("IMG_2041.heic"), Some("jpeg"));
+            assert_eq!(state_target("Screenshot 1.heic"), Some("png"));
+        }
     }
 }

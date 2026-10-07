@@ -883,8 +883,8 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
 #[gpui_kit::test]
 fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let broken = f.dir.path().join("broken.png");
-    std::fs::write(&broken, "not a png").unwrap();
+    let broken = f.dir.path().join("broken.bmp");
+    std::fs::write(&broken, "not a bmp").unwrap();
     let (window, view) = f.main(cx);
     view.update(cx, |v, cx| v.add(std::slice::from_ref(&broken), cx));
     wait_until(cx, "the failure", |cx| f.app.read(cx).recent.len() == 1);
@@ -1254,8 +1254,8 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
         "{card}"
     );
 
-    let png = f.png("a.png");
-    view.update(cx, |v, cx| v.add(std::slice::from_ref(&png), cx));
+    let bmp = f.bmp("a.bmp");
+    view.update(cx, |v, cx| v.add(std::slice::from_ref(&bmp), cx));
     assert_eq!(f.jobs(cx), 0);
     assert!(
         label(cx, main, "error")
@@ -1263,7 +1263,7 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
             .starts_with("This build is newer")
     );
 
-    let (quick, _) = f.quick(cli(vec![png], Some("jpeg"), None), cx);
+    let (quick, _) = f.quick(cli(vec![bmp], Some("jpeg"), None), cx);
     assert!(shown(cx, quick, "download"));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     assert!(shown(cx, settings, "remove-license"));
@@ -1586,7 +1586,7 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_screenshot_automation_converts_and_can_copy(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let shots = f.dir.path().join("shots");
+    let shots = f.dir.path().join("Desktop");
     std::fs::create_dir(&shots).unwrap();
     f.app.update(cx, |s, cx| {
         s.update_settings(
@@ -1807,7 +1807,7 @@ fn quick_convert_shows_errors_the_license_banner_does_not(cx: &mut TestAppContex
 #[gpui_kit::test]
 fn the_popover_copies_every_drop_even_past_the_listed_few(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let files: Vec<PathBuf> = (0..5).map(|i| f.png(&format!("shot {i}.png"))).collect();
+    let files: Vec<PathBuf> = (0..5).map(|i| f.bmp(&format!("shot {i}.bmp"))).collect();
     let (window, view) = cx.update(super::open_popover).unwrap();
     view.update(cx, |v, cx| v.drop_files(&files, cx));
     let jobs: Vec<JobId> =
@@ -2556,13 +2556,14 @@ fn documents_added_dropped_or_in_folders_reach_the_offer(cx: &mut TestAppContext
     let f = Fixture::with_packs(cx, packs.clone());
     let docx = f.docx("Plan.docx");
     let png = f.png("a.png");
+    let bmp = f.bmp("a.bmp");
     let folder = f.dir.path().join("folder");
     std::fs::create_dir(&folder).unwrap();
     std::fs::write(folder.join("Budget.xlsx"), b"PK").unwrap();
 
-    // Add files: the PNG converts, the document opens the offer.
+    // Add files: the BMP converts, the document opens the offer.
     let (_, main) = f.main(cx);
-    main.update(cx, |v, cx| v.add(&[png.clone(), docx.clone()], cx));
+    main.update(cx, |v, cx| v.add(&[bmp, docx.clone()], cx));
     let (window, view) = last_quick(cx);
     cx.read(|cx| assert_eq!(view.read(cx).files, std::slice::from_ref(&docx)));
     assert!(shown(cx, window, "pack-download"));
