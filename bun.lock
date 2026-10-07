@@ -27,8 +27,13 @@
         "wrangler": "^4.70.0",
       },
     },
+    "apps/desktop": {
+      "name": "@convt/desktop",
+      "version": "0.1.0",
+    },
     "apps/web": {
       "name": "@convt/web",
+      "version": "0.1.0",
       "dependencies": {
         "@convt/billing": "workspace:*",
         "@convt/db": "workspace:*",
@@ -139,6 +144,10 @@
         "typescript": "^6.0.2",
       },
     },
+    "tools/cli": {
+      "name": "@convt/cli",
+      "version": "0.1.0",
+    },
     "tools/loadtest": {
       "name": "@convt/loadtest",
       "dependencies": {
@@ -244,7 +253,11 @@
 
     "@convt/billing-worker": ["@convt/billing-worker@workspace:apps/billing"],
 
+    "@convt/cli": ["@convt/cli@workspace:tools/cli"],
+
     "@convt/db": ["@convt/db@workspace:packages/db"],
+
+    "@convt/desktop": ["@convt/desktop@workspace:apps/desktop"],
 
     "@convt/license": ["@convt/license@workspace:packages/license"],
 
