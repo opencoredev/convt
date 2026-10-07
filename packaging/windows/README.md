@@ -1,6 +1,6 @@
 # Windows verification installer
 
-Run in a Windows x64 checkout with Rust 1.95.0, Visual Studio 2019 or 2022 C++ build tools (including CMake), Git for Windows, Python 3 and the .NET SDK. The scripts use only user-owned build directories. Git supplies patch and Perl for the codec builds.
+Run in a Windows x64 checkout with Rust 1.95.0, Visual Studio 2019, 2022 or 2026 C++ build tools (including CMake), Git for Windows, Python 3 and the .NET SDK. The scripts use only user-owned build directories. Git supplies patch and Perl for the codec builds; Strawberry Perl's `patch.exe` is refused (it asserts on the x265 debian series).
 
 ```powershell
 $env:SOURCE_DATE_EPOCH = '1791244800'
