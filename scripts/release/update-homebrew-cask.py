@@ -63,16 +63,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'updated' if changed else 'unchanged'} {cask} {version} {sha256}")
         errors: list[str] = []
         repo = homebrew.REPO if cask.is_relative_to(homebrew.REPO) else cask.parent.parent
-        if changed and args.commit:
-            message = f"chore(homebrew): bump convt to {version}"
-            if homebrew.commit_if_changed(repo, cask, message):
-                print(f"committed {cask.relative_to(repo)}")
-                if args.push:
-                    try:
-                        homebrew.push_head(repo)
-                        print("pushed this repository")
-                    except Exception as error:  # noqa: BLE001 — report, then still try the tap
-                        errors.append(f"push this repository: {error}")
+        # Commit, push and tap are independent. A failed push must still be
+        # retryable when the cask file already matches, and a failed commit
+        # must not skip the tap.
+        if args.commit:
+            try:
+                if homebrew.commit_if_changed(repo, cask, f"chore(homebrew): bump convt to {version}"):
+                    print(f"committed {cask.relative_to(repo)}")
+                else:
+                    print("nothing to commit")
+            except Exception as error:  # noqa: BLE001 — still try push and tap
+                errors.append(f"commit this repository: {error}")
+        if args.push:
+            try:
+                homebrew.push_head(repo)
+                print("pushed this repository")
+            except Exception as error:  # noqa: BLE001 — still try the tap
+                errors.append(f"push this repository: {error}")
         token = os.environ.get("HOMEBREW_TAP_TOKEN", "").strip()
         if not args.skip_tap and token:
             try:

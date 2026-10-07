@@ -47,17 +47,30 @@ def validate_cask(text: str) -> None:
     missing = [item for item in REQUIRED if item not in text]
     if missing:
         raise ValueError("cask is missing: " + ", ".join(missing))
-    if VERSION_RE.search(text) is None:
+    cask_fields(text)
+
+
+def cask_fields(text: str) -> tuple[str, str]:
+    version = VERSION_RE.search(text)
+    digest = SHA_RE.search(text)
+    if version is None:
         raise ValueError("cask needs a version stanza")
-    if SHA_RE.search(text) is None:
+    if digest is None:
         raise ValueError("cask needs a sha256 stanza")
+    if not VERSION_VALUE.fullmatch(version[2]):
+        raise ValueError(f"invalid version: {version[2]}")
+    if not SHA_VALUE.fullmatch(digest[2]):
+        raise ValueError(f"invalid sha256: {digest[2]}")
+    return version[2], digest[2]
 
 
-def bump_cask(text: str, *, version: str, sha256: str) -> str:
+def bump_cask(text: str, *, version: str, sha256: str, url: str | None = None) -> str:
     if not VERSION_VALUE.fullmatch(version):
         raise ValueError(f"invalid version: {version}")
     if not SHA_VALUE.fullmatch(sha256):
         raise ValueError(f"invalid sha256: {sha256}")
+    if url is not None and not url.startswith("https://"):
+        raise ValueError("cask url must be https")
     validate_cask(text)
     bumped, count = VERSION_RE.subn(rf"\g<1>{version}\g<3>", text, count=1)
     if count != 1:
@@ -65,6 +78,12 @@ def bump_cask(text: str, *, version: str, sha256: str) -> str:
     bumped, count = SHA_RE.subn(rf"\g<1>{sha256}\g<3>", bumped, count=1)
     if count != 1:
         raise ValueError("expected exactly one sha256 stanza")
+    if url is not None:
+        bumped, count = re.compile(r'^(\s*url\s+")([^"]+)(")', re.M).subn(
+            rf"\g<1>{url}\g<3>", bumped, count=1
+        )
+        if count != 1:
+            raise ValueError("expected exactly one url stanza")
     validate_cask(bumped)
     return bumped
 
@@ -122,6 +141,13 @@ def git_env(token: str | None = None) -> dict[str, str]:
     return env
 
 
+def git_ident_args() -> list[str]:
+    # Git needs user.name and user.email. Keep both local-only; never embed an address.
+    name = os.environ.get("GIT_AUTHOR_NAME") or "github-actions[bot]"
+    ident = os.environ.get("GIT_AUTHOR_EMAIL") or "github-actions[bot]"
+    return ["-c", f"user.name={name}", "-c", f"user.email={ident}"]
+
+
 def run_git(args: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
     merged = git_env()
     if env:
@@ -134,18 +160,7 @@ def commit_if_changed(repo: Path, path: Path, message: str) -> bool:
     staged = run_git(["diff", "--cached", "--name-only", "--", str(path.relative_to(repo))], cwd=repo)
     if not staged:
         return False
-    run_git(
-        [
-            "-c",
-            "user.name=github-actions[bot]",
-            "-c",
-            "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-            "commit",
-            "-m",
-            message,
-        ],
-        cwd=repo,
-    )
+    run_git([*git_ident_args(), "commit", "-m", message], cwd=repo)
     return True
 
 
@@ -156,6 +171,10 @@ def push_head(repo: Path, remote: str = "origin") -> None:
     subprocess.check_call(["git", "push", remote, f"HEAD:refs/heads/{branch}"], cwd=repo)
 
 
+def clone_tap(url: str, dest: Path, env: dict[str, str]) -> None:
+    subprocess.check_call(["git", "clone", "--depth", "1", url, str(dest)], env=env)
+
+
 def publish_tap(cask: Path, *, tap: str, token: str, version: str) -> None:
     if "/" not in tap:
         raise ValueError(f"tap must be owner/repo: {tap}")
@@ -163,10 +182,7 @@ def publish_tap(cask: Path, *, tap: str, token: str, version: str) -> None:
     env = git_env(token)
     try:
         try:
-            subprocess.check_call(
-                ["git", "clone", "--depth", "1", f"https://github.com/{tap}.git", str(work / "tap")],
-                env=env,
-            )
+            clone_tap(f"https://github.com/{tap}.git", work / "tap", env)
         except subprocess.CalledProcessError:
             raise ValueError(
                 f"could not clone {tap}; create the public repo and set HOMEBREW_TAP_TOKEN"
@@ -181,19 +197,7 @@ def publish_tap(cask: Path, *, tap: str, token: str, version: str) -> None:
         run_git(["add", "Casks/convt.rb", "README.md"], cwd=repo, env=env)
         if not run_git(["diff", "--cached", "--name-only"], cwd=repo, env=env):
             return
-        run_git(
-            [
-                "-c",
-                "user.name=github-actions[bot]",
-                "-c",
-                "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-                "commit",
-                "-m",
-                f"convt {version}",
-            ],
-            cwd=repo,
-            env=env,
-        )
+        run_git([*git_ident_args(), "commit", "-m", f"convt {version}"], cwd=repo, env=env)
         subprocess.check_call(["git", "push", "origin", "HEAD"], cwd=repo, env=env)
     finally:
         shutil.rmtree(work, ignore_errors=True)

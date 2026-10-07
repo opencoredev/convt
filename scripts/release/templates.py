@@ -29,7 +29,7 @@ if mac:
     homebrew_spec=spec_from_file_location('homebrew_cask',Path(__file__).with_name('homebrew_cask.py'))
     homebrew=module_from_spec(homebrew_spec); homebrew_spec.loader.exec_module(homebrew)
     source=Path(__file__).resolve().parents[2]/'Casks'/'convt.rb'
-    text(Path('homebrew/convt.rb'),homebrew.bump_cask(source.read_text(),version=version,sha256=mac['sha256']))
+    text(Path('homebrew/convt.rb'),homebrew.bump_cask(source.read_text(),version=version,sha256=mac['sha256'],url=mac['url']))
 windows=artifacts.get(('windows-x86_64','msi')) or artifacts.get(('windows-x86_64','exe'))
 if windows:
     text(Path('winget/Convt.Convt.installer.yaml'),f'''PackageIdentifier: Convt.Convt

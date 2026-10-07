@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 import { cx } from "#/components/app/ui";
-import { DownloadButton, Sha } from "#/components/site/download";
+import { DownloadButton, HomebrewInstall, Sha } from "#/components/site/download";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
 import {
   isOs,
@@ -190,17 +190,5 @@ function PlatformCard({ os, current }: { os: Os; current: boolean }) {
       </ul>
       {os === "macos" && <HomebrewInstall />}
     </section>
-  );
-}
-
-function HomebrewInstall() {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-[13px]/5 text-ink-2">Or install with Homebrew (Apple silicon):</p>
-      <pre className="overflow-x-auto rounded-lg bg-sunken px-3 py-2 font-mono text-[12px]/5">
-        {`brew tap opencoredev/convt https://github.com/opencoredev/convt
-brew install --cask convt`}
-      </pre>
-    </div>
   );
 }

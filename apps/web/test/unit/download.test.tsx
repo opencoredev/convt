@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DownloadButton } from "../../src/components/site/download";
+import { DownloadButton, HomebrewInstall } from "../../src/components/site/download";
 
 const page = readFileSync(new URL("../../src/routes/_site/download.tsx", import.meta.url), "utf8");
 
@@ -39,6 +39,11 @@ test("/download has no checksum or source Coming soon sections", () => {
   expect(page).not.toContain("verify-title");
   expect(page).toContain("DownloadButton");
   expect(page).toContain("For your computer");
-  expect(page).toContain("brew install --cask convt");
-  expect(page).toContain("brew tap opencoredev/convt");
+  expect(page).toContain("HomebrewInstall");
+});
+
+test("Homebrew install block renders the tap commands", () => {
+  const html = renderToStaticMarkup(<HomebrewInstall />);
+  expect(html).toContain("brew tap opencoredev/convt");
+  expect(html).toContain("brew install --cask convt");
 });

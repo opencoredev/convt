@@ -63,3 +63,15 @@ export function Sha({ value }: { value: string }) {
     </div>
   );
 }
+
+export function HomebrewInstall() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[13px]/5 text-ink-2">Or install with Homebrew (Apple silicon):</p>
+      <pre className="overflow-x-auto rounded-lg bg-sunken px-3 py-2 font-mono text-[12px]/5">
+        {`brew tap opencoredev/convt https://github.com/opencoredev/convt
+brew install --cask convt`}
+      </pre>
+    </div>
+  );
+}
