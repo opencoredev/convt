@@ -27,9 +27,13 @@ on:
         type: boolean
 permissions:
   contents: read
+concurrency:
+  group: release-macos-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: true
 jobs:
   macos:
     # Apple silicon only: the release ships a single arm64 slice.
+    # macos-15 GitHub-hosted runners are arm64; the DMG stays convt-macos-arm64.dmg.
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -56,9 +60,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-release
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
       - name: Require an Apple silicon runner
         run: test "$(uname -m)" = arm64
       - name: Install pinned source-build tools

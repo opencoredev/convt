@@ -1,0 +1,240 @@
+# Cold double-build + compare. Does not publish and does not block Release.
+# Dispatch only: a schedule would keep burning runner minutes after the split.
+name: Release reproducibility
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Synced release version (must match this commit)
+        required: true
+        type: string
+      source_date_epoch:
+        description: Release UTC Unix timestamp
+        required: true
+        type: string
+      platform:
+        description: Which unsigned rebuild pair to compare
+        type: choice
+        options: [linux, macos, windows, all]
+        default: linux
+permissions:
+  contents: read
+concurrency:
+  group: release-reproducibility-${{ github.ref }}-${{ inputs.version }}-${{ inputs.platform }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    if: inputs.platform == 'linux' || inputs.platform == 'all'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
+      CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
+      CONVT_UPDATE_PUBKEY: ${{ vars.CONVT_UPDATE_PUBKEY }}
+      CONVT_LICENSE_STORE: file
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check requested version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: cargo fetch --locked
+      - name: Prepare temporary update seed
+        run: |
+          key=$(mktemp)
+          chmod 600 "$key"
+          bun run update:keygen "$key"
+          echo "CONVT_UPDATE_PUBKEY=$(bun run release:manifest public-key "$key")" >> "$GITHUB_ENV"
+          echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
+      - name: Rebuild twice and compare unsigned artifacts
+        run: |
+          frozen=$(mktemp -d)
+          rmdir "$frozen"
+          python3 scripts/release/source.py snapshot "$frozen"
+          export CONVT_RELEASE_SOURCE_TREE="$frozen"
+          bun run release:linux --verification-only packaging/out/ci-a
+          bun run release:linux --verification-only packaging/out/ci-b
+          version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')
+          python3 scripts/release/compare.py "packaging/out/ci-a/$version" "packaging/out/ci-b/$version"
+          bash scripts/release/rebuild-cli.sh "packaging/out/ci-a/$version/convt-$version-source.tar.gz"
+          rm -rf "$frozen"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-reproducibility
+          path: |
+            packaging/out/ci-a/${{ inputs.version }}/
+            packaging/out/ci-b/${{ inputs.version }}/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove update seed
+        if: always()
+        run: |
+          if [ -n "${CONVT_UPDATE_SIGNING_KEY:-}" ]; then rm -f "$CONVT_UPDATE_SIGNING_KEY"; fi
+
+  macos:
+    if: inputs.platform == 'macos' || inputs.platform == 'all'
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
+      CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
+      CONVT_UPDATE_PUBKEY: ${{ vars.CONVT_UPDATE_PUBKEY }}
+      CONVT_LICENSE_STORE: file
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check requested version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: aarch64-apple-darwin
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Require an Apple silicon runner
+        run: test "$(uname -m)" = arm64
+      - name: Install pinned source-build tools
+        run: brew install meson ninja pkg-config
+      - name: Restore the source FFmpeg build
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: packaging/.cache/macos-source-built-arm64
+          key: macos-ffmpeg-arm64-${{ hashFiles('packaging/release/macos-source-ffmpeg.lock.json', 'packaging/release/macos-source-ffmpeg-build.sh', 'packaging/macos/ffmpeg-input.py') }}
+      - name: Build and qualify source FFmpeg for arm64
+        env:
+          CONVT_BUNDLE_CACHE: ${{ github.workspace }}/packaging/.cache
+          CONVT_BUILD_JOBS: "4"
+          CACHE_HIT: ${{ steps.ffmpeg-cache.outputs.cache-hit }}
+        run: |
+          python3 packaging/release/pdfium-source-verify.py --fetch packaging/release/macos-source-ffmpeg.lock.json
+          python3 - <<'PY'
+          import importlib.util, json
+          spec = importlib.util.spec_from_file_location('verify', 'packaging/release/pdfium-source-verify.py')
+          verify = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(verify)
+          lock = json.load(open('packaging/release/pdfium-source.lock.json'))
+          wanted = {notice['source_cache_filename'] for notice in lock['supplemental_source_notices']}
+          for item in lock['sources']:
+              if item['cache_filename'] in wanted:
+                  path = verify.cache_path(item)
+                  if not path.exists():
+                      verify.fetch(item, path)
+                  verify.verify(item, path)
+          PY
+          if [ "$CACHE_HIT" != true ]; then
+            bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64
+          fi
+          /usr/bin/python3 packaging/macos/ffmpeg-input.py \
+            "$CONVT_BUNDLE_CACHE/macos-source-built-arm64" arm64 \
+            packaging/release/macos-source-ffmpeg.lock.json "$RUNNER_TEMP/arm64-notices"
+      - name: Rebuild twice and compare unsigned arm64 images
+        run: |
+          export CONVT_BUILD="$SOURCE_DATE_EPOCH" CONVT_SIGN_IDENTITY=- CONVT_MAC_ARCHS=arm64
+          first() {
+            export CONVT_MAC_OUT="$1" CARGO_TARGET_DIR="$2"
+            rm -rf "$CONVT_MAC_OUT" "$CARGO_TARGET_DIR"
+            bash packaging/macos/bundle.sh
+            bash packaging/macos/dmg.sh "$CONVT_MAC_OUT/convt.app"
+            test "$(lipo -archs "$CONVT_MAC_OUT/convt.app/Contents/MacOS/convt-app")" = arm64
+            cp "$CONVT_MAC_OUT"/convt-*-arm64.dmg "$3"
+          }
+          first packaging/out/macos-a "$RUNNER_TEMP/macos-target-a" packaging/out/convt-macos-arm64-a.dmg
+          first packaging/out/macos-b "$RUNNER_TEMP/macos-target-b" packaging/out/convt-macos-arm64-b.dmg
+          python3 - <<'PY'
+          import hashlib, sys
+          from pathlib import Path
+          pairs = [
+            (Path('packaging/out/macos-a/convt.app/Contents/MacOS/convt-app'),
+             Path('packaging/out/macos-b/convt.app/Contents/MacOS/convt-app')),
+            (Path('packaging/out/convt-macos-arm64-a.dmg'),
+             Path('packaging/out/convt-macos-arm64-b.dmg')),
+          ]
+          failed = []
+          for left, right in pairs:
+              a = hashlib.sha256(left.read_bytes()).hexdigest()
+              b = hashlib.sha256(right.read_bytes()).hexdigest()
+              print(('PASS' if a == b else 'FAIL') + f' {left.name} {a} {b}')
+              if a != b:
+                  failed.append(left.name)
+          if failed:
+              sys.exit('Non-reproducible Mac artifacts: ' + ', '.join(failed))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-reproducibility
+          path: |
+            packaging/out/convt-macos-arm64-a.dmg
+            packaging/out/convt-macos-arm64-b.dmg
+          if-no-files-found: ignore
+          retention-days: 7
+
+  windows:
+    if: inputs.platform == 'windows' || inputs.platform == 'all'
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
+      CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
+      CONVT_UPDATE_PUBKEY: ${{ vars.CONVT_UPDATE_PUBKEY }}
+      CONVT_LICENSE_STORE: file
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check requested version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Rebuild twice and compare unsigned MSIs
+        shell: pwsh
+        run: |
+          function Invoke-UnsignedWindows($Destination) {
+            if (Test-Path packaging/out/windows) { Remove-Item -Recurse -Force packaging/out/windows }
+            ./packaging/windows/build.ps1 -VerificationOnly
+            ./packaging/windows/installer.ps1
+            New-Item -ItemType Directory -Force $Destination | Out-Null
+            Copy-Item packaging/out/windows/*.msi $Destination
+          }
+          Invoke-UnsignedWindows packaging/out/windows-a
+          Invoke-UnsignedWindows packaging/out/windows-b
+          python3 -c "
+          import hashlib, pathlib, sys
+          left = next(pathlib.Path('packaging/out/windows-a').glob('*.msi'))
+          right = next(pathlib.Path('packaging/out/windows-b').glob('*.msi'))
+          a = hashlib.sha256(left.read_bytes()).hexdigest()
+          b = hashlib.sha256(right.read_bytes()).hexdigest()
+          print(('PASS' if a == b else 'FAIL') + f' {left.name} {a} {b}')
+          sys.exit('Non-reproducible Windows artifacts: ' + left.name) if a != b else None
+          "
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-reproducibility
+          path: |
+            packaging/out/windows-a/*.msi
+            packaging/out/windows-b/*.msi
+          if-no-files-found: ignore
+          retention-days: 7

@@ -14,11 +14,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: desktop-release
-  cancel-in-progress: false
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   preflight:
-    runs-on: tenki-standard-medium-4c-8g
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       publish: ${{ steps.version.outputs.publish }}
@@ -106,7 +106,7 @@ jobs:
   publish:
     if: always() && needs.preflight.outputs.publish == 'true' && needs.linux.result == 'success' && needs.macos.result == 'success'
     needs: [preflight, linux, macos, windows]
-    runs-on: tenki-standard-large-8c-16g
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
@@ -123,9 +123,20 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-publish
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
       - run: cargo fetch --locked
       - uses: actions/download-artifact@v4
         with:

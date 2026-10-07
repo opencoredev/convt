@@ -21,6 +21,7 @@ cd /repo
 export SOURCE_DATE_EPOCH CONVT_BUILD_DATE CARGO_INCREMENTAL=0 CONST_RANDOM_SEED="convt-$SOURCE_DATE_EPOCH"
 [[ $(rustc --version) == 'rustc 1.95.0 '* ]]
 # Reset only generated payload directories when reusing the compilation cache.
+# CI keeps /work/target (CONVT_RELEASE_BUILD_WORK) outside the checkout.
 python3 - <<'RESET'
 import pathlib,shutil
 for name in ['convt','validation-tools','ffmpeg','native']:

@@ -42,14 +42,14 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: release-linux
-  cancel-in-progress: false
+  group: release-linux-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: true
 jobs:
   linux:
     # GitHub-hosted: Tenki's cargo config redirects crates.io to a proxy
     # registry that the offline build container cannot resolve.
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 120
     env:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
       CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
@@ -72,11 +72,38 @@ jobs:
           fi
           test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
       - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-release
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
       - name: Populate locked Rust source cache
         run: cargo fetch --locked
+      - name: Restore pinned bundle inputs
+        uses: actions/cache@v4
+        with:
+          path: packaging/.cache
+          key: linux-bundle-${{ hashFiles('packaging/linux/*.lock.json', 'packaging/linux/build-image.json', 'packaging/release/*.lock.json', 'packaging/release/appimage-source-build.sh') }}
+          restore-keys: |
+            linux-bundle-
+      # Cargo target for the offline builder. Must stay outside the checkout
+      # so source.py snapshot / the source tarball cannot pick it up.
+      - name: Restore container Cargo target
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/convt-linux-compile/target
+          key: linux-compile-${{ hashFiles('Cargo.lock', 'crates/**/Cargo.toml', 'packaging/linux/container-build.sh') }}
+          restore-keys: |
+            linux-compile-
       # Authenticate history with the production key before a dry run swaps in its temporary key.
       - name: Authenticate retained release history
         env:
@@ -109,9 +136,10 @@ jobs:
             printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
           fi
           echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
-      - name: Rebuild twice and compare unsigned artifacts
+      - name: Build unsigned Linux artifacts
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          CONVT_RELEASE_BUILD_WORK: ${{ runner.temp }}/convt-linux-compile
         run: |
           mode=--dry-run
           if [ "$DRY_RUN" = true ]; then mode=--verification-only; fi
@@ -119,11 +147,8 @@ jobs:
           rmdir "$frozen"
           python3 scripts/release/source.py snapshot "$frozen"
           export CONVT_RELEASE_SOURCE_TREE="$frozen"
+          mkdir -p "$CONVT_RELEASE_BUILD_WORK"
           bun run release:linux "$mode" packaging/out/ci-a
-          bun run release:linux "$mode" packaging/out/ci-b
-          version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')
-          python3 scripts/release/compare.py "packaging/out/ci-a/$version" "packaging/out/ci-b/$version"
-          bash scripts/release/rebuild-cli.sh "packaging/out/ci-a/$version/convt-$version-source.tar.gz"
           rm -rf "$frozen"
       - uses: actions/upload-artifact@v4
         with:

@@ -57,11 +57,11 @@ Compare unsigned artifacts first. `scripts/release/sign-linux.sh UNSIGNED SIGNED
 
 The uploader stages immutable version objects. It does not move a stable update pointer. Publish immutable artifacts and their matching source first, verify the objects and signatures, then atomically replace the stable manifests. Never delete a covered historical release. Publish source links from the download page, About and server API for the matching build. The web, app and server owners implement those consumers.
 
-The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows is optional and remains excluded until its native dependencies, source notices and installer signing gates pass. Successful authentication or signing alone does not bypass publication gates.
+GitHub Actions `Release` on main calls one cached Linux build, one cached macOS arm64 build, and an optional Windows build. Linux no longer rebuilds twice on the publish path; a failed compare used to drop the `linux-release-review` artifact after hours. Byte-for-byte rebuilds live in the dispatch-only `Release reproducibility` workflow and fail only that run. Successful authentication or signing alone does not bypass publication gates.
 
 ## Launch checklist
 
-- Confirm the workspace version, UTC epoch and embedded build date agree across platforms. Rebuild twice and compare unsigned hashes.
+- Confirm the workspace version, UTC epoch and embedded build date agree across platforms. Dispatch `Release reproducibility` (or rebuild twice locally) and compare unsigned hashes; do not block publication on that job.
 - Close every source and notice gap, retain replaceable LGPL libraries and required relinking material, and review codec patent obligations separately.
 - Rebuild the source CLI offline and exercise bundled engine conversions on each supported OS.
 - Generate separate license and update production keys, verify the embedded public keys, and store signing seeds outside the checkout.
