@@ -295,6 +295,15 @@ unsafe fn sym<'l, T>(lib: &'l Library, name: &[u8]) -> Result<Symbol<'l, T>> {
 }
 
 fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
+    // Orientation tags are read first so the source file is not held in
+    // memory together with the decoded pixel buffer.
+    let (heif_ori, file_exif) = {
+        let file = std::fs::read(input).unwrap_or_default();
+        (
+            crate::orientation::heif_display_orientation(&file),
+            crate::orientation::heif_exif_orientation(&file),
+        )
+    };
     let path = CString::new(input.as_os_str().as_encoded_bytes())
         .map_err(|_| failed("path contains a NUL byte"))?;
     // SAFETY: every signature below matches libheif/heif.h. Pointers come
@@ -387,10 +396,8 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
         // often the same transform (iPhone photos store both). Applying it
         // again would rotate twice. Only bake EXIF when the container has
         // no transformative properties.
-        let file = std::fs::read(input).unwrap_or_default();
-        if crate::orientation::heif_display_orientation(&file).is_none()
-            && let Some(exif) = heif_handle_exif_orientation(lib, handle.ptr)
-                .or_else(|| crate::orientation::heif_exif_orientation(&file))
+        if heif_ori.is_none()
+            && let Some(exif) = heif_handle_exif_orientation(lib, handle.ptr).or(file_exif)
         {
             img.apply_orientation(exif);
         }

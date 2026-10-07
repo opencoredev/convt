@@ -110,28 +110,56 @@ fn apply_if_still_stored(
     encode(img, to, options, dest)
 }
 
-#[cfg(target_os = "macos")]
-fn needs_source_orientation(
+/// Whether `dest` still looks like the stored HEIF frame, so a source
+/// orientation should be applied. `sips -Z` scales after (or instead of)
+/// transforming; comparing against the unscaled `ispe` would treat a
+/// scaled-and-rotated 90° output as "still stored" and rotate twice.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn needs_source_orientation(
     orientation: Orientation,
     dest: (u32, u32),
     stored: Option<(u32, u32)>,
 ) -> bool {
-    let display = display_size(orientation, stored.unwrap_or(dest));
+    let stored = stored.unwrap_or(dest);
     if swaps_dims(orientation) {
-        dest != display
+        let display = display_size(orientation, stored);
+        let looks_stored = same_aspect(dest, stored);
+        let looks_display = same_aspect(dest, display);
+        if looks_stored != looks_display {
+            return looks_stored;
+        }
+        // Square or ambiguous after scale: apply only when dest matches
+        // the stored frame and not the swapped one.
+        let max_side = dest.0.max(dest.1);
+        dest == scale_to_max_side(stored, max_side) && dest != scale_to_max_side(display, max_side)
     } else {
-        // 180° and mirrors do not change size. If the writer already baked
-        // the pixels and stripped the tag, applying again would flip twice.
-        // Only apply when the output is still the stored size *and* we have
-        // no other signal — which we treat as "writer dropped the tag".
-        // Callers only reach this for files that still look untransformed
-        // (no dest EXIF). Prefer not to guess: leave same-size transforms
-        // to leftover dest EXIF, which `bake_pending_orientation` handled.
-        false
+        // 180° and mirrors keep aspect. ImageIO often drops the tag without
+        // baking. Dest has no leftover EXIF (caller already baked that).
+        same_aspect(dest, stored)
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
+fn same_aspect(a: (u32, u32), b: (u32, u32)) -> bool {
+    let left = u64::from(a.0) * u64::from(b.1);
+    let right = u64::from(a.1) * u64::from(b.0);
+    left.abs_diff(right) <= u64::from(a.0.max(a.1).max(b.0).max(b.1))
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn scale_to_max_side(src: (u32, u32), max_side: u32) -> (u32, u32) {
+    let src_max = src.0.max(src.1);
+    if src_max == 0 || max_side == 0 {
+        return src;
+    }
+    let scale = f64::from(max_side) / f64::from(src_max);
+    (
+        ((f64::from(src.0) * scale).round() as u32).max(1),
+        ((f64::from(src.1) * scale).round() as u32).max(1),
+    )
+}
+
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn swaps_dims(orientation: Orientation) -> bool {
     matches!(
         orientation,
@@ -142,7 +170,7 @@ pub(crate) fn swaps_dims(orientation: Orientation) -> bool {
     )
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn display_size(orientation: Orientation, stored: (u32, u32)) -> (u32, u32) {
     if swaps_dims(orientation) {
         (stored.1, stored.0)
@@ -211,17 +239,16 @@ pub(crate) fn heif_transforms_to_orientation(irot_angle: u8, imir: Option<u8>) -
 }
 
 fn heif_transforms(data: &[u8]) -> Option<(Option<u8>, Option<u8>)> {
-    let ipco = find_box_payload(data, b"ipco")?;
     let mut irot = None;
     let mut imir = None;
-    for_each_box(ipco, |typ, payload| {
+    for (typ, payload) in primary_ipco_properties(data)? {
         if typ == *b"irot" && !payload.is_empty() {
             irot = Some(payload[0] & 3);
         }
         if typ == *b"imir" && !payload.is_empty() {
             imir = Some(payload[0] & 1);
         }
-    });
+    }
     if irot.is_none() && imir.is_none() {
         None
     } else {
@@ -229,11 +256,10 @@ fn heif_transforms(data: &[u8]) -> Option<(Option<u8>, Option<u8>)> {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn heif_ispe(data: &[u8]) -> Option<(u32, u32)> {
-    let ipco = find_box_payload(data, b"ipco")?;
     let mut size = None;
-    for_each_box(ipco, |typ, payload| {
+    for (typ, payload) in primary_ipco_properties(data)? {
         if typ == *b"ispe" && payload.len() >= 12 {
             let width = u32::from_be_bytes(payload[4..8].try_into().unwrap());
             let height = u32::from_be_bytes(payload[8..12].try_into().unwrap());
@@ -241,8 +267,101 @@ pub(crate) fn heif_ispe(data: &[u8]) -> Option<(u32, u32)> {
                 size = Some((width, height));
             }
         }
-    });
+    }
     size
+}
+
+/// Properties on the primary image. When `ipma` is present, thumbnail
+/// `irot`/`imir`/`ispe` entries in the shared `ipco` are ignored.
+fn primary_ipco_properties(data: &[u8]) -> Option<Vec<([u8; 4], &[u8])>> {
+    let ipco = find_box_payload(data, b"ipco")?;
+    let mut children = Vec::new();
+    walk_nested(ipco, false, &mut |typ, payload| {
+        children.push((typ, payload))
+    });
+    let Some(ipma) = find_box_payload(data, b"ipma") else {
+        return Some(children);
+    };
+    let item = heif_primary_item_id(data).or_else(|| first_ipma_item(ipma))?;
+    let indices = ipma_indices_for_item(ipma, item)?;
+    Some(
+        indices
+            .into_iter()
+            .filter_map(|idx| idx.checked_sub(1).and_then(|i| children.get(i).copied()))
+            .collect(),
+    )
+}
+
+fn heif_primary_item_id(data: &[u8]) -> Option<u32> {
+    let payload = find_box_payload(data, b"pitm")?;
+    if payload.len() < 6 {
+        return None;
+    }
+    if payload[0] == 0 {
+        Some(u16::from_be_bytes(payload[4..6].try_into().ok()?) as u32)
+    } else if payload.len() >= 8 {
+        Some(u32::from_be_bytes(payload[4..8].try_into().ok()?))
+    } else {
+        None
+    }
+}
+
+fn first_ipma_item(ipma: &[u8]) -> Option<u32> {
+    if ipma.len() < 10 {
+        return None;
+    }
+    let version = ipma[0];
+    let id_size = if version < 1 { 2 } else { 4 };
+    if version < 1 {
+        Some(u16::from_be_bytes(ipma[8..10].try_into().ok()?) as u32)
+    } else if ipma.len() >= 8 + id_size {
+        Some(u32::from_be_bytes(ipma[8..12].try_into().ok()?))
+    } else {
+        None
+    }
+}
+
+fn ipma_indices_for_item(ipma: &[u8], item_id: u32) -> Option<Vec<usize>> {
+    if ipma.len() < 8 {
+        return None;
+    }
+    let version = ipma[0];
+    let flags = u32::from_be_bytes([0, ipma[1], ipma[2], ipma[3]]);
+    let wide = flags & 1 != 0;
+    let id_size = if version < 1 { 2 } else { 4 };
+    let prop_size = if wide { 2 } else { 1 };
+    let entry_count = u32::from_be_bytes(ipma[4..8].try_into().ok()?);
+    let mut i = 8;
+    for _ in 0..entry_count {
+        if i + id_size + 1 > ipma.len() {
+            return None;
+        }
+        let id = if id_size == 2 {
+            u16::from_be_bytes(ipma[i..i + 2].try_into().ok()?) as u32
+        } else {
+            u32::from_be_bytes(ipma[i..i + 4].try_into().ok()?)
+        };
+        i += id_size;
+        let count = ipma[i] as usize;
+        i += 1;
+        let mut idxs = Vec::new();
+        for _ in 0..count {
+            if i + prop_size > ipma.len() {
+                return None;
+            }
+            let index = if wide {
+                (u16::from_be_bytes(ipma[i..i + 2].try_into().ok()?) & 0x7fff) as usize
+            } else {
+                (ipma[i] & 0x7f) as usize
+            };
+            i += prop_size;
+            idxs.push(index);
+        }
+        if id == item_id {
+            return Some(idxs);
+        }
+    }
+    None
 }
 
 /// EXIF orientation stored as a HEIF `Exif` item, if any.
@@ -261,7 +380,7 @@ pub(crate) fn heif_exif_orientation(data: &[u8]) -> Option<Orientation> {
 
 fn heif_exif_in_meta(meta: &[u8], file: &[u8]) -> Option<Orientation> {
     let mut exif_id = None;
-    let mut locations: Vec<(u32, u64, u64)> = Vec::new();
+    let mut locations = Vec::new();
     for_each_box(meta, |typ, payload| {
         if typ == *b"iinf" && payload.len() > 4 {
             exif_id = exif_id.or_else(|| exif_item_id(&payload[4..]));
@@ -271,13 +390,8 @@ fn heif_exif_in_meta(meta: &[u8], file: &[u8]) -> Option<Orientation> {
         }
     });
     let id = exif_id?;
-    let (_, offset, length) = locations.into_iter().find(|(item, _, _)| *item == id)?;
-    let start = offset as usize;
-    let end = start.saturating_add(length as usize);
-    if end > file.len() || start >= file.len() {
-        return None;
-    }
-    orientation_from_exif_bytes(&file[start..end])
+    let extent = locations.into_iter().find(|item| item.id == id)?;
+    orientation_from_exif_bytes(item_bytes(&extent, file)?)
 }
 
 fn exif_item_id(iinf: &[u8]) -> Option<u32> {
@@ -328,7 +442,15 @@ fn exif_item_id(iinf: &[u8]) -> Option<u32> {
     None
 }
 
-fn parse_iloc(payload: &[u8]) -> Vec<(u32, u64, u64)> {
+struct ItemExtent {
+    id: u32,
+    /// 0 = file/`mdat` offset, 1 = offset into the `idat` box payload.
+    construction_method: u8,
+    offset: u64,
+    length: u64,
+}
+
+fn parse_iloc(payload: &[u8]) -> Vec<ItemExtent> {
     // payload includes FullBox version/flags.
     if payload.len() < 8 {
         return Vec::new();
@@ -374,9 +496,17 @@ fn parse_iloc(payload: &[u8]) -> Vec<(u32, u64, u64)> {
             i += 4;
             id
         };
-        if version == 1 || version == 2 {
-            i += 2; // construction_method + reserved
-        }
+        let construction_method = if version == 1 || version == 2 {
+            if i + 2 > payload.len() {
+                break;
+            }
+            // reserved (12 bits) + construction_method (4 bits).
+            let method = payload[i + 1] & 0x0f;
+            i += 2;
+            method
+        } else {
+            0
+        };
         i += 2; // data_reference_index
         if i + base_offset_size > payload.len() {
             break;
@@ -397,10 +527,38 @@ fn parse_iloc(payload: &[u8]) -> Vec<(u32, u64, u64)> {
             i += offset_size;
             let length = read_size(&payload[i..], length_size);
             i += length_size;
-            out.push((id, offset, length));
+            out.push(ItemExtent {
+                id,
+                construction_method,
+                offset,
+                length,
+            });
         }
     }
     out
+}
+
+fn item_bytes<'a>(extent: &ItemExtent, file: &'a [u8]) -> Option<&'a [u8]> {
+    let start = extent.offset as usize;
+    let end = start.saturating_add(extent.length as usize);
+    match extent.construction_method {
+        0 => {
+            if end > file.len() || start >= file.len() {
+                None
+            } else {
+                Some(&file[start..end])
+            }
+        }
+        1 => {
+            let idat = find_box_payload(file, b"idat")?;
+            if end > idat.len() || start >= idat.len() {
+                None
+            } else {
+                Some(&idat[start..end])
+            }
+        }
+        _ => None,
+    }
 }
 
 fn read_size(data: &[u8], size: usize) -> u64 {
@@ -704,7 +862,7 @@ fn heif_exif_item_extent(data: &[u8]) -> Option<(usize, usize)> {
 #[cfg(test)]
 fn heif_exif_extent_in_meta(meta: &[u8], file: &[u8]) -> Option<(usize, usize)> {
     let mut exif_id = None;
-    let mut locations: Vec<(u32, u64, u64)> = Vec::new();
+    let mut locations = Vec::new();
     for_each_box(meta, |typ, payload| {
         if typ == *b"iinf" && payload.len() > 4 {
             exif_id = exif_id.or_else(|| exif_item_id(&payload[4..]));
@@ -714,13 +872,22 @@ fn heif_exif_extent_in_meta(meta: &[u8], file: &[u8]) -> Option<(usize, usize)> 
         }
     });
     let id = exif_id?;
-    let (_, offset, length) = locations.into_iter().find(|(item, _, _)| *item == id)?;
-    let start = offset as usize;
-    let end = start.saturating_add(length as usize);
-    if end > file.len() || start >= file.len() {
-        return None;
+    let extent = locations.into_iter().find(|item| item.id == id)?;
+    match extent.construction_method {
+        0 => {
+            let start = extent.offset as usize;
+            let end = start.saturating_add(extent.length as usize);
+            (end <= file.len() && start < file.len()).then_some((start, end - start))
+        }
+        1 => {
+            let idat = find_located(file, b"idat")?;
+            let start = idat.payload.saturating_add(extent.offset as usize);
+            let end = start.saturating_add(extent.length as usize);
+            (end <= idat.end && end <= file.len() && start < file.len())
+                .then_some((start, end - start))
+        }
+        _ => None,
     }
-    Some((start, end - start))
 }
 
 /// Writes an Exif Orientation tag as a HEIF `Exif` item, without adding
@@ -780,18 +947,7 @@ fn append_heif_exif_item(data: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 fn pitm_id(data: &[u8]) -> Option<u32> {
-    let loc = find_located(data, b"pitm")?;
-    let payload = &data[loc.payload..loc.end];
-    if payload.len() < 6 {
-        return None;
-    }
-    if payload[0] == 0 {
-        Some(u16::from_be_bytes(payload[4..6].try_into().ok()?) as u32)
-    } else if payload.len() >= 8 {
-        Some(u32::from_be_bytes(payload[4..8].try_into().ok()?))
-    } else {
-        None
-    }
+    heif_primary_item_id(data)
 }
 
 #[cfg(test)]
@@ -1278,13 +1434,22 @@ fn bump_iloc_offsets(file: &mut [u8], insert_at: usize, delta: i64) -> Result<()
     let id_size = if version < 2 { 2 } else { 4 };
     for _ in 0..item_count {
         i += id_size;
-        if version == 1 || version == 2 {
+        let construction_method = if version == 1 || version == 2 {
+            if i + 2 > file.len() {
+                break;
+            }
+            let method = file[i + 1] & 0x0f;
             i += 2;
-        }
+            method
+        } else {
+            0
+        };
         i += 2;
-        if base_offset_size == 4 && i + 4 <= file.len() {
+        // construction_method 1 offsets are into `idat`, not the file.
+        let bump = construction_method == 0;
+        if bump && base_offset_size == 4 && i + 4 <= file.len() {
             bump_u32(&mut file[i..i + 4], insert_at as u64, delta);
-        } else if base_offset_size == 8 && i + 8 <= file.len() {
+        } else if bump && base_offset_size == 8 && i + 8 <= file.len() {
             bump_u64(&mut file[i..i + 8], insert_at as u64, delta);
         }
         i += base_offset_size;
@@ -1295,9 +1460,9 @@ fn bump_iloc_offsets(file: &mut [u8], insert_at: usize, delta: i64) -> Result<()
         i += 2;
         for _ in 0..extents {
             i += index_size;
-            if offset_size == 4 && i + 4 <= file.len() {
+            if bump && offset_size == 4 && i + 4 <= file.len() {
                 bump_u32(&mut file[i..i + 4], insert_at as u64, delta);
-            } else if offset_size == 8 && i + 8 <= file.len() {
+            } else if bump && offset_size == 8 && i + 8 <= file.len() {
                 bump_u64(&mut file[i..i + 8], insert_at as u64, delta);
             }
             i += offset_size + length_size;
@@ -1536,6 +1701,212 @@ mod tests {
             heif_exif_orientation(&inject_heif_exif(&stripped, 6).unwrap())
                 .map(Orientation::to_exif),
             Some(6)
+        );
+    }
+
+    #[test]
+    fn scaled_ninety_is_not_still_stored() {
+        let stored = (64, 48);
+        let ori = Orientation::Rotate90;
+        // sips -Z 32 after a 90° transform: 24×32 matches display, not ispe.
+        assert!(
+            !needs_source_orientation(ori, (24, 32), Some(stored)),
+            "scaled-and-rotated output must not be rotated again"
+        );
+        // sips -Z 32 without transforming: 32×24 still has the stored aspect.
+        assert!(
+            needs_source_orientation(ori, (32, 24), Some(stored)),
+            "scaled but unrotated output still needs the 90°"
+        );
+        assert!(!needs_source_orientation(ori, (48, 64), Some(stored)));
+        assert!(needs_source_orientation(ori, (64, 48), Some(stored)));
+    }
+
+    #[test]
+    fn same_size_one_eighty_and_mirrors_still_need_apply() {
+        let stored = (64, 48);
+        for ori in [
+            Orientation::Rotate180,
+            Orientation::FlipHorizontal,
+            Orientation::FlipVertical,
+        ] {
+            assert!(
+                needs_source_orientation(ori, (64, 48), Some(stored)),
+                "{ori:?} at stored size"
+            );
+            assert!(
+                needs_source_orientation(ori, (32, 24), Some(stored)),
+                "scaled {ori:?}"
+            );
+            assert!(
+                !needs_source_orientation(ori, (48, 64), Some(stored)),
+                "swapped aspect is not the stored frame for {ori:?}"
+            );
+        }
+    }
+
+    fn meta_with_iprp(pitm: u16, ipco: &[u8], ipma: &[u8]) -> Vec<u8> {
+        let iprp = box_of(b"iprp", &[ipco, ipma].concat());
+        let pitm = full(b"pitm", 0, &pitm.to_be_bytes());
+        let mut meta_payload = vec![0, 0, 0, 0];
+        meta_payload.extend_from_slice(&pitm);
+        meta_payload.extend_from_slice(&iprp);
+        box_of(b"meta", &meta_payload)
+    }
+
+    fn ispe_box(width: u32, height: u32) -> Vec<u8> {
+        let mut rest = Vec::new();
+        rest.extend_from_slice(&width.to_be_bytes());
+        rest.extend_from_slice(&height.to_be_bytes());
+        full(b"ispe", 0, &rest)
+    }
+
+    #[test]
+    fn thumbnail_irot_does_not_control_primary() {
+        let ispe = ispe_box(64, 48);
+        let irot_thumb = box_of(b"irot", &[3]);
+        let ipco = box_of(b"ipco", &[ispe, irot_thumb].concat());
+        let mut ipma_rest = 2u32.to_be_bytes().to_vec();
+        ipma_rest.extend_from_slice(&1u16.to_be_bytes());
+        ipma_rest.push(1);
+        ipma_rest.push(0x81); // primary → ispe only
+        ipma_rest.extend_from_slice(&2u16.to_be_bytes());
+        ipma_rest.push(1);
+        ipma_rest.push(0x82); // thumbnail → irot 3
+        let ipma = full(b"ipma", 0, &ipma_rest);
+        let file = meta_with_iprp(1, &ipco, &ipma);
+        assert!(
+            heif_display_orientation(&file).is_none(),
+            "thumbnail irot must not orient the primary photo"
+        );
+        assert_eq!(heif_ispe(&file), Some((64, 48)));
+    }
+
+    #[test]
+    fn primary_irot_wins_over_thumbnail() {
+        let ispe = ispe_box(64, 48);
+        let irot_primary = box_of(b"irot", &[3]);
+        let irot_thumb = box_of(b"irot", &[1]);
+        let ipco = box_of(b"ipco", &[ispe, irot_primary, irot_thumb].concat());
+        let mut ipma_rest = 2u32.to_be_bytes().to_vec();
+        ipma_rest.extend_from_slice(&1u16.to_be_bytes());
+        ipma_rest.push(2);
+        ipma_rest.push(0x81);
+        ipma_rest.push(0x82); // primary → ispe + irot 3
+        ipma_rest.extend_from_slice(&2u16.to_be_bytes());
+        ipma_rest.push(1);
+        ipma_rest.push(0x83); // thumbnail → irot 1
+        let ipma = full(b"ipma", 0, &ipma_rest);
+        let file = meta_with_iprp(1, &ipco, &ipma);
+        assert_eq!(
+            heif_display_orientation(&file),
+            Some(Orientation::Rotate90),
+            "primary irot 3, not the thumbnail's irot 1"
+        );
+    }
+
+    fn infe_item(id: u16, typ: &[u8; 4]) -> Vec<u8> {
+        let mut body = vec![2, 0, 0, 0];
+        body.extend_from_slice(&id.to_be_bytes());
+        body.extend_from_slice(&0u16.to_be_bytes());
+        body.extend_from_slice(typ);
+        body.push(0);
+        box_of(b"infe", &body)
+    }
+
+    fn iloc_v1_item(id: u16, method: u8, offset: u32, length: u32) -> Vec<u8> {
+        let mut entry = Vec::new();
+        entry.extend_from_slice(&id.to_be_bytes());
+        entry.extend_from_slice(&[0, method & 0x0f]);
+        entry.extend_from_slice(&0u16.to_be_bytes());
+        entry.extend_from_slice(&1u16.to_be_bytes());
+        entry.extend_from_slice(&offset.to_be_bytes());
+        entry.extend_from_slice(&length.to_be_bytes());
+        entry
+    }
+
+    /// EXIF lives in `idat` (construction_method 1). Treating that offset as a
+    /// file offset reads the ftyp header instead of the TIFF.
+    #[test]
+    fn heif_exif_in_idat_uses_construction_method() {
+        let exif = exif_item_payload(6);
+        let decoy = exif_item_payload(3);
+        let media = {
+            let mut m = decoy.clone();
+            m.extend_from_slice(&[0u8; 16]);
+            m
+        };
+
+        let mut ftyp_payload = Vec::from(*b"heic");
+        ftyp_payload.extend_from_slice(&0u32.to_be_bytes());
+        ftyp_payload.extend_from_slice(b"mif1heic");
+        let ftyp = box_of(b"ftyp", &ftyp_payload);
+
+        let mut hdlr_rest = vec![0u8; 4];
+        hdlr_rest.extend_from_slice(b"pict");
+        hdlr_rest.extend_from_slice(&[0u8; 12]);
+        hdlr_rest.push(0);
+        let hdlr = full(b"hdlr", 0, &hdlr_rest);
+        let pitm = full(b"pitm", 0, &1u16.to_be_bytes());
+
+        let mut iinf_rest = 2u16.to_be_bytes().to_vec();
+        iinf_rest.extend_from_slice(&infe_item(1, b"hvc1"));
+        iinf_rest.extend_from_slice(&infe_item(2, b"Exif"));
+        let iinf = full(b"iinf", 0, &iinf_rest);
+
+        let ispe = ispe_box(64, 48);
+        let ipco = box_of(b"ipco", &ispe);
+        let mut ipma_rest = 1u32.to_be_bytes().to_vec();
+        ipma_rest.extend_from_slice(&1u16.to_be_bytes());
+        ipma_rest.push(1);
+        ipma_rest.push(0x81);
+        let ipma = full(b"ipma", 0, &ipma_rest);
+        let iprp = box_of(b"iprp", &[ipco, ipma].concat());
+        let idat = box_of(b"idat", &exif);
+
+        // iloc version 1: image in mdat (method 0), EXIF in idat (method 1).
+        let iloc_box_size = 8 + 4 + 2 + 2 + 16 * 2;
+        let children_len =
+            hdlr.len() + pitm.len() + iloc_box_size + iinf.len() + iprp.len() + idat.len();
+        let meta_len = 8 + 4 + children_len;
+        let mdat_offset = ftyp.len() + meta_len + 8;
+
+        let mut iloc_rest = vec![0x44, 0x00];
+        iloc_rest.extend_from_slice(&2u16.to_be_bytes());
+        iloc_rest.extend_from_slice(&iloc_v1_item(1, 0, mdat_offset as u32, media.len() as u32));
+        iloc_rest.extend_from_slice(&iloc_v1_item(2, 1, 0, exif.len() as u32));
+        let iloc = full(b"iloc", 1, &iloc_rest);
+        assert_eq!(iloc.len(), iloc_box_size);
+
+        let mut meta_payload = vec![0, 0, 0, 0];
+        meta_payload.extend_from_slice(&hdlr);
+        meta_payload.extend_from_slice(&pitm);
+        meta_payload.extend_from_slice(&iloc);
+        meta_payload.extend_from_slice(&iinf);
+        meta_payload.extend_from_slice(&iprp);
+        meta_payload.extend_from_slice(&idat);
+        let meta = box_of(b"meta", &meta_payload);
+        let mdat = box_of(b"mdat", &media);
+
+        let mut file = ftyp;
+        file.extend_from_slice(&meta);
+        file.extend_from_slice(&mdat);
+
+        assert_eq!(
+            heif_exif_orientation(&file),
+            Some(Orientation::Rotate90),
+            "idat-backed EXIF 6 must be read from the idat payload"
+        );
+        // File offset 0 is the ftyp header, so a method-blind read cannot
+        // return the decoy EXIF 3 in mdat either.
+        assert_ne!(
+            orientation_from_exif_bytes(&file[0..exif.len().min(file.len())]),
+            Some(Orientation::Rotate90)
+        );
+        assert_eq!(
+            heif_exif_orientation(&inject_heif_exif(&file, 8).unwrap()).map(Orientation::to_exif),
+            Some(8),
+            "in-place replace must target the idat payload"
         );
     }
 }
