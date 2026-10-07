@@ -125,6 +125,32 @@ describe("checkout result", () => {
     expect(ready[0].setCookie).not.toBeNull();
   });
 
+  test("a rejected sync leaves synced_at null so the success page can retry", async () => {
+    const b = await h.buy("desktop", null, { email: "sync-reject@convt.test" });
+    const orderId = b.paid.id as string;
+    h.mock.mutateQuietly("order", orderId, (x) => {
+      x.discountId = "disc_unknown";
+      x.discountAmount = 870;
+    });
+    const rejected = await result(b.providerCheckoutId, b.cookieValue, null, true);
+    expect(rejected.result.state).toBe("pending");
+    const [row] = await h.q<{ synced_at: string | null }>(
+      sql`select synced_at from checkouts where id = ${b.checkoutId}`,
+    );
+    expect(row.synced_at).toBeNull();
+    // After the catalog would accept the code, a later sync can finish.
+    h.mock.mutateQuietly("order", orderId, (x) => {
+      x.discountId = "disc_local_producthunt";
+      x.discountAmount = 870;
+    });
+    const ok = await result(b.providerCheckoutId, b.cookieValue, null, true);
+    expect(ok.result.state).toBe("ready");
+    const [after] = await h.q<{ synced_at: string | null }>(
+      sql`select synced_at from checkouts where id = ${b.checkoutId}`,
+    );
+    expect(after.synced_at).not.toBeNull();
+  });
+
   test("a trial and a declined checkout report their states", async () => {
     const u = await h.user("trial-cookie@convt.test");
     const t = await h.buy("pro_month", u);
