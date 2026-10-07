@@ -6,10 +6,30 @@ import { DownloadButton } from "../../src/components/site/download";
 
 const page = readFileSync(new URL("../../src/routes/_site/download.tsx", import.meta.url), "utf8");
 
-test("unpublished primary download is Coming soon, not a fake URL", () => {
+test("unpublished primary download is Shipping today, not a fake URL", () => {
   const html = renderToStaticMarkup(<DownloadButton artifact={null} large />);
-  expect(html).toContain("Coming soon");
+  expect(html).toContain("Shipping today");
+  expect(html).not.toContain("Coming soon");
   expect(html).not.toContain("href=");
+});
+
+test("published Mac artifact is a real download button", () => {
+  const html = renderToStaticMarkup(
+    <DownloadButton
+      artifact={{
+        platform: "macos-arm64",
+        kind: "dmg",
+        url: "https://downloads.convt.app/0.1.0/convt-0.1.0-macos-arm64.dmg",
+        size: 1234,
+        sha256: "a".repeat(64),
+      }}
+      large
+    />,
+  );
+  expect(html).toContain('href="https://downloads.convt.app/0.1.0/convt-0.1.0-macos-arm64.dmg"');
+  expect(html).toContain("Download convt-0.1.0-macos-arm64.dmg");
+  expect(html).not.toContain("Shipping today");
+  expect(html).not.toContain("Coming soon");
 });
 
 test("/download has no checksum or source Coming soon sections", () => {

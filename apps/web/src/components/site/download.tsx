@@ -12,7 +12,7 @@ export function ComingSoon({ large }: { large?: boolean }) {
         large ? "h-10 w-full text-sm/4.5" : "px-2.5 py-1.5 text-xs/4",
       )}
     >
-      Coming soon
+      Shipping today
     </span>
   );
 }

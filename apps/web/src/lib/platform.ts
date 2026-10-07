@@ -33,7 +33,7 @@ export const kindLabels: Record<ArtifactKind, { title: string; note: string }> =
   "tar.gz": { title: "Archive (.tar.gz)", note: "Unpack anywhere" },
 };
 
-/** The downloads each OS always lists, first one offered first. Missing ones say "Coming soon". */
+/** The downloads each OS always lists, first one offered first. Missing ones say "Shipping today". */
 const expected: Record<Os, ArtifactKind[]> = {
   macos: ["dmg"],
   windows: ["msi"],

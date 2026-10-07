@@ -39,7 +39,7 @@ if (existsSync(manifestPath)) {
     `generate-content: release manifest sequence ${manifest.sequence}, distribution_ready=${manifest.distribution_ready}`,
   );
 } else {
-  console.log("generate-content: no release manifest; downloads show Coming soon");
+  console.log("generate-content: no release manifest; downloads show Shipping today");
 }
 
 // 2. Formats
