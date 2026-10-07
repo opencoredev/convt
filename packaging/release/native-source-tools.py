@@ -160,7 +160,9 @@ def main(default_lock):
         path = cache / source["cache"]
         if not path.resolve().is_relative_to(cache):
             raise ValueError("Source escapes cache")
-        if args.command == "fetch" and not path.exists():
+        # collect on a clean runner has no cache yet (release-linux CI).
+        # verify still requires the locked files to already be present.
+        if args.command in ("fetch", "collect") and not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(path.suffix + ".download")
             with urllib.request.urlopen(source["url"], timeout=60) as response, temporary.open("wb") as out:

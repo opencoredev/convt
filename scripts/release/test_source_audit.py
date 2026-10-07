@@ -39,4 +39,10 @@ class MacStatus(unittest.TestCase):
  def test_repository_status_is_not_ready(self):
   self.assertTrue(audit.mac_gaps(Path(__file__).resolve().parents[2]))
 
+class NativeClosure(unittest.TestCase):
+ def test_audit_fetches_locked_native_sources_before_collect(self):
+  text=Path(__file__).with_name('source-audit.py').read_text()
+  native=text.split('native-sources.lock.json',1)[1]
+  self.assertLess(native.index("'fetch'"),native.index("'collect'"))
+
 if __name__=='__main__':unittest.main()

@@ -63,7 +63,11 @@ def collect(tree, payload, cache, epoch):
         lock=tree/'packaging/release'/filename
         if not lock.exists():gaps.append('Missing closure lock: '+filename);continue
         data=json.loads(lock.read_text())
-        result=subprocess.run([sys.executable,str(tree/'packaging/release'/script),'collect','--source-only','--lock',str(lock),'--cache',str(cache),'--output',str(destination/subdir),'--rpm-image',image]+(['--payload',str(payload)] if subdir=='baseline' else ['--runtime-file',str(cache/'runtime-source-built-x86_64')]),check=True)
+        # Fetch locked inputs first — a clean runner never populated
+        # packaging/.cache/native-source (same class of bug as appimage-source).
+        extra=(['--payload',str(payload)] if subdir=='baseline' else ['--runtime-file',str(cache/'runtime-source-built-x86_64')])
+        subprocess.run([sys.executable,str(tree/'packaging/release'/script),'fetch','--lock',str(lock),'--cache',str(cache),'--rpm-image',image],check=True)
+        result=subprocess.run([sys.executable,str(tree/'packaging/release'/script),'collect','--source-only','--lock',str(lock),'--cache',str(cache),'--output',str(destination/subdir),'--rpm-image',image]+extra,check=True)
         if not data['closure_complete'] or data.get('blockers'):gaps.extend(data.get('blockers') or ['Incomplete closure: '+filename])
         checks.append(filename+': source/recipe/notice hashes and binary associations validated')
     runtime_lock=json.loads((tree/'packaging/release/appimage-source-closure.lock.json').read_text())
