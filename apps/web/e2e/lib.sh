@@ -132,3 +132,5 @@ width() { # desktop | phone
 text_of() { ab get text "$1" 2>/dev/null; }
 
 page_text() { ab eval 'document.body.innerText'; }
+# The site nav's account button, named "Account: <name>" for screen readers.
+header_account() { ab eval 'document.querySelector("header button[aria-expanded]")?.textContent ?? ""'; }

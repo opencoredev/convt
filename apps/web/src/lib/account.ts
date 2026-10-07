@@ -12,6 +12,7 @@ import {
   fetchOverview,
 } from "#/server/account-fns";
 
+import { accountFromUser } from "./auth-client";
 import type { Account } from "./types";
 
 export const getOverview = () => fetchOverview();
@@ -29,11 +30,5 @@ export const getLicenseKey = async (id: string) => (await fetchLicenseKey({ data
 
 /** The signed-in account for the header, from the session the shell already loaded. */
 export function accountFromSession(session: SessionInfo): Account {
-  const { user } = session;
-  return {
-    name: user.name.trim() || user.email.split("@")[0],
-    email: user.email,
-    emailVerified: user.emailVerified,
-    avatarUrl: user.image,
-  };
+  return accountFromUser(session.user);
 }

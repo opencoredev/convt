@@ -1,11 +1,9 @@
 import { Link } from "@tanstack/react-router";
 
-import { Mark } from "#/components/logo";
-import { signOut } from "#/lib/auth-client";
-import { links } from "#/lib/config";
+import { Nav } from "#/components/landing/nav";
 import type { Account } from "#/lib/types";
 
-import { cx, focusRing } from "./ui";
+import { cx } from "./ui";
 
 const tabs = [
   { to: "/dashboard", label: "Overview", exact: true },
@@ -27,54 +25,9 @@ export function AppShell({ account, children }: { account: Account; children: Re
       >
         Skip to content
       </a>
-      <header className="border-b border-line">
-        <div className={cx(column, "flex items-center justify-between gap-4 pt-5 pb-3.5")}>
-          <div className="flex min-w-0 items-center gap-3.5">
-            <Link
-              to="/"
-              className={cx(
-                "flex items-center gap-2 rounded-sm text-[17px]/5.5 font-semibold tracking-[-0.02em]",
-                focusRing,
-              )}
-            >
-              <Mark />
-              convt
-            </Link>
-            <span aria-hidden="true" className="text-sm/4.5 text-separator">
-              /
-            </span>
-            <span className="truncate text-sm/4.5">{account.name}'s account</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-4.5">
-            <a
-              href={links.docs}
-              className={cx("rounded-sm text-sm/4.5 text-ink-nav hover:text-ink", focusRing)}
-            >
-              Docs
-            </a>
-            <a
-              href={links.help}
-              className={cx("rounded-sm text-sm/4.5 text-ink-nav hover:text-ink", focusRing)}
-            >
-              Help
-            </a>
-            {/* Placed after Help until the designer gives it a home. */}
-            <button
-              type="button"
-              onClick={async () => {
-                await signOut();
-                window.location.assign("/sign-in");
-              }}
-              className={cx(
-                "cursor-pointer rounded-sm text-sm/4.5 whitespace-nowrap text-ink-nav hover:text-ink",
-                focusRing,
-              )}
-            >
-              Sign out
-            </button>
-            <Avatar account={account} />
-          </div>
-        </div>
+      {/* The tabs sit under the site nav, outside its <header>, behind one rule. */}
+      <div className="border-b border-line">
+        <Nav account={account} className="max-w-[1120px]!" />
         <nav aria-label="Account" className={cx(column, "overflow-x-auto")}>
           <ul className="flex gap-6">
             {tabs.map((tab) => (
@@ -97,7 +50,7 @@ export function AppShell({ account, children }: { account: Account; children: Re
             ))}
           </ul>
         </nav>
-      </header>
+      </div>
       <main id="main" className={cx(column, "pt-10 pb-18")}>
         {children}
       </main>
