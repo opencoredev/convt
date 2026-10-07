@@ -36,7 +36,9 @@ $env:CONVT_DATA_DIR = Join-Path $Work 'data'
 $env:CONVT_PDFIUM_DIR = $Bin
 & "$Bin/convt.exe" engines
 if ($LASTEXITCODE -ne 0) { throw 'convt engines failed' }
-& "$Bin/ffmpeg.exe" -v error -nostdin -y -f lavfi -i color=c=red:s=32x32:d=0.1 "$Work/in/sample.png"
+# color is 25 fps; without -frames:v 1 the image2 muxer refuses a second
+# frame for an unnumbered PNG and the required smoke step fails.
+& "$Bin/ffmpeg.exe" -v error -nostdin -y -f lavfi -i color=c=red:s=32x32:d=0.1 -frames:v 1 "$Work/in/sample.png"
 if ($LASTEXITCODE -ne 0) { throw 'ffmpeg image fixture failed' }
 & "$Bin/ffmpeg.exe" -v error -nostdin -y -f lavfi -i testsrc=size=32x32:rate=10:duration=1 -f lavfi -i sine=frequency=440:duration=1 -c:v libx264 -c:a aac "$Work/in/sample.mp4"
 if ($LASTEXITCODE -ne 0) { throw 'ffmpeg video fixture failed' }

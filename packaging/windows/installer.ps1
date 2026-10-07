@@ -5,9 +5,6 @@ Set-Location $Repo
 $Version = ((Get-Content Cargo.toml | Select-String '^version = "([0-9.]+)"$' | Select-Object -First 1).Matches[0].Groups[1].Value)
 $Payload = Join-Path $Repo 'packaging/out/windows/payload'
 if (!(Test-Path "$Payload/build-receipt.json") -or !(Test-Path "$Payload/convt-app.exe")) { throw 'Build verified payload first' }
-$Stage = Join-Path $Repo 'packaging/out/windows/msi-payload'
-python "$PSScriptRoot/stage_payload.py" $Payload $Stage
-if ($LASTEXITCODE -ne 0) { throw 'Windows MSI payload staging failed' }
 $WixVersion = '6.0.2'
 $Tools = Join-Path $Repo 'packaging/cache/windows/wix'
 if (!(Test-Path "$Tools/wix.exe")) {
@@ -18,6 +15,12 @@ $CachedVersion = (& "$Tools/wix.exe" --version | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or ($CachedVersion -split '\+')[0] -ne $WixVersion) {
     throw "Cached WiX version '$CachedVersion' does not match pin $WixVersion. Remove $Tools and rerun."
 }
+# Derived harvest: replace it so a previous WiX failure can retry without
+# rebuilding the verified payload. stage_payload.py still refuses any other dest.
+$Stage = Join-Path $Repo 'packaging/out/windows/msi-payload'
+if (Test-Path $Stage) { Remove-Item -LiteralPath $Stage -Recurse -Force }
+python "$PSScriptRoot/stage_payload.py" $Payload $Stage
+if ($LASTEXITCODE -ne 0) { throw 'Windows MSI payload staging failed' }
 $Msi = Join-Path $Repo "packaging/out/windows/convt-$Version-windows-x86_64.msi"
 & "$Tools/wix.exe" build -arch x64 -d "Version=$Version" -d "Payload=$Stage" "$PSScriptRoot/convt.wxs" -o $Msi
 if ($LASTEXITCODE -ne 0) { throw 'WiX installer build failed' }

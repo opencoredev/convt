@@ -81,6 +81,20 @@ class StagePayloadTest(unittest.TestCase):
             self.assertIn("convt-0.2.0-windows-x86_64-documents.tar.gz", errors)
             self.assertIn("document pack", errors)
 
+    def test_native_notice_aliases_are_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / "payload"
+            dest = Path(raw) / "msi"
+            runtime_payload(source)
+            write(source / "licenses" / "codecs" / "x265" / "COPYING.LESSER")
+            write(source / "licenses" / "codecs" / "x265" / "LICENSE-1")
+            write(source / "licenses" / "codecs" / "libheif" / "LICENSE-2.txt")
+            self.assertEqual(validate(source), [])
+            staged = {path.as_posix() for path, _ in stage(source, dest)}
+            self.assertIn("licenses/codecs/x265/COPYING.LESSER", staged)
+            self.assertIn("licenses/codecs/x265/LICENSE-1", staged)
+            self.assertIn("licenses/codecs/libheif/LICENSE-2.txt", staged)
+
     def test_missing_codec_dll_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             source = Path(raw) / "payload"

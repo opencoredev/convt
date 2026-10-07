@@ -38,6 +38,8 @@ FORBIDDEN_DIRS = frozenset({"native-source", "build-convt"})
 ROOT_SUFFIXES = frozenset({".exe", ".dll"})
 ROOT_NAMES = frozenset({"license.txt", "build-receipt.json"})
 LICENSE_SUFFIXES = frozenset({".txt", ".md", ".json", ".ps1", ".py", ".rs", ".patch"})
+# build-native.ps1 copies LICENSE/COPYING/NOTICE/PATENTS/COPYRIGHT, including
+# COPYING.LESSER and a LICENSE-1 disambiguation when two files share a name.
 LICENSE_NAMES = frozenset({"license", "copying", "notice", "patents", "copyright"})
 
 
@@ -70,9 +72,17 @@ def keep(path: Path, root: Path) -> bool:
         return path.suffix.lower() in ROOT_SUFFIXES or path.name.lower() in ROOT_NAMES
     if relative.parts[0] != "licenses":
         return False
-    if path.suffix.lower() in LICENSE_SUFFIXES:
+    return is_license_notice(path.name)
+
+
+def is_license_notice(name: str) -> bool:
+    lower = name.lower()
+    if lower in LICENSE_NAMES or Path(name).suffix.lower() in LICENSE_SUFFIXES:
         return True
-    return path.name.lower() in LICENSE_NAMES
+    stem = Path(lower).stem
+    if "-" in stem and stem.rsplit("-", 1)[-1].isdigit():
+        stem = stem.rsplit("-", 1)[0]
+    return stem in LICENSE_NAMES or stem.split(".")[0] in LICENSE_NAMES
 
 
 def payload_files(root: Path) -> list[Path]:
