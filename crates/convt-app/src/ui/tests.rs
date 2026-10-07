@@ -4081,7 +4081,7 @@ fn the_menu_shortcuts_are_the_usual_ones(cx: &mut TestAppContext) {
             s.update_settings(|s| s.first_run_done = true, cx)
         });
         menus::init(cx);
-        cx.bind_keys(menus::key_bindings());
+        cx.bind_keys(menus::mac_key_bindings());
     });
     let (main, _) = f.main(cx);
     cx.simulate_keystrokes(main, "cmd-,");
@@ -4094,9 +4094,89 @@ fn the_menu_shortcuts_are_the_usual_ones(cx: &mut TestAppContext) {
         .update(cx, |_, window, _| window.activate_window())
         .unwrap();
     cx.run_until_parked();
-    cx.simulate_keystrokes(settings, "cmd-w");
+    cx.simulate_keystrokes(settings, "secondary-w");
     cx.run_until_parked();
     assert_eq!(cx.update(|cx| cx.windows().len()), windows - 1);
+}
+
+#[gpui_kit::test]
+fn quit_and_close_window_shortcuts_work_on_every_platform(cx: &mut TestAppContext) {
+    use gpui_kit::Focusable as _;
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    let quits = std::rc::Rc::new(std::cell::Cell::new(0));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        menus::init(cx);
+        // Registered after the app's handler, so it hears Quit first; it
+        // counts it and passes it on.
+        let quits = quits.clone();
+        cx.on_action(move |_: &menus::Quit, cx| {
+            quits.set(quits.get() + 1);
+            cx.propagate();
+        });
+    });
+    // ⌘Q and ⌘W on macOS, Ctrl+Q and Ctrl+W on Linux and Windows. On macOS
+    // the menu bar also shows each item's shortcut from these bindings.
+    let (quit, close) = if cfg!(target_os = "macos") {
+        ("cmd-q", "cmd-w")
+    } else {
+        ("ctrl-q", "ctrl-w")
+    };
+    for (keys, action) in [
+        (quit, &menus::Quit as &dyn gpui_kit::Action),
+        (close, &menus::CloseWindow),
+    ] {
+        let keystroke = gpui_kit::Keystroke::parse(keys).unwrap();
+        let bindings = cx.update(|cx| cx.all_bindings_for_input(&[keystroke]));
+        assert_eq!(bindings.len(), 1, "{keys}");
+        assert!(bindings[0].action().partial_eq(action), "{keys}");
+    }
+    // With the menu bar icon on, the app runs with no window; Quit is still
+    // enabled in the menu and still quits.
+    assert!(cx.update(|cx| cx.windows()).is_empty());
+    assert!(cx.update(|cx| cx.is_action_available(&menus::Quit)));
+    cx.update(|cx| cx.dispatch_action(&menus::Quit));
+    cx.run_until_parked();
+    assert_eq!(quits.get(), 1);
+
+    let (main, _) = f.main(cx);
+    let (settings, view) = f.settings(SettingsTab::License, cx);
+    let field = cx.read(|cx| view.read(cx).license_key.clone());
+    let activate = |window: AnyWindowHandle, cx: &mut TestAppContext| {
+        window
+            .update(cx, |_, window, _| window.activate_window())
+            .unwrap();
+        cx.run_until_parked();
+    };
+
+    activate(main, cx);
+    cx.simulate_keystrokes(main, quit);
+    cx.run_until_parked();
+    assert_eq!(quits.get(), 2);
+
+    // A focused text field doesn't keep either shortcut for itself.
+    activate(settings, cx);
+    cx.update_window(settings, |_, window, cx| {
+        window.focus(&field.read(cx).focus_handle(cx), cx)
+    })
+    .unwrap();
+    cx.simulate_keystrokes(settings, quit);
+    cx.run_until_parked();
+    assert_eq!(quits.get(), 3);
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.simulate_keystrokes(settings, close);
+    cx.run_until_parked();
+    let open = cx.update(|cx| cx.windows());
+    assert_eq!(open.len(), windows - 1);
+    assert!(!open.contains(&settings), "Settings closed");
+    assert!(open.contains(&main), "only the window typed in closes");
+
+    activate(main, cx);
+    cx.simulate_keystrokes(main, close);
+    cx.run_until_parked();
+    assert!(!cx.update(|cx| cx.windows()).contains(&main));
 }
 
 #[gpui_kit::test]

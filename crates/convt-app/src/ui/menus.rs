@@ -1,7 +1,8 @@
 //! The app menus. On macOS they fill the menu bar: convt, File, Edit, Window
 //! and Help, with the usual shortcuts. Other platforms have no app menu bar,
-//! so there the menus and shortcuts aren't installed; the actions behind
-//! them are registered everywhere, and the windows offer the same things.
+//! so there the menus aren't installed; the actions behind them are
+//! registered everywhere, the windows offer the same things, and Quit and
+//! Close Window keep their shortcuts (Ctrl+Q and Ctrl+W).
 
 use gpui_kit::component::input;
 use gpui_kit::*;
@@ -83,22 +84,30 @@ pub fn menus() -> Vec<Menu> {
     ]
 }
 
-/// The shortcuts macOS users expect. Copy, Paste and the rest are bound by
-/// the text fields themselves.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+/// Quit and Close Window: ⌘Q and ⌘W on macOS, Ctrl+Q and Ctrl+W elsewhere.
+/// The windows bind neither, so nothing else ever answers them.
 pub fn key_bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("secondary-w", CloseWindow, None),
+    ]
+}
+
+/// The other shortcuts macOS users expect. Copy, Paste and the rest are
+/// bound by the text fields themselves.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn mac_key_bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
-        KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-o", AddFiles, None),
-        KeyBinding::new("cmd-w", CloseWindow, None),
         KeyBinding::new("cmd-m", Minimize, None),
     ]
 }
 
-/// Registers what the menu items do and, on macOS, installs the menu bar.
+/// Registers what the menu items do and binds Quit and Close Window; on
+/// macOS, also the other shortcuts and the menu bar.
 pub fn init(cx: &mut App) {
     on::<About>(super::show_about, cx);
     on::<CheckForUpdates>(check_for_updates, cx);
@@ -115,9 +124,10 @@ pub fn init(cx: &mut App) {
     on::<OpenHelp>(|cx| cx.open_url(DOCS_URL), cx);
     on::<OpenReleaseNotes>(|cx| cx.open_url(CHANGELOG_URL), cx);
     on::<ContactSupport>(|cx| cx.open_url(SUPPORT_URL), cx);
+    cx.bind_keys(key_bindings());
     #[cfg(target_os = "macos")]
     {
-        cx.bind_keys(key_bindings());
+        cx.bind_keys(mac_key_bindings());
         cx.set_menus(menus());
     }
 }
