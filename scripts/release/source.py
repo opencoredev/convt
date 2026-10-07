@@ -8,11 +8,12 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
 import stat
+import tarfile
 import traceback
 
 REPO = Path(__file__).resolve().parents[2]
@@ -59,6 +60,47 @@ def check(tree):
     actual={str(p.relative_to(tree)) for p in tree.rglob('*') if p.is_file() and not p.is_symlink()}
     if actual-set(receipt['files'])-{'release-tree.json'}:raise ValueError('Unexpected files in frozen tree')
 
+def source_archive_build_output_members(names, root):
+    """Names that are Cargo or Python build output, not corresponding source."""
+    bad=[]
+    for name in names:
+        parts=PurePosixPath(name).parts
+        if not parts:
+            continue
+        if '__pycache__' in parts:
+            bad.append(name)
+            continue
+        if parts[0]==root and len(parts)>1 and parts[1]=='target':
+            bad.append(name)
+            continue
+        if 'target' in parts and any(p in {'.rustc_info.json','.fingerprint','incremental'} for p in parts):
+            bad.append(name)
+    return bad
+
+def refuse_build_output_in_archive(archive_path, root):
+    with tarfile.open(archive_path) as archive:
+        names=[member.name for member in archive.getmembers()]
+    bad=source_archive_build_output_members(names, root)
+    if bad:
+        preview=', '.join(bad[:8])
+        extra=f' (+{len(bad)-8} more)' if len(bad)>8 else ''
+        raise ValueError(f'source archive contains build output ({len(bad)} members): {preview}{extra}')
+    return names
+
+def pack_source_archive(tree, archive_path, epoch):
+    """Write a deterministic source tarball and refuse leaked build output."""
+    tree=tree.resolve()
+    tar=subprocess.Popen(['tar','--sort=name',f'--mtime=@{epoch}','--owner=0','--group=0','--numeric-owner',
+                            '--exclude=*/__pycache__','--exclude=*/.cache',
+                            # Build output from audits run inside the tree is not source.
+                            f'--exclude={tree.name}/target','-C',str(tree.parent),'-cf','-',tree.name], stdout=subprocess.PIPE)
+    with Path(archive_path).open('wb') as stream:
+        gzip=subprocess.run(['gzip','-n'], stdin=tar.stdout, stdout=stream)
+    tar.stdout.close()
+    if tar.wait() or gzip.returncode:
+        raise ValueError('source archive failed')
+    refuse_build_output_in_archive(archive_path, tree.name)
+
 def archive(tree, output, version, epoch, verification):
     # Full lockfile vendoring makes the CLI rebuild independent of a host cache.
     subprocess.run(['cargo', 'vendor', '--offline', '--locked', '--versioned-dirs', 'third-party/rust'], cwd=tree, check=True, stdout=subprocess.DEVNULL)
@@ -89,15 +131,7 @@ def archive(tree, output, version, epoch, verification):
     # Retain the full source of every archived component. Rust crates retain
     # their original notices, source headers and Cargo checksums.
     archive_path = output/f'convt-{version}-source.tar.gz'
-    tar = subprocess.Popen(['tar','--sort=name',f'--mtime=@{epoch}','--owner=0','--group=0','--numeric-owner','--exclude=*/__pycache__',
-                            '--exclude=*/.cache',
-                            # Build output from audits run inside the tree is not source.
-                            f'--exclude={tree.name}/target', '-C',str(tree.parent),'-cf','-',tree.name], stdout=subprocess.PIPE)
-    with archive_path.open('wb') as stream:
-        gzip = subprocess.run(['gzip','-n'], stdin=tar.stdout, stdout=stream)
-    tar.stdout.close()
-    if tar.wait() or gzip.returncode:
-        raise ValueError('source archive failed')
+    pack_source_archive(tree, archive_path, epoch)
     if gaps and not verification:
         raise ValueError('Publication blocked: ' + '; '.join(gaps))
     print(f'Source archive: {archive_path}; {len(gaps)} publication gaps')
