@@ -2259,7 +2259,7 @@
       "dynamic_needed": [],
       "binary_sha256": "57940b0449dc59aefdfad1a1251f2e1d4420bce722d730d67c5e0136b64769f1",
       "binary_package": "rebuilt-runtime-x86_64",
-      "build_provenance": "Built with --network none using the exact signed, hash-locked APK set; implicit link inputs captured in build-evidence/link-inputs.txt."
+      "build_provenance": "Built with --network none using the exact signed, hash-locked APK set; implicit link inputs are captured in link-inputs.txt during the build; it differs between identical builds, so it is not shipped in the source archive."
     },
     {
       "name": "fuse",

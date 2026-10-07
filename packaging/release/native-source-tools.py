@@ -458,7 +458,9 @@ def main(default_lock):
         if "sha256" in entry and digest(data) != entry["sha256"]:
             raise ValueError(f"Build evidence hash mismatch: {path}")
         verify_evidence_contents(entry, data, lock)
-        if args.command == "collect" and args.output:
+        # Unpinned logs differ between identical builds; keeping them would make
+        # the source archive itself irreproducible, so only pinned evidence ships.
+        if args.command == "collect" and args.output and "sha256" in entry:
             target = args.output / "build-evidence" / path.name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, target)
