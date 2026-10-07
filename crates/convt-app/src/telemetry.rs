@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use convt_license::client::State;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 const ENDPOINT: &str = "https://us.i.posthog.com/batch/";
 const PROJECT_KEY: &str = "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw";
@@ -49,7 +50,7 @@ pub struct Telemetry {
 
 impl Telemetry {
     pub fn new(install_id: String, setting: bool, enforced: bool) -> Self {
-        let enabled = setting && enforced && !do_not_track();
+        let enabled = enabled(setting, enforced);
         let queue = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
         let stop = Arc::new(Mutex::new(false));
         let worker_queue = queue.clone();
@@ -183,7 +184,19 @@ pub fn size_bucket(size: Option<u64>) -> &'static str {
 }
 
 pub fn allowed(setting: bool, enforced: bool) -> bool {
+    enabled(setting, enforced)
+}
+
+/// Shared opt-out gate for all desktop telemetry, including crash reporting.
+pub fn enabled(setting: bool, enforced: bool) -> bool {
     setting && enforced && !do_not_track()
+}
+
+/// Turns an account handle into an opaque identifier without sending the handle.
+pub fn opaque_account_id(account: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(account.trim().to_ascii_lowercase().as_bytes());
+    format!("sha256:{:x}", digest.finalize())
 }
 
 #[cfg(test)]
