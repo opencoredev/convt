@@ -13,3 +13,13 @@ $env:SOURCE_DATE_EPOCH = '1791244800'
 The MSI installs into `%LOCALAPPDATA%\Programs\convt` and adds a Start menu shortcut. It needs no machine-wide LibreOffice or codec installation. Images, SVG, PDF, video and audio engines find their dependencies beside the installed executable. Run `convt.exe pack install documents` to explicitly install the bundled, pinned document archive into the user's convt data directory. Pack removal leaves a system LibreOffice untouched. Uninstalling the MSI removes its payload and shortcut and preserves user data.
 
 The artifact is unsigned. Public-release builds remain blocked because the full corresponding sources for the prebuilt FFmpeg and PDFium archives have not been collected. Do not treat `-VerificationOnly` as publication clearance. See [the licence inventory](../../docs/licence-inventory.md). Signing remains P11, and Explorer integration is CNV-11.
+
+## Public Release MSI
+
+The Release workflow builds with `-VerificationOnly` and publishes an **unsigned**
+per-user MSI when the Windows job succeeds. That MSI is attached to the GitHub
+release and listed on /download without claiming code signing or a complete
+FFmpeg/PDFium corresponding-source closure. `inputs.lock.json` keeps
+`distribution_ready=false` until those source archives are collected; Mac and
+Linux publication stays gated on their own audited source closures.
+

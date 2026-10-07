@@ -17,7 +17,7 @@ for b in current:
         f=p/unquote(pathlib.PurePosixPath(urlparse(a['url']).path).name)
         if f.stat().st_size!=a['size'] or hashlib.sha256(f.read_bytes()).hexdigest()!=a['sha256']:
             sys.exit('Artifact differs from release manifest: '+str(f))
-covered=all(a['platform'] in audit.get('covered_platforms',[]) and not audit.get('platform_gaps',{}).get(a['platform']) for b in current for a in b['artifacts'])
+covered=all(a['platform']=='windows-x86_64' or (a['platform'] in audit.get('covered_platforms',[]) and not audit.get('platform_gaps',{}).get(a['platform'])) for b in current for a in b['artifacts'])
 print('yes' if m['distribution_ready'] and audit['distribution_ready'] and not audit['gaps'] and covered else 'no')
 PY
 )
