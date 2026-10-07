@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Anonymous identifier for this installation, never derived from files or accounts.
+    pub install_id: String,
     /// Where converted files go. Unset means next to each input.
     pub output_dir: Option<PathBuf>,
     /// How many conversions run at once. Unset means Auto: one per CPU core.
@@ -31,6 +33,8 @@ pub struct Settings {
     pub license_checked: Option<String>,
     /// Check convt.app once a day for a newer build. On by default.
     pub update_checks: bool,
+    /// Send anonymous product usage events.
+    pub telemetry: bool,
     /// The UTC day (`YYYY-MM-DD`) of the last update check.
     pub update_checked: Option<String>,
     /// The highest update manifest `sequence` accepted, so an older signed
@@ -45,6 +49,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            install_id: crate::telemetry::new_install_id(),
             output_dir: None,
             concurrency: None,
             notifications: true,
@@ -53,6 +58,7 @@ impl Default for Settings {
             first_run_done: false,
             license_checked: None,
             update_checks: true,
+            telemetry: true,
             update_checked: None,
             update_sequence: 0,
             defaults: Defaults::default(),

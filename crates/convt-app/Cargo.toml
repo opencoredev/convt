@@ -17,6 +17,7 @@ convt-license = { workspace = true, features = ["client"] }
 convt-update.workspace = true
 ed25519-dalek.workspace = true
 futures.workspace = true
+getrandom.workspace = true
 gpui-kit.workspace = true
 rusqlite.workspace = true
 serde.workspace = true

@@ -24,6 +24,7 @@ use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
 use crate::request::Request;
 use crate::settings::{Kind, Settings, write_atomic};
+use crate::telemetry::Telemetry;
 use crate::update::{Update, UpdateConfig};
 
 /// How many rows the History tab shows.
@@ -240,6 +241,7 @@ pub struct AppState {
     /// Problems loading or saving app files, shown in the Settings tab.
     pub errors: Vec<String>,
     pub(crate) licensing: Licensing,
+    pub(crate) telemetry: Telemetry,
     /// Where this machine stands, refreshed whenever it can change.
     pub license: client::State,
     /// Desktop sign-in and Pro renewal.
@@ -312,6 +314,11 @@ impl AppState {
             }
         });
         let licensing = Licensing::new(paths.license);
+        let telemetry = Telemetry::new(
+            settings.install_id.clone(),
+            settings.telemetry,
+            licensing.enforced(),
+        );
         let account = Account::new(paths.account_url, paths.account_api, licensing.session());
         let mut state = Self {
             registry,
@@ -331,6 +338,7 @@ impl AppState {
             errors,
             license: licensing.state(),
             licensing,
+            telemetry,
             account,
             update_config: paths.update,
             update: Update::Idle,
@@ -396,11 +404,26 @@ impl AppState {
         {
             return Err(reason.into());
         }
+        let was_trial_unstarted = matches!(
+            self.licensing.state(),
+            client::State::Trial { started: None, .. }
+        );
+        let was_trial_ended = matches!(self.licensing.state(), client::State::TrialEnded);
         let allowed = self.licensing.begin_conversion();
         self.license = self.licensing.state();
         if let Err(blocked) = allowed {
             cx.notify();
             return Err(blocked.to_string());
+        }
+        self.telemetry
+            .capture("conversion_started", self.telemetry.common(&self.license));
+        if was_trial_unstarted {
+            self.telemetry
+                .capture("trial_started", self.telemetry.common(&self.license));
+        }
+        if !was_trial_ended && matches!(self.license, client::State::TrialEnded) {
+            self.telemetry
+                .capture("trial_expired", self.telemetry.common(&self.license));
         }
         // Retry runs from history, maybe after a restart in another working
         // directory, so a relative folder must not keep its meaning open.
@@ -714,6 +737,13 @@ impl AppState {
         self.license = self.licensing.state();
         self.reselect_update();
         cx.notify();
+        if let Ok(ref license) = result {
+            self.telemetry.capture(
+                "license_activated",
+                self.telemetry
+                    .license_props(&self.license, license.plan.name()),
+            );
+        }
         result
     }
 
@@ -785,6 +815,33 @@ impl AppState {
                     Outcome::Cancelled
                 }
             };
+            if matches!(entry.status, Status::Done(_) | Status::Failed(_)) {
+                let mut props = self.telemetry.common(&self.license);
+                props.insert(
+                    "from".into(),
+                    serde_json::json!(convt_core::format_by_extension(&entry.input).map(|f| f.id)),
+                );
+                props.insert("to".into(), serde_json::json!(entry.to.id));
+                props.insert(
+                    "success".into(),
+                    serde_json::json!(matches!(entry.status, Status::Done(_))),
+                );
+                props.insert(
+                    "duration_ms".into(),
+                    serde_json::json!(entry.started.map(|s| s.elapsed().as_millis() as u64)),
+                );
+                props.insert("engine".into(), serde_json::json!("registry"));
+                props.insert(
+                    "size_bucket".into(),
+                    serde_json::json!(crate::telemetry::size_bucket(
+                        std::fs::metadata(&entry.input).ok().map(|m| m.len())
+                    )),
+                );
+                if let Status::Failed(ref e) = entry.status {
+                    props.insert("error_kind".into(), serde_json::json!(e.kind));
+                }
+                self.telemetry.capture("conversion_completed", props);
+            }
             if let Err(e) = self
                 .history
                 .add(&entry.input, entry.to.id, &entry.setup, &outcome)

@@ -1496,6 +1496,7 @@ dependencies = [
  "convt-update",
  "ed25519-dalek",
  "futures",
+ "getrandom 0.3.4",
  "gpui-kit",
  "image",
  "libc",
