@@ -273,7 +273,7 @@ fn heic_orientation_exif_only_to_every_image_target() {
         // ImageIO may apply a same-size EXIF (2/3/4) and drop the tag, or drop
         // it unapplied. finish_heif_output will not guess those. 90° tags
         // change size, so they are unambiguous on macOS.
-        if cfg!(target_os = "macos") && matches!(tag, 2 | 3 | 4) {
+        if cfg!(target_os = "macos") && matches!(tag, 2..=4) {
             let out = convert(&src, "webp");
             let stored = open_stored(&out).expect("webp pixels");
             let ((x, y), _) = red_sample(tag);
