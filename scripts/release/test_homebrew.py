@@ -94,20 +94,33 @@ class BumpTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid sha256"):
             homebrew.bump_cask(CASK, version="0.2.1", sha256="C" * 64)
 
+    def test_refuses_an_older_version(self):
+        newer = homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64)
+        with self.assertRaisesRegex(ValueError, r"downgrade cask from 0\.3\.0 to 0\.2\.1"):
+            homebrew.bump_cask(newer, version="0.2.1", sha256="e" * 64)
+        same = homebrew.bump_cask(newer, version="0.3.0", sha256="f" * 64)
+        self.assertIn('sha256 "' + "f" * 64 + '"', same)
+        self.assertGreater(homebrew.version_key("0.2.10"), homebrew.version_key("0.2.9"))
+
     def test_manifest_reads_latest_mac_dmg(self):
-        version, digest = homebrew.dmg_from_manifest(manifest())
+        url = "https://downloads.convt.app/0.2.1/convt-macos-arm64.dmg"
+        version, digest, got = homebrew.dmg_from_manifest(manifest(url=url))
         self.assertEqual(version, "0.2.1")
         self.assertEqual(digest, "b" * 64)
+        self.assertEqual(got, url)
         with self.assertRaisesRegex(ValueError, "macos-arm64 dmg"):
             homebrew.dmg_from_manifest({"builds": [{"version": "1.0.0", "artifacts": []}]})
+        with self.assertRaisesRegex(ValueError, "bad url"):
+            homebrew.dmg_from_manifest(manifest(url="http://example.test/convt-macos-arm64.dmg"))
 
     def test_cli_rewrites_a_copy(self):
+        url = "https://downloads.convt.app/0.3.0/convt-macos-arm64.dmg"
         with tempfile.TemporaryDirectory(prefix="convt-cask-") as tmp:
             dest = Path(tmp) / "Casks" / "convt.rb"
             dest.parent.mkdir()
             dest.write_text(CASK)
             payload = Path(tmp) / "release-manifest.json"
-            payload.write_text(json.dumps(manifest("0.3.0", "d" * 64)))
+            payload.write_text(json.dumps(manifest("0.3.0", "d" * 64, url=url)))
             result = subprocess.run(
                 [
                     sys.executable,
@@ -126,7 +139,35 @@ class BumpTests(unittest.TestCase):
             text = dest.read_text()
             self.assertIn('version "0.3.0"', text)
             self.assertIn('sha256 "' + "d" * 64 + '"', text)
+            self.assertIn(url, text)
+            self.assertNotIn("github.com/opencoredev/convt/releases/download", text)
             self.assertIn("updated ", result.stdout)
+
+    def test_cli_refuses_an_older_release(self):
+        with tempfile.TemporaryDirectory(prefix="convt-cask-old-") as tmp:
+            dest = Path(tmp) / "Casks" / "convt.rb"
+            dest.parent.mkdir()
+            dest.write_text(homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64))
+            original = dest.read_text()
+            payload = Path(tmp) / "release-manifest.json"
+            payload.write_text(json.dumps(manifest("0.2.9", "e" * 64)))
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(HERE / "update-homebrew-cask.py"),
+                    "--cask",
+                    str(dest),
+                    "--manifest",
+                    str(payload),
+                    "--skip-tap",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("downgrade", result.stderr)
+            self.assertEqual(dest.read_text(), original)
 
 
 class GuardTests(unittest.TestCase):
@@ -178,6 +219,32 @@ class GuardTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             commit.assert_called_once()
             push.assert_called_once()
+
+    def test_commit_only_the_cask_file(self):
+        with tempfile.TemporaryDirectory(prefix="convt-cask-commit-") as tmp:
+            repo = Path(tmp)
+            dest = repo / "Casks" / "convt.rb"
+            dest.parent.mkdir()
+            dest.write_text(CASK)
+            extra = repo / "NOTES"
+            extra.write_text("already staged leftover")
+            homebrew.run_git(["init", "-b", "main"], cwd=repo)
+            homebrew.run_git(["add", "--", "Casks/convt.rb"], cwd=repo)
+            homebrew.run_git(
+                [*homebrew.git_ident_args(), "commit", "-m", "seed", "--", "Casks/convt.rb"],
+                cwd=repo,
+            )
+            dest.write_text(homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64))
+            homebrew.run_git(["add", "--", "NOTES"], cwd=repo)
+            self.assertTrue(homebrew.commit_if_changed(repo, dest, "chore(homebrew): bump convt to 0.3.0"))
+            committed = homebrew.run_git(
+                ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+                cwd=repo,
+            )
+            self.assertEqual(committed, "Casks/convt.rb")
+            still_staged = homebrew.run_git(["diff", "--cached", "--name-only"], cwd=repo)
+            self.assertEqual(still_staged, "NOTES")
+            self.assertIn("already staged leftover", extra.read_text())
 
     def test_commit_failure_still_publishes_the_tap(self):
         with tempfile.TemporaryDirectory(prefix="convt-cask-tap-") as tmp:

@@ -64,6 +64,11 @@ def cask_fields(text: str) -> tuple[str, str]:
     return version[2], digest[2]
 
 
+def version_key(version: str) -> tuple[int, int, int]:
+    major, minor, patch = (int(part) for part in version.split("."))
+    return major, minor, patch
+
+
 def bump_cask(text: str, *, version: str, sha256: str, url: str | None = None) -> str:
     if not VERSION_VALUE.fullmatch(version):
         raise ValueError(f"invalid version: {version}")
@@ -72,6 +77,9 @@ def bump_cask(text: str, *, version: str, sha256: str, url: str | None = None) -
     if url is not None and not url.startswith("https://"):
         raise ValueError("cask url must be https")
     validate_cask(text)
+    current, _ = cask_fields(text)
+    if version_key(version) < version_key(current):
+        raise ValueError(f"refusing to downgrade cask from {current} to {version}")
     bumped, count = VERSION_RE.subn(rf"\g<1>{version}\g<3>", text, count=1)
     if count != 1:
         raise ValueError("expected exactly one version stanza")
@@ -88,7 +96,7 @@ def bump_cask(text: str, *, version: str, sha256: str, url: str | None = None) -
     return bumped
 
 
-def dmg_from_manifest(manifest: dict) -> tuple[str, str]:
+def dmg_from_manifest(manifest: dict) -> tuple[str, str, str]:
     builds = manifest.get("builds") or []
     if not builds:
         raise ValueError("manifest has no builds")
@@ -99,9 +107,12 @@ def dmg_from_manifest(manifest: dict) -> tuple[str, str]:
     for artifact in build.get("artifacts") or []:
         if artifact.get("platform") == "macos-arm64" and artifact.get("kind") == "dmg":
             digest = artifact.get("sha256")
+            url = artifact.get("url")
             if not isinstance(digest, str) or not SHA_VALUE.fullmatch(digest):
                 raise ValueError("macos-arm64 dmg has a bad sha256")
-            return version, digest
+            if not isinstance(url, str) or not url.startswith("https://"):
+                raise ValueError("macos-arm64 dmg has a bad url")
+            return version, digest, url
     raise ValueError("manifest has no macos-arm64 dmg")
 
 
@@ -156,11 +167,12 @@ def run_git(args: list[str], *, cwd: Path, env: dict[str, str] | None = None) ->
 
 
 def commit_if_changed(repo: Path, path: Path, message: str) -> bool:
-    run_git(["add", "--", str(path.relative_to(repo))], cwd=repo)
-    staged = run_git(["diff", "--cached", "--name-only", "--", str(path.relative_to(repo))], cwd=repo)
+    rel = str(path.relative_to(repo))
+    run_git(["add", "--", rel], cwd=repo)
+    staged = run_git(["diff", "--cached", "--name-only", "--", rel], cwd=repo)
     if not staged:
         return False
-    run_git([*git_ident_args(), "commit", "-m", message], cwd=repo)
+    run_git([*git_ident_args(), "commit", "-m", message, "--", rel], cwd=repo)
     return True
 
 

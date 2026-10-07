@@ -38,13 +38,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def version_and_sha(args: argparse.Namespace) -> tuple[str, str]:
+def release_fields(args: argparse.Namespace) -> tuple[str, str, str | None]:
     if args.manifest is not None:
         return homebrew.dmg_from_manifest(json.loads(args.manifest.read_text()))
     if args.from_manifest_url:
         return homebrew.dmg_from_manifest(homebrew.fetch_json(args.from_manifest_url))
     if args.version and args.sha256:
-        return args.version, args.sha256
+        return args.version, args.sha256, None
     raise ValueError("pass --version and --sha256, --manifest, or --from-manifest-url")
 
 
@@ -57,8 +57,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.check:
             print(f"ok {cask}")
             return 0
-        version, sha256 = version_and_sha(args)
-        bumped = homebrew.bump_cask(text, version=version, sha256=sha256)
+        version, sha256, url = release_fields(args)
+        bumped = homebrew.bump_cask(text, version=version, sha256=sha256, url=url)
         changed = homebrew.write_cask(cask, bumped)
         print(f"{'updated' if changed else 'unchanged'} {cask} {version} {sha256}")
         errors: list[str] = []
