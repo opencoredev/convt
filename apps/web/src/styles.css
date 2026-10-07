@@ -241,6 +241,14 @@ body {
   }
 }
 
+/* The account menu in the site nav opens from the avatar (reduced motion: no animation). */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
 /* brand page motion */
 /*
  * /brand (components/brand/brand-page.tsx). Curves: a strong ease-out for things arriving,

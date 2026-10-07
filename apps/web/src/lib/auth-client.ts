@@ -1,6 +1,8 @@
 // Browser calls to Better Auth's endpoints under /api/auth. Plain fetch: the
 // session cookie is HttpOnly and same-origin, and Better Auth checks Origin.
 
+import type { Account } from "./types";
+
 export type AuthResult<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; status: number; code: string; message: string };
@@ -81,6 +83,36 @@ export const changeEmail = (newEmail: string, otp: string) =>
 export const unlinkAccount = (accountId: string) => post("/unlink-account", { accountId });
 
 export const signOut = () => post("/sign-out", {});
+
+/** The header's view of a signed-in user. A blank name falls back to the email's local part. */
+export function accountFromUser(user: {
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  image?: string | null;
+}): Account {
+  return {
+    name: user.name.trim() || user.email.split("@")[0],
+    email: user.email,
+    emailVerified: user.emailVerified,
+    avatarUrl: user.image ?? null,
+  };
+}
+
+/**
+ * The signed-in account, or null when signed out or offline. For prerendered pages,
+ * which cannot read the session on the server.
+ */
+export async function fetchSignedInAccount(): Promise<Account | null> {
+  try {
+    const res = await fetch("/api/auth/get-session", { credentials: "same-origin" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { user?: Parameters<typeof accountFromUser>[0] } | null;
+    return data?.user ? accountFromUser(data.user) : null;
+  } catch {
+    return null;
+  }
+}
 
 export type SocialProvider = "github" | "google";
 
