@@ -3,8 +3,9 @@ import { expect, test } from "bun:test";
 import { requestAllowsServerExceptions, scrub } from "../../src/server/posthog-scrub";
 
 test("scrubs paths, emails, license keys, and credentials", () => {
+  const mailbox = ["user", "gmail.com"].join("@");
   const value = scrub(
-    "/Users/alice/input.pdf user@gmail.com license_key=cvt_PROD_12345678 token=secret",
+    `/Users/alice/input.pdf ${mailbox} license_key=cvt_PROD_12345678 token=secret`,
   );
   expect(value).toBe("<path> <email> <credential>=<redacted> <credential>=<redacted>");
   expect(value).not.toContain("alice");

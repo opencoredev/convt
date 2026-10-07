@@ -87,7 +87,7 @@ function OverviewPage() {
                 {data.license.maskedKey}
               </span>
             }
-            detail={`Active on ${plural(data.license.activeMacs, "Mac")}`}
+            detail={`Active on ${plural(data.license.activeMacs, "device")}`}
             meta={data.license.updatesLabel}
             action={<CopyKeyButton license={data.license} />}
           />

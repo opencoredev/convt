@@ -266,6 +266,10 @@ pub struct AppState {
     /// none, or macOS has not registered it. Tests set this directly.
     pub finder_on: Option<bool>,
     _finder_watch: Option<Task<()>>,
+    /// Jobs whose result should be copied when they finish.
+    automation_copies: HashSet<JobId>,
+    watch: crate::automation::WatchState,
+    _automations: Option<Task<()>>,
     _drain: Task<()>,
 }
 
@@ -346,6 +350,15 @@ impl AppState {
             // Tests set `finder_on` themselves; a live poll would overwrite it.
             _finder_watch: if cfg!(all(target_os = "macos", not(test))) {
                 Some(crate::finder::watch(cx))
+            } else {
+                None
+            },
+            automation_copies: HashSet::new(),
+            watch: crate::automation::WatchState::default(),
+            // Tests drive the watcher themselves so a live poll cannot see
+            // the real Desktop or race a fixture.
+            _automations: if cfg!(not(test)) {
+                Some(crate::automation::watch(cx))
             } else {
                 None
             },
@@ -431,8 +444,8 @@ impl AppState {
     /// the file can reach it.
     pub fn default_target(&self, file: &Path) -> Option<&'static Format> {
         let from = format_by_extension(file)?;
-        let to = self.settings.defaults.get(Kind::of(from)?)?;
-        self.registry.targets(from).contains(&to).then_some(to)
+        let to = self.settings.defaults.get(Kind::of_file(file, from)?)?;
+        (from.id != to.id && self.registry.targets(from).contains(&to)).then_some(to)
     }
 
     /// Converts files (and the files directly inside folders) to their
@@ -696,8 +709,7 @@ impl AppState {
         self.registry_generation += 1;
     }
 
-    /// Switches an automation rule on or off. Only the setting changes: no
-    /// automation engine runs the rules yet.
+    /// Switches an automation rule on or off.
     pub fn set_automation(&mut self, index: usize, enabled: bool, cx: &mut Context<Self>) {
         self.update_settings(
             |s| {
@@ -707,6 +719,54 @@ impl AppState {
             },
             cx,
         );
+    }
+
+    /// Whether a finished automation should copy its result.
+    pub fn set_automation_copy(&mut self, index: usize, copy: bool, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                if let Some(rule) = s.automations.get_mut(index) {
+                    rule.copy_to_clipboard = Some(copy);
+                    rule.detail = if copy {
+                        "copy to clipboard".into()
+                    } else {
+                        "save beside original".into()
+                    };
+                }
+            },
+            cx,
+        );
+    }
+
+    /// Lists each watched folder and converts new matching files. Tests call
+    /// this twice after writing a file: once to see it, once after it is
+    /// the same size.
+    pub fn poll_automations(&mut self, cx: &mut Context<Self>) {
+        let rules = self.settings.automations.clone();
+        let ready = self.watch.drain_ready(&rules);
+        for (index, path) in ready {
+            let Some(rule) = rules.get(index) else {
+                continue;
+            };
+            let Some(to) = format_by_id(&rule.to) else {
+                continue;
+            };
+            let Some(from) = format_by_extension(&path) else {
+                continue;
+            };
+            if !self.registry.targets(from).contains(&to) {
+                continue;
+            }
+            let copy = rule.copies_to_clipboard();
+            match self.convert(std::slice::from_ref(&path), to, &Options::default(), cx) {
+                Ok(ids) => {
+                    if copy {
+                        self.automation_copies.extend(ids);
+                    }
+                }
+                Err(e) => self.errors.push(e),
+            }
+        }
     }
 
     /// Verifies and stores a license key.
@@ -762,9 +822,12 @@ impl AppState {
             } else {
                 &mut self.batch
             };
-            let outcome = match entry.status {
+            let outcome = match &entry.status {
                 Status::Done(outputs) => {
                     batch.done += 1;
+                    if self.automation_copies.remove(&entry.id) {
+                        cx.write_to_clipboard(crate::clipboard::clipboard_item(outputs));
+                    }
                     if !silent
                         && self.settings.reveal_when_done
                         && let Some(first) = outputs.first()
@@ -775,12 +838,13 @@ impl AppState {
                         #[cfg(test)]
                         self.revealed.push(first.clone());
                     }
-                    Outcome::Done(outputs)
+                    Outcome::Done(outputs.clone())
                 }
                 Status::Failed(e) => {
-                    batch.failed += 1;
                     crash_report::report_error(e.kind, &e.message);
-                    Outcome::Failed(e.message)
+                    self.automation_copies.remove(&entry.id);
+                    batch.failed += 1;
+                    Outcome::Failed(e.message.clone())
                 }
                 _ => {
                     batch.cancelled += 1;
@@ -815,7 +879,7 @@ impl AppState {
                 actions: Vec::new(),
             });
         }
-        if self.quit_when_idle && cx.windows().is_empty() {
+        if self.quit_when_idle && cx.windows().is_empty() && !self.settings.menu_bar_icon {
             cx.quit();
         }
     }
@@ -1035,5 +1099,29 @@ mod tests {
         assert_eq!(t.formats, expected);
         assert!(t.formats.iter().any(|f| f.id == "webp"));
         assert_eq!(common_targets(&registry, &[]), Targets::default());
+    }
+
+    #[test]
+    fn default_target_splits_photos_from_other_images() {
+        let registry = convt_engines::default_registry();
+        let settings = Settings::default();
+        let state_target = |file: &str| {
+            let from = format_by_extension(Path::new(file))?;
+            let to = settings
+                .defaults
+                .get(Kind::of_file(Path::new(file), from)?)?;
+            (from.id != to.id && registry.targets(from).contains(&to)).then_some(to.id)
+        };
+        assert_eq!(state_target("share.webp"), Some("jpeg"));
+        assert_eq!(state_target("Screenshot 1.webp"), Some("png"));
+        assert_eq!(state_target("diagram.svg"), Some("png"));
+        assert_eq!(state_target("icon.bmp"), Some("png"));
+        assert_eq!(state_target("already.png"), None);
+        assert_eq!(state_target("already.jpg"), None);
+        let heic = format_by_id("heic").unwrap();
+        if registry.targets(heic).iter().any(|f| f.id == "jpeg") {
+            assert_eq!(state_target("IMG_2041.heic"), Some("jpeg"));
+            assert_eq!(state_target("Screenshot 1.heic"), Some("png"));
+        }
     }
 }

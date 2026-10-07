@@ -18,6 +18,8 @@ use gpui_kit::*;
 use super::main_window::Page;
 use super::theme::{self, Palette, mono, text, text_button};
 use super::{SettingsTab, error_text, file_size, human_size, time_left};
+use crate::automation;
+use crate::clipboard::clipboard_item;
 use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState};
 use crate::request::Request;
@@ -252,10 +254,11 @@ impl PopoverView {
                             .flex_1()
                             .gap(px(2.))
                             .child(text(13., 16., p.text).child(format!("{} → {to}", rule.name)))
-                            .child(
-                                mono(11., 14., p.secondary)
-                                    .child(format!("{} · {}", rule.source, rule.detail)),
-                            ),
+                            .child(mono(11., 14., p.secondary).child(format!(
+                                "{} · {}",
+                                automation::source_line(&rule),
+                                rule.detail
+                            ))),
                     )
                     .child(
                         theme::switch(
@@ -277,32 +280,6 @@ fn show_page(page: Page, cx: &mut App) {
     if let Some((handle, view)) = super::open_main(cx) {
         let _ = handle.update(cx, |_, _, cx| view.update(cx, |v, cx| v.set_page(page, cx)));
     }
-}
-
-/// What a finished drop puts on the clipboard: the image itself for one
-/// image the clipboard can hold, otherwise the output paths.
-fn clipboard_item(outputs: &[PathBuf]) -> ClipboardItem {
-    if let [one] = outputs
-        && let Some(format) = image_format(one)
-        && let Ok(bytes) = std::fs::read(one)
-    {
-        return ClipboardItem::new_image(&Image::from_bytes(format, bytes));
-    }
-    let paths: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
-    ClipboardItem::new_string(paths.join("\n"))
-}
-
-fn image_format(path: &Path) -> Option<ImageFormat> {
-    Some(match convt_core::format_by_extension(path)?.id {
-        "png" => ImageFormat::Png,
-        "jpeg" => ImageFormat::Jpeg,
-        "webp" => ImageFormat::Webp,
-        "gif" => ImageFormat::Gif,
-        "svg" => ImageFormat::Svg,
-        "bmp" => ImageFormat::Bmp,
-        "tiff" => ImageFormat::Tiff,
-        _ => return None,
-    })
 }
 
 fn title(input: &Path, to: &str, p: &Palette) -> Div {

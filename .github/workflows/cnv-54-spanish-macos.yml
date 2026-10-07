@@ -1,0 +1,62 @@
+name: CNV-54 Spanish macOS close smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  close-last-window:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - name: Select Spanish locale and Spanish ISO keyboard
+        shell: bash
+        run: |
+          defaults write -g AppleLanguages -array es
+          defaults write -g AppleLocale es_ES
+          defaults write -g AppleMeasurementUnits -string Centimeters
+          defaults write com.apple.HIToolbox AppleEnabledInputSources -array \
+            '{"InputSourceKind"="Keyboard Layout"; "KeyboardLayout ID"=2; "KeyboardLayout Name"="Spanish - ISO";}'
+          defaults write com.apple.HIToolbox AppleSelectedInputSources -array \
+            '{"InputSourceKind"="Keyboard Layout"; "KeyboardLayout ID"=2; "KeyboardLayout Name"="Spanish - ISO";}'
+          cat > "$RUNNER_TEMP/verify-keyboard.swift" <<'SWIFT'
+          import Carbon
+          let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+          guard let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { exit(2) }
+          let id = Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+          print("selected_input_source=\(id)")
+          guard id.lowercased().contains("spanish") else { exit(3) }
+          SWIFT
+          swiftc "$RUNNER_TEMP/verify-keyboard.swift" -framework Carbon -o "$RUNNER_TEMP/verify-keyboard"
+          "$RUNNER_TEMP/verify-keyboard"
+          defaults read -g AppleLanguages
+          defaults read -g AppleLocale
+      - name: Download and run v0.2.0, close its only window, and collect diagnostics
+        shell: bash
+        env:
+          OLD_DMG: https://github.com/opencoredev/convt/releases/download/v0.2.0/convt-macos-arm64.dmg
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cnv-54" "$HOME/Library/Logs/DiagnosticReports"
+          curl --fail --location "$OLD_DMG" -o "$RUNNER_TEMP/convt-v0.2.0.dmg"
+          hdiutil attach -nobrowse -mountpoint "$RUNNER_TEMP/convt-old" "$RUNNER_TEMP/convt-v0.2.0.dmg"
+          app="$RUNNER_TEMP/convt-old/convt.app"
+          open "$app"
+          sleep 5
+          osascript -e 'tell application "System Events" to tell process "convt" to click button 1 of window 1' >"$RUNNER_TEMP/cnv-54/close.out" 2>&1
+          sleep 10
+          printf 'close_status=success\n' | tee "$RUNNER_TEMP/cnv-54/result.txt"
+          find "$HOME/Library/Logs/DiagnosticReports" -type f -name 'convt*.ips' -newer "$RUNNER_TEMP/convt-v0.2.0.dmg" -print -exec cp {} "$RUNNER_TEMP/cnv-54/" \;
+          hdiutil detach "$RUNNER_TEMP/convt-old" || true
+          cat "$RUNNER_TEMP/cnv-54/close.out" || true
+      - name: Upload crash evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cnv-54-spanish-macos-evidence
+          path: ${{ runner.temp }}/cnv-54
+          if-no-files-found: warn

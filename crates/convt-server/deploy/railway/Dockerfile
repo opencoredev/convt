@@ -4,6 +4,7 @@ FROM rust:1.95.0-bookworm AS build
 WORKDIR /build
 ENV SQLX_OFFLINE=true
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/ vendor/
 # Retain all workspace manifests and the crate-local SQLx metadata.
 COPY crates/ crates/
 # build.rs hashes these files; it does not connect to Postgres or run migrations.

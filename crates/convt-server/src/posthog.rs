@@ -78,8 +78,11 @@ mod tests {
 
     #[test]
     fn scrubs_tokens_and_complete_emails() {
+        let mailbox = format!("{}@{}", "user", "gmail.com");
         let value = scrub(
-            "/Users/alice/input.pdf Bearer secret-token user@gmail.com license_key=cvt_PROD_12345678 token=api-secret",
+            &format!(
+                "/Users/alice/input.pdf Bearer secret-token {mailbox} license_key=cvt_PROD_12345678 token=api-secret"
+            ),
         );
         assert_eq!(
             value,

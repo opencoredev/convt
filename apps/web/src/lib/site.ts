@@ -30,14 +30,20 @@ export const SUPPORT_EMAIL = "support@convt.app";
 export const PRIVACY_EMAIL = "privacy@convt.app";
 
 /**
- * PLACEHOLDER legal facts for the privacy policy and terms. Leo fills these in
- * after legal review; the pages show them highlighted until then.
+ * Facts the privacy policy and terms state about who sells convt. convt is the trading
+ * name; Polar sells every purchase as merchant of record. No postal address is published.
  */
 export const legal = {
-  entity: "[Legal entity name]",
-  address: "[Registered address]",
-  jurisdiction: "[Governing law and courts]",
-  effectiveDate: "[Effective date]",
+  /** The name the pages give the seller and data controller. */
+  entity: "convt",
+  /** Days after a Desktop or Pro payment in which a refund needs no reason. */
+  refundDays: 14,
+  /** Completes "These terms are governed by …". */
+  governingLaw: "the laws of the State of Florida, USA",
+  /** Completes "Any dispute about them goes to …". */
+  courts: "the state and federal courts located in Florida",
+  /** The day this text takes effect; move it to the merge date if that slips. */
+  effectiveDate: "October 7, 2026",
 } as const;
 
 /** Internal routes the landing page and the site footer link to. */
