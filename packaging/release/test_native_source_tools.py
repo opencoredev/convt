@@ -178,10 +178,14 @@ class CollectInputs(unittest.TestCase):
             for entry in evidence:
                 locked = cache / entry["cache"]
                 self.assertTrue(locked.is_file(), entry["cache"])
-                self.assertEqual((out / "build-evidence" / Path(entry["cache"]).name).read_bytes(),
-                                 locked.read_bytes())
+                archived = out / "build-evidence" / Path(entry["cache"]).name
                 if "sha256" in entry:
                     self.assertEqual(sha(locked.read_bytes()), entry["sha256"])
+                    self.assertEqual(archived.read_bytes(), locked.read_bytes())
+                else:
+                    # Unpinned logs differ between identical builds and would make
+                    # the source archive irreproducible, so they stay out of it.
+                    self.assertFalse(archived.exists(), entry["cache"])
 
     def test_rebuild_product_hash_mismatch_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
