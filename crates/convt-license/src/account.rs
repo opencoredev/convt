@@ -109,7 +109,11 @@ impl Pending {
 
     /// The flow as if it had started `ago` earlier, for tests of the timeout.
     pub fn started_earlier(mut self, ago: Duration) -> Self {
-        self.started = self.started.checked_sub(ago).unwrap_or(self.started);
+        // On Windows an `Instant` counts from boot, so it can't go back further.
+        self.started = self
+            .started
+            .checked_sub(ago)
+            .expect("the clock started less than `ago` ago");
         self
     }
 }
@@ -307,9 +311,12 @@ mod tests {
         assert!(!a.accepts(b.state(), now));
         assert!(!a.accepts("", now));
         assert!(!a.accepts(&a.state()[..42], now));
-        let late = Pending::new().unwrap();
-        let after_timeout = Instant::now() + SIGN_IN_TIMEOUT + Duration::from_secs(1);
-        assert!(!late.accepts(late.state(), after_timeout));
+        // Later times are passed in, so this doesn't depend on how long the
+        // machine has been up.
+        let deadline = a.started + SIGN_IN_TIMEOUT;
+        assert!(a.accepts(a.state(), deadline - Duration::from_secs(1)));
+        assert!(!a.accepts(a.state(), deadline));
+        assert!(!a.accepts(a.state(), deadline + Duration::from_secs(1)));
     }
 
     #[test]
