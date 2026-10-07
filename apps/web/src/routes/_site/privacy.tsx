@@ -22,10 +22,10 @@ export const Route = createFileRoute("/_site/privacy")({
       title="Privacy policy"
       summary={
         <p>
-          convt converts files on your own computer. The app has no analytics or tracking, and your
-          files stay on your machine unless you choose to convert one in the cloud. The convt.app
-          website uses PostHog analytics to count visits, which you can turn off. This policy covers
-          the convt app, the command line tool, convt.app and the convt API.
+          convt converts files on your own computer. Your files stay on your machine unless you
+          choose to convert one in the cloud. The convt.app website uses PostHog analytics to count
+          visits, which you can turn off. This policy covers the convt app, the command line tool,
+          convt.app and the convt API.
         </p>
       }
       sections={sections}
@@ -41,8 +41,7 @@ const sections: LegalSection[] = [
     title: "Who we are",
     body: (
       <p>
-        The controller of the personal data described here is {legal.entity}
-        {legal.address && `, ${legal.address}`} ("we"). Write to{" "}
+        The controller of the personal data described here is {legal.entity} ("we"). Write to{" "}
         <TextLink href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</TextLink> with any question
         about it.
       </p>
@@ -55,8 +54,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           Conversions run on your computer. The app and the <code>convt</code> command never upload
-          a file, and contain no analytics, crash reporting or advertising code. The trial and your
-          license key are stored on your computer and checked offline.
+          a file, and contain no advertising code. The trial and your license key are stored on your
+          computer and checked offline.
         </p>
         <p>The app connects to the internet only in these cases:</p>
         <List
@@ -151,9 +150,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           convt.app uses <span className={strong}>PostHog</span> to see which pages people visit and
-          how they move through the site, so we can tell what works and fix what does not. It runs
-          only on the website, never in the app or the command line tool. PostHog processes the data
-          for us in the United States.
+          how they move through the site, so we can tell what works and fix what does not. PostHog
+          processes the data for us in the United States.
         </p>
         <p>When analytics are on, each page you open sends PostHog:</p>
         <List

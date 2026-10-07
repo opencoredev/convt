@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { TextLink } from "#/components/site/layout";
 import { LegalPage, List, type LegalSection } from "#/components/site/legal";
-import { GITHUB_URL, SUPPORT_EMAIL, legal, routes, seo, type RefundPolicy } from "#/lib/site";
+import { GITHUB_URL, SUPPORT_EMAIL, legal, routes, seo } from "#/lib/site";
 
 // Prices and plan facts match the pricing section and docs/plan.md; refunds and key
-// revocation match docs/p7-billing-plan.md. Who provides convt, the refund policy and
-// the governing law come from `legal` in lib/site.ts.
+// revocation match docs/p7-billing-plan.md. The seller name, refund window, governing
+// law and courts come from `legal` in lib/site.ts.
 
 export const Route = createFileRoute("/_site/terms")({
   head: () =>
@@ -31,22 +31,17 @@ export const Route = createFileRoute("/_site/terms")({
 
 const strong = "font-medium text-ink";
 
-/** The refund promise for each policy `legal.refunds` can pick. */
-const refundText: Record<RefundPolicy, string> = {
-  "14-days": `If convt is not right for you, email ${SUPPORT_EMAIL} within 14 days of paying for a Desktop license or Pro, including a Pro renewal, and we will refund it in full. You do not need to give a reason.`,
-  "30-days": `If convt is not right for you, email ${SUPPORT_EMAIL} within 30 days of paying for a Desktop license or Pro, including a Pro renewal, and we will refund it in full. You do not need to give a reason.`,
-  "case-by-case": `Payments are not refundable as a rule. We refund a payment we took by mistake or twice, and whenever the law where you live gives you the right to one; email ${SUPPORT_EMAIL} and we will sort it out.`,
-};
-
 const sections: LegalSection[] = [
   {
     id: "agreement",
     title: "Agreement",
     body: (
       <p>
-        These terms are an agreement between you and {legal.entity} ("we", "us"). By buying a
-        license, starting a trial, creating an account or using the API, you agree to them. If you
-        use convt for an organization, you accept them on its behalf.
+        These terms are an agreement between you and {legal.entity} ("we", "us"), the name convt is
+        sold under. Every purchase is processed by Polar as merchant of record (see Payment, taxes
+        and refunds). By buying a license, starting a trial, creating an account or using the API,
+        you agree to these terms. If you use convt for an organization, you accept them on its
+        behalf.
       </p>
     ),
   },
@@ -98,10 +93,15 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Polar is the merchant of record for every purchase: you buy from Polar, which takes
-          payment, charges any sales tax or VAT, and issues your receipt under its own terms.
+          Purchases are processed by Polar (<TextLink href="https://polar.sh">polar.sh</TextLink>)
+          as merchant of record: you buy from Polar, which handles payment, sales tax and VAT, and
+          invoicing, and issues your receipt under its own terms.
         </p>
-        <p>{refundText[legal.refunds]}</p>
+        <p>
+          If convt is not right for you, email {SUPPORT_EMAIL} within {legal.refundDays} days of
+          paying for a Desktop license or Pro, including a Pro renewal, and we will refund it in
+          full. You do not need to give a reason.
+        </p>
         <p>
           Polar sends every refund to the payment method you used. A refund in full revokes the
           license key that payment bought, and the dashboard marks it as refunded. Keys are checked
@@ -209,9 +209,9 @@ const sections: LegalSection[] = [
     title: "Governing law",
     body: (
       <p>
-        These terms are governed by {legal.governingLaw}. If you are a consumer, you also keep the
-        protection of the mandatory law of the country where you live, and can bring a claim in its
-        courts.
+        These terms are governed by {legal.governingLaw}, and any dispute about them goes to{" "}
+        {legal.courts}. If you are a consumer, you also keep the protection of the mandatory law of
+        the country where you live, and can bring a claim in its courts.
       </p>
     ),
   },

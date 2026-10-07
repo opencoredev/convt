@@ -32,3 +32,19 @@ test("the terms state the refund policy, termination, governing law and contact"
   expect(html).toContain("merchant of record");
   expect(html).toContain("These terms are governed by");
 });
+
+test("the terms name convt as seller, Polar as merchant of record and Florida law", () => {
+  const text = render(Terms).replace(/<[^>]*>/g, "");
+  expect(text).toContain("you and convt (");
+  expect(text).toContain("Polar (polar.sh) as merchant of record");
+  expect(text).toContain("within 14 days");
+  expect(text).toContain("governed by the laws of the State of Florida, USA");
+  expect(text).toContain("courts located in Florida");
+  expect(text).toContain("mandatory law of the country where you live");
+  expect(text).toContain("Effective October 7, 2026");
+});
+
+test("the privacy policy does not claim the app has no analytics or crash reporting", () => {
+  const text = render(Privacy).replace(/<[^>]*>/g, "");
+  expect(text).not.toMatch(/no analytics|crash reporting|never in the app/i);
+});
