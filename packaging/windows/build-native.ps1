@@ -12,9 +12,11 @@ $Generator = switch ($Major) { 16 { 'Visual Studio 16 2019' } 17 { 'Visual Studi
 $CMake = Get-Command cmake.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 if (-not $CMake) { $CMake = Join-Path $VisualStudio.installationPath 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' }
 if (!(Test-Path $CMake)) { throw 'CMake required (Visual Studio C++ CMake tools or PATH)' }
-$Patch = (Get-Command patch.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
-if (-not $Patch) { $Patch = "$env:ProgramFiles\Git\usr\bin\patch.exe" }
-if (!(Test-Path $Patch)) { throw 'patch.exe required (Git for Windows)' }
+# Prefer Git's GNU patch: hosted runners also put Strawberry Perl's patch 2.5.9
+# on PATH, which rejects the Debian patch series.
+$Patch = "$env:ProgramFiles\Git\usr\bin\patch.exe"
+if (!(Test-Path $Patch)) { $Patch = (Get-Command patch.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source) }
+if (-not $Patch -or !(Test-Path $Patch)) { throw 'patch.exe required (Git for Windows)' }
 function Native($Name, $Subdir, $Options) {
     $Source = Join-Path $Work $Name
     New-Item -ItemType Directory -Force $Source | Out-Null
