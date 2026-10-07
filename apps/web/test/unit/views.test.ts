@@ -322,7 +322,7 @@ describe("billing per state", () => {
       interval: "year",
       cancelsOn: null,
       summary:
-        "$96 a year. Renews Oct 2, 2027. Includes the desktop app on your Macs, every update while you're subscribed, and API access.",
+        "$96 a year. Renews Oct 2, 2027. Includes the desktop app on your computers, every update while you're subscribed, and API access.",
     });
     expect(b.invoices).toEqual([
       {
