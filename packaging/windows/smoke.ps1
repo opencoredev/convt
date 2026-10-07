@@ -1,6 +1,6 @@
-# Extract the per-user MSI and convert one image and one video with the
-# bundled CLI. The GUI is started only long enough to prove the process lives;
-# a headless runner may not keep a GPUI window up, so that check is best-effort.
+# Extract the per-user MSI, convert an image and a video, install the
+# document pack from the sibling release archive, convert a Word file to
+# PDF, and prove convt-app.exe stays running.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Repo = (Resolve-Path "$PSScriptRoot/../..").Path
@@ -70,19 +70,59 @@ if ($Status -notmatch 'pack install documents') {
 }
 Write-Host $Status
 Write-Host ("document pack {0}: {1:N0} bytes, sha256 {2}" -f $Pack.Name, $Pack.Length, $PackHash)
+# The GitHub asset is not on the release yet during a dry-run. Install the
+# same archive the release will publish, through the pinned CLI source.
+$PackUri = 'file://' + $Pack.FullName
+& "$Bin/convt.exe" pack install documents --source $PackUri --sha256 $PackHash
+if ($LASTEXITCODE -ne 0) { throw 'document pack install failed' }
+$Installed = & "$Bin/convt.exe" pack status documents
+if ($LASTEXITCODE -ne 0) { throw 'convt pack status failed after install' }
+if ($Installed -notmatch 'documents: installed') {
+    throw "Document pack did not install:`n$Installed"
+}
+Write-Host $Installed
+$Docx = Join-Path "$Work/in" 'sample.docx'
+python -c @"
+import zipfile
+from pathlib import Path
+path = Path(r'$Docx')
+with zipfile.ZipFile(path, 'w') as z:
+    z.writestr('[Content_Types].xml', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>''')
+    z.writestr('_rels/.rels', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>''')
+    z.writestr('word/document.xml', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>Known document text 12345</w:t></w:r></w:p></w:body>
+</w:document>''')
+    z.writestr('word/_rels/document.xml.rels', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>''')
+"@
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Docx)) { throw 'Word fixture failed' }
+& "$Bin/convt.exe" $Docx --to pdf -o "$Work/out"
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$Work/out/sample.pdf")) { throw 'document conversion failed' }
+$Pdf = Get-Item "$Work/out/sample.pdf"
+$PdfHead = [System.IO.File]::ReadAllBytes($Pdf.FullName)[0..4]
+if ($Pdf.Length -lt 32 -or [System.Text.Encoding]::ASCII.GetString($PdfHead) -ne '%PDF-') {
+    throw ("{0} is not a PDF ({1} bytes)" -f $Pdf.Name, $Pdf.Length)
+}
+Write-Host ("{0}: {1} bytes" -f $Pdf.Name, $Pdf.Length)
 $App = Join-Path $Bin 'convt-app.exe'
-$Gui = $null
+if (-not (Test-Path -LiteralPath $App)) { throw 'Extracted MSI has no convt-app.exe' }
+$Gui = Start-Process -FilePath $App -PassThru -WindowStyle Hidden
+if (-not $Gui) { throw 'convt-app.exe did not start' }
 try {
-    $Gui = Start-Process -FilePath $App -PassThru -WindowStyle Hidden
     Start-Sleep -Seconds 5
     if ($Gui.HasExited) {
-        Write-Host "convt-app.exe exited $($Gui.ExitCode) on this runner; CLI conversions still passed."
-    } else {
-        Write-Host "convt-app.exe stayed running (pid $($Gui.Id))"
-        Stop-Process -Id $Gui.Id
+        throw "convt-app.exe exited $($Gui.ExitCode) after launch"
     }
-} catch {
-    Write-Host "convt-app.exe launch skipped: $_"
+    Write-Host "convt-app.exe stayed running (pid $($Gui.Id))"
 } finally {
     if ($Gui -and -not $Gui.HasExited) { Stop-Process -Id $Gui.Id -ErrorAction SilentlyContinue }
 }
