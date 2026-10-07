@@ -42,13 +42,13 @@ actions:
         input_format: png
         target_format: webp
         input_bytes: 48213
-  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_format
+  - target: $.components.schemas.CreateJob.properties.input_format
     update:
       description: Format id of the file you upload, such as `png` or `docx`. See [Formats](https://convt.app/docs/reference/formats).
-  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.target_format
+  - target: $.components.schemas.CreateJob.properties.target_format
     update:
       description: Format id to convert to. It must differ from `input_format` and be a target the input can reach.
-  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_bytes
+  - target: $.components.schemas.CreateJob.properties.input_bytes
     update:
       description: Exact size of the upload in bytes.
   - target: $.paths['/v1/jobs'].post.responses['200']
@@ -68,10 +68,10 @@ actions:
               expires_at: "2026-10-08T12:00:00Z"
             upload_url: https://bucket.example/job_01k6z7v4q8m3x2a9b5c0d1e2f3/upload?X-Amz-Signature=…
             upload_expires_in: 900
-  - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_url
+  - target: $.components.schemas.JobReservation.properties.upload_url
     update:
       description: Signed URL. Send the file bytes to it with `PUT`.
-  - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_expires_in
+  - target: $.components.schemas.JobReservation.properties.upload_expires_in
     update:
       description: Seconds until `upload_url` stops accepting uploads. Always 900.
   - target: $.paths['/v1/jobs'].post.responses['400']
@@ -225,26 +225,12 @@ actions:
               extensions: [webp]
               mime: image/webp
 
-  # Shared
-  - target: $.paths.*.*.parameters[?@.name == 'id']
+  # Shared. The 401, 403, 404, 429, 500 and 502 responses every job route shares are
+  # components in the spec and carry their own descriptions.
+  - target: $.components.parameters.JobId
     update:
       description: The job id returned when you created the job, such as `job_01k6z7v4q8m3x2a9b5c0d1e2f3`.
       example: job_01k6z7v4q8m3x2a9b5c0d1e2f3
-  - target: $.paths.*.*.responses['401']
-    update:
-      description: "`unauthorized`: no `Authorization: Bearer` header."
-  - target: $.paths.*.*.responses['403']
-    update:
-      description: "`unauthorized` (key invalid or revoked) or a billing limit."
-  - target: $.paths.*.*.responses['404']
-    update:
-      description: "`not_found`: the job does not exist, belongs to another account, or has expired."
-  - target: $.paths.*.*.responses['429']
-    update:
-      description: "`rate_limited`: more than 120 requests in a minute for this key."
-  - target: $.paths.*.*.responses['502']
-    update:
-      description: "`storage_unavailable`: object storage did not answer. Retry with backoff."
   - target: $.components.securitySchemes.bearerAuth
     update:
       description: "A `cvt_live_` API key from the [dashboard](https://convt.app/dashboard/api), sent as `Authorization: Bearer cvt_live_…`. Keep it on your server."
