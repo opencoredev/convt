@@ -16,8 +16,8 @@ import {
   type Os,
   type Slot,
 } from "#/lib/platform";
-import { primarySlot } from "#/lib/install-guide";
-import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
+import { selectedSlot, slotCaption } from "#/lib/install-guide";
+import { isArtifactKind, parseReleaseManifest, type ArtifactKind } from "#/lib/release-manifest";
 import { fetchLatestManifest } from "#/server/latest-release";
 import { routes, seo } from "#/lib/site";
 
@@ -41,15 +41,18 @@ const detectOs = createServerFn({ method: "GET" }).handler(() =>
 );
 
 export const Route = createFileRoute("/_site/download")({
-  validateSearch: (search: Record<string, unknown>): { os?: Os } =>
-    isOs(search.os) ? { os: search.os } : {},
-  loaderDeps: ({ search }) => ({ os: search.os }),
+  validateSearch: (search: Record<string, unknown>): { os?: Os; kind?: ArtifactKind } => ({
+    ...(isOs(search.os) ? { os: search.os } : {}),
+    ...(isArtifactKind(search.kind) ? { kind: search.kind } : {}),
+  }),
+  loaderDeps: ({ search }) => ({ os: search.os, kind: search.kind }),
   // The User-Agent picks the build on the first load; client navigations read it locally.
   // Check `window`, not `navigator`: Workers define navigator with their own user agent.
   loader: async ({ deps }) => ({
     os:
       deps.os ??
       (typeof window === "undefined" ? await detectOs() : osFromUserAgent(navigator.userAgent)),
+    kind: deps.kind,
     release: await loadRelease(),
   }),
   head: () =>
@@ -62,10 +65,16 @@ export const Route = createFileRoute("/_site/download")({
   component: DownloadPage,
 });
 
+function downloadHref(os: Os, kind?: ArtifactKind): string {
+  const params = new URLSearchParams({ os });
+  if (kind) params.set("kind", kind);
+  return `${routes.download}?${params}`;
+}
+
 function DownloadPage() {
-  const { os, release } = Route.useLoaderData();
+  const { os, kind, release } = Route.useLoaderData();
   const published = release.slots.some((s) => s.artifact);
-  const primary = os ? primarySlot(release.slots, os) : undefined;
+  const selected = os ? selectedSlot(release.slots, os, kind) : undefined;
   return (
     <div className={cx(siteColumn, "flex flex-col gap-16 pt-12 pb-24 md:gap-20 md:pt-20")}>
       <div className="flex flex-col items-center gap-8 text-center">
@@ -90,42 +99,33 @@ function DownloadPage() {
             published.
           </p>
         )}
-        {os && primary ? <PrimaryDownload os={os} primary={primary} /> : <ChooseSystem />}
+        {os && selected ? <PrimaryDownload os={os} selected={selected} /> : <ChooseSystem />}
         <OsSwitcher current={os} />
       </div>
 
-      {os && primary && <InstallGuide os={os} kind={primary.kind} />}
+      {os && selected && <InstallGuide os={os} kind={selected.kind} />}
     </div>
   );
 }
 
-function PrimaryDownload({ os, primary }: { os: Os; primary: Slot }) {
+function PrimaryDownload({ os, selected }: { os: Os; selected: Slot }) {
   const { release } = Route.useLoaderData();
-  const extras = release.slots.filter((s) => s.os === os && s.kind !== primary.kind && s.artifact);
+  const extras = release.slots.filter((s) => s.os === os && s.kind !== selected.kind && s.artifact);
   return (
     <div className="flex w-full max-w-[400px] flex-col items-center gap-3">
-      <DownloadButton artifact={primary.artifact} large label={`Download for ${osNames[os]}`} />
-      <p className="text-sm/5 text-ink-2">
-        {kindLabels[primary.kind].title}
-        {primary.artifact
-          ? ` · ${formatBytes(primary.artifact.size)}`
-          : ` · ${kindLabels[primary.kind].note}`}
-      </p>
+      <DownloadButton artifact={selected.artifact} large label={`Download for ${osNames[os]}`} />
+      <p className="text-sm/5 text-ink-2">{slotCaption(selected)}</p>
       {extras.length > 0 && (
         <p className="text-[13px]/5 text-ink-2">
           Also{" "}
-          {extras.map((slot, index) => {
-            const artifact = slot.artifact;
-            if (!artifact) return null;
-            return (
-              <span key={slot.kind}>
-                {index > 0 && ", "}
-                <TextLink href={artifact.url} className="font-normal">
-                  {kindLabels[slot.kind].title}
-                </TextLink>
-              </span>
-            );
-          })}
+          {extras.map((slot, index) => (
+            <span key={slot.kind}>
+              {index > 0 && ", "}
+              <TextLink href={downloadHref(os, slot.kind)} className="font-normal">
+                {kindLabels[slot.kind].title}
+              </TextLink>
+            </span>
+          ))}
         </p>
       )}
     </div>
@@ -152,7 +152,7 @@ function OsSwitcher({ current }: { current: Os | null }) {
           {os === current ? (
             <span className="font-medium text-ink">{osNames[os]}</span>
           ) : (
-            <TextLink href={`${routes.download}?os=${os}`} className="font-normal">
+            <TextLink href={downloadHref(os)} className="font-normal">
               {osNames[os]}
             </TextLink>
           )}

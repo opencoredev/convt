@@ -4,7 +4,7 @@ import { osNames, type Os } from "#/lib/platform";
 
 import { cx } from "#/components/app/ui";
 
-/** Three install panels for the selected OS, in the spirit of a post-download guide. */
+/** Three install panels for the selected OS and file kind, in the spirit of a post-download guide. */
 export function InstallGuide({ os, kind }: { os: Os; kind: ArtifactKind }) {
   const steps = installSteps(os, kind);
   return (
@@ -30,7 +30,7 @@ export function InstallGuide({ os, kind }: { os: Os; kind: ArtifactKind }) {
                   "bg-[radial-gradient(circle_at_50%_42%,var(--green-tint),var(--sunken)_70%)]",
               )}
             >
-              <InstallArt os={os} step={index} />
+              <InstallArt os={os} kind={kind} step={index} />
             </div>
             <div className="flex flex-col gap-1.5 text-center">
               <p className="text-[15px]/6 font-medium">{step.title}</p>
@@ -43,10 +43,17 @@ export function InstallGuide({ os, kind }: { os: Os; kind: ArtifactKind }) {
   );
 }
 
-function InstallArt({ os, step }: { os: Os; step: number }) {
+function fileLabel(kind: ArtifactKind): string {
+  if (kind === "AppImage") return "app";
+  if (kind === "tar.gz") return ".tar";
+  return `.${kind}`;
+}
+
+function InstallArt({ os, kind, step }: { os: Os; kind: ArtifactKind; step: number }) {
+  if (kind === "zip" || kind === "tar.gz") return <ArchiveArt kind={kind} os={os} step={step} />;
   if (os === "macos") return <MacArt step={step} />;
   if (os === "windows") return <WindowsArt step={step} />;
-  return <LinuxArt step={step} />;
+  return <LinuxArt kind={kind} step={step} />;
 }
 
 function FileGlyph({ label }: { label: string }) {
@@ -117,17 +124,82 @@ function AppGlyph() {
   );
 }
 
+function AppWindow() {
+  return (
+    <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
+      <rect
+        x="28"
+        y="18"
+        width="104"
+        height="78"
+        rx="12"
+        fill="var(--raised)"
+        stroke="var(--line-strong)"
+      />
+      <circle cx="40" cy="30" r="3" fill="var(--line-strong)" />
+      <circle cx="50" cy="30" r="3" fill="var(--line-strong)" />
+      <g transform="translate(36 38) scale(1.6)">
+        <rect x="2" y="2" width="19" height="19" rx="5" fill="var(--ink)" />
+        <rect x="11" y="11" width="19" height="19" rx="5" fill="#22a867" />
+      </g>
+    </svg>
+  );
+}
+
+function InstallerWindow() {
+  return (
+    <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
+      <rect
+        x="34"
+        y="22"
+        width="92"
+        height="72"
+        rx="10"
+        fill="var(--raised)"
+        stroke="var(--line-strong)"
+      />
+      <rect x="46" y="36" width="68" height="8" rx="4" fill="var(--ink)" />
+      <rect x="46" y="50" width="48" height="6" rx="3" fill="var(--line-strong)" />
+      <rect x="70" y="72" width="36" height="12" rx="6" fill="#22a867" />
+    </svg>
+  );
+}
+
+function DownloadsFile({ label }: { label: string }) {
+  return (
+    <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
+      <FolderGlyph x={36} y={22} label="Downloads" />
+      <g transform="translate(86 18)">
+        <FileGlyph label={label} />
+      </g>
+    </svg>
+  );
+}
+
+function TerminalArt({ line, file }: { line: string; file?: string }) {
+  return (
+    <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
+      <rect x="28" y="22" width="104" height="72" rx="10" fill="var(--code)" />
+      <text
+        x="44"
+        y={file ? 54 : 64}
+        fill="var(--code-ink)"
+        fontSize="12"
+        fontFamily="ui-monospace, monospace"
+      >
+        {line}
+      </text>
+      {file && (
+        <text x="44" y="72" fill="#3fcb84" fontSize="12" fontFamily="ui-monospace, monospace">
+          {file}
+        </text>
+      )}
+    </svg>
+  );
+}
+
 function MacArt({ step }: { step: number }) {
-  if (step === 0) {
-    return (
-      <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <FolderGlyph x={36} y={22} label="Downloads" />
-        <g transform="translate(86 18)">
-          <FileGlyph label=".dmg" />
-        </g>
-      </svg>
-    );
-  }
+  if (step === 0) return <DownloadsFile label=".dmg" />;
   if (step === 1) {
     return (
       <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
@@ -151,56 +223,12 @@ function MacArt({ step }: { step: number }) {
       </svg>
     );
   }
-  return (
-    <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-      <rect
-        x="28"
-        y="18"
-        width="104"
-        height="78"
-        rx="12"
-        fill="var(--raised)"
-        stroke="var(--line-strong)"
-      />
-      <circle cx="40" cy="30" r="3" fill="var(--line-strong)" />
-      <circle cx="50" cy="30" r="3" fill="var(--line-strong)" />
-      <g transform="translate(36 38) scale(1.6)">
-        <rect x="2" y="2" width="19" height="19" rx="5" fill="var(--ink)" />
-        <rect x="11" y="11" width="19" height="19" rx="5" fill="#22a867" />
-      </g>
-    </svg>
-  );
+  return <AppWindow />;
 }
 
 function WindowsArt({ step }: { step: number }) {
-  if (step === 0) {
-    return (
-      <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <FolderGlyph x={36} y={22} label="Downloads" />
-        <g transform="translate(86 18)">
-          <FileGlyph label=".msi" />
-        </g>
-      </svg>
-    );
-  }
-  if (step === 1) {
-    return (
-      <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <rect
-          x="34"
-          y="22"
-          width="92"
-          height="72"
-          rx="10"
-          fill="var(--raised)"
-          stroke="var(--line-strong)"
-        />
-        <rect x="46" y="36" width="68" height="8" rx="4" fill="var(--ink)" />
-        <rect x="46" y="50" width="48" height="6" rx="3" fill="var(--line-strong)" />
-        <rect x="70" y="72" width="36" height="12" rx="6" fill="#22a867" />
-      </svg>
-    );
-  }
+  if (step === 0) return <DownloadsFile label=".msi" />;
+  if (step === 1) return <InstallerWindow />;
   return (
     <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
       <rect
@@ -222,51 +250,70 @@ function WindowsArt({ step }: { step: number }) {
   );
 }
 
-function LinuxArt({ step }: { step: number }) {
-  if (step === 0) {
+function LinuxArt({ kind, step }: { kind: ArtifactKind; step: number }) {
+  if (step === 0) return <DownloadsFile label={fileLabel(kind)} />;
+  if (step === 1) {
+    if (kind === "deb" || kind === "rpm") return <InstallerWindow />;
+    return <TerminalArt line="$ chmod +x" file="convt.AppImage" />;
+  }
+  return <AppWindow />;
+}
+
+function ArchiveArt({
+  kind,
+  os,
+  step,
+}: {
+  kind: ArtifactKind;
+  os: Os;
+  step: number;
+}) {
+  if (step === 0) return <DownloadsFile label={fileLabel(kind)} />;
+  if (step === 1) {
+    if (os === "macos") {
+      return (
+        <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
+          <AppGlyph />
+          <path
+            d="M78 42h18"
+            fill="none"
+            stroke="var(--ink-2)"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <path
+            d="M90 36l8 6-8 6"
+            fill="none"
+            stroke="var(--ink-2)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <FolderGlyph x={78} y={28} label="Applications" />
+        </svg>
+      );
+    }
+    if (os === "windows") {
+      return (
+        <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
+          <FolderGlyph x={40} y={22} label="convt" />
+        </svg>
+      );
+    }
+    return <TerminalArt line="$ tar xf" file="convt.tar.gz" />;
+  }
+  if (os === "windows") {
     return (
       <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <FolderGlyph x={36} y={22} label="Downloads" />
-        <g transform="translate(86 18)">
-          <FileGlyph label="app" />
+        <FolderGlyph x={18} y={22} label="convt" />
+        <g transform="translate(88 18)">
+          <FileGlyph label=".exe" />
         </g>
       </svg>
     );
   }
-  if (step === 1) {
-    return (
-      <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <rect x="28" y="22" width="104" height="72" rx="10" fill="var(--code)" />
-        <text
-          x="44"
-          y="54"
-          fill="var(--code-ink)"
-          fontSize="12"
-          fontFamily="ui-monospace, monospace"
-        >
-          $ chmod +x
-        </text>
-        <text x="44" y="72" fill="#3fcb84" fontSize="12" fontFamily="ui-monospace, monospace">
-          convt.AppImage
-        </text>
-      </svg>
-    );
+  if (os === "linux" || kind === "tar.gz") {
+    return <TerminalArt line="$ ./convt-app" />;
   }
-  return (
-    <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-      <rect
-        x="28"
-        y="18"
-        width="104"
-        height="78"
-        rx="12"
-        fill="var(--raised)"
-        stroke="var(--line-strong)"
-      />
-      <g transform="translate(36 38) scale(1.6)">
-        <rect x="2" y="2" width="19" height="19" rx="5" fill="var(--ink)" />
-        <rect x="11" y="11" width="19" height="19" rx="5" fill="#22a867" />
-      </g>
-    </svg>
-  );
+  return <AppWindow />;
 }
