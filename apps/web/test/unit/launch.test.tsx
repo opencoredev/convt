@@ -9,7 +9,8 @@ test("flipping launch enables Desktop without enabling cloud sales", () => {
   const after = renderToStaticMarkup(<Pricing sales="desktop" launched />);
   expect(after).toContain('href="/checkout/desktop"');
   expect(after).not.toContain('href="/checkout/pro');
-  expect(after).toContain("Coming soon");
+  expect(after).toContain("Pro is not on sale yet");
+  expect(after).not.toContain("Coming soon");
   const cloud = renderToStaticMarkup(<Pricing sales="all" launched />);
   expect(cloud).toContain('href="/checkout/pro?interval=month"');
 });

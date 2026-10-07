@@ -26,7 +26,7 @@ const config = defineConfig({
     tanstackStart({
       serverFns: { disableCsrfMiddlewareWarning: true },
       // `bun run build:landing` prerenders the home and brand pages to static HTML for the
-      // coming-soon deploy on Vercel (see LAUNCHED in src/lib/site.ts).
+      // static Vercel deploy (see LAUNCHED in src/lib/site.ts).
       ...(landingOnly && {
         prerender: { enabled: true, autoStaticPathsDiscovery: false, crawlLinks: false },
         pages: [{ path: "/" }, { path: "/brand" }],

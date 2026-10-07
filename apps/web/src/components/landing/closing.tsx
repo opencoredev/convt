@@ -28,7 +28,7 @@ export function CallToAction() {
             <DownloadActions />
           ) : (
             <ComingSoon className="h-11 rounded-[10px] px-5 text-[15px]/[18px]">
-              Coming soon to macOS, Windows and Linux
+              Not available yet
             </ComingSoon>
           )}
         </div>
@@ -42,17 +42,17 @@ function DownloadActions() {
     <>
       <ButtonLink
         variant="primary"
-        href={`${routes.download}?os=macos`}
+        href={`${routes.download}?os=linux`}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
-        Download for macOS
+        Download for Linux
       </ButtonLink>
       <ButtonLink
         variant="secondary"
         href={`${routes.download}#platforms`}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
-        Windows and Linux
+        All platforms
       </ButtonLink>
     </>
   );
@@ -72,7 +72,7 @@ export function Footer() {
               Local file conversion for macOS, Windows and Linux. Open source under AGPL-3.0.
             </p>
           </div>
-          {/* Every footer page needs the full site, so the coming-soon page has none. */}
+          {/* Every footer page needs the full site, so the pre-launch page has none. */}
           {LAUNCHED && (
             <div className="flex flex-wrap gap-x-20 gap-y-10">
               {footerColumns.map((column) => (
@@ -110,7 +110,7 @@ export function Footer() {
         <div className="flex flex-col gap-2 border-t border-line pt-6 sm:flex-row sm:justify-between">
           <p className="flex gap-4 text-[13px]/[16px] text-land-muted">
             © 2026 convt
-            {/* The brand page ships with the coming-soon site, so it is linked before launch too. */}
+            {/* The brand page ships with the pre-launch site, so it is linked before launch too. */}
             {!LAUNCHED && (
               <a
                 href={routes.brand}

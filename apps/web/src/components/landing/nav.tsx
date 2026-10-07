@@ -7,7 +7,7 @@ const links = [
   { label: "Formats", href: "/#formats" },
   { label: "Pricing", href: "/#pricing" },
   { label: "API", href: "/#api" },
-  // The repo is private until launch.
+  // The repo was private before launch.
   ...(LAUNCHED ? [{ label: "GitHub", href: GITHUB_URL }] : []),
 ];
 
