@@ -1,9 +1,7 @@
-import { useState } from "react";
-
-import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
+import { PrimaryLink, SecondaryLink, cx } from "#/components/app/ui";
 import { fileName, type ManifestArtifact } from "#/lib/release-manifest";
 
-/** Shown on a download button when that build is not published yet. */
+/** Shown where a build is not published yet, instead of a link. */
 export function ComingSoon({ large }: { large?: boolean }) {
   return (
     <span
@@ -20,46 +18,21 @@ export function ComingSoon({ large }: { large?: boolean }) {
 export function DownloadButton({
   artifact,
   large,
+  label,
 }: {
   artifact: ManifestArtifact | null;
   large?: boolean;
+  label?: string;
 }) {
   if (!artifact) return <ComingSoon large={large} />;
   const file = fileName(artifact.url);
   return large ? (
     <PrimaryLink href={artifact.url} download={file} className="h-10 w-full">
-      Download {file}
+      {label ?? `Download ${file}`}
     </PrimaryLink>
   ) : (
     <SecondaryLink href={artifact.url} download={file} className="shrink-0">
-      Download
+      {label ?? "Download"}
     </SecondaryLink>
-  );
-}
-
-/** A SHA-256 checksum, shortened on screen, with a button that copies all of it. */
-export function Sha({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex min-w-0 items-center gap-2 font-mono text-[11.5px]/4 text-ink-2">
-      <span className="shrink-0">SHA-256</span>
-      <span className="min-w-0 truncate text-ink-2" title={value}>
-        {value}
-      </span>
-      <button
-        type="button"
-        onClick={async () => {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
-        className={cx(
-          "shrink-0 cursor-pointer rounded-sm font-sans text-xs/4 font-medium text-[#157f4a] dark:text-green hover:underline",
-          focusRing,
-        )}
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
-    </div>
   );
 }

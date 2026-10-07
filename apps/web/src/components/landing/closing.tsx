@@ -51,7 +51,7 @@ function DownloadActions() {
       </ButtonLink>
       <ButtonLink
         variant="secondary"
-        href={`${routes.download}#platforms`}
+        href={routes.download}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
         All platforms
