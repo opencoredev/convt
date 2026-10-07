@@ -334,16 +334,33 @@ function openProTrial(subscriptions: SubscriptionRow[], now: Date): Subscription
   return open[0] ?? null;
 }
 
+function liveDesktopLicense(licenses: LicenseRow[]): LicenseRow | undefined {
+  return licenses.find((l) => l.plan === "desktop" && l.revokedAt === null);
+}
+
+function desktopInvoiceOpen(invoices: InvoiceRow[]): boolean {
+  return invoices.some(
+    (i) =>
+      i.description.startsWith("Desktop License") &&
+      i.status !== "refunded" &&
+      i.status !== "void" &&
+      i.status !== "uncollectible",
+  );
+}
+
 export function billingView(input: {
   user: UserRow;
   subscriptions: SubscriptionRow[];
+  licenses: LicenseRow[];
   invoices: InvoiceRow[];
   card: Billing["card"];
   openApiCheckout: boolean;
   now: Date;
 }): Billing {
-  const { user, subscriptions, invoices, now } = input;
+  const { user, subscriptions, licenses, invoices, now } = input;
   const pro = currentProSubscription(subscriptions, now) ?? openProTrial(subscriptions, now);
+  const desktop = liveDesktopLicense(licenses);
+  const ownsDesktop = desktop !== undefined || desktopInvoiceOpen(invoices);
   let plan: Billing["plan"] = null;
   if (pro) {
     const interval = pro.interval === "year" ? "year" : "month";
@@ -386,16 +403,30 @@ export function billingView(input: {
         : `${price}. Renews ${end}. ${includes}`;
     }
     plan = {
+      kind: "pro",
       name: `Pro, ${interval === "year" ? "yearly" : "monthly"}`,
       status,
       summary,
       interval,
       cancelsOn,
     };
+  } else if (ownsDesktop) {
+    const until = desktop ? formatDate(`${desktop.updatesUntil}T00:00:00Z`) : null;
+    plan = {
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+      summary: until
+        ? `Paid once. Updates until ${until}. Your license is on this account and works offline.`
+        : "Paid once. Your license is on this account and works offline.",
+      interval: null,
+      cancelsOn: null,
+    };
   }
   return {
     plan,
     hadPro: subscriptions.some((s) => s.kind === "pro"),
+    ownsDesktop,
     api: apiEnrollment(subscriptions, input.openApiCheckout, now),
     card: input.card,
     receiptEmail: user.email,

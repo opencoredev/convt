@@ -94,6 +94,7 @@ export const fetchBilling = createServerFn({ method: "GET" })
       ...billingView({
         user,
         subscriptions: await userSubscriptions(db, userId),
+        licenses: await userLicenses(db, userId),
         invoices: await userInvoices(db, userId),
         card,
         openApiCheckout: (await openApiCheckout(db, userId, now)) !== null,

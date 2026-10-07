@@ -5,7 +5,7 @@
 
 import { sql } from "drizzle-orm";
 
-import { discountProblem, isPro, type CatalogProduct } from "./catalog";
+import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
 import { convergeDesktop, convergePro, convergeApi } from "./converge";
 import { emptyFacts } from "./provider";
@@ -201,12 +201,12 @@ export async function checkFacts(
     if (o.product === "desktop") {
       const price = catalog.products.desktop;
       if (o.reason !== "purchase") return `amount: a Desktop order with reason ${o.reason}`;
-      if (
-        o.items.length !== 1 ||
-        o.items[0].priceId !== price.priceId ||
-        o.items[0].amountCents !== price.amountCents ||
-        o.subtotalCents !== price.amountCents
-      )
+      const listPrice =
+        o.items.length === 1 &&
+        o.items[0].priceId === price.priceId &&
+        o.items[0].amountCents === price.amountCents &&
+        o.subtotalCents === price.amountCents;
+      if (!listPrice && !complimentaryDesktop(catalog, o))
         return `amount: Desktop is ${price.amountCents}, the order is ${o.subtotalCents}`;
       const r = await checkCheckout(
         "order",
