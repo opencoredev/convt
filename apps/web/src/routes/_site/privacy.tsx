@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { AnalyticsOptOut } from "#/components/site/analytics-opt-out";
 import { TextLink } from "#/components/site/layout";
-import { LegalPage, List, Placeholder, type LegalSection } from "#/components/site/legal";
+import { LegalPage, List, type LegalSection } from "#/components/site/legal";
 import { PRIVACY_EMAIL, legal, routes, seo } from "#/lib/site";
 
-// DRAFT pending Leo's legal review. Keep it matched to what the product does:
-// docs/plan.md (P8, P9, P11) and docs/document-pack.md describe every network call.
+// Keep it matched to what the product does: docs/plan.md (P8, P9, P11) and
+// docs/document-pack.md describe every network call. Who runs convt comes from `legal`
+// in lib/site.ts.
 
 export const Route = createFileRoute("/_site/privacy")({
   head: () =>
@@ -20,9 +22,10 @@ export const Route = createFileRoute("/_site/privacy")({
       title="Privacy policy"
       summary={
         <p>
-          convt converts files on your own computer. The app has no analytics or tracking, and your
-          files stay on your machine unless you choose to convert one in the cloud. This policy
-          covers the convt app, the command line tool, convt.app and the convt API.
+          convt converts files on your own computer. Your files stay on your machine unless you
+          choose to convert one in the cloud. The convt.app website uses PostHog analytics to count
+          visits, which you can turn off. This policy covers the convt app, the command line tool,
+          convt.app and the convt API.
         </p>
       }
       sections={sections}
@@ -38,9 +41,7 @@ const sections: LegalSection[] = [
     title: "Who we are",
     body: (
       <p>
-        convt is run by <Placeholder>{legal.entity}</Placeholder>,{" "}
-        <Placeholder>{legal.address}</Placeholder> ("we"). We are the controller of the personal
-        data described here. Write to{" "}
+        The controller of the personal data described here is {legal.entity} ("we"). Write to{" "}
         <TextLink href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</TextLink> with any question
         about it.
       </p>
@@ -53,8 +54,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           Conversions run on your computer. The app and the <code>convt</code> command never upload
-          a file, and contain no analytics, crash reporting or advertising code. The trial and your
-          license key are stored on your computer and checked offline.
+          a file, and contain no advertising code. The trial and your license key are stored on your
+          computer and checked offline.
         </p>
         <p>The app connects to the internet only in these cases:</p>
         <List
@@ -111,7 +112,7 @@ const sections: LegalSection[] = [
     title: "What we collect on convt.app",
     body: (
       <>
-        <p>We collect only what the account, licensing and billing features need:</p>
+        <p>For accounts, licensing and billing we collect only what those features need:</p>
         <List
           items={[
             <>
@@ -135,10 +136,53 @@ const sections: LegalSection[] = [
           ]}
         />
         <p>
-          The site sets only the cookies it needs to work: the sign-in session and, during a
-          purchase, a short-lived cookie that lets this browser show your new license key. There are
-          no analytics, advertising or third-party tracking cookies.
+          The site sets the cookies it needs to work: the sign-in session and, during a purchase, a
+          short-lived cookie that lets this browser show your new license key. The analytics below
+          add one more. There are no advertising cookies.
         </p>
+      </>
+    ),
+  },
+  {
+    id: "analytics",
+    title: "Website analytics",
+    body: (
+      <>
+        <p>
+          convt.app uses <span className={strong}>PostHog</span> to see which pages people visit and
+          how they move through the site, so we can tell what works and fix what does not. PostHog
+          processes the data for us in the United States.
+        </p>
+        <p>When analytics are on, each page you open sends PostHog:</p>
+        <List
+          items={[
+            <>
+              <span className={strong}>Page views and clicks:</span> the address of the page,
+              without anything after a <code>?</code> or <code>#</code>, the page you came from, cut
+              the same way, and which links and buttons you click, without the text on them or
+              anything you type.
+            </>,
+            <>
+              <span className={strong}>Device and browser:</span> browser, operating system, device
+              type and screen size.
+            </>,
+            <>
+              <span className={strong}>Approximate location:</span> PostHog receives and keeps your
+              IP address, and uses it to estimate your country and city.
+            </>,
+            <>
+              <span className={strong}>A random visitor ID</span> kept in a first-party cookie and
+              local storage, so repeat visits count once. It is not linked to your convt account,
+              your email address or your purchases.
+            </>,
+          ]}
+        />
+        <p>
+          We do not record sessions. To turn analytics off, use the switch below, turn on Global
+          Privacy Control or Do Not Track in your browser, or block PostHog with a content blocker.
+          Once they are off, this browser sends PostHog nothing more.
+        </p>
+        <AnalyticsOptOut />
       </>
     ),
   },
@@ -165,6 +209,10 @@ const sections: LegalSection[] = [
             <>
               <span className={strong}>Railway</span> hosts our Postgres database and the conversion
               servers.
+            </>,
+            <>
+              <span className={strong}>PostHog</span> runs the website analytics described above, in
+              the United States.
             </>,
             <>
               <span className={strong}>GitHub and Google</span> receive a sign-in request only if
@@ -203,9 +251,15 @@ const sections: LegalSection[] = [
           complain to your local data protection authority.
         </p>
         <p>
-          We process account and purchase data to provide what you signed up for or bought, and
-          security data for our legitimate interest in keeping the service safe.{" "}
-          <Placeholder>[Legal bases and international transfer mechanism to confirm]</Placeholder>
+          We process account, purchase and cloud conversion data to provide what you signed up for
+          or bought, security data for our legitimate interest in keeping the service safe, and
+          order and invoice records because tax and accounting law requires them.
+        </p>
+        <p>
+          Our providers may process data outside the country where you live, including in the United
+          States. Where data leaves the EU, the UK or Switzerland, it is protected by the safeguards
+          the law provides, such as the European Commission's standard contractual clauses or the
+          EU-US Data Privacy Framework.
         </p>
       </>
     ),
