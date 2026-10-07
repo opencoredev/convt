@@ -28,8 +28,9 @@ shot signin-wrong-code-desktop-light
 type_code "$(mail_code desktop@convt.test)"
 check "the code signs in and returns to /dashboard/billing" wait_url "/dashboard/billing"
 
-# Sign out from the header.
-ab find role button click --name "Sign out" >/dev/null 2>&1 || ab click 'header button' >/dev/null
+# Sign out from the header's account menu.
+ab click 'header button[aria-expanded]' >/dev/null
+ab find role button click --name "Sign out" >/dev/null
 check "Sign out in the header ends the session" wait_url "/sign-in"
 open_page "/dashboard"
 check "after signing out the dashboard needs sign-in again" wait_url "/sign-in?redirect="
@@ -75,7 +76,7 @@ shot oauth-google-gmail-dashboard-desktop-light
 
 oauth_sign_in github github-pro
 check "the GitHub identity linked to pro@ signs in to pro@" wait_url /dashboard
-check "and shows pro's account" grep -q "Leo's account" <<<"$(page_text)"
+check "and shows pro's account" grep -q "Account: Leo" <<<"$(header_account)"
 
 oauth_sign_in google google-thirdparty "e2e-thirdparty-$RANDOM@thirdparty.test"
 check "a third-party Google address must confirm its email first" wait_url /sign-in/verify-email

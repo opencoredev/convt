@@ -45,7 +45,10 @@ pub fn account_url() -> String {
 pub struct Pending {
     state: String,
     verifier: String,
-    started: Instant,
+    /// When the flow expires. Kept instead of the start so tests can age a
+    /// flow by up to [`SIGN_IN_TIMEOUT`]: on Windows an `Instant` counts from
+    /// boot, and a runner may have been up for less than that.
+    deadline: Instant,
 }
 
 impl std::fmt::Debug for Pending {
@@ -60,7 +63,7 @@ impl Pending {
         Ok(Self {
             state: random_text()?,
             verifier: random_text()?,
-            started: Instant::now(),
+            deadline: Instant::now() + SIGN_IN_TIMEOUT,
         })
     }
 
@@ -99,7 +102,7 @@ impl Pending {
 
     /// Whether the user took longer than [`SIGN_IN_TIMEOUT`] to come back.
     pub fn expired(&self, now: Instant) -> bool {
-        now.saturating_duration_since(self.started) >= SIGN_IN_TIMEOUT
+        now >= self.deadline
     }
 
     /// The state, which travels in the page URL and comes back in the link.
@@ -108,8 +111,13 @@ impl Pending {
     }
 
     /// The flow as if it had started `ago` earlier, for tests of the timeout.
+    /// `ago` may be at most [`SIGN_IN_TIMEOUT`].
     pub fn started_earlier(mut self, ago: Duration) -> Self {
-        self.started = self.started.checked_sub(ago).unwrap_or(self.started);
+        assert!(
+            ago <= SIGN_IN_TIMEOUT,
+            "a flow can age by SIGN_IN_TIMEOUT at most"
+        );
+        self.deadline -= ago;
         self
     }
 }
@@ -298,7 +306,9 @@ mod tests {
 
     #[test]
     fn a_flow_accepts_only_its_own_state_in_time() {
+        let before = Instant::now();
         let a = Pending::new().unwrap();
+        let after = Instant::now();
         let b = Pending::new().unwrap();
         assert_ne!(a.state(), b.state());
         assert_eq!(a.state().len(), 43);
@@ -307,9 +317,22 @@ mod tests {
         assert!(!a.accepts(b.state(), now));
         assert!(!a.accepts("", now));
         assert!(!a.accepts(&a.state()[..42], now));
-        let late = Pending::new().unwrap();
-        let after_timeout = Instant::now() + SIGN_IN_TIMEOUT + Duration::from_secs(1);
-        assert!(!late.accepts(late.state(), after_timeout));
+        // Later times are passed in, so this doesn't depend on how long the
+        // machine has been up.
+        let second = Duration::from_secs(1);
+        assert!(a.accepts(a.state(), before + SIGN_IN_TIMEOUT - second));
+        assert!(!a.accepts(a.state(), after + SIGN_IN_TIMEOUT));
+        // The deadline itself is too late.
+        assert!((before + SIGN_IN_TIMEOUT..=after + SIGN_IN_TIMEOUT).contains(&a.deadline));
+        assert!(!a.accepts(a.state(), a.deadline));
+        assert!(!a.accepts(a.state(), after + SIGN_IN_TIMEOUT + second));
+
+        let aged = Pending::new().unwrap().started_earlier(SIGN_IN_TIMEOUT);
+        assert!(!aged.accepts(aged.state(), Instant::now()));
+        let aged = Pending::new()
+            .unwrap()
+            .started_earlier(SIGN_IN_TIMEOUT - Duration::from_secs(60));
+        assert!(aged.accepts(aged.state(), Instant::now()));
     }
 
     #[test]

@@ -58,7 +58,8 @@ open_page /account
 ab fill 'input[name=name]' "Sam Settings" >/dev/null
 ab press Enter >/dev/null
 wait_text "Name saved"
-check "rename saves and the header follows" wait_text "Sam Settings's account"
+check "rename saves and the header follows" \
+  ab wait --fn "document.querySelector('header button[aria-expanded]')?.textContent.includes('Sam Settings')"
 
 dom_click "Connect GitHub" >/dev/null
 wait_url /github/authorize
