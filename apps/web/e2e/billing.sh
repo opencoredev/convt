@@ -146,7 +146,7 @@ wait_url "$MOCK/checkout/"
 check "the Pro checkout offers the 7-day trial" grep -q "7-day free trial" <<<"$(page_text)"
 pay
 wait_url /checkout/success 30
-check "the success page says the trial started" wait_text "Your free trial has started"
+check "the success page says the trial started" wait_text "Your trial has started"
 shots success-trial
 check "no key during the trial" test "$(owner_sql "select count(*) from licenses l join users u on u.id = l.user_id where u.email = '$pro'")" = 0
 open_page /dashboard/billing

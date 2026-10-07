@@ -7,7 +7,7 @@ import { PrimaryButton, SecondaryLink, TextButton, cx, focusRing } from "#/compo
 import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
 import { fetchCheckoutResult } from "#/server/billing-fns";
-import type { CheckoutView } from "#/server/views";
+import { checkoutGiveUp, type CheckoutView } from "#/server/views";
 
 // Where the provider sends the buyer back. The page renders with no order data;
 // the key arrives only in the client-side server function call (private, no-store)
@@ -43,12 +43,21 @@ const errors: Record<string, string> = {
   already_enrolled: "This account already has API billing.",
 };
 
-const aside = {
+const keyAside = {
   title: "WHAT'S NEXT",
   items: [
     "Download convt for your Mac",
     "Open the key in the app, or paste it in Settings",
     "Find it again under Licenses",
+  ],
+};
+
+const trialAside = {
+  title: "WHAT'S NEXT",
+  items: [
+    "Download convt for your Mac",
+    "Open the app and start converting",
+    "Cancel any time from Billing before the first charge",
   ],
 };
 
@@ -59,12 +68,17 @@ function SuccessPage() {
       ? { state: "error", reason: error }
       : checkoutId
         ? { state: "loading" }
-        : { state: "not_found", product: null },
+        : { state: "not_found", product: null, allowTrial: false },
   );
-  // After the first pending answer, the next call asks convt-billing to sync this
-  // checkout from the provider; it does that at most once per checkout.
+  // After the first pending answer, later calls ask convt-billing to sync this
+  // checkout from the provider. Keep asking while Polar is still attaching the
+  // subscription; a single early GET used to give up and show "key by email".
   const syncNext = useRef(false);
-  const syncDone = useRef(false);
+  const syncedOnce = useRef(false);
+  const lastKnown = useRef<{ product: CheckoutView["product"]; allowTrial: boolean }>({
+    product: null,
+    allowTrial: false,
+  });
 
   useEffect(() => {
     if (!checkoutId || error) return;
@@ -73,8 +87,8 @@ function SuccessPage() {
     const started = Date.now();
     const poll = async () => {
       try {
-        const sync = syncNext.current && !syncDone.current;
-        if (sync) syncDone.current = true;
+        const sync = syncNext.current;
+        if (sync) syncedOnce.current = true;
         // A call that never answers (a dropped connection) must not stall the page.
         const r = await Promise.race([
           fetchCheckoutResult({ data: { checkoutId, sync } }),
@@ -83,21 +97,22 @@ function SuccessPage() {
           ),
         ]);
         if (stopped) return;
+        if (r.state !== "ready") lastKnown.current = { product: r.product, allowTrial: r.allowTrial };
         if (r.state === "pending") {
           syncNext.current = true;
           if (Date.now() - started > giveUpMs) {
-            setState({ state: "email" });
+            setState(checkoutGiveUp(r.product, r.allowTrial));
             return;
           }
           setState(r);
-          timer = setTimeout(poll, syncDone.current ? pollMs : 0);
+          timer = setTimeout(poll, syncedOnce.current ? pollMs : 0);
           return;
         }
         setState(r);
       } catch {
         if (stopped) return;
         if (Date.now() - started > giveUpMs) {
-          setState({ state: "email" });
+          setState(checkoutGiveUp(lastKnown.current.product, lastKnown.current.allowTrial));
           return;
         }
         timer = setTimeout(poll, pollMs);
@@ -111,7 +126,7 @@ function SuccessPage() {
   }, [checkoutId, error]);
 
   return (
-    <AuthLayout aside={aside}>
+    <AuthLayout aside={state.state === "trial" ? trialAside : keyAside}>
       <div aria-live="polite" className="flex flex-col gap-6">
         <Body state={state} />
       </div>
@@ -146,19 +161,9 @@ function Body({ state }: { state: State }) {
     case "trial":
       return (
         <>
-          <Heading eyebrow="CONVT PRO">Your free trial has started</Heading>
-          <p className={lead}>
-            Pro is free for 7 days, then your card is charged. Cancel any time before then from
-            Billing and you won't pay anything.
-          </p>
-          <p className={lead}>
-            The desktop app runs its own 7-day trial in the meantime. Your Pro license key arrives
-            by email with the first payment, and appears under Licenses.
-          </p>
-          <Actions
-            primary={{ href: "/dashboard/billing", label: "Go to Billing" }}
-            secondary={{ href: links.download, label: "Download convt" }}
-          />
+          <Heading eyebrow="CONVT PRO">Your trial has started</Heading>
+          <p className={lead}>You can go download the app here.</p>
+          <Actions primary={{ href: links.download, label: "Download convt" }} />
         </>
       );
     case "api_enrolled":

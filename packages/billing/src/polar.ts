@@ -405,6 +405,9 @@ export function parsePolarEvent(catalog: Catalog, body: string): ParsedEvent {
     const c = parse(checkout);
     if (typeof c === "string") return { ok: false, type, reason: c };
     facts.checkouts.push(checkoutFact(c));
+    // checkout.updated carries subscription_id once Polar creates it; hydrate
+    // fetches that snapshot so a delayed subscription.* event is not required.
+    if (c.subscription_id) facts.hints.push({ kind: "subscription", id: c.subscription_id });
     return { ok: true, type, facts, ignored: false };
   }
   if (type.startsWith("order.")) {

@@ -155,12 +155,60 @@ describe("checkout result", () => {
     const u = await h.user("trial-cookie@convt.test");
     const t = await h.buy("pro_month", u);
     await h.deliverAll();
-    expect((await result(t.providerCheckoutId, t.cookieValue)).result.state).toBe("trial");
+    const trial = await result(t.providerCheckoutId, t.cookieValue);
+    expect(trial.result).toMatchObject({ state: "trial", allowTrial: true });
     const d = await h.service.createCheckout({ product: "desktop", user: null });
     if (!d.ok) throw new Error("refused");
     const co = h.mock.checkoutBySecret(d.url.split("/checkout/")[1])!;
     h.mock.completeCheckout(co.id, "0002");
     await h.deliverAll();
     expect((await result(co.id, d.cookieValue)).result.state).toBe("pending");
+  });
+
+  test("a succeeded Pro trial reports trial before the subscription row lands", async () => {
+    const u = await h.user("early-trial@convt.test");
+    const created = await h.service.createCheckout({ product: "pro_month", user: u });
+    if (!created.ok) throw new Error("refused");
+    const secret = created.url.split("/checkout/")[1];
+    const co = h.mock.checkoutBySecret(secret)!;
+    h.mock.completeCheckout(co.id);
+    await h.owner.execute(
+      sql`update checkouts set status = 'succeeded' where id = ${created.checkoutId}`,
+    );
+    expect((await result(co.id, created.cookieValue, u.id)).result.state).toBe("trial");
+  });
+
+  test("a second sync picks up a Pro trial that was not ready on the first", async () => {
+    const u = await h.user("retry-trial@convt.test");
+    const created = await h.service.createCheckout({ product: "pro_month", user: u });
+    if (!created.ok) throw new Error("refused");
+    const secret = created.url.split("/checkout/")[1];
+    const co = h.mock.checkoutBySecret(secret)!;
+    expect((await result(co.id, created.cookieValue, u.id, true)).result.state).toBe("pending");
+    const [row] = await h.q<{ synced_at: string | null }>(
+      sql`select synced_at from checkouts where id = ${created.checkoutId}`,
+    );
+    expect(row.synced_at).not.toBeNull();
+    h.mock.completeCheckout(co.id);
+    expect((await result(co.id, created.cookieValue, u.id, true)).result.state).toBe("trial");
+  });
+
+  test("a checkout.updated with a subscription id ingests the trial without subscription.*", async () => {
+    const u = await h.user("co-updated@convt.test");
+    const b = await h.buy("pro_month", u);
+    const updates = h.mock.takeHeld().filter((d) => d.type === "checkout.updated");
+    expect(updates.length).toBeGreaterThan(0);
+    for (const d of updates) expect((await h.deliver(d)).status).toBe(200);
+    expect((await result(b.providerCheckoutId, b.cookieValue)).result.state).toBe("trial");
+  });
+
+  test("a Pro trial whose subscription is not linked by checkout_id still reports trial", async () => {
+    const u = await h.user("unlinked-trial@convt.test");
+    const t = await h.buy("pro_month", u);
+    await h.deliverAll();
+    await h.owner.execute(
+      sql`update subscriptions set checkout_id = null where user_id = ${u.id} and kind = 'pro'`,
+    );
+    expect((await result(t.providerCheckoutId, t.cookieValue, u.id)).result.state).toBe("trial");
   });
 });

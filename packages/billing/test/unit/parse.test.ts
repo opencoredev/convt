@@ -61,6 +61,11 @@ describe("parsePolarEvent", () => {
     if (!paid.ok) throw new Error("no");
     expect(paid.facts.orders[0].checkoutRef).toBe(`chk_${"b".repeat(26)}`);
     expect(paid.facts.orders[0].userId).toBe(`usr_${"a".repeat(26)}`);
+    const hinted = held
+      .filter((d) => d.type === "checkout.updated")
+      .map((d) => parsePolarEvent(catalog, d.body))
+      .find((r) => r.ok && r.facts.hints.some((x) => x.kind === "subscription"));
+    expect(hinted).toBeDefined();
   });
 
   test("ignored, unknown and malformed events", () => {
