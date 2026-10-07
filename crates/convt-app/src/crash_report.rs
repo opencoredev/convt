@@ -244,6 +244,9 @@ fn resend() {
     });
 }
 
+/// Handled errors that are not a conversion. Conversions use
+/// [`report_conversion`] so format ids can go on the event.
+#[allow(dead_code)]
 pub fn report_error(kind: &str, message: &str) {
     report_conversion(kind, message, None, None);
 }

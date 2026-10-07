@@ -173,10 +173,7 @@ pub fn format_bundle(input: &BundleInput<'_>) -> String {
     let mut out = String::new();
     out.push_str(&format!("convt-app {}\n", input.version));
     out.push_str(&format!("os: {}\n", input.os));
-    out.push_str(&format!(
-        "os_version: {}\n",
-        crash_report::scrub(input.os_version)
-    ));
+    out.push_str(&format!("os_version: {}\n", input.os_version));
     out.push_str(&format!("arch: {}\n", input.arch));
     out.push_str(&format!("license: {}\n", input.license));
     out.push_str("\n--- logs ---\n");
