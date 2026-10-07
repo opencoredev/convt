@@ -313,7 +313,7 @@ function Converter() {
                           className="sr-only"
                         />
                         <span className="font-mono text-[12px] uppercase">{id}</span>
-                        {f && f.name.toLowerCase() !== id && (
+                        {f && !f.name.toLowerCase().includes(id) && (
                           <span className="hidden text-xs text-ink-3 sm:inline">{f.name}</span>
                         )}
                       </label>
@@ -482,7 +482,7 @@ function Progress({ stage, job }: { stage: Stage; job: Job | null }) {
         {stage !== "succeeded" && (
           <p className="text-xs/4 text-ink-2">
             {job
-              ? `Attempt ${job.attempt || 1}. Keep this page open until your download is ready.`
+              ? `${job.attempt > 1 ? `Retrying, attempt ${job.attempt}. ` : ""}Keep this page open until your download is ready.`
               : "Your file goes to convt cloud storage for this conversion."}
           </p>
         )}

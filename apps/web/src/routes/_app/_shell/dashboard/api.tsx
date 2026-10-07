@@ -318,12 +318,16 @@ function ApiPage() {
                               tone="danger"
                               disabled={busy}
                               onClick={() => revoke(key.id)}
-                              aria-label={`Confirm revoking ${key.name}`}
+                              aria-label={`Revoke now: ${key.name}`}
                               className="font-medium"
                             >
                               Revoke now
                             </TextButton>
-                            <TextButton tone="muted" onClick={() => setConfirming(null)}>
+                            <TextButton
+                              tone="muted"
+                              onClick={() => setConfirming(null)}
+                              aria-label={`Keep ${key.name}`}
+                            >
                               Keep
                             </TextButton>
                           </span>
