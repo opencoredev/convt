@@ -51,6 +51,15 @@ test("abort before creation leaves no reservation or upload", async () => {
     }),
   ).rejects.toThrow("user cancelled");
 });
+test("default base URL uses the live API host", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    calls.push(String(input));
+    return Response.json({ error: { code: "unauthorized", message: "test" } }, { status: 401 });
+  }) as typeof fetch;
+  await expect(new Convt({ apiKey: "test" }).status("job_test")).rejects.toThrow();
+  expect(calls).toEqual(["https://api.convt.app/v1/jobs/job_test"]);
+});
 test("several outputs must be saved explicitly", async () => {
   const result = new Conversion({ ...job, status: "succeeded" }, [
     { name: "1.png", url: "https://objects.test/1" },

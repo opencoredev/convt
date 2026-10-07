@@ -15,7 +15,7 @@ actions:
 
         Every job route takes a `cvt_live_` API key as a Bearer token. Create keys in the [dashboard](https://convt.app/dashboard/api). Each successful job is billed once; failed and cancelled jobs are free.
 
-        Until `api.convt.app` resolves, use the first server listed in this spec. The paths, keys and responses are the same on both hosts.
+        Use the production server listed in this spec. `api.convt.app` is the canonical API hostname.
 
   - target: $
     update:
