@@ -827,6 +827,10 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
     let (window, view) = f.main(cx);
     assert!(shown(cx, window, "empty"));
     assert_eq!(
+        label(cx, window, "empty-add-files").as_deref(),
+        Some("Choose files…")
+    );
+    assert_eq!(
         label(cx, window, "defaults").as_deref(),
         Some("Images → WebP, Video → MP4, Audio → MP3, Documents → PDF")
     );
@@ -2034,9 +2038,12 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
 
         let app = f.app.clone();
         cx.update(|cx| {
-            super::show(size(px(420.), px(420.)), "first run", cx, |window, cx| {
-                cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
-            })
+            super::show(
+                size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
+                "first run",
+                cx,
+                |window, cx| cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx)),
+            )
         });
         let (first, _) = window_of::<FirstRunView>(cx);
         assert!(
@@ -2050,9 +2057,12 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
 
         let app = f.app.clone();
         cx.update(|cx| {
-            super::show(size(px(420.), px(420.)), "first run", cx, |window, cx| {
-                cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
-            })
+            super::show(
+                size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
+                "first run",
+                cx,
+                |window, cx| cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx)),
+            )
         });
         let (first, view) = window_of::<FirstRunView>(cx);
         assert!(fits(cx, first, "first-run-next"), "first run, trial");
@@ -2080,6 +2090,7 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         cx.update(super::show_main);
         let (main, _) = window_of::<MainView>(cx);
         assert!(fits(cx, main, "trial-buy"), "main window");
+        assert!(fits(cx, main, "empty-add-files"), "main window, empty");
     }
 }
 
@@ -2119,7 +2130,33 @@ fn the_icons_the_windows_draw_are_bundled() {
     use gpui_kit::AssetSource;
     use gpui_kit::component::{IconName, IconNamed};
     let assets = super::assets();
-    for icon in [IconName::Check, IconName::ChevronDown, IconName::ArrowDown] {
+    for icon in [
+        IconName::ArrowDown,
+        IconName::ArrowRight,
+        IconName::Ban,
+        IconName::Bot,
+        IconName::Calendar,
+        IconName::Check,
+        IconName::ChevronRight,
+        IconName::ChevronsUpDown,
+        IconName::CircleAlert,
+        IconName::CircleCheck,
+        IconName::CircleUser,
+        IconName::CircleX,
+        IconName::ExternalLink,
+        IconName::Folder,
+        IconName::FolderOpen,
+        IconName::HardDrive,
+        IconName::Inbox,
+        IconName::Info,
+        IconName::Loader,
+        IconName::Plus,
+        IconName::RefreshCw,
+        IconName::RotateCw,
+        IconName::Settings,
+        IconName::Star,
+        IconName::TriangleAlert,
+    ] {
         let path = icon.path();
         assert!(
             assets.load(&path).unwrap().is_some(),
