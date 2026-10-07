@@ -59,15 +59,21 @@ rustc --edition=2024 -C opt-level=2 -C target-feature=+crt-static -C link-arg=/B
 if ($LASTEXITCODE -ne 0) { throw 'Document launcher build failed' }
 # Keep the archive beside the payload, not inside it. The v0.2.0 MSI was 537 MiB
 # because WiX harvested this already-gzipped LibreOffice pack (446 MiB).
-# Document support stays opt-in, same as Mac and Linux; pin the digest so a
-# later hosted URL or `convt pack install --source file://...` can verify it.
-$Documents = Join-Path $Repo 'packaging/out/windows/documents.tar.gz'
+# Mac and Linux already download that pack on demand after Install; Windows
+# publishes the same asset on the GitHub release and compiles its URL in.
+$Version = ((Get-Content Cargo.toml | Select-String '^version = "([0-9.]+)"$' | Select-Object -First 1).Matches[0].Groups[1].Value)
+$DocumentsDir = Join-Path $Repo 'packaging/out/windows'
+$Documents = Join-Path $DocumentsDir 'documents.tar.gz'
 $Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" $Documents
 if ($LASTEXITCODE -ne 0 -or $Hash -notmatch '^[a-f0-9]{64}$') { throw 'Document archive creation failed' }
+$PublishedJson = python "$PSScriptRoot/document_pack.py" publish $Documents $Version $DocumentsDir
+if ($LASTEXITCODE -ne 0) { throw 'Document pack publish failed' }
+$Published = $PublishedJson | ConvertFrom-Json
+if ($Published.sha256 -ne $Hash) { throw "Document pack digest changed during publish: $($Published.sha256)" }
 $env:CONVT_DOCUMENT_PACK_SHA256 = $Hash
-Remove-Item Env:CONVT_DOCUMENT_PACK_URL -ErrorAction SilentlyContinue
+$env:CONVT_DOCUMENT_PACK_URL = $Published.url
 $env:CONVT_DOCUMENT_PACK_VERSION = 'LibreOffice 25.8.7 Windows x64'
-$env:CONVT_DOCUMENT_PACK_SIZE = (Get-Item $Documents).Length.ToString()
+$env:CONVT_DOCUMENT_PACK_SIZE = $Published.size.ToString()
 $env:CONVT_DOCUMENT_PACK_INSTALLED_SIZE = ((Get-ChildItem $Office.Directory.Parent.FullName -Recurse -File | Measure-Object Length -Sum).Sum).ToString()
 cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p convt-app
 if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
@@ -77,6 +83,7 @@ Copy-Item "$PSScriptRoot/inputs.lock.json","$PSScriptRoot/build-native.ps1","$PS
 @{
     verification_only = [bool]$VerificationOnly
     document_pack_sha256 = $Hash
-    document_pack = 'packaging/out/windows/documents.tar.gz'
+    document_pack = "packaging/out/windows/$($Published.name)"
+    document_pack_url = $Published.url
     source_date_epoch = $env:SOURCE_DATE_EPOCH
 } | ConvertTo-Json | Set-Content "$Out/build-receipt.json" -Encoding utf8

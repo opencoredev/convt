@@ -48,6 +48,19 @@ Get-Item "$Work/out/sample.webp","$Work/out/sample.webm" | ForEach-Object {
     if ($_.Length -lt 32) { throw "$($_.Name) is too small" }
     Write-Host ("{0}: {1} bytes" -f $_.Name, $_.Length)
 }
+$Pack = Get-Item "$Repo/packaging/out/windows/convt-*-windows-x86_64-documents.tar.gz" | Select-Object -First 1
+$Checksum = Get-Item "$Repo/packaging/out/windows/convt-*-windows-x86_64-documents.tar.gz.sha256" | Select-Object -First 1
+if (-not $Pack -or -not $Checksum) { throw 'Windows document pack release assets are missing' }
+$PackHash = (Get-FileHash $Pack.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+$Recorded = (($Checksum | Get-Content -TotalCount 1) -split '\s+')[0].ToLowerInvariant()
+if ($PackHash -ne $Recorded) { throw "Document pack checksum mismatch: $PackHash vs $Recorded" }
+$Status = & "$Bin/convt.exe" pack status documents
+if ($LASTEXITCODE -ne 0) { throw 'convt pack status failed' }
+if ($Status -notmatch 'pack install documents') {
+    throw "Document pack is not compiled as a downloadable add-on:`n$Status"
+}
+Write-Host $Status
+Write-Host ("document pack {0}: {1:N0} bytes, sha256 {2}" -f $Pack.Name, $Pack.Length, $PackHash)
 $App = Join-Path $Bin 'convt-app.exe'
 $Gui = $null
 try {

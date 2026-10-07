@@ -77,5 +77,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release-review
-          path: packaging/out/windows/*.msi
+          path: |
+            packaging/out/windows/*.msi
+            packaging/out/windows/*-documents.tar.gz
+            packaging/out/windows/*-documents.tar.gz.sha256
           if-no-files-found: error
