@@ -39,7 +39,7 @@ await result.save("report.pdf");
 
 - `blob(index = 0)` downloads one output as a `Blob`.
 - `save(path)` writes the only output to disk. Node only.
-- `saveAll(directory)` writes every output into a folder. Node only.
+- `saveAll(directory)` writes every output into a folder under the names the API returns, such as `input.png` and `input-2.png`. Node only.
 
 Errors are `ConvtError` instances with the API's `code` and the HTTP `status`.
 

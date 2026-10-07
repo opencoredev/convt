@@ -3,7 +3,7 @@ title: Server upload route
 description: A route that takes a file from the browser, converts it with your key, and returns signed output URLs.
 ---
 
-This route sits between your web app and convt so the API key stays on the server. It uses the standard `Request` and `Response` objects, so the same handler runs on Bun, Deno, Node 18+ frameworks, Cloudflare Workers and Next.js route handlers. It imports `convert` and `formatFor` from the [Node helper](/examples/node-script).
+This route sits between your web app and convt so the API key stays on the server. It uses the standard `Request` and `Response` objects, so the same handler runs on Bun, Deno, Node 20+ frameworks, Cloudflare Workers and Next.js route handlers. It imports `convert` and `formatFor` from the [Node helper](/examples/node-script).
 
 ```js server.mjs lineNumbers
 import { convert, formatFor } from "./convt.mjs";

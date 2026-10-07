@@ -16,7 +16,7 @@ while (!finished.includes(job.status)) {
 }
 ```
 
-Poll about once a second. Every poll counts toward the 120 requests per minute your key gets, so a key that runs many jobs at once should poll each one less often. Two seconds per job keeps 60 concurrent jobs under the limit.
+Poll about once a second for a single job. Every poll counts toward the 120 requests a minute your key gets, which is 2 a second across all your jobs. With N jobs running at once, poll each one every N seconds or slower: 4 jobs every 4 seconds, 10 jobs every 10 seconds. That keeps polling at 1 request a second and leaves room for the create, start and download calls.
 
 Give up after a deadline you choose. A conversion attempt runs for at most 10 minutes, and a retry can follow, so 11 minutes covers almost every job. If you stop waiting, [cancel the job](/guides/cancelling) to release its reservation.
 
@@ -31,13 +31,13 @@ curl {{api}}/v1/jobs/$JOB/download \
 
 ```json
 {
-  "outputs": [{ "name": "photo.webp", "url": "https://…" }],
+  "outputs": [{ "name": "input.webp", "url": "https://…" }],
   "expires_in": 300
 }
 ```
 
 - `outputs` has one entry per file. Most conversions produce one. Some produce several, such as a PDF converted to PNG, which gives one image per page.
-- `name` is the output file name. Use it when you save the file.
+- `name` is the output's file name. It is always based on `input`, not on the name of the file you uploaded: `input.webp`, or `input.png`, `input-2.png`, `input-3.png` for pages. Replace `input` with your own name when you save it.
 - `url` is a signed `GET` URL. It needs no `Authorization` header.
 - `expires_in` is how many seconds the URLs stay valid, at most 300. Call the route again for fresh URLs.
 
@@ -56,14 +56,15 @@ const { outputs } = await call(`/v1/jobs/${id}/download`);
 for (const output of outputs) {
   const res = await fetch(output.url);
   if (!res.ok) throw new Error(`download failed with ${res.status}`);
-  await writeFile(output.name, Buffer.from(await res.arrayBuffer()));
+  const name = output.name.replace(/^input/, "photo"); // input-2.png -> photo-2.png
+  await writeFile(name, Buffer.from(await res.arrayBuffer()));
 }
 ```
 
 ```bash cURL
 curl -sS "$API/v1/jobs/$JOB/download" -H "$AUTH" |
   jq -r '.outputs[] | "\(.name)\t\(.url)"' |
-  while IFS=$'\t' read -r NAME URL; do curl -sS -o "$NAME" "$URL"; done
+  while IFS=$'\t' read -r NAME URL; do curl -sS -o "${NAME/#input/photo}" "$URL"; done
 ```
 
 </CodeGroup>

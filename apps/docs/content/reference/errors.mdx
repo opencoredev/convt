@@ -13,23 +13,23 @@ Branch on `code`. `message` may change. See [Errors and retries](/guides/errors-
 
 ## Request errors
 
-| Status | `code`                  | Returned by                  | Meaning and fix                                                                                                                  |
-| ------ | ----------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | `unsupported_format`    | Create                       | A format id is unknown, the two formats are the same, or the input cannot reach the target. Check [Formats](/reference/formats). |
-| `400`  | `file_too_large`        | Create                       | `input_bytes` is below 1 or above 2,000,000,000.                                                                                 |
-| `400`  | `size_mismatch`         | Start                        | Nothing was uploaded, or the upload's size differs from `input_bytes`. The job is cancelled. Reserve a new one.                  |
-| `400`  | `not_ready`             | Download                     | The job has not succeeded yet. Keep polling.                                                                                     |
-| `401`  | `unauthorized`          | Any job route                | No `Authorization: Bearer` header.                                                                                               |
-| `403`  | `unauthorized`          | Any job route                | The key is invalid or revoked.                                                                                                   |
-| `403`  | `not_enrolled`          | Create                       | The account has no active API subscription. Subscribe on the [dashboard](https://convt.app/dashboard/api).                       |
-| `403`  | `limit_reached`         | Create                       | Used plus reserved spend has reached your spend cap. Raise the cap or wait for the next billing period.                          |
-| `403`  | `storage_limit_reached` | Create                       | Your unexpired uploads hit 100 jobs or 50 GB. Wait for older jobs to expire.                                                     |
-| `404`  | `not_found`             | Get, start, cancel, download | The job does not exist, belongs to another account, or has expired.                                                              |
-| `415`  | plain text              | Create                       | The body was not sent as `application/json`.                                                                                     |
-| `422`  | plain text              | Create                       | The JSON is malformed, misses a field, or has an unknown field.                                                                  |
-| `429`  | `rate_limited`          | Any job route                | More than 120 requests in a minute for this key. Back off.                                                                       |
-| `500`  | `internal`              | Any job route                | An unexpected server error. Retry with backoff.                                                                                  |
-| `502`  | `storage_unavailable`   | Any job route                | Object storage did not answer. Retry with backoff.                                                                               |
+| Status | `code`                  | Returned by                  | Meaning and fix                                                                                                                        |
+| ------ | ----------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `unsupported_format`    | Create                       | A format id is unknown, the two formats are the same, or the input cannot reach the target. Check [Formats](/reference/formats).       |
+| `400`  | `file_too_large`        | Create                       | `input_bytes` is below 1 or above 2,000,000,000.                                                                                       |
+| `400`  | `size_mismatch`         | Start                        | The upload's size differs from `input_bytes`. The job is cancelled. Reserve a new one.                                                 |
+| `400`  | `not_ready`             | Download                     | The job has not succeeded yet. Keep polling.                                                                                           |
+| `401`  | `unauthorized`          | Any job route                | No `Authorization: Bearer` header.                                                                                                     |
+| `403`  | `unauthorized`          | Any job route                | The key is invalid or revoked.                                                                                                         |
+| `403`  | `not_enrolled`          | Create                       | The account has no active API subscription. Subscribe on the [dashboard](https://convt.app/dashboard/api).                             |
+| `403`  | `limit_reached`         | Create                       | Used plus reserved spend has reached your spend cap. Raise the cap or wait for the next billing period.                                |
+| `403`  | `storage_limit_reached` | Create                       | Your unexpired uploads hit 100 jobs or 50 GB. Wait for older jobs to expire.                                                           |
+| `404`  | `not_found`             | Get, start, cancel, download | The job does not exist, belongs to another account, or has expired.                                                                    |
+| `415`  | plain text              | Create                       | The body was not sent as `application/json`.                                                                                           |
+| `422`  | plain text              | Create                       | The JSON is malformed, misses a field, or has an unknown field.                                                                        |
+| `429`  | `rate_limited`          | Any job route                | More than 120 requests in a minute for this key. Back off.                                                                             |
+| `500`  | `internal`              | Any job route                | An unexpected server error. Retry with backoff.                                                                                        |
+| `502`  | `storage_unavailable`   | Any job route                | Object storage did not answer. Retry with backoff. From start, it also means nothing was uploaded for the job: check your `PUT` first. |
 
 The signed upload and download URLs are served by object storage, not the API. When they fail, they return storage's own XML errors, usually `403` once the URL has expired or the size does not match.
 
@@ -37,11 +37,10 @@ The signed upload and download URLs are served by object storage, not the API. W
 
 A job that fails has `status: "failed"` and an `error_code`. These are not HTTP errors: the request that reads the job succeeds.
 
-| `error_code`           | Meaning                                                              |
-| ---------------------- | -------------------------------------------------------------------- |
-| `conversion_failed`    | The file could not be converted, or the attempt ran over 10 minutes. |
-| `expired`              | The job reached its 24-hour expiry before it finished.               |
-| `expired_or_exhausted` | All 3 attempts were used, or the job expired while running.          |
-| `worker_shutdown`      | The worker stopped during the conversion. Create a new job.          |
+| `error_code`           | Meaning                                                                   |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `conversion_failed`    | The file could not be converted, or the attempt ran over 10 minutes.      |
+| `expired_or_exhausted` | All 3 attempts were used up because workers kept stopping mid-conversion. |
+| `worker_shutdown`      | The worker stopped during the conversion. Create a new job.               |
 
-Failed jobs are never billed.
+Failed jobs are never billed. A job past its 24-hour expiry is not reported as failed: every route returns `404 not_found` for it.

@@ -11,6 +11,10 @@ import { join } from "node:path";
 import { convertFile } from "./convt.mjs";
 
 const [dir, to, concurrency = "4"] = process.argv.slice(2);
+const workers = Number(concurrency);
+// 120 requests a minute per key: poll each job every `workers` seconds so all
+// jobs together poll about once a second.
+const pollMs = workers * 1000;
 const files = (await readdir(dir, { withFileTypes: true }))
   .filter((entry) => entry.isFile())
   .map((entry) => join(dir, entry.name));
@@ -21,7 +25,7 @@ async function worker() {
   while (next < files.length) {
     const file = files[next++];
     try {
-      const saved = await convertFile(file, to);
+      const saved = await convertFile(file, to, { pollMs });
       console.log(`${file} -> ${saved.join(", ")}`);
     } catch (error) {
       failed++;
@@ -30,7 +34,7 @@ async function worker() {
   }
 }
 
-await Promise.all(Array.from({ length: Number(concurrency) }, worker));
+await Promise.all(Array.from({ length: workers }, worker));
 console.log(`${files.length - failed} converted, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;
 ```
@@ -44,7 +48,9 @@ photos/b.heic -> b.webp
 
 ## Stay under the rate limit
 
-Each running job polls once a second, and your key gets 120 requests a minute. Four jobs at a time leaves plenty of room. To run more at once, raise the `pollMs` default in `convert()` so all jobs together stay under 2 requests a second.
+Your key gets 120 requests a minute, or 2 a second. The script polls each job every N seconds when it runs N at a time, so polling stays near 1 request a second whatever the concurrency, with room left for the create, start and download calls. Raising the concurrency speeds up the folder but makes each job's result arrive a little later.
+
+Two files with the same name and different extensions, such as `a.png` and `a.heic`, both save as `a.webp`. Convert them into separate folders if that matters.
 
 For folders on your own machine, the [convt CLI](https://convt.app/download) does the same thing locally, with no key and no upload:
 

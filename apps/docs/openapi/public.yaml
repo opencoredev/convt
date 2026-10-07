@@ -50,7 +50,7 @@ actions:
         input_bytes: 48213
   - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_format
     update:
-      description: Format id of the file you upload, such as `png` or `docx`. See [Formats](https://convt.app/docs/formats).
+      description: Format id of the file you upload, such as `png` or `docx`. See [Formats](https://convt.app/docs/reference/formats).
   - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.target_format
     update:
       description: Format id to convert to. It must differ from `input_format` and be a target the input can reach.
@@ -107,7 +107,7 @@ actions:
       description: |
         Returns the job's current status. Poll this about once a second after you start the job, and stop when `status` is `succeeded`, `failed` or `cancelled`.
 
-        Jobs disappear 24 hours after they were created. After that this returns `404`.
+        Jobs disappear 24 hours after they were created. After that this returns `404 not_found`, whatever state the job was in.
   - target: $.paths['/v1/jobs/{id}'].get.responses['200']
     update:
       description: The job.
@@ -132,6 +132,8 @@ actions:
         Seals the uploaded file, checks that its size matches `input_bytes`, and queues the job. The response usually shows `queued`.
 
         Calling start again is safe: a job that is no longer `created` is returned as it is. If the uploaded size does not match, the job is cancelled and the call fails with `size_mismatch`. Reserve a new job to try again.
+
+        If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` succeeded before you retry.
   - target: $.paths['/v1/jobs/{id}/start'].post.responses['200']
     update:
       description: The job, now `queued`, or unchanged if it was already started.
@@ -148,7 +150,7 @@ actions:
             expires_at: "2026-10-08T12:00:00Z"
   - target: $.paths['/v1/jobs/{id}/start'].post.responses['400']
     update:
-      description: "`size_mismatch`: the upload is missing or its size differs from `input_bytes`. The job is cancelled."
+      description: "`size_mismatch`: the upload's size differs from `input_bytes`. The job is cancelled."
       content:
         application/json:
           example:
@@ -178,6 +180,8 @@ actions:
       description: |
         Returns a signed URL for every output of a `succeeded` job. Most conversions have one output; some, such as a multi-page PDF to PNG, have several.
 
+        Output names are based on `input`, not on your file's name: `input.webp`, or `input.png`, `input-2.png` and so on for pages. Rename them when you save them.
+
         The URLs expire after `expires_in` seconds, at most 5 minutes. Call this route again for fresh URLs while the job exists. Calling it before the job succeeds fails with `not_ready`.
   - target: $.paths['/v1/jobs/{id}/download'].get.responses['200']
     update:
@@ -186,8 +190,8 @@ actions:
         application/json:
           example:
             outputs:
-              - name: photo.webp
-                url: https://bucket.example/job_01k6z7v4q8m3x2a9b5c0d1e2f3/output/photo.webp?X-Amz-Signature=…
+              - name: input.webp
+                url: https://bucket.example/job_01k6z7v4q8m3x2a9b5c0d1e2f3/attempt-1/input.webp?X-Amz-Signature=…
             expires_in: 300
   - target: $.paths['/v1/jobs/{id}/download'].get.responses['400']
     update:
@@ -208,7 +212,7 @@ actions:
       description: |
         Lists every format convt recognizes, with its id, extensions and MIME type. Use the `id` values for `input_format` and `target_format`.
 
-        Not every pair converts in the cloud. The [Formats](https://convt.app/docs/formats) page lists the targets each input can reach through the API.
+        Not every pair converts in the cloud. The [Formats](https://convt.app/docs/reference/formats) page lists the targets each input can reach through the API.
       security: []
   - target: $.paths['/v1/formats'].get.responses['200']
     update:
@@ -262,7 +266,7 @@ actions:
     update: { description: How many times a worker has picked up the job. Starts at 0. }
   - target: $.components.schemas.Job.properties.error_code
     update:
-      description: Why a `failed` job failed (`conversion_failed`, `expired`, `expired_or_exhausted`, `worker_shutdown`), otherwise `null`.
+      description: Why a `failed` job failed (`conversion_failed`, `expired_or_exhausted` or `worker_shutdown`), otherwise `null`.
   - target: $.components.schemas.Job.properties.input_bytes
     update: { description: Size you reserved, in bytes. }
   - target: $.components.schemas.Job.properties.expires_at

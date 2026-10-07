@@ -40,10 +40,14 @@ if [ "$STATUS" != succeeded ]; then
   false
 fi
 
+# Outputs are named input.<ext>; save them under the input's own name.
+STEM=$(basename "${FILE%.*}")
 api "$API/v1/jobs/$JOB/download" | jq -r '.outputs[] | "\(.name)\t\(.url)"' |
   while IFS=$'\t' read -r NAME URL; do
-    curl -sS --fail-with-body -o "$(basename "$NAME")" "$URL"
-    echo "saved $(basename "$NAME")"
+    NAME=$(basename "$NAME")
+    NAME=${NAME/#input/$STEM}
+    curl -sS --fail-with-body -o "$NAME" "$URL"
+    echo "saved $NAME"
   done
 ```
 

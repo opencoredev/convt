@@ -16,7 +16,6 @@ stateDiagram-v2
   created --> cancelled: POST /cancel
   queued --> cancelled: POST /cancel
   running --> cancelled: POST /cancel
-  created --> failed: expired
 ```
 
 | Status      | Meaning                                                          | Next step                |
@@ -35,7 +34,7 @@ stateDiagram-v2
 - **Upload window.** The `upload_url` from `POST /v1/jobs` works for 15 minutes.
 - **Conversion time.** Each attempt can run for up to 10 minutes. Most image and document conversions finish in a few seconds.
 - **Retries.** If a worker stops responding for 30 seconds, another worker picks the job up again. The status stays `running` and `attempt` goes up by one. After 3 attempts the job fails with `expired_or_exhausted`.
-- **Expiry.** A job, its upload and its outputs are deleted 24 hours after creation. Reads then return `404`. A job that has not succeeded by then fails with `expired`.
+- **Expiry.** A job, its upload and its outputs are deleted 24 hours after creation. From then on every route returns `404 not_found` for it, whatever state it was in. A poll loop that runs past expiry sees a `404`, not a `failed` status.
 
 ## Failure codes
 
@@ -44,8 +43,7 @@ When `status` is `failed`, `error_code` is one of:
 | `error_code`           | Meaning                                                                                                        |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `conversion_failed`    | The converter could not convert this file, or hit the 10-minute limit. The file may be damaged or unsupported. |
-| `expired`              | The job reached its 24-hour expiry before it finished. Usually the file was never uploaded or started.         |
-| `expired_or_exhausted` | Every retry was used up, or the job expired while running.                                                     |
+| `expired_or_exhausted` | All 3 attempts were used up because workers kept stopping mid-conversion.                                      |
 | `worker_shutdown`      | The worker shut down during the conversion. Create a new job.                                                  |
 
 A failed job releases its reservation, so you are not charged. Create a new job to try again.

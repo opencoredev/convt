@@ -57,7 +57,9 @@ curl -X POST {{api}}/v1/jobs/$JOB/start \
 
 convt copies the upload to a sealed location, checks its size again, and queues the job. Overwriting the upload after this point does not change what gets converted.
 
-If no file was uploaded, or its size differs from `input_bytes`, start fails with `400 size_mismatch` and cancels the job. Reserve a new job to try again.
+If the uploaded file's size differs from `input_bytes`, start fails with `400 size_mismatch` and cancels the job. Reserve a new job to try again.
+
+If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` returned a `2xx` status before calling start, and cancel the job if you give up on it.
 
 Start is safe to repeat. If the job already left `created`, the call returns it unchanged.
 

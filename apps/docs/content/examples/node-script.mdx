@@ -93,15 +93,20 @@ export async function convert({ bytes, from, to, timeoutMs = 11 * 60_000, pollMs
   }
 }
 
-/** Converts a file on disk and writes each output next to the current directory. */
-export async function convertFile(path, to) {
+/**
+ * Converts a file on disk and writes each output to the current directory.
+ * Outputs come back as input.webp, input-2.png and so on; they are saved
+ * under the input's own name instead: photo.webp, report-2.png.
+ */
+export async function convertFile(path, to, options = {}) {
   const bytes = await readFile(path);
-  const outputs = await convert({ bytes, from: await formatFor(path), to });
+  const outputs = await convert({ ...options, bytes, from: await formatFor(path), to });
+  const stem = basename(path, extname(path));
   const saved = [];
   for (const output of outputs) {
     const res = await fetch(output.url);
     if (!res.ok) throw new ConvtError("download_failed", await res.text(), res.status);
-    const name = basename(output.name);
+    const name = basename(output.name).replace(/^input/, stem);
     await writeFile(name, Buffer.from(await res.arrayBuffer()));
     saved.push(name);
   }
@@ -141,4 +146,5 @@ await convertFile("clip.mov", "mp4");
 - **Retries.** `429` and `5xx` responses are retried with jittered backoff. Creating a job is retried only on `429`, because repeating it after an unknown failure could reserve two jobs.
 - **Timeout.** The whole conversion gives up after 11 minutes by default.
 - **Cleanup.** Any failure after the job exists cancels it, so you are not left with an open reservation.
-- **Several outputs.** A PDF converted to PNG writes one image per page.
+- **Output names.** The API names outputs `input.<ext>`. `convertFile()` saves them under the input's name, so `report.pdf` to PNG writes `report.png`, `report-2.png` and so on.
+- **Polling rate.** Pass `{ pollMs }` as the third argument to `convertFile()` to poll less often when several jobs run at once.
