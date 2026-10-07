@@ -1,11 +1,10 @@
 import { env, waitUntil } from "cloudflare:workers";
+import { scrub } from "./posthog-scrub";
 
-const scrub = (value: string) => value
-  .replace(/Bearer\s+\S+/gi, "Bearer <redacted>")
-  .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "<email>")
-  .replace(/(?:[A-Za-z]:[\\/]|\/)(?:[^\s/\\]+[\\/])*[^\s/\\]+\.[A-Za-z0-9]{1,8}/g, "<path>");
+export { requestAllowsServerExceptions, scrub } from "./posthog-scrub";
 
-export function captureServerException(error: unknown, context: string): void {
+export function captureServerException(error: unknown, context: string, allowed = true): void {
+  if (!allowed) return;
   const key = (env as unknown as Record<string, unknown>).POSTHOG_KEY;
   if (typeof key !== "string" || !key) return;
   const value = error instanceof Error ? error.message : String(error);

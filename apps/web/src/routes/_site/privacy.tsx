@@ -55,7 +55,7 @@ const sections: LegalSection[] = [
       <>
         <p>
           Conversions run on your computer. The app and the <code>convt</code> command never upload
-          a file, and contain no analytics, crash reporting or advertising code. The trial and your
+          a file, and contain no analytics or advertising code. The trial and your
           license key are stored on your computer and checked offline.
         </p>
         <p>The app connects to the internet only in these cases:</p>

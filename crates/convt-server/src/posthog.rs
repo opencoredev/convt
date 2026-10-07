@@ -21,6 +21,32 @@ fn scrub(input: &str) -> String {
                     .is_some_and(|(_, domain)| domain.contains('.'))
             {
                 word.replacen(trimmed, "<email>", 1)
+            } else if trimmed.to_ascii_lowercase().starts_with("token=")
+                || trimmed.to_ascii_lowercase().starts_with("api_key=")
+                || trimmed.to_ascii_lowercase().starts_with("x-api-key=")
+                || trimmed.to_ascii_lowercase().starts_with("access_token=")
+                || trimmed.to_ascii_lowercase().starts_with("refresh_token=")
+                || trimmed.to_ascii_lowercase().starts_with("license_key=")
+                || trimmed.to_ascii_lowercase().starts_with("secret=")
+            {
+                "<credential>=<redacted>".to_string()
+            } else if trimmed.to_ascii_lowercase().starts_with("cvt_")
+                || trimmed.to_ascii_lowercase().starts_with("convt_")
+                || (trimmed.len() >= 19
+                    && trimmed.matches('-').count() >= 3
+                    && trimmed
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-'))
+            {
+                "<license-key>".to_string()
+            } else if trimmed.starts_with('/')
+                || trimmed.contains("\\")
+                || (trimmed.contains('.')
+                    && trimmed
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-'))
+            {
+                "<path>".to_string()
             } else {
                 word.to_string()
             }
@@ -30,6 +56,9 @@ fn scrub(input: &str) -> String {
 }
 
 pub fn capture(error: &str, context: &str) {
+    if std::env::var("POSTHOG_ERRORS").ok().as_deref() == Some("0") {
+        return;
+    }
     let Ok(key) = std::env::var("POSTHOG_KEY") else {
         return;
     };
@@ -49,9 +78,17 @@ mod tests {
 
     #[test]
     fn scrubs_tokens_and_complete_emails() {
-        let value = scrub("Bearer secret-token failed for user@gmail.com");
-        assert_eq!(value, "Bearer <redacted> failed for <email>");
-        assert!(!value.contains("secret-token"));
-        assert!(!value.contains("gmail.com"));
+        let value = scrub(
+            "/Users/alice/input.pdf Bearer secret-token user@gmail.com license_key=cvt_PROD_12345678 token=api-secret",
+        );
+        assert_eq!(
+            value,
+            "<path> Bearer <redacted> <email> <credential>=<redacted> <credential>=<redacted>"
+        );
+        assert!(
+            !value.contains("alice")
+                && !value.contains("secret-token")
+                && !value.contains("gmail.com")
+        );
     }
 }
