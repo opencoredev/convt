@@ -8,7 +8,7 @@ $VSWhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.e
 $VisualStudio = & $VSWhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -format json | ConvertFrom-Json | Select-Object -First 1
 if (-not $VisualStudio) { throw 'Visual Studio C++ build tools required' }
 $Major = [int]($VisualStudio.installationVersion -split '\.')[0]
-$Generator = switch ($Major) { 16 { 'Visual Studio 16 2019' } 17 { 'Visual Studio 17 2022' } default { throw "Unsupported Visual Studio version $Major" } }
+$Generator = switch ($Major) { 16 { 'Visual Studio 16 2019' } 17 { 'Visual Studio 17 2022' } 18 { 'Visual Studio 18 2026' } default { throw "Unsupported Visual Studio version $Major" } }
 $CMake = Get-Command cmake.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 if (-not $CMake) { $CMake = Join-Path $VisualStudio.installationPath 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe' }
 if (!(Test-Path $CMake)) { throw 'CMake required (Visual Studio C++ CMake tools or PATH)' }
