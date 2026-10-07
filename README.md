@@ -8,17 +8,15 @@
 
 Local file conversion for your own machine. Right-click a file, pick a format, and convt writes the result next to the original. Images, video, audio, PDFs and documents stay on disk: nothing is uploaded.
 
-- 40 formats behind one menu, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
-- Desktop app and `convt` CLI; file-manager menus ship with the desktop builds (Linux first; Finder and Explorer follow)
+- 40 formats, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
+- `convt` CLI today; desktop app coming Linux-first. Finder and Explorer menus are not ready
 - Multi-hop routes of at most three steps when no engine can convert directly
 - Optional document pack for Word, Excel and PowerPoint, installed only when you ask
 - Accounts, checkout and downloads on [convt.app](https://convt.app)
 
 ## Install
 
-Desktop builds (the app, the right-click menu and the CLI) will appear on the [download page](https://convt.app/download). Linux is first; macOS and Windows follow. A 7-day trial starts on the first conversion.
-
-From this repo:
+The CLI works from this repo today. Desktop builds will appear on the [download page](https://convt.app/download) (Linux first). A 7-day trial starts on the first conversion.
 
 ```bash
 bun run setup
@@ -47,7 +45,7 @@ convt registers whatever can run on this machine and picks a route:
 - **image** and **resvg** for photos and SVG (JPEG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO, TGA, PPM, QOI, OpenEXR)
 - **libheif**, or `sips` on macOS, for HEIC
 
-Office files need LibreOffice on `PATH`. Released builds can also run `convt pack install documents`; a checkout needs a system install, or `--source` and `--sha256`. The engines never start that download themselves.
+Office files need LibreOffice on `PATH`. Released builds can also run `convt pack install documents`. Ordinary source builds need a system LibreOffice, or an explicit `--source` and `--sha256`. The engines never start that download themselves.
 
 ## CLI
 
