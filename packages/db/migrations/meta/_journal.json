@@ -43,6 +43,13 @@
       "when": 1791321450359,
       "tag": "0005_billing_auth_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791405637195,
+      "tag": "0006_launch_list",
+      "breakpoints": true
     }
   ]
 }

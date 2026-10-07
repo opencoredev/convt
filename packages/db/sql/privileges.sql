@@ -12,6 +12,9 @@ grant select, insert, update, delete on sessions, accounts, verifications, rate_
 --> statement-breakpoint
 grant select, insert, update on otp_send_limits to convt_web;
 --> statement-breakpoint
+-- since 0006_launch_list: the phone download-link card joins the list; unsubscribing deletes the row.
+grant select, insert, update, delete on launch_list to convt_web;
+--> statement-breakpoint
 -- insert since 0002_device_auth: desktop sign-in (P8) creates device rows.
 grant select, insert, update on devices to convt_web;
 --> statement-breakpoint

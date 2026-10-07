@@ -1,7 +1,7 @@
-// The emailed download link for phone visitors. The address is used to send one
-// email and is otherwise kept only as a SHA-256 hash in the send-limit buckets
-// (otp_send_limits), which convt-billing deletes within 10 minutes of the window
-// ending. It is never logged.
+// The emailed download link for phone visitors. Giving an address also joins the
+// launch mailing list (launch_list), which the card says; every email carries an
+// unsubscribe link that deletes the row. The send limits key on a SHA-256 of the
+// address (otp_send_limits). The address is never logged.
 
 import { downloadLink } from "@convt/mail";
 
@@ -39,14 +39,56 @@ async function sha256Hex(text: string): Promise<string> {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * The address's unsubscribe token: an HMAC of it under the site's auth secret, so it
+ * is the same in every email and any of them unsubscribes. 43 base64url characters;
+ * the database keeps only its SHA-256.
+ */
+export async function unsubscribeToken(secret: string, email: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = new Uint8Array(
+    await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(`launch-list-unsubscribe\n${email}`),
+    ),
+  );
+  return btoa(String.fromCharCode(...mac))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export const hashUnsubscribeToken = sha256Hex;
+
+/** The /unsubscribe server function's validator. */
+export function parseUnsubscribeInput(data: unknown): { token: string } {
+  const token = (data as { token?: unknown } | null)?.token;
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
+    throw new Error("bad request");
+  return { token };
+}
+
+/** The token rides in the fragment, so it never reaches a server log or a Referer. */
+export const unsubscribeUrl = (siteUrl: string, token: string) =>
+  `${siteUrl}/unsubscribe#${new URLSearchParams({ t: token })}`;
+
 export function downloadLinkMessage(
   to: string,
   siteUrl: string,
   offer: LaunchOffer | null,
+  unsubscribeToken: string,
   idempotencyKey: string,
 ): MailMessage {
   const rendered = downloadLink({
     downloadUrl: `${siteUrl}/download`,
+    unsubscribeUrl: unsubscribeUrl(siteUrl, unsubscribeToken),
     offer: offer ?? undefined,
   });
   return { to, ...rendered, idempotencyKey };
@@ -57,13 +99,21 @@ export type MobileLinkDeps = {
   consume: (key: string, windowMs: number) => Promise<number>;
   /** releaseSendBucket: ends a bucket's window, so a failed send does not count as sent. */
   release: (key: string) => Promise<void>;
+  /** joinLaunchList bound to a database. */
+  join: (entry: {
+    email: string;
+    source: CaptureSource;
+    unsubscribeTokenHash: string;
+  }) => Promise<void>;
   send: (message: MailMessage) => Promise<void>;
   siteUrl: string;
+  /** Keys the unsubscribe token (the site's auth secret). */
+  unsubscribeSecret: string;
   now: Date;
 };
 
 export async function requestMobileLink(
-  input: { email: string; ip: string },
+  input: { email: string; source: CaptureSource; ip: string },
   deps: MobileLinkDeps,
 ): Promise<MobileLinkResult> {
   const email = normalizeEmail(input.email);
@@ -85,13 +135,20 @@ export async function requestMobileLink(
   }
   // Stable for the duplicate window, so a provider retry of the same send is dropped too.
   const slot = Math.floor(deps.now.getTime() / limits.duplicateWindowMs);
+  const token = await unsubscribeToken(deps.unsubscribeSecret, email);
   const message = downloadLinkMessage(
     email,
     deps.siteUrl,
     activeOffer(deps.now),
+    token,
     `mobile-link-${hash.slice(0, 32)}-${slot}`,
   );
   try {
+    await deps.join({
+      email,
+      source: input.source,
+      unsubscribeTokenHash: await hashUnsubscribeToken(token),
+    });
     await deps.send(message);
     return { ok: true };
   } catch (e) {

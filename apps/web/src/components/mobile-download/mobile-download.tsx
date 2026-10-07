@@ -13,6 +13,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type MouseEve
 import { cx, focusRing } from "#/components/app/ui";
 import { activeOffer } from "#/lib/launch-offer";
 import { isMobileBrowser, mobileCss, normalizeEmail, type CaptureSource } from "#/lib/mobile";
+import { routes } from "#/lib/site";
 import { sendMobileDownloadLink } from "#/server/mobile-link-fns";
 
 type FormState =
@@ -88,6 +89,7 @@ export function MobileEmailCard({
   const titleId = headingId ?? `${ownId}-title`;
   const inputId = `${ownId}-email`;
   const errorId = `${ownId}-error`;
+  const consentId = `${ownId}-consent`;
   const offer = activeOffer(new Date());
   const error = state.status === "error" ? state.message : null;
 
@@ -144,7 +146,7 @@ export function MobileEmailCard({
               autoFocus={autoFocus}
               placeholder="you@email.com"
               aria-invalid={error ? true : undefined}
-              aria-describedby={error ? errorId : undefined}
+              aria-describedby={error ? `${errorId} ${consentId}` : consentId}
               className="h-11 rounded-lg bg-page px-3 text-base/5 text-ink shadow-input outline-none placeholder:text-ink-3 focus-visible:ring-2 focus-visible:ring-green dark:bg-sunken"
             />
             {error ? (
@@ -163,6 +165,16 @@ export function MobileEmailCard({
             >
               {state.status === "sending" ? "Sending…" : "Send me the link"}
             </button>
+            <p id={consentId} className="text-[13px]/[18px] text-ink-2">
+              You'll also join the convt launch list. Every email has an unsubscribe link that
+              deletes your address.{" "}
+              <a
+                href={routes.privacy}
+                className={cx("rounded-sm underline underline-offset-2 hover:text-ink", focusRing)}
+              >
+                Privacy
+              </a>
+            </p>
           </form>
         )}
       </div>

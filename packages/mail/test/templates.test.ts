@@ -112,6 +112,7 @@ describe("download link", () => {
   test("with the launch offer", () => {
     const m = downloadLink({
       downloadUrl: `${site}/download`,
+      unsubscribeUrl: `${site}/unsubscribe#t=abc`,
       offer: { code: "PRODUCTHUNT", terms: "30% off <Desktop>", endsLabel: "31 October 2026" },
     });
     expect(m.subject).toBe("Your convt download link");
@@ -122,8 +123,13 @@ describe("download link", () => {
   });
 
   test("without an offer, no code", () => {
-    const m = downloadLink({ downloadUrl: `${site}/download` });
+    const m = downloadLink({
+      downloadUrl: `${site}/download`,
+      unsubscribeUrl: `${site}/unsubscribe#t=abc`,
+    });
     expect(m.text).not.toContain("code");
+    expect(m.text).toContain(`Unsubscribe and delete my address: ${site}/unsubscribe#t=abc`);
+    expect(m.html).toContain(`href="${site}/unsubscribe#t=abc"`);
     expect(m.html).toContain(`href="${site}/download"`);
   });
 });

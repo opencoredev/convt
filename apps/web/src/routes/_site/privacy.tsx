@@ -135,9 +135,9 @@ const sections: LegalSection[] = [
               license keys. Card details go to our payment provider and never reach us.
             </>,
             <>
-              <span className={strong}>Download link:</span> if you ask us to email you the download
-              link from your phone, we use your address to send that one email and keep only a
-              one-way hash of it for about an hour to limit repeat requests.
+              <span className={strong}>Launch list:</span> if you ask us to email you the download
+              link from your phone, we send it and keep your address on our launch mailing list
+              until you use the unsubscribe link in any of its emails, which deletes it.
             </>,
           ]}
         />
@@ -207,7 +207,7 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>Resend</span> delivers our emails: sign-in codes, license
-              keys, receipts and account notices. We send no marketing email.
+              keys, receipts and account notices. Marketing email goes only to the launch list.
             </>,
             <>
               <span className={strong}>Cloudflare</span> hosts convt.app and stores cloud conversion

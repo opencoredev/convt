@@ -4,9 +4,11 @@
 
 import { describe, expect, spyOn, test } from "bun:test";
 import { loadCatalog } from "@convt/billing/catalog";
+import { launchListSources } from "@convt/db/schema";
 
 import { activeOffer, launchOffer } from "../../src/lib/launch-offer";
 import {
+  captureSources,
   isMobileDevice,
   isMobileUserAgent,
   mobileCss,
@@ -16,9 +18,12 @@ import {
 } from "../../src/lib/mobile";
 import type { MailMessage } from "../../src/server/mail";
 import {
+  hashUnsubscribeToken,
   mobileLinkLimits,
   parseMobileLinkInput,
+  parseUnsubscribeInput,
   requestMobileLink,
+  unsubscribeToken,
   type MobileLinkDeps,
 } from "../../src/server/mobile-link";
 
@@ -114,6 +119,10 @@ describe("validation", () => {
       expect(normalizeEmail(bad)).toBeNull();
   });
 
+  test("the card's sources are the ones the launch list table accepts", () => {
+    expect([...captureSources]).toEqual([...launchListSources]);
+  });
+
   test("the request needs a string email and a known source", () => {
     expect(parseMobileLinkInput({ email: "a@example.com", source: "landing" })).toEqual({
       email: "a@example.com",
@@ -130,12 +139,22 @@ describe("validation", () => {
 function fakeDeps(options: { now?: Date; failSends?: number } = {}) {
   const buckets = new Map<string, { count: number; expires: number }>();
   const sent: MailMessage[] = [];
+  const joined: Parameters<MobileLinkDeps["join"]>[0][] = [];
   let fails = options.failSends ?? 0;
-  const deps: MobileLinkDeps & { sent: MailMessage[]; buckets: typeof buckets } = {
+  const deps: MobileLinkDeps & {
+    sent: MailMessage[];
+    joined: typeof joined;
+    buckets: typeof buckets;
+  } = {
     now: options.now ?? new Date("2026-10-07T12:00:00Z"),
     siteUrl: "https://convt.app",
+    unsubscribeSecret: "test-secret",
     sent,
+    joined,
     buckets,
+    async join(entry) {
+      joined.push(entry);
+    },
     async consume(key, windowMs) {
       const t = deps.now.getTime();
       const b = buckets.get(key);
@@ -166,7 +185,12 @@ const later = (d: Date, ms: number) => new Date(d.getTime() + ms);
 describe("requestMobileLink", () => {
   test("a valid address gets one email with the download link and the offer", async () => {
     const deps = fakeDeps();
-    expect(await requestMobileLink({ email: " Me@Example.com", ip: "1.1.1.1" }, deps)).toEqual({
+    expect(
+      await requestMobileLink(
+        { email: " Me@Example.com", ip: "1.1.1.1", source: "landing" as const },
+        deps,
+      ),
+    ).toEqual({
       ok: true,
     });
     expect(deps.sent).toHaveLength(1);
@@ -182,36 +206,72 @@ describe("requestMobileLink", () => {
     expect(`${m.subject}${m.text}${m.html}`).not.toContain("—");
   });
 
+  test("a valid address joins the launch list, and its email can unsubscribe it", async () => {
+    const deps = fakeDeps();
+    await requestMobileLink({ email: "Me@Example.com", ip: "1.1.1.1", source: "download" }, deps);
+    const token = await unsubscribeToken("test-secret", "me@example.com");
+    expect(deps.joined).toEqual([
+      {
+        email: "me@example.com",
+        source: "download",
+        unsubscribeTokenHash: await hashUnsubscribeToken(token),
+      },
+    ]);
+    // The token rides in the fragment, never the query string.
+    expect(deps.sent[0].text).toContain(`https://convt.app/unsubscribe#t=${token}`);
+    expect(deps.sent[0].html).toContain(`href="https://convt.app/unsubscribe#t=${token}"`);
+    expect(deps.sent[0].text).toContain("launch list");
+  });
+
+  test("the unsubscribe token is stable per address, so every email's link works", async () => {
+    const a = await unsubscribeToken("s", "me@example.com");
+    expect(await unsubscribeToken("s", "me@example.com")).toBe(a);
+    expect(await unsubscribeToken("s", "you@example.com")).not.toBe(a);
+    expect(await unsubscribeToken("other", "me@example.com")).not.toBe(a);
+    expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(parseUnsubscribeInput({ token: a })).toEqual({ token: a });
+    expect(() => parseUnsubscribeInput({ token: "short" })).toThrow();
+    expect(() => parseUnsubscribeInput({ token: `${a}x` })).toThrow();
+    expect(() => parseUnsubscribeInput(null)).toThrow();
+  });
+
   test("the address is never what the buckets are keyed by", async () => {
     const deps = fakeDeps();
-    await requestMobileLink({ email: "me@example.com", ip: "1.1.1.1" }, deps);
+    await requestMobileLink(
+      { email: "me@example.com", ip: "1.1.1.1", source: "landing" as const },
+      deps,
+    );
     for (const key of deps.buckets.keys()) expect(key).not.toContain("example");
   });
 
   test("an invalid address sends nothing and counts nothing", async () => {
     const deps = fakeDeps();
-    expect(await requestMobileLink({ email: "me@", ip: "1.1.1.1" }, deps)).toEqual({
+    expect(
+      await requestMobileLink({ email: "me@", ip: "1.1.1.1", source: "landing" as const }, deps),
+    ).toEqual({
       ok: false,
       error: "invalid_email",
     });
     expect(deps.sent).toHaveLength(0);
     expect(deps.buckets.size).toBe(0);
+    expect(deps.joined).toHaveLength(0);
   });
 
   test("a double tap sends one email", async () => {
     const deps = fakeDeps();
-    const input = { email: "me@example.com", ip: "1.1.1.1" };
+    const input = { email: "me@example.com", ip: "1.1.1.1", source: "landing" as const };
     const results = await Promise.all([
       requestMobileLink(input, deps),
       requestMobileLink(input, deps),
     ]);
     expect(results).toEqual([{ ok: true }, { ok: true }]);
     expect(deps.sent).toHaveLength(1);
+    expect(deps.joined).toHaveLength(1);
   });
 
   test("past the per-address limit: too many tries and no more email", async () => {
     const deps = fakeDeps();
-    const input = { email: "me@example.com", ip: "1.1.1.1" };
+    const input = { email: "me@example.com", ip: "1.1.1.1", source: "landing" as const };
     for (let i = 0; i < mobileLinkLimits.email.max; i++) {
       expect(await requestMobileLink(input, deps)).toEqual({ ok: true });
       deps.now = later(deps.now, mobileLinkLimits.duplicateWindowMs);
@@ -229,15 +289,30 @@ describe("requestMobileLink", () => {
   test("past the per-IP limit: too many tries, whatever the address", async () => {
     const deps = fakeDeps();
     for (let i = 0; i < mobileLinkLimits.ip.max; i++)
-      expect(await requestMobileLink({ email: `u${i}@example.com`, ip: "2.2.2.2" }, deps)).toEqual({
+      expect(
+        await requestMobileLink(
+          { email: `u${i}@example.com`, ip: "2.2.2.2", source: "landing" as const },
+          deps,
+        ),
+      ).toEqual({
         ok: true,
       });
-    expect(await requestMobileLink({ email: "new@example.com", ip: "2.2.2.2" }, deps)).toEqual({
+    expect(
+      await requestMobileLink(
+        { email: "new@example.com", ip: "2.2.2.2", source: "landing" as const },
+        deps,
+      ),
+    ).toEqual({
       ok: false,
       error: "too_many",
     });
     expect(deps.sent).toHaveLength(mobileLinkLimits.ip.max);
-    expect(await requestMobileLink({ email: "new@example.com", ip: "3.3.3.3" }, deps)).toEqual({
+    expect(
+      await requestMobileLink(
+        { email: "new@example.com", ip: "3.3.3.3", source: "landing" as const },
+        deps,
+      ),
+    ).toEqual({
       ok: true,
     });
   });
@@ -246,7 +321,7 @@ describe("requestMobileLink", () => {
     const deps = fakeDeps({ failSends: 1 });
     const errors = spyOn(console, "error").mockImplementation(() => {});
     try {
-      const input = { email: "me@example.com", ip: "1.1.1.1" };
+      const input = { email: "me@example.com", ip: "1.1.1.1", source: "landing" as const };
       expect(await requestMobileLink(input, deps)).toEqual({ ok: false, error: "send_failed" });
       expect(JSON.stringify(errors.mock.calls)).not.toContain("example.com");
       expect(await requestMobileLink(input, deps)).toEqual({ ok: true });
@@ -258,7 +333,10 @@ describe("requestMobileLink", () => {
 
   test("after the offer ends, the email has no discount", async () => {
     const deps = fakeDeps({ now: launchOffer.endsAt });
-    await requestMobileLink({ email: "me@example.com", ip: "1.1.1.1" }, deps);
+    await requestMobileLink(
+      { email: "me@example.com", ip: "1.1.1.1", source: "landing" as const },
+      deps,
+    );
     expect(deps.sent[0].text).not.toContain(launchOffer.code);
     expect(deps.sent[0].text).toContain("https://convt.app/download");
   });
