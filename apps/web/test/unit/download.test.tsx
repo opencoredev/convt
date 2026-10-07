@@ -26,7 +26,7 @@ test("published Mac artifact is a real download button", () => {
       large
     />,
   );
-  expect(html).toContain("href=\"https://downloads.convt.app/0.1.0/convt-0.1.0-macos-arm64.dmg\"");
+  expect(html).toContain('href="https://downloads.convt.app/0.1.0/convt-0.1.0-macos-arm64.dmg"');
   expect(html).toContain("Download convt-0.1.0-macos-arm64.dmg");
   expect(html).not.toContain("Shipping today");
   expect(html).not.toContain("Coming soon");
