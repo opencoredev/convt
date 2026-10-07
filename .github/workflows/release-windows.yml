@@ -77,8 +77,6 @@ jobs:
         with:
           path: packaging/cache/windows
           key: windows-bundle-${{ hashFiles('packaging/windows/inputs.lock.json') }}
-          restore-keys: |
-            windows-bundle-
       - name: Build the unsigned Windows payload (verification gates)
         shell: pwsh
         env:

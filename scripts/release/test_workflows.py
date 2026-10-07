@@ -38,6 +38,7 @@ class ReleaseWorkflows(unittest.TestCase):
         self.assertNotIn('packaging/out/ci-b', text)
         self.assertIn('cancel-in-progress: true', text)
         self.assertIn('runs-on: ubuntu-24.04', text)
+        self.assertNotIn('linux-bundle-\n', text)
 
     def test_reproducibility_is_dispatch_only(self):
         text = workflow('release-reproducibility.yml')
@@ -50,6 +51,8 @@ class ReleaseWorkflows(unittest.TestCase):
         self.assertIn('runs-on: macos-15', text)
         self.assertIn('runs-on: windows-latest', text)
         self.assertIn('cancel-in-progress: true', text)
+        self.assertIn('rm "$key"', text)
+        self.assertIn('Remove-Item -Recurse -Force target', text)
 
     def test_macos_release_stays_arm64_on_github_hosted(self):
         text = workflow('release-macos.yml')
@@ -75,8 +78,9 @@ class ReleaseWorkflows(unittest.TestCase):
         self.assertIn('uses: ./.github/workflows/release-windows.yml', text)
         self.assertIn('*-release-review', text)
         self.assertEqual(text.count('runs-on: ubuntu-24.04'), 2)
-        self.assertIn('cancel-in-progress: true', text)
+        self.assertIn('cancel-in-progress: false', text)
         self.assertNotIn('tenki-', text)
+        self.assertNotIn('Swatinem/rust-cache@v2', text)
 
 
 if __name__ == '__main__':

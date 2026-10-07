@@ -93,8 +93,6 @@ jobs:
         with:
           path: packaging/.cache
           key: linux-bundle-${{ hashFiles('packaging/linux/*.lock.json', 'packaging/linux/build-image.json', 'packaging/release/*.lock.json', 'packaging/release/appimage-source-build.sh') }}
-          restore-keys: |
-            linux-bundle-
       # Cargo target for the offline builder. Must stay outside the checkout
       # so source.py snapshot / the source tarball cannot pick it up.
       - name: Restore container Cargo target

@@ -14,8 +14,11 @@ on:
 permissions:
   contents: read
 concurrency:
+  # Queue, do not cancel. A Cargo.lock or desktop push with the same version
+  # starts this workflow, then preflight sets publish=false. Cancelling the
+  # in-flight run would drop a real publish with no replacement.
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   preflight:
     runs-on: ubuntu-24.04
@@ -123,9 +126,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.95.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: release-publish
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2

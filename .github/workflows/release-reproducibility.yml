@@ -51,6 +51,7 @@ jobs:
         run: |
           key=$(mktemp)
           chmod 600 "$key"
+          rm "$key"
           bun run update:keygen "$key"
           echo "CONVT_UPDATE_PUBKEY=$(bun run release:manifest public-key "$key")" >> "$GITHUB_ENV"
           echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
@@ -108,6 +109,8 @@ jobs:
         run: test "$(uname -m)" = arm64
       - name: Install pinned source-build tools
         run: brew install meson ninja pkg-config
+      # Shared pinned FFmpeg, same as the Mac release path. This job compares
+      # two app/DMG rebuilds against that fixed input, not two FFmpeg builds.
       - name: Restore the source FFmpeg build
         id: ffmpeg-cache
         uses: actions/cache@v4
@@ -213,6 +216,7 @@ jobs:
         run: |
           function Invoke-UnsignedWindows($Destination) {
             if (Test-Path packaging/out/windows) { Remove-Item -Recurse -Force packaging/out/windows }
+            if (Test-Path target) { Remove-Item -Recurse -Force target }
             ./packaging/windows/build.ps1 -VerificationOnly
             ./packaging/windows/installer.ps1
             New-Item -ItemType Directory -Force $Destination | Out-Null
