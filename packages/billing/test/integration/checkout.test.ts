@@ -127,7 +127,7 @@ describe("checkout result", () => {
 
   test("a rejected sync leaves synced_at null so the success page can retry", async () => {
     const b = await h.buy("desktop", null, { email: "sync-reject@convt.test" });
-    const orderId = b.paid.id as string;
+    const orderId = h.mock.state().orders.find((o) => o.checkout_id === b.providerCheckoutId)!.id;
     h.mock.mutateQuietly("order", orderId, (x) => {
       x.discountId = "disc_unknown";
       x.discountAmount = 870;
