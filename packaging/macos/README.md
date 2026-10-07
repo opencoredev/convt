@@ -50,10 +50,10 @@ Build-time variables the Rust build reads (`CONVT_LICENSE_PUBKEY`, `CONVT_UPDATE
 
 **FFmpeg 9.0.2** is built from source by `packaging/release/macos-source-ffmpeg-build.sh`, from the nine archives pinned in `packaging/release/macos-source-ffmpeg.lock.json`: FFmpeg 9.0.2, x264 0.164.3108+git31e19f9, x265 3.5, libvpx 1.14.0, opus 1.4, LAME 3.99.5, libogg 1.3.5, libvorbis 1.3.7 and zlib 1.3.1. It links only system libraries and frameworks. `bundle.sh` refuses the build unless its receipt (`provenance.json`) names the right architecture, its binaries still match the receipt, its sources and helper hash match the lock, and every software codec check passed. The binary hashes aren't pinned, because a rebuild with another Xcode gives different bytes; the sources and recipe are.
 
-| Architecture | FFmpeg                              | Status                                                                                        |
-| ------------ | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| arm64        | source build                        | Built on macOS 27 / Xcode 27; all receipt checks pass, including VideoToolbox H.264 and HEVC. |
-| x86_64       | Martin Riedl prebuilt (`inputs.sh`) | Not shipped. `bundle.sh` refuses it without `CONVT_MAC_UNSOURCED_FFMPEG=1`.                   |
+| Architecture | FFmpeg                     | Status                                                                                        |
+| ------------ | -------------------------- | --------------------------------------------------------------------------------------------- |
+| arm64        | source build               | Built on macOS 27 / Xcode 27; all receipt checks pass, including VideoToolbox H.264 and HEVC. |
+| x86_64       | source build (`inputs.sh`) | Not shipped. The release builds only the arm64 slice.                                         |
 
 Compared with the Riedl build it replaces, the source build has no dav1d, libaom, rav1e, SVT-AV1 or vvenc (AV1 and VVC), no libass, freetype, fontconfig or harfbuzz (subtitles and text), no libwebp, openjpeg, openh264 or theora libraries, no zimg or libvmaf, and no OpenSSL, srt or bluray. convt encodes none of these. The one convt-visible loss is **AV1 input**: FFmpeg's own AV1 decoder needs a hardware accelerator, so AV1 video in MP4, WebM or MKV doesn't convert, and has no thumbnail. It works on M3 and later only with `-hwaccel videotoolbox`, which the engine doesn't pass. Adding pinned dav1d to the source build fixes it on every Mac.
 

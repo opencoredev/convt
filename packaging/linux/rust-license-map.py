@@ -251,7 +251,11 @@ def collect(package, supplements):
             notices.extend(canonical)
             reproduced = True
     if retained_upstream_notices:
-        notices.extend(retained_upstream_notices)
+        # The incomplete upstream file only counts beside reproduced canonical terms.
+        if reproduced:
+            notices.extend(retained_upstream_notices)
+        else:
+            incomplete_notices = retained_upstream_notices
     complete = bool(notices)
     if complete:
         notices.extend({**header, 'source_path': header['source_path'] + ' (notice comment blocks)'} for header in headers)

@@ -46,8 +46,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   linux:
-    runs-on: tenki-standard-large-8c-16g
-    timeout-minutes: 90
+    # GitHub-hosted: Tenki's cargo config redirects crates.io to a proxy
+    # registry that the offline build container cannot resolve.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     env:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
       CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
@@ -75,6 +77,22 @@ jobs:
           bun-version: 1.4.2
       - name: Populate locked Rust source cache
         run: cargo fetch --locked
+      # Authenticate history with the production key before a dry run swaps in its temporary key.
+      - name: Authenticate retained release history
+        env:
+          HISTORY_URL: ${{ inputs.history_url }}
+          INITIAL_RELEASE: ${{ inputs.initial_release }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ -n "$HISTORY_URL" ]; then
+            case "$HISTORY_URL" in https://*) ;; *) exit 2 ;; esac
+            curl --location --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
+            bun run release:manifest unpack-history "$RUNNER_TEMP/history-signed.json" "$RUNNER_TEMP/history.json"
+            echo "CONVT_RELEASE_HISTORY=$RUNNER_TEMP/history.json" >> "$GITHUB_ENV"
+          elif [ "$DRY_RUN" = false ] && [ "$INITIAL_RELEASE" != true ]; then
+            echo 'Production requires signed history or explicit first-release confirmation' >&2
+            exit 2
+          fi
       - name: Prepare external update seed
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.CONVT_UPDATE_SIGNING_KEY }}
@@ -91,21 +109,6 @@ jobs:
             printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
           fi
           echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
-      - name: Authenticate retained release history
-        env:
-          HISTORY_URL: ${{ inputs.history_url }}
-          INITIAL_RELEASE: ${{ inputs.initial_release }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          if [ -n "$HISTORY_URL" ]; then
-            case "$HISTORY_URL" in https://*) ;; *) exit 2 ;; esac
-            curl --location --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --max-time 30 "$HISTORY_URL" -o "$RUNNER_TEMP/history-signed.json"
-            bun run release:manifest unpack-history "$RUNNER_TEMP/history-signed.json" "$RUNNER_TEMP/history.json"
-            echo "CONVT_RELEASE_HISTORY=$RUNNER_TEMP/history.json" >> "$GITHUB_ENV"
-          elif [ "$DRY_RUN" = false ] && [ "$INITIAL_RELEASE" != true ]; then
-            echo 'Production requires signed history or explicit first-release confirmation' >&2
-            exit 2
-          fi
       - name: Rebuild twice and compare unsigned artifacts
         env:
           DRY_RUN: ${{ inputs.dry_run }}

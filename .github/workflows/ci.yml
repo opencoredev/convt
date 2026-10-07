@@ -17,18 +17,25 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_INCREMENTAL: 0
 
 jobs:
   rust:
-    name: Rust (${{ matrix.os }})
+    name: Rust (${{ matrix.os }}, ${{ matrix.suite }})
     strategy:
       fail-fast: false
       matrix:
+        os: [Linux, macOS, Windows]
+        suite: [core, desktop]
         include:
-          - os: linux
+          - os: Linux
             runner: tenki-standard-large-8c-16g
-          - os: macos
+          - os: macOS
             runner: tenki-macos-26-medium
+          - os: Windows
+            runner: windows-2025
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
@@ -41,16 +48,43 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Install GPUI system libraries
+        with:
+          key: ${{ matrix.suite }}
+      - name: Install media fixture tools (Linux)
         if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          echo "CONVT_MATRIX_AV1_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+      - name: Install media fixture tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+          echo "CONVT_MATRIX_AV1_FFMPEG=$(brew --prefix ffmpeg-full)/bin/ffmpeg" >> "$GITHUB_ENV"
+      - name: Install media fixture tools (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress -y
+      - name: Install GPUI system libraries
+        if: runner.os == 'Linux' && matrix.suite == 'desktop'
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb1-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libasound2-dev libzstd-dev
       - run: cargo fmt --all --check
         if: runner.os == 'Linux'
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: env CARGO_BUILD_JOBS=4 CARGO_INCREMENTAL=0 python3 -c 'import subprocess; subprocess.run(["cargo", "test", "--workspace"], timeout=900, check=True)'
+      - name: Clippy (core)
+        if: matrix.suite == 'core'
+        run: cargo clippy --workspace --exclude convt-app --all-targets -- -D warnings
+      - name: Test (core)
+        if: matrix.suite == 'core'
+        run: cargo test --workspace --exclude convt-app
+      - name: Clippy (desktop)
+        if: matrix.suite == 'desktop'
+        run: cargo clippy -p convt-app --all-targets -- -D warnings
+      - name: Test (desktop)
+        if: matrix.suite == 'desktop'
+        run: cargo test -p convt-app
 
   web:
     name: Web
