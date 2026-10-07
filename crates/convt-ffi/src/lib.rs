@@ -51,7 +51,9 @@ pub fn targets_for(path: String) -> Vec<Target> {
 
 /// Converts `input` to `to`, writing next to the input without replacing
 /// any existing file. Returns every file written (one per page for PDFs).
-/// Fails like the app does when the trial has ended.
+/// Fails like the app does when the license stops conversions: no trial
+/// yet (it starts in the app, after signing in), a trial that ended, or a
+/// clock that needs checking.
 #[uniffi::export]
 pub fn convert(input: String, to: String) -> Result<Vec<String>, ConvtError> {
     use convt_engines::paths;

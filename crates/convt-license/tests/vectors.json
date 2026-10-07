@@ -32,6 +32,17 @@
       },
       "name": "unicode_email",
       "token": "eyJpZCI6ImxpY190ZXN0X3VuaWNvZGUiLCJlbWFpbCI6Inpvw6tAZXhhbXBsZS5jb20iLCJwbGFuIjoiZGVza3RvcCIsImlzc3VlZCI6IjIwMjYtMDEtMzEiLCJ1cGRhdGVzX3VudGlsIjoiMjAyNy0wMS0zMSJ9.9Lg-LVwQQFXuvdY-4kn6DWHLHLX3E5VqRfJxyzAGk-u_EmKrpPk2dKD92mprRONWpT4TfJwGfOTyKZSPLeY9AQ"
+    },
+    {
+      "name": "trial",
+      "license": {
+        "email": "Trial test account",
+        "id": "trl_test_trial",
+        "issued": "2026-10-07",
+        "plan": "trial",
+        "updates_until": "2026-10-13"
+      },
+      "token": "eyJpZCI6InRybF90ZXN0X3RyaWFsIiwiZW1haWwiOiJUcmlhbCB0ZXN0IGFjY291bnQiLCJwbGFuIjoidHJpYWwiLCJpc3N1ZWQiOiIyMDI2LTEwLTA3IiwidXBkYXRlc191bnRpbCI6IjIwMjYtMTAtMTMifQ.YwGxr92hnktE7tf1YHrsRE_E2oFvzAyyb5QYh8dYzjERTCdwcRS7-FF0cmfkj2BYoPnIKbELtoYJLNZggn_TDA"
     }
   ],
   "comment": "Public test vectors. The seed is [7; 32] and must never be used to sign real licenses. Tokens are base64url(JSON payload) + '.' + base64url(Ed25519 signature over the payload string bytes).",

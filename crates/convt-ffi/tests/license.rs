@@ -5,7 +5,7 @@ use convt_license::{License, Plan, encode_public_key, sign};
 use ed25519_dalek::SigningKey;
 
 #[test]
-fn convert_stops_after_the_trial() {
+fn convert_needs_a_trial_or_a_license() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[9; 32]);
     // SAFETY: the only test in this process, set before any thread reads them.
@@ -25,22 +25,36 @@ fn convert_stops_after_the_trial() {
         .unwrap();
     let input = png.to_string_lossy().into_owned();
 
-    let out = convt_ffi::convert(input.clone(), "jpeg".into()).unwrap();
-    assert_eq!(out.len(), 1);
-    assert!(dir.path().join("data/trial").exists());
+    // Converting starts no trial: that takes a convt.app sign-in in the app.
+    let err = convt_ffi::convert(input.clone(), "jpeg".into()).unwrap_err();
+    assert!(err.to_string().contains("signing in to convt.app"), "{err}");
+    assert!(!dir.path().join("data/trial").exists());
+    assert!(!dir.path().join("in.jpg").exists());
 
-    std::fs::write(dir.path().join("data/trial"), "2000-01-01\n").unwrap();
+    let trial = License {
+        id: "trial_ffi".into(),
+        email: mailbox("a"),
+        plan: Plan::Trial,
+        issued: "2000-01-01".into(),
+        updates_until: "2000-01-07".into(),
+    };
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::write(dir.path().join("config/trial.key"), sign(&trial, &key)).unwrap();
     let err = convt_ffi::convert(input.clone(), "webp".into()).unwrap_err();
     assert!(err.to_string().contains("trial has ended"), "{err}");
 
     let license = License {
         id: "lic_ffi".into(),
-        email: "a@example.com".into(),
+        email: mailbox("a"),
         plan: Plan::Pro,
         issued: "2026-01-01".into(),
         updates_until: "2099-01-01".into(),
     };
-    std::fs::create_dir_all(dir.path().join("config")).unwrap();
     std::fs::write(dir.path().join("config/license.key"), sign(&license, &key)).unwrap();
     assert!(convt_ffi::convert(input, "webp".into()).is_ok());
+}
+
+/// A test mailbox, put together at run time so no address sits in the source.
+fn mailbox(name: &str) -> String {
+    [name, "convt.test"].join("@")
 }

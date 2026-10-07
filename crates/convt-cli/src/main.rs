@@ -8,7 +8,7 @@ use convt_core::{
     Background, Cancel, Category, Event, FORMATS, Job, Options, Output, PageRange, Preset,
     VideoCodec, expand_inputs, format_by_extension, format_by_id, run_batch,
 };
-use convt_license::client::{Config, Licensing};
+use convt_license::client::{Blocked, Config, Licensing, State};
 use serde_json::json;
 
 #[derive(Parser)]
@@ -211,10 +211,25 @@ fn licensing() -> Licensing {
     Licensing::new(Config::from_env(paths::config_dir(), paths::data_dir()))
 }
 
+/// What the CLI says about a license state. The trial starts only in the
+/// app, which signs in to convt.app; the CLI can't start one.
+fn describe(state: &State) -> String {
+    match state {
+        State::NoTrial => "No license or trial yet. Start your free trial from the convt app \
+             (it needs a convt.app sign-in), or run `convt license activate <key>`."
+            .into(),
+        State::NeedsCheck => format!(
+            "{} Or run `convt license activate <key>`.",
+            state.blocked_reason().unwrap_or_default()
+        ),
+        _ => state.summary(),
+    }
+}
+
 fn license(action: LicenseCmd) -> anyhow::Result<()> {
     let mut licensing = licensing();
     match action {
-        LicenseCmd::Status => println!("{}", licensing.state().summary()),
+        LicenseCmd::Status => println!("{}", describe(&licensing.state())),
         LicenseCmd::Activate { key } => {
             if !licensing.enforced() {
                 println!("{}", licensing.state().summary());
@@ -384,8 +399,8 @@ fn convert(cli: Cli, registry: &convt_core::Registry) -> anyhow::Result<()> {
     if jobs.is_empty() {
         bail!("nothing in those folders converts to {}", to.id);
     }
-    if let Err(blocked) = licensing().begin_conversion() {
-        bail!("{blocked}");
+    if let Err(Blocked::State(state)) = licensing().begin_conversion() {
+        bail!("{}", describe(&state));
     }
 
     let cancel = Cancel::new();

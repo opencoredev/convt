@@ -523,14 +523,15 @@ fn finder_setup_card(p: &Palette) -> impl IntoElement {
 /// The trial or license card at the bottom of the sidebar. Nothing once
 /// licensed or in a build that doesn't check licenses.
 fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
+    let buy = format!("Buy license · {LICENSE_PRICE}");
     let (title, left, used, color, link) = match state {
         State::Unrestricted | State::Licensed(_) => return None,
-        State::Trial { started: None, .. } => (
-            "Trial",
+        State::NoTrial => (
+            "Free trial",
             format!("{TRIAL_DAYS} days"),
             0.,
             p.green,
-            format!("Buy license · {LICENSE_PRICE}"),
+            "Start 7-day trial".to_string(),
         ),
         State::Trial { days_left, .. } => (
             "Trial",
@@ -538,18 +539,24 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
                 1 => "1 day left".to_string(),
                 n => format!("{n} days left"),
             },
-            (TRIAL_DAYS - days_left) as f32 / TRIAL_DAYS as f32,
+            ((TRIAL_DAYS - days_left) as f32 / TRIAL_DAYS as f32).max(0.),
             p.green,
-            format!("Buy license · {LICENSE_PRICE}"),
+            buy,
         ),
-        State::TrialEnded => (
-            "Trial ended",
-            "0 days left".into(),
+        State::TrialEnded => ("Trial ended", "0 days left".into(), 1., p.error, buy),
+        State::NeedsCheck => (
+            "Trial paused",
+            String::new(),
             1.,
             p.error,
-            format!("Buy license · {LICENSE_PRICE}"),
+            "Check now".to_string(),
         ),
         State::NotCovered(_) => ("Updates ended", String::new(), 1., p.error, "Renew".into()),
+    };
+    let action: fn(&mut App) = match state {
+        State::NoTrial => super::start_trial,
+        State::NeedsCheck => super::check_clock,
+        _ => |cx| cx.open_url(BUY_URL),
     };
     Some(
         div()
@@ -580,7 +587,7 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
             .child(
                 text_button("trial-buy", link, p.green, 12.)
                     .font_weight(FontWeight::MEDIUM)
-                    .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                    .on_click(move |_, _, cx| action(cx)),
             ),
     )
 }

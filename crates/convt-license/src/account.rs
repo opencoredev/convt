@@ -1,5 +1,5 @@
-//! Desktop sign-in and Pro renewal: the only part of this crate that talks to
-//! the network, and only when a client asks it to.
+//! Desktop sign-in, the free trial and key renewal: the only part of this
+//! crate that talks to the network, and only when a client asks it to.
 //!
 //! Sign-in runs in the browser. The app makes a [`Pending`] flow (a random
 //! `state` and a PKCE verifier), opens convt.app/device with the state and the
@@ -11,9 +11,19 @@
 //! match and is dropped. Someone who intercepts the link gets a code that is
 //! useless without the verifier, which never leaves this machine.
 //!
+//! The free trial needs that sign-in. [`Api::start_trial`] sends the device
+//! token and a salted hash of this computer's id ([`crate::client::device_hash_of`]),
+//! and gets back a trial key for the account: the one it already has, or a
+//! new one. convt.app gives one trial per account and per computer; a
+//! computer whose trial another account used gets [`ApiError::DeviceUsed`].
+//!
 //! Renewal ([`Api::current_key`]) sends the device token and gets back the
-//! account's current Pro key, if it has one. The token can be revoked from the
-//! dashboard; the server then answers 401 and the app signs out.
+//! account's current Desktop or Pro key, or a trial key while a Pro
+//! subscription is in its trial, if it has one. The token can be revoked from
+//! the dashboard; the server then answers 401 and the app signs out.
+//!
+//! Every successful answer carries convt.app's clock, which the client uses
+//! to tell a clock that was set back from a real trial day.
 
 use std::time::{Duration, Instant};
 
@@ -178,14 +188,47 @@ pub enum ApiError {
     Server(u16),
     #[error("convt.app sent an answer this version of convt doesn't understand.")]
     BadResponse,
+    /// Another account already used the free trial on this computer.
+    #[error(
+        "This computer already used a free trial with another account. Buy a license, or \
+         contact us at convt.app/contact if that's wrong."
+    )]
+    DeviceUsed,
+}
+
+/// What [`Api::current_key`] got back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyReply {
+    /// The account's best key, or `None` if it has none.
+    pub key: Option<String>,
+    /// convt.app's clock, in Unix seconds.
+    pub server_now: Option<i64>,
+}
+
+/// What [`Api::start_trial`] got back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrialReply {
+    /// The account's trial key, which may have ended already.
+    pub key: String,
+    /// convt.app's clock, in Unix seconds.
+    pub server_now: Option<i64>,
 }
 
 /// The calls the app makes to convt.app. Tests script their own.
 pub trait Api: Send + Sync {
     /// Trades a one-time code and its verifier for a device token.
     fn exchange(&self, code: &str, verifier: &str) -> Result<Session, ApiError>;
-    /// The account's current Pro key, or `None` if it has none.
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError>;
+    /// The account's current Desktop or Pro key, or the trial key of a Pro
+    /// subscription in its trial.
+    fn current_key(&self, token: &str, version: &str) -> Result<KeyReply, ApiError>;
+    /// Starts the account's free trial on this computer, or returns the
+    /// trial it already has. `device_hash` is [`crate::client::device_hash_of`]'s.
+    fn start_trial(
+        &self,
+        token: &str,
+        device_hash: &str,
+        version: &str,
+    ) -> Result<TrialReply, ApiError>;
     /// Revokes this device's token on the server.
     fn sign_out(&self, token: &str) -> Result<(), ApiError>;
 }
@@ -246,6 +289,13 @@ impl Http {
     }
 }
 
+/// convt.app's clock from an answer's `now`, if it sent a readable one.
+fn server_now(json: &serde_json::Value) -> Option<i64> {
+    json.get("now")?
+        .as_str()
+        .and_then(crate::date::parse_rfc3339)
+}
+
 /// Maps the statuses every endpoint shares.
 fn check(status: u16) -> Result<(), ApiError> {
     match status {
@@ -272,16 +322,46 @@ impl Api for Http {
         serde_json::from_value(json).map_err(|_| ApiError::BadResponse)
     }
 
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError> {
+    fn current_key(&self, token: &str, version: &str) -> Result<KeyReply, ApiError> {
         let (status, json) = self.post(
             "/api/device/license",
             Some(token),
-            serde_json::json!({ "version": version }),
+            // Older apps took only Pro keys, so the site sends Desktop and
+            // trial keys only to apps that say they accept them.
+            serde_json::json!({ "version": version, "accepts": ["desktop", "pro", "trial"] }),
         )?;
         check(status)?;
+        let key = match json.get("key") {
+            Some(serde_json::Value::String(key)) => Some(key.clone()),
+            Some(serde_json::Value::Null) => None,
+            _ => return Err(ApiError::BadResponse),
+        };
+        Ok(KeyReply {
+            key,
+            server_now: server_now(&json),
+        })
+    }
+
+    fn start_trial(
+        &self,
+        token: &str,
+        device_hash: &str,
+        version: &str,
+    ) -> Result<TrialReply, ApiError> {
+        let (status, json) = self.post(
+            "/api/device/trial",
+            Some(token),
+            serde_json::json!({ "device_hash": device_hash, "version": version }),
+        )?;
+        if status == 409 && json.get("error").and_then(|e| e.as_str()) == Some("device_used") {
+            return Err(ApiError::DeviceUsed);
+        }
+        check(status)?;
         match json.get("key") {
-            Some(serde_json::Value::String(key)) => Ok(Some(key.clone())),
-            Some(serde_json::Value::Null) => Ok(None),
+            Some(serde_json::Value::String(key)) => Ok(TrialReply {
+                key: key.clone(),
+                server_now: server_now(&json),
+            }),
             _ => Err(ApiError::BadResponse),
         }
     }
@@ -404,15 +484,27 @@ mod tests {
         assert!(request.starts_with("POST /api/device/token "));
         assert!(request.contains(r#""code":"code1""#) && request.contains(r#""verifier":"ver1""#));
 
-        let (base, got) = serve_once(200, r#"{"key":"k.s"}"#);
-        let key = Http::new(&base).current_key("cvd_x", "0.1.0").unwrap();
-        assert_eq!(key.as_deref(), Some("k.s"));
+        let (base, got) = serve_once(200, r#"{"key":"k.s","now":"2026-10-07T00:00:10.500Z"}"#);
+        let reply = Http::new(&base).current_key("cvd_x", "0.1.0").unwrap();
+        assert_eq!(reply.key.as_deref(), Some("k.s"));
+        assert_eq!(
+            reply.server_now,
+            Some(crate::date::to_days("2026-10-07").unwrap() * 86_400 + 10)
+        );
         let request = got.recv().unwrap().to_ascii_lowercase();
         assert!(request.starts_with("post /api/device/license "));
         assert!(request.contains("authorization: bearer cvd_x"));
+        // Without this the site sends only Pro keys, as older apps expect.
+        assert!(request.contains(r#""accepts":["desktop","pro","trial"]"#));
 
         let (base, _) = serve_once(200, r#"{"key":null}"#);
-        assert_eq!(Http::new(&base).current_key("t", "v"), Ok(None));
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(KeyReply {
+                key: None,
+                server_now: None
+            })
+        );
         let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
@@ -432,6 +524,81 @@ mod tests {
         );
         let (base, _) = serve_once(401, "{}");
         assert_eq!(Http::new(&base).sign_out("t"), Ok(()));
+    }
+
+    #[test]
+    fn starting_the_trial_over_http() {
+        let hash = crate::client::device_hash_of("machine:test");
+        let (base, got) = serve_once(
+            200,
+            r#"{"key":"t.s","ends_at":"2026-10-14T00:00:00Z","now":"2026-10-07T08:00:00Z"}"#,
+        );
+        let reply = Http::new(&base)
+            .start_trial("cvd_x", &hash, "0.2.0")
+            .unwrap();
+        assert_eq!(reply.key, "t.s");
+        assert_eq!(
+            reply.server_now,
+            Some(crate::date::to_days("2026-10-07").unwrap() * 86_400 + 8 * 3600)
+        );
+        let request = got.recv().unwrap();
+        assert!(request.starts_with("POST /api/device/trial "));
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("authorization: bearer cvd_x")
+        );
+        assert!(request.contains(&format!(r#""device_hash":"{hash}""#)));
+        assert!(request.contains(r#""version":"0.2.0""#));
+        // Only the hash travels, never the machine id.
+        assert!(!request.contains("machine:test"));
+
+        let (base, _) = serve_once(409, r#"{"error":"device_used"}"#);
+        let err = Http::new(&base).start_trial("t", &hash, "v").unwrap_err();
+        assert_eq!(err, ApiError::DeviceUsed);
+        assert!(err.to_string().contains("convt.app/contact"));
+        let (base, _) = serve_once(409, r#"{"error":"other"}"#);
+        assert_eq!(
+            Http::new(&base).start_trial("t", &hash, "v"),
+            Err(ApiError::Server(409))
+        );
+        let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
+        assert_eq!(
+            Http::new(&base).start_trial("t", &hash, "v"),
+            Err(ApiError::SignedOut)
+        );
+        let (base, _) = serve_once(400, r#"{"error":"invalid_request"}"#);
+        assert_eq!(
+            Http::new(&base).start_trial("t", &hash, "v"),
+            Err(ApiError::Rejected)
+        );
+        let (base, _) = serve_once(429, r#"{"error":"rate_limited"}"#);
+        assert_eq!(
+            Http::new(&base).start_trial("t", &hash, "v"),
+            Err(ApiError::RateLimited)
+        );
+        let (base, _) = serve_once(503, r#"{"error":"unavailable"}"#);
+        assert_eq!(
+            Http::new(&base).start_trial("t", &hash, "v"),
+            Err(ApiError::Server(503))
+        );
+        let (base, _) = serve_once(200, r#"{"key":null}"#);
+        assert_eq!(
+            Http::new(&base).start_trial("t", &hash, "v"),
+            Err(ApiError::BadResponse)
+        );
+        // convt.app's own format: whole seconds in UTC.
+        let (base, _) = serve_once(
+            200,
+            r#"{"key":"t.s","ends_at":"2026-10-14T20:44:44Z","now":"2026-10-07T20:44:44Z"}"#,
+        );
+        assert_eq!(
+            Http::new(&base)
+                .start_trial("t", &hash, "v")
+                .unwrap()
+                .server_now,
+            Some(crate::date::to_days("2026-10-07").unwrap() * 86_400 + 20 * 3600 + 44 * 60 + 44)
+        );
     }
 
     #[test]

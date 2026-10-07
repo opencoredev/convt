@@ -2,12 +2,13 @@
 //!
 //! ```sh
 //! cargo run -p convt-license --example dev-keys -- keygen
-//! cargo run -p convt-license --example dev-keys -- issue you@example.com 2027-10-02 [desktop|pro]
+//! cargo run -p convt-license --example dev-keys -- issue tester 2027-10-02 [desktop|pro|trial]
 //! ```
 //!
 //! `keygen` writes `.convt-dev/license.key` (the signing key, readable only by
 //! you) and `.convt-dev/license.pub` in the workspace root. Builds made after
-//! that accept keys `issue` prints. `.convt-dev` is gitignored: never commit it.
+//! that accept keys `issue` prints. A `trial` key works through the given
+//! day by today's date, like the ones convt.app signs when a trial starts. `.convt-dev` is gitignored: never commit it.
 //! Release keys are made and kept elsewhere.
 
 use std::path::{Path, PathBuf};
@@ -29,7 +30,10 @@ fn main() {
         ["issue", email, until] => issue(email, until, Plan::Desktop),
         ["issue", email, until, "desktop"] => issue(email, until, Plan::Desktop),
         ["issue", email, until, "pro"] => issue(email, until, Plan::Pro),
-        _ => Err("usage: dev-keys keygen | issue <email> <updates-until> [desktop|pro]".into()),
+        ["issue", email, until, "trial"] => issue(email, until, Plan::Trial),
+        _ => {
+            Err("usage: dev-keys keygen | issue <email> <updates-until> [desktop|pro|trial]".into())
+        }
     };
     if let Err(e) = result {
         eprintln!("dev-keys: {e}");

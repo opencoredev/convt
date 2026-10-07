@@ -792,12 +792,12 @@ pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     (
         "network-refresh",
         "License refresh: only while you're signed in to convt.app, once a day at launch, \
-         to fetch your current Pro key. See License.",
+         to fetch your current license key. See License.",
     ),
     (
         "network-other",
-        "Anything else, such as downloading document support, waits for your click. \
-         Your files never leave this computer.",
+        "Anything else, such as starting the free trial or downloading document support, \
+         waits for your click. Your files never leave this computer.",
     ),
 ];
 

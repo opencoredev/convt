@@ -14,7 +14,9 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// The build only needs the day conversions, not the time parsing.
 #[path = "src/date.rs"]
+#[allow(dead_code)]
 mod date;
 
 fn main() {

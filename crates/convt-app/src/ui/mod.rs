@@ -17,7 +17,7 @@ mod update;
 use std::path::{Path, PathBuf};
 
 use convt_core::Preset;
-use convt_license::client::{BUY_URL, DOWNLOAD_URL, State};
+use convt_license::client::{BUY_URL, DOWNLOAD_URL, State, TRIAL_DAYS};
 use gpui_kit::*;
 
 pub use first_run::FirstRunView;
@@ -39,6 +39,10 @@ pub fn assets() -> gpui_kit::assets::Assets {
 
 /// The license price quoted in the trial card and the first-run window.
 pub const LICENSE_PRICE: &str = "$29";
+/// The soft block when another account used this computer's trial. The
+/// Contact us button next to it opens the contact page.
+pub const DEVICE_USED: &str = "This computer already used a free trial with another account. \
+     Buy a license, or contact us if that's wrong.";
 
 /// An open window of one kind, if any.
 struct Open<V: 'static>(AnyWindowHandle, WeakEntity<V>);
@@ -183,6 +187,27 @@ pub fn show_license(key: Option<String>, cx: &mut App) {
     }
 }
 
+/// Starts the free trial from a window that isn't first run: the License
+/// tab opens to follow the sign-in and the trial.
+pub(crate) fn start_trial(cx: &mut App) {
+    show_license(None, cx);
+    model::shared(cx).update(cx, |s, cx| s.start_trial(cx));
+}
+
+/// Asks convt.app for the time when the clock went back: a refresh while
+/// signed in, else a sign-in, which refreshes when it finishes. The License
+/// tab opens to follow it.
+pub(crate) fn check_clock(cx: &mut App) {
+    show_license(None, cx);
+    model::shared(cx).update(cx, |s, cx| {
+        if s.account.session.is_some() {
+            s.refresh_license(cx)
+        } else {
+            s.start_sign_in(cx)
+        }
+    });
+}
+
 pub fn open_quick(request: Request, cx: &mut App) {
     let app = model::shared(cx);
     // Status is read offline; it may have changed through the CLI.
@@ -293,7 +318,14 @@ fn error_text(message: impl Into<SharedString>, p: &Palette) -> impl IntoElement
 /// Why conversions stopped, with what the user can do about it. Nothing
 /// while conversions are allowed.
 fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
-    let reason = SharedString::from(state.blocked_reason()?);
+    let reason = SharedString::from(match state {
+        // Inside the app, "from the convt app" says nothing.
+        State::NoTrial => format!(
+            "Start your free {TRIAL_DAYS}-day trial to convert: sign in to convt.app and it \
+             starts on this computer. Or buy a license to keep converting."
+        ),
+        _ => state.blocked_reason()?,
+    });
     let buy = if matches!(state, State::NotCovered(_)) {
         "Renew"
     } else {
@@ -303,6 +335,19 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
         theme::text_button("download", "Download a covered build", p.green, 12.)
             .on_click(|_, _, cx| cx.open_url(DOWNLOAD_URL))
     });
+    let next = match state {
+        State::NoTrial => Some(
+            theme::text_button("start-trial", "Start 7-day trial", p.green, 12.)
+                .font_weight(FontWeight::MEDIUM)
+                .on_click(|_, _, cx| start_trial(cx)),
+        ),
+        State::NeedsCheck => Some(
+            theme::text_button("check-clock", "Check now", p.green, 12.)
+                .font_weight(FontWeight::MEDIUM)
+                .on_click(|_, _, cx| check_clock(cx)),
+        ),
+        _ => None,
+    };
     Some(
         div()
             .flex()
@@ -319,6 +364,7 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
                 div()
                     .flex()
                     .gap(px(14.))
+                    .children(next)
                     .children(download)
                     .child(
                         theme::text_button("buy", buy, p.green, 12.)
