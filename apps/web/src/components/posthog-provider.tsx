@@ -13,6 +13,7 @@ function initPostHog(config: { key: string; host: string }) {
     person_profiles: "identified_only",
     capture_pageview: false,
     capture_pageleave: true,
+    capture_exceptions: true,
   });
   initialized = true;
 }

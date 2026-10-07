@@ -13,6 +13,7 @@ import { LazyClient } from "./lazy-client";
 import type { RequestScope } from "./auth";
 import { readEnv, type AppEnv } from "./env";
 import { isSameOriginRequest } from "./origin";
+import { captureServerException } from "./posthog-error";
 
 export type RequestContext = { scope: RequestScope; appEnv: AppEnv };
 
@@ -58,6 +59,7 @@ export const requestMiddleware = createMiddleware({ type: "request" }).server(
       else await close();
       return result;
     } catch (e) {
+      captureServerException(e, `${request.method} ${url.pathname}`);
       waitUntil(close());
       throw e;
     }

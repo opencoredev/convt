@@ -8,6 +8,7 @@ pub mod ids;
 pub mod jobs;
 pub mod meter;
 pub mod migrations;
+pub mod posthog;
 pub mod routes;
 pub mod storage;
 pub mod tokens;

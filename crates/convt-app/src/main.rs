@@ -3,6 +3,7 @@
 
 mod account;
 mod clock;
+mod crash_report;
 mod finder;
 mod history;
 mod instance;
@@ -31,6 +32,7 @@ use crate::model::{AppState, Paths, Shared};
 use crate::request::{Command, Request, USAGE};
 
 fn main() -> ExitCode {
+    crash_report::install();
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
