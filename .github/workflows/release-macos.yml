@@ -78,6 +78,21 @@ jobs:
           CACHE_HIT: ${{ steps.ffmpeg-cache.outputs.cache-hit }}
         run: |
           python3 packaging/release/pdfium-source-verify.py --fetch packaging/release/macos-source-ffmpeg.lock.json
+          # bundle.sh installs the PDFium compiler-runtime notices from these pinned sources.
+          python3 - <<'PY'
+          import importlib.util, json
+          spec = importlib.util.spec_from_file_location('verify', 'packaging/release/pdfium-source-verify.py')
+          verify = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(verify)
+          lock = json.load(open('packaging/release/pdfium-source.lock.json'))
+          wanted = {notice['source_cache_filename'] for notice in lock['supplemental_source_notices']}
+          for item in lock['sources']:
+              if item['cache_filename'] in wanted:
+                  path = verify.cache_path(item)
+                  if not path.exists():
+                      verify.fetch(item, path)
+                  verify.verify(item, path)
+          PY
           if [ "$CACHE_HIT" != true ]; then
             bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64
           fi
