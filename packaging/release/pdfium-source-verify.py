@@ -45,14 +45,19 @@ def cache_path(item):
     return path
 
 
-def canonicalize(source, output, *, sort_members=False):
+def canonicalize(source, output, *, sort_members=False, drop_members=()):
     # Codeload/Gitiles can reshuffle member order between regenerations. Sorting
     # makes the locked digest stable when sort_members is requested.
+    # drop_members names export-subst files (paths below the archive root):
+    # the server writes `git describe` output into them, which differs between
+    # regenerations, and they are archive metadata rather than source.
+    def dropped(member):
+        return member.name.split('/', 1)[-1] in drop_members
     if sort_members:
         with tempfile.TemporaryDirectory(prefix='canon-sort-', dir=CACHE) as temporary:
             root = Path(temporary)
             with tarfile.open(source, 'r:gz') as archive:
-                members = archive.getmembers()
+                members = [member for member in archive.getmembers() if not dropped(member)]
                 for member in members:
                     if not member.isfile():
                         continue
@@ -81,6 +86,8 @@ def canonicalize(source, output, *, sort_members=False):
             gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0, compresslevel=9) as stream, \
             tarfile.open(fileobj=stream, mode='w|', format=tarfile.PAX_FORMAT) as result:
         for member in archive:
+            if dropped(member):
+                continue
             member.uid = member.gid = 0
             member.uname = member.gname = ''
             member.mtime = 0
@@ -125,6 +132,7 @@ def fetch(item, path):
                 downloaded,
                 canonical,
                 sort_members=bool(retrieval.get('sort_members')),
+                drop_members=tuple(retrieval.get('drop_members', ())),
             )
             downloaded = canonical
         elif retrieval.get('type') == 'canonical-github-release':
