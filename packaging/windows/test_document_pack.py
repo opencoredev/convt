@@ -38,6 +38,23 @@ class DocumentPackNamingTest(unittest.TestCase):
             os.environ, {"CONVT_DOCUMENT_PACK_URL": "https://example.test/pack.tar.gz"}, clear=True
         ):
             self.assertEqual(public_url("0.2.0"), "https://example.test/pack.tar.gz")
+        with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "not-a-repo"}, clear=True):
+            with self.assertRaises(ValueError):
+                public_url("0.2.0")
+
+    def test_publish_receipt_url_is_the_github_release_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            archive = root / "documents.tar.gz"
+            archive.write_bytes(b"libreoffice-pack")
+            with mock.patch.dict(os.environ, {}, clear=True):
+                receipt = publish(archive, "0.2.0", root)
+            self.assertEqual(
+                receipt["url"],
+                "https://github.com/opencoredev/convt/releases/download/v0.2.0/"
+                "convt-0.2.0-windows-x86_64-documents.tar.gz",
+            )
+            self.assertRegex(receipt["sha256"], r"^[a-f0-9]{64}$")
 
     def test_publish_writes_checksum_and_renames_the_archive(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

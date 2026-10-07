@@ -78,6 +78,36 @@ class AssembleWindowsDocumentsTest(unittest.TestCase):
                 (out / "convt-0.2.0-windows-x86_64-documents.tar.gz.sha256").is_file()
             )
 
+    def test_windows_requires_the_checksum_as_well_as_the_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            downloads = Path(raw) / "downloaded"
+            linux_tree(downloads, "0.2.0")
+            windows = downloads / "windows-release-review"
+            write(windows / "convt-0.2.0-windows-x86_64.msi")
+            write(windows / "convt-0.2.0-windows-x86_64-documents.tar.gz", b"pack")
+            out = Path(raw) / "release"
+            missing = subprocess.run(
+                [sys.executable, str(SCRIPT), str(downloads), str(out), "0.2.0", "--include-windows"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("sha256", missing.stderr + missing.stdout)
+
+    def test_linux_only_assemble_does_not_require_the_windows_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            downloads = Path(raw) / "downloaded"
+            linux_tree(downloads, "0.2.0")
+            out = Path(raw) / "release"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(downloads), str(out), "0.2.0"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertIn("Assembled", result.stdout)
+            self.assertFalse((out / "convt-0.2.0-windows-x86_64-documents.tar.gz").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

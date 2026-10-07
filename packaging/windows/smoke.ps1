@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force $Extract | Out-Null
 & $LessMsi.FullName x $Msi.FullName "$Extract\\"
 if ($LASTEXITCODE -ne 0) { throw 'lessmsi extraction failed' }
 $Forbidden = Get-ChildItem $Extract -Recurse -File | Where-Object {
-    $_.Name -eq 'documents.tar.gz' -or $_.Extension -in '.pdb','.lib','.h','.hpp' -or $_.FullName -match '[\\/]native-source[\\/]'
+    $_.Name -eq 'documents.tar.gz' -or $_.Name -like '*-documents.tar.gz' -or $_.Extension -in '.pdb','.lib','.h','.hpp' -or $_.FullName -match '[\\/]native-source[\\/]'
 }
 if ($Forbidden) {
     throw ("Extracted MSI still contains non-runtime files:`n{0}" -f (($Forbidden | ForEach-Object { $_.FullName.Substring($Extract.Length + 1) }) -join "`n"))
@@ -54,6 +54,13 @@ if (-not $Pack -or -not $Checksum) { throw 'Windows document pack release assets
 $PackHash = (Get-FileHash $Pack.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 $Recorded = (($Checksum | Get-Content -TotalCount 1) -split '\s+')[0].ToLowerInvariant()
 if ($PackHash -ne $Recorded) { throw "Document pack checksum mismatch: $PackHash vs $Recorded" }
+$Receipt = Get-Content "$Bin/build-receipt.json" -Raw | ConvertFrom-Json
+if ($Receipt.document_pack_sha256 -ne $PackHash) {
+    throw "Compiled document pack digest $($Receipt.document_pack_sha256) does not match $($Pack.Name)"
+}
+if ($Receipt.document_pack_url -notmatch '^https://github.com/.+/releases/download/v[^/]+/convt-[^/]+-windows-x86_64-documents\.tar\.gz$') {
+    throw "Compiled document pack URL is not the GitHub release asset: $($Receipt.document_pack_url)"
+}
 $Status = & "$Bin/convt.exe" pack status documents
 if ($LASTEXITCODE -ne 0) { throw 'convt pack status failed' }
 if ($Status -notmatch 'pack install documents') {

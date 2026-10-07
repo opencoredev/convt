@@ -63,6 +63,24 @@ class StagePayloadTest(unittest.TestCase):
             self.assertIn("documents.tar.gz", str(raised.exception))
             self.assertFalse(dest.exists())
 
+    def test_required_runtime_files_must_live_at_the_payload_root(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / "payload"
+            runtime_payload(source)
+            (source / "convt.exe").unlink()
+            write(source / "licenses" / "convt.exe")
+            errors = "\n".join(validate(source))
+            self.assertIn("missing required runtime file: convt.exe", errors)
+
+    def test_versioned_document_pack_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / "payload"
+            runtime_payload(source)
+            write(source / "convt-0.2.0-windows-x86_64-documents.tar.gz", 64)
+            errors = "\n".join(validate(source))
+            self.assertIn("convt-0.2.0-windows-x86_64-documents.tar.gz", errors)
+            self.assertIn("document pack", errors)
+
     def test_missing_codec_dll_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             source = Path(raw) / "payload"

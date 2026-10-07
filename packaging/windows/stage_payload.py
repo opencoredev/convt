@@ -45,10 +45,15 @@ def rel(path: Path, root: Path) -> Path:
     return path.relative_to(root)
 
 
+def is_document_pack_name(name: str) -> bool:
+    lower = name.lower()
+    return lower in FORBIDDEN_NAMES or lower.endswith("-documents.tar.gz")
+
+
 def forbidden_reason(path: Path, root: Path) -> str | None:
     relative = rel(path, root)
     name = path.name
-    if name.lower() in FORBIDDEN_NAMES:
+    if is_document_pack_name(name):
         return f"{relative}: optional document pack does not belong in the MSI"
     if path.suffix.lower() in FORBIDDEN_SUFFIXES:
         return f"{relative}: {path.suffix} is a build artifact, not a runtime file"
@@ -82,7 +87,7 @@ def family_present(names: set[str], options: tuple[str, ...]) -> bool:
 def validate(root: Path) -> list[str]:
     files = payload_files(root)
     errors = [reason for path in files if (reason := forbidden_reason(path, root))]
-    names = {path.name for path in files}
+    names = {path.name for path in files if path.parent == root}
     for required in REQUIRED:
         if required not in names:
             errors.append(f"missing required runtime file: {required}")
