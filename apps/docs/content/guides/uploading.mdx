@@ -1,0 +1,68 @@
+---
+title: Uploading files
+description: Reserve a job with the exact file size, PUT the bytes to the signed URL, and start the job.
+---
+
+convt does not take files in API request bodies. You upload straight to storage with a signed URL, which is how uploads reach 2 GB without passing through the API.
+
+## 1. Reserve the job
+
+Send the formats and the file's size in bytes:
+
+```bash
+curl {{api}}/v1/jobs \
+  -H "Authorization: Bearer $CONVT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input_format":"png","target_format":"webp","input_bytes":48213}'
+```
+
+```json
+{
+  "job": { "id": "job_01k6z7v4q8m3x2a9b5c0d1e2f3", "status": "created", "...": "..." },
+  "upload_url": "https://…",
+  "upload_expires_in": 900
+}
+```
+
+- `input_format` and `target_format` are format ids such as `png`, `mp4` or `docx`. See [Formats](/reference/formats).
+- `input_bytes` must be the exact size of the file, from 1 byte to 2,000,000,000 bytes.
+- The body must be JSON with `Content-Type: application/json`, and it may not have other fields.
+
+## 2. Upload the bytes
+
+Send the raw file with `PUT` to `upload_url` within 15 minutes. Do not add an `Authorization` header, and do not wrap the file in multipart form data.
+
+<CodeGroup>
+
+```bash cURL
+curl -X PUT -T photo.png "$UPLOAD_URL"
+```
+
+```js Node
+const file = await readFile("photo.png");
+const res = await fetch(uploadUrl, { method: "PUT", body: file });
+if (!res.ok) throw new Error(`upload failed with ${res.status}`);
+```
+
+</CodeGroup>
+
+The signature binds `Content-Length` to `input_bytes`. Storage rejects an upload of any other size.
+
+## 3. Start the job
+
+```bash
+curl -X POST {{api}}/v1/jobs/$JOB/start \
+  -H "Authorization: Bearer $CONVT_API_KEY"
+```
+
+convt copies the upload to a sealed location, checks its size again, and queues the job. Overwriting the upload after this point does not change what gets converted.
+
+If the uploaded file's size differs from `input_bytes`, start fails with `400 size_mismatch` and cancels the job. Reserve a new job to try again.
+
+If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` returned a `2xx` status before calling start, and cancel the job if you give up on it.
+
+Start is safe to repeat. If the job already left `created`, the call returns it unchanged.
+
+## Storage limits
+
+Uploads count toward a per-account limit of 100 jobs and 50 GB of declared input until they expire 24 hours after creation. Cancelling a job does not free its space sooner. When you hit the limit, new jobs fail with `403 storage_limit_reached`. See [Limits](/reference/limits).

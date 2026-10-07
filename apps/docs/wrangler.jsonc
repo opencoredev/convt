@@ -1,0 +1,20 @@
+{
+  "$schema": "../web/node_modules/wrangler/config-schema.json",
+  // Static Blume build of convt.app/docs. No Worker code: Cloudflare serves the files.
+  // scripts/deploy.sh builds with base /docs and moves the output under .deploy/docs/,
+  // so asset paths match request paths. These routes win over convt-web's custom
+  // domain for /docs, the same way convt-billing's /webhooks/* route does.
+  "name": "convt-docs",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": ".deploy",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  "routes": [
+    { "pattern": "convt.app/docs", "zone_name": "convt.app" },
+    { "pattern": "convt.app/docs/*", "zone_name": "convt.app" },
+  ],
+  "workers_dev": true,
+  "preview_urls": true,
+}

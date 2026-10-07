@@ -1,0 +1,61 @@
+---
+title: Shell script
+description: Convert a file from the command line with curl and jq, with cleanup on failure.
+---
+
+`convt-api.sh` takes a file and a target format and saves every output in the current directory. It needs Bash, `curl` 7.76 or newer and `jq`.
+
+```bash convt-api.sh lineNumbers expandable
+#!/usr/bin/env bash
+# usage: convt-api.sh <file> <input-format> <target-format>
+set -euo pipefail
+
+API=${CONVT_API:-{{api}}}
+FILE=$1 FROM=$2 TO=$3
+AUTH="Authorization: Bearer ${CONVT_API_KEY:?set CONVT_API_KEY}"
+BYTES=$(wc -c < "$FILE" | tr -d ' ')
+
+api() { curl -sS --fail-with-body -H "$AUTH" "$@"; }
+
+RESERVED=$(api "$API/v1/jobs" -H "Content-Type: application/json" \
+  -d "$(jq -n --arg from "$FROM" --arg to "$TO" --argjson bytes "$BYTES" \
+    '{input_format: $from, target_format: $to, input_bytes: $bytes}')")
+JOB=$(jq -r .job.id <<< "$RESERVED")
+
+# Release the reservation if anything below fails.
+trap 'api -X POST "$API/v1/jobs/$JOB/cancel" > /dev/null || true' ERR
+
+curl -sS --fail-with-body -X PUT -T "$FILE" "$(jq -r .upload_url <<< "$RESERVED")"
+api -X POST "$API/v1/jobs/$JOB/start" > /dev/null
+
+for _ in $(seq 660); do
+  JOB_JSON=$(api "$API/v1/jobs/$JOB")
+  STATUS=$(jq -r .status <<< "$JOB_JSON")
+  case $STATUS in succeeded|failed|cancelled) break ;; esac
+  sleep 1
+done
+
+if [ "$STATUS" != succeeded ]; then
+  echo "job $JOB $STATUS: $(jq -r '.error_code // "timed out"' <<< "$JOB_JSON")" >&2
+  false
+fi
+
+# Outputs are named input.<ext>; save them under the input's own name.
+STEM=$(basename "$FILE")
+[[ $STEM == *.* ]] && STEM=${STEM%.*}
+api "$API/v1/jobs/$JOB/download" | jq -r '.outputs[] | "\(.name)\t\(.url)"' |
+  while IFS=$'\t' read -r NAME URL; do
+    NAME=$(basename "$NAME")
+    NAME=${NAME/#input/$STEM}
+    curl -sS --fail-with-body -o "$NAME" "$URL"
+    echo "saved $NAME"
+  done
+```
+
+```console
+$ chmod +x convt-api.sh
+$ ./convt-api.sh slides.pptx pptx pdf
+saved slides.pdf
+```
+
+The input format is an argument because shell scripts have no clean way to map extensions. Find ids on the [Formats](/reference/formats) page or with `curl {{api}}/v1/formats`.

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+  <defs>
+    <clipPath id="convt-source"><rect x="2" y="2" width="19" height="19" rx="5"/></clipPath>
+    <linearGradient id="convt-green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2fc27a"/><stop offset="1" stop-color="#17834d"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="19" height="19" rx="5" fill="currentColor"/>
+  <rect x="11" y="11" width="19" height="19" rx="5" fill="url(#convt-green)"/>
+  <rect x="11" y="11" width="19" height="19" rx="5" fill="#0b5c34" clip-path="url(#convt-source)" opacity="0.9"/>
+</svg>

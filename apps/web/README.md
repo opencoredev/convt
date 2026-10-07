@@ -12,13 +12,11 @@ bun run deploy   # wrangler deploy (needs Cloudflare auth)
 
 The public pages read files in `content/` and `src/generated/` at build time. `bun run build` runs `scripts/generate-content.ts` first.
 
-| File                               | Page         | Written by                                                                                                                                                          |
-| ---------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content/release-manifest.json`    | `/download`  | The release pipeline. Copy the unsigned `release-manifest.json` from `scripts/release/manifest.ts generate`; its shape is `packaging/release/manifest.schema.json`. |
-| `content/formats.json`             | `/formats`   | `scripts/generate-content.ts`, from `convt formats --json`, `convt engines` and `convt targets`.                                                                    |
-| `content/changelog.md`             | `/changelog` | By hand. Each `## ` heading is a release.                                                                                                                           |
-| `src/generated/openapi.json`       | `/docs/api`  | The API work (P9), generated from convt-server.                                                                                                                     |
-| `content/openapi.placeholder.json` | `/docs/api`  | Used only while `src/generated/openapi.json` is missing; the page then says the API is a preview.                                                                   |
+| File                            | Page         | Written by                                                                                                                                                          |
+| ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content/release-manifest.json` | `/download`  | The release pipeline. Copy the unsigned `release-manifest.json` from `scripts/release/manifest.ts generate`; its shape is `packaging/release/manifest.schema.json`. |
+| `content/formats.json`          | `/formats`   | `scripts/generate-content.ts`, from `convt formats --json`, `convt engines` and `convt targets`.                                                                    |
+| `content/changelog.md`          | `/changelog` | By hand. Each `## ` heading is a release.                                                                                                                           |
 
 The release manifest is optional. Without it, or while its `distribution_ready` is false, download buttons show "Shipping today" and nothing is linked. With it, the page lists the newest build's artifacts by platform and kind, and keeps the expected slots (macOS `dmg`, Windows `msi`, Linux `AppImage`, `deb`, `rpm`, `tar.gz`) that the build lacks as "Shipping today".
 
@@ -36,4 +34,4 @@ The landing page is `src/routes/index.tsx` (dark only). The other public pages l
 - `content/release-manifest.json`: optional. Copy the unsigned `release-manifest.json` that `scripts/release/manifest.ts generate` writes (schema in `packaging/release/manifest.schema.json`). Without the file, or while `distribution_ready` is false, download buttons show "Shipping today". The download page lists the newest build.
 - `content/changelog.md`: the changelog page. Each `## ` heading is a release.
 
-The API reference at `/docs/api` renders `src/generated/openapi.json`, which the API work generates from convt-server. When that file is missing it falls back to `content/openapi.placeholder.json` and shows a preview notice.
+Everything under `/docs`, including the API reference at `/docs/api`, is the Blume site in `apps/docs`, deployed as its own Worker. This app has no `/docs` routes.

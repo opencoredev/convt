@@ -1,0 +1,23 @@
+---
+title: Base URL
+description: Which host to send API requests to while api.convt.app is not live.
+---
+
+| Host            | Status                                      |
+| --------------- | ------------------------------------------- |
+| `{{api}}`       | **Live.** Use this now.                     |
+| `{{final-api}}` | Planned. Its DNS record does not exist yet. |
+
+Every example on this site uses the live host. When `api.convt.app` starts resolving, this page and the examples will switch to it, and the Railway host will keep working during the move. Paths, keys, request bodies and responses are the same on both.
+
+Keep the host in one setting so the change is a one-line edit:
+
+```bash
+export CONVT_API={{api}}
+```
+
+All routes are versioned under `/v1`. `GET /health` returns `ok` and needs no key, which makes it a cheap connectivity check:
+
+```bash
+curl {{api}}/health
+```

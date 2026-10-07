@@ -33,7 +33,6 @@ import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
 import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/check-email'
 import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
 import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/verify-email'
-import { Route as SiteDocsApiRouteImport } from './routes/_site/docs/api'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
 import { Route as ApiDeviceSignOutRouteImport } from './routes/api/device/sign-out'
@@ -161,11 +160,6 @@ const AppSignInVerifyEmailRoute = AppSignInVerifyEmailRouteImport.update({
   path: '/sign-in/verify-email',
   getParentRoute: () => AppRoute,
 } as any)
-const SiteDocsApiRoute = SiteDocsApiRouteImport.update({
-  id: '/docs/api',
-  path: '/docs/api',
-  getParentRoute: () => SiteRoute,
-} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -236,7 +230,6 @@ export interface FileRoutesByFullPath {
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
-  '/docs/api': typeof SiteDocsApiRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
@@ -269,7 +262,6 @@ export interface FileRoutesByTo {
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
-  '/docs/api': typeof SiteDocsApiRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
@@ -306,7 +298,6 @@ export interface FileRoutesById {
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/_app/sign-in/verify': typeof AppSignInVerifyRoute
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
-  '/_site/docs/api': typeof SiteDocsApiRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
@@ -341,7 +332,6 @@ export interface FileRouteTypes {
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
-    | '/docs/api'
     | '/api/auth/$'
     | '/api/device/license'
     | '/api/device/sign-out'
@@ -374,7 +364,6 @@ export interface FileRouteTypes {
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
-    | '/docs/api'
     | '/api/auth/$'
     | '/api/device/license'
     | '/api/device/sign-out'
@@ -410,7 +399,6 @@ export interface FileRouteTypes {
     | '/_app/sign-in/check-email'
     | '/_app/sign-in/verify'
     | '/_app/sign-in/verify-email'
-    | '/_site/docs/api'
     | '/api/auth/$'
     | '/api/device/license'
     | '/api/device/sign-out'
@@ -610,13 +598,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSignInVerifyEmailRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_site/docs/api': {
-      id: '/_site/docs/api'
-      path: '/docs/api'
-      fullPath: '/docs/api'
-      preLoaderRoute: typeof SiteDocsApiRouteImport
-      parentRoute: typeof SiteRoute
-    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -734,7 +715,6 @@ interface SiteRouteChildren {
   SiteFormatsRoute: typeof SiteFormatsRoute
   SitePrivacyRoute: typeof SitePrivacyRoute
   SiteTermsRoute: typeof SiteTermsRoute
-  SiteDocsApiRoute: typeof SiteDocsApiRoute
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
@@ -744,7 +724,6 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteFormatsRoute: SiteFormatsRoute,
   SitePrivacyRoute: SitePrivacyRoute,
   SiteTermsRoute: SiteTermsRoute,
-  SiteDocsApiRoute: SiteDocsApiRoute,
 }
 
 const SiteRouteWithChildren = SiteRoute._addFileChildren(SiteRouteChildren)
@@ -768,13 +747,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

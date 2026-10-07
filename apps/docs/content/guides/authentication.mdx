@@ -1,0 +1,41 @@
+---
+title: Authentication
+description: Create a cvt_live_ API key, send it as a Bearer token, and keep it off the client.
+---
+
+Every job route needs an API key. `GET /v1/formats` is the only public route.
+
+## Get a key
+
+1. Sign in at [convt.app](https://convt.app) and open the [API page](https://convt.app/dashboard/api) of the dashboard.
+2. Subscribe to API billing and choose a spend cap.
+3. Select **Create key**, name it, and copy the key. It starts with `cvt_live_` and is shown only once.
+
+Make one key per app or environment. You can revoke a key from the same page at any time, and requests with it stop working immediately.
+
+## Send the key
+
+Pass the key as a Bearer token in the `Authorization` header:
+
+```bash
+curl {{api}}/v1/jobs/job_01k6z7v4q8m3x2a9b5c0d1e2f3 \
+  -H "Authorization: Bearer $CONVT_API_KEY"
+```
+
+The signed upload and download URLs carry their own signature. Do not send your key to them.
+
+## Failed authentication
+
+| Status | `error.code`   | Cause                                                           |
+| ------ | -------------- | --------------------------------------------------------------- |
+| `401`  | `unauthorized` | No `Authorization` header, or it does not start with `Bearer `. |
+| `403`  | `unauthorized` | The key is unknown or has been revoked.                         |
+| `403`  | `not_enrolled` | The account has no active API subscription.                     |
+
+## Keep keys secret
+
+- Load the key from an environment variable or your secret manager. The examples on this site read `CONVT_API_KEY`.
+- Never ship a key in browser or mobile code. Anyone who has it can spend up to your cap. [Browser apps](/guides/browser-apps) shows how to call convt from your server instead.
+- If a key leaks, revoke it on the dashboard and create a new one.
+
+Rate limits apply per key. See [Limits](/reference/limits).

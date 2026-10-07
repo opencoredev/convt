@@ -1,0 +1,39 @@
+---
+title: Cancelling jobs
+description: Cancel a job you no longer need and release its reservation.
+---
+
+Cancel a job when you stop waiting for it, when your user leaves, or when your own code fails between steps:
+
+```bash
+curl -X POST {{api}}/v1/jobs/$JOB/cancel \
+  -H "Authorization: Bearer $CONVT_API_KEY"
+```
+
+The response is the job after the call. Check its `status`:
+
+| `status` after cancel | What happened                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| `cancelled`           | The job stopped and its 1-cent reservation was released. No charge.                    |
+| `succeeded`           | The job finished before your cancel arrived. It was billed, and its outputs are ready. |
+| `failed`              | The job had already failed. No charge.                                                 |
+
+Cancel is safe to repeat. A finished job is returned unchanged.
+
+A running conversion stops within about 5 seconds, when its worker next checks in.
+
+## Cancel on error
+
+If your code fails after it created a job, cancel the job in a `finally` or `catch`. Otherwise the reservation stays open until the job expires, and it counts against your spend cap until then.
+
+```js
+const { job, upload_url } = await call("/v1/jobs", { method: "POST" /* ... */ });
+try {
+  // upload, start, poll, download
+} catch (error) {
+  await call(`/v1/jobs/${job.id}/cancel`, { method: "POST" }).catch(() => {});
+  throw error;
+}
+```
+
+Cancelling does not free storage. The upload counts toward your storage limit until the job's 24-hour expiry.
