@@ -16,6 +16,8 @@ export type AppEnv = {
   oauthMock: { url: string; publicUrl: string } | null;
   github: { clientId: string; clientSecret: string } | null;
   google: { clientId: string; clientSecret: string } | null;
+  /** Public PostHog project key + host for the marketing site. Null when unset. */
+  posthog: { key: string; host: string } | null;
 };
 
 export type RawEnv = Record<string, unknown>;
@@ -91,6 +93,10 @@ export function readEnv(raw: RawEnv): AppEnv {
     const clientSecret = str(raw, secret);
     return clientId && clientSecret ? { clientId, clientSecret } : null;
   };
+  const posthogKey = str(raw, "POSTHOG_KEY");
+  const posthogHost = str(raw, "POSTHOG_HOST") ?? "https://us.i.posthog.com";
+  const posthog = posthogKey ? { key: posthogKey, host: posthogHost.replace(/\/$/, "") } : null;
+
   return {
     env: envName,
     sales,
@@ -100,6 +106,7 @@ export function readEnv(raw: RawEnv): AppEnv {
     oauthMock,
     github: pair("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"),
     google: pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
+    posthog,
   };
 }
 

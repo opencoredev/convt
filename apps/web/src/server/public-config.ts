@@ -8,5 +8,9 @@ import { requestContext } from "./context";
 export const getPublicConfig = createServerFn({ method: "GET" }).handler(({ context }) => {
   setResponseHeader("cache-control", "no-store");
   const { appEnv } = requestContext(context);
-  return { sales: appEnv.sales, providers: availableProviders(appEnv) };
+  return {
+    sales: appEnv.sales,
+    providers: availableProviders(appEnv),
+    posthog: appEnv.posthog,
+  };
 });
