@@ -7,7 +7,7 @@
 #                         its private key in the login keychain
 #   CONVT_NOTARY_PROFILE  a notarytool keychain profile, created once with
 #                         xcrun notarytool store-credentials convt-notary \
-#                           --apple-id <id> --team-id <TEAMID> --password <app-specific password>
+#                           --key <api-key.p8> --key-id <KEY_ID> --issuer <ISSUER_ID>
 #   CONVT_MAC_ARCHS       "arm64 x86_64" for the universal release (default)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)

@@ -68,7 +68,7 @@ The build also passes `--disable-asm` everywhere, so encoding is slower than an 
 - x86_64 FFmpeg has a retained cross-build, but its receipt is unqualified without an x86_64-capable execution host, so the universal app can't ship.
 - No Developer ID signature.
 - Not notarized or stapled.
-- Mac Rust inventories are generated for both Apple targets, including the SDK-derived objc2 crates; the 22 crates with incomplete upstream terms remain a release gate.
+- Mac Rust inventories are generated for both Apple targets, including the SDK-derived objc2 crates. Their exact sources, upstream `LICENSE.md` declaration and Apple SDK caveat, authors/copyright lines, and canonical declared SPDX terms from the pinned SPDX source lock are retained.
 
 Codec patents (H.264, HEVC and AAC through FFmpeg; VideoToolbox and ImageIO cover some of these) are a separate P12 decision.
 
@@ -79,7 +79,7 @@ Local builds use ad-hoc or Apple Development signing and run only on the machine
 A release needs, from a paid Apple Developer Program membership:
 
 1. A **Developer ID Application** certificate with its private key, exported as a `.p12` for CI.
-2. **notarytool credentials**: an app-specific password for the Apple ID (or an App Store Connect API key), stored once with `xcrun notarytool store-credentials convt-notary --apple-id <id> --team-id <TEAMID> --password <app-specific password>`.
+2. **notarytool credentials**: an App Store Connect API key, stored once with `xcrun notarytool store-credentials convt-notary --key <api-key.p8> --key-id <KEY_ID> --issuer <ISSUER_ID>`.
 3. The **Team ID**, which also names the App Group (`<TEAMID>.app.convt.desktop`). Team-prefixed groups need no provisioning profile on macOS.
 
 Then:

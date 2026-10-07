@@ -225,7 +225,9 @@ def derive(tree, vendor):
     if receipt_dir.exists():
         raise ValueError('Linux derivation already exists; start with a fresh archive copy')
     blockers = json.loads((tree / 'packaging/release/rust-notice-blockers.json').read_text())['blockers']
-    blocked = {(p['name'], p['version']) for p in blockers}
+    # Keep resolved Mac notice decisions in the audit ledger without treating
+    # them as removable Linux source blockers.
+    blocked = {(p['name'], p['version']) for p in blockers if not p.get('resolved')}
     packages = {}
     for manifest in sorted(vendor.glob('*/Cargo.toml')):
         package = tomllib.loads(manifest.read_text())['package']

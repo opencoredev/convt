@@ -12,13 +12,12 @@
     "x86_64": {
       "ffmpeg": "NOT READY: source build completed from the pinned lock, but its x86_64 receipt has no executable codec checks on this Apple Silicon Mac (Bad CPU type; Rosetta is unavailable); ffmpeg-input.py therefore rejects it",
       "pdfium": "chromium/8076 prebuilt, covered by the same lock",
-      "status": "cross-built on macOS 27 / Xcode 27; receipt retained on the builder, qualification blocked until an x86_64-capable macOS runner can execute the checks"
+      "status": "cross-built on macOS 27 / Xcode 27; qualification blocked until the GitHub-hosted macos-15 Rosetta receipt executes and passes all checks"
     }
   },
   "gaps": [
     "x86_64 FFmpeg source build receipt is not qualified: the cross-build completed, but this Apple Silicon Mac has no Rosetta/x86_64 execution support, so ffmpeg-input.py rejects the required codec checks; run the same build and receipt check on an x86_64-capable macOS runner before shipping universal.",
     "No Developer ID Application signature: local builds are ad-hoc signed.",
-    "Not notarized or stapled.",
-    "Mac Rust inventories now cover aarch64-apple-darwin and x86_64-apple-darwin, including the SDK-derived objc2 crates; 22 of those crates retain incomplete upstream licence terms recorded in packaging/release/rust-notice-blockers.json, so the source audit remains blocked."
+    "Not notarized or stapled."
   ]
 }

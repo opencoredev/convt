@@ -1,5 +1,5 @@
 {
-  "scope": "Remaining explicit upstream ambiguity after exact manifest-declared SPDX terms are reproduced from hash-pinned SPDX license-list-data. These entries remain unresolved even though their manifests declare SPDX licences.",
+  "scope": "Resolved Mac SDK-derived Rust notices: retain exact crate sources and upstream LICENSE.md declaration/caveat, reproduce the declared SPDX terms verbatim from hash-pinned SPDX license-list-data, and retain authors/copyright lines. These entries remain in the ledger for provenance and are no longer release blockers.",
   "original_linux_gaps": 30,
   "original_linux_gaps_closed": 30,
   "original_linux_resolved": [
@@ -137,7 +137,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "block2",
         "version": "0.6.2",
@@ -148,9 +147,11 @@
         "path_in_vcs": "crates/block2",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/b4167b582b2f75f9a1be75495c41b765344fd03c",
         "archive_sha256": "5a1d3a8562cc03f3675b6a27234eb70dbd2189bd307af218e23b4023f0e01c46",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "dispatch2",
@@ -164,7 +165,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "dispatch2",
         "version": "0.3.1",
@@ -175,9 +175,11 @@
         "path_in_vcs": "crates/dispatch2",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/8852b424193ca41602281b3d7540d7c8ed51e49a",
         "archive_sha256": "e26253acf0639ce1986f79690fbc3ae9fa29b082ddc1e8661b9b53ac8d4925b3",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2",
@@ -191,7 +193,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2",
         "version": "0.6.4",
@@ -202,9 +203,11 @@
         "path_in_vcs": "crates/objc2",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/8852b424193ca41602281b3d7540d7c8ed51e49a",
         "archive_sha256": "e26253acf0639ce1986f79690fbc3ae9fa29b082ddc1e8661b9b53ac8d4925b3",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-app-kit",
@@ -218,7 +221,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-app-kit",
         "version": "0.3.2",
@@ -229,9 +231,11 @@
         "path_in_vcs": "framework-crates/objc2-app-kit",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-cloud-kit",
@@ -245,7 +249,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-cloud-kit",
         "version": "0.3.2",
@@ -256,9 +259,11 @@
         "path_in_vcs": "framework-crates/objc2-cloud-kit",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-audio",
@@ -272,7 +277,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-audio",
         "version": "0.3.2",
@@ -283,9 +287,11 @@
         "path_in_vcs": "framework-crates/objc2-core-audio",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-audio-types",
@@ -299,7 +305,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-audio-types",
         "version": "0.3.2",
@@ -310,9 +315,11 @@
         "path_in_vcs": "framework-crates/objc2-core-audio-types",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-data",
@@ -326,7 +333,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-data",
         "version": "0.3.2",
@@ -337,9 +343,11 @@
         "path_in_vcs": "framework-crates/objc2-core-data",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-foundation",
@@ -353,7 +361,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-foundation",
         "version": "0.3.2",
@@ -364,9 +371,11 @@
         "path_in_vcs": "framework-crates/objc2-core-foundation",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-graphics",
@@ -380,7 +389,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-graphics",
         "version": "0.3.2",
@@ -391,9 +399,11 @@
         "path_in_vcs": "framework-crates/objc2-core-graphics",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-image",
@@ -407,7 +417,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-image",
         "version": "0.3.2",
@@ -418,9 +427,11 @@
         "path_in_vcs": "framework-crates/objc2-core-image",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-location",
@@ -434,7 +445,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-location",
         "version": "0.3.2",
@@ -445,9 +455,11 @@
         "path_in_vcs": "framework-crates/objc2-core-location",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-media",
@@ -461,7 +473,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-media",
         "version": "0.3.2",
@@ -472,9 +483,11 @@
         "path_in_vcs": "framework-crates/objc2-core-media",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-text",
@@ -488,7 +501,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-text",
         "version": "0.3.2",
@@ -499,9 +511,11 @@
         "path_in_vcs": "framework-crates/objc2-core-text",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-core-video",
@@ -515,7 +529,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-core-video",
         "version": "0.3.2",
@@ -526,9 +539,11 @@
         "path_in_vcs": "framework-crates/objc2-core-video",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-encode",
@@ -542,7 +557,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-encode",
         "version": "4.1.0",
@@ -553,9 +567,11 @@
         "path_in_vcs": "crates/objc2-encode",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/8d214f5477365ffcbcbb7de058c86ed9a518efb7",
         "archive_sha256": "c58f920fbc97c7f21b3af0f89d713188384ff012fd4cdfa2b6242e2952bf1a7d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-io-kit",
@@ -566,7 +582,6 @@
       "vcs_sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
       "targets": [],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-io-kit",
         "version": "0.3.2",
@@ -577,9 +592,11 @@
         "path_in_vcs": "framework-crates/objc2-io-kit",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-io-surface",
@@ -593,7 +610,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-io-surface",
         "version": "0.3.2",
@@ -604,9 +620,11 @@
         "path_in_vcs": "framework-crates/objc2-io-surface",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-metal",
@@ -620,7 +638,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-metal",
         "version": "0.3.2",
@@ -631,9 +648,11 @@
         "path_in_vcs": "framework-crates/objc2-metal",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-quartz-core",
@@ -647,7 +666,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-quartz-core",
         "version": "0.3.2",
@@ -658,9 +676,11 @@
         "path_in_vcs": "framework-crates/objc2-quartz-core",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-screen-capture-kit",
@@ -674,7 +694,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-screen-capture-kit",
         "version": "0.3.2",
@@ -685,9 +704,11 @@
         "path_in_vcs": "framework-crates/objc2-screen-capture-kit",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     },
     {
       "name": "objc2-user-notifications",
@@ -701,7 +722,6 @@
         "x86_64-apple-darwin"
       ],
       "declared_license": "Zlib OR Apache-2.0 OR MIT",
-      "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text.",
       "provenance": {
         "name": "objc2-user-notifications",
         "version": "0.3.2",
@@ -712,9 +732,17 @@
         "path_in_vcs": "framework-crates/objc2-user-notifications",
         "archive_url": "https://codeload.github.com/madsmtm/objc2/tar.gz/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
         "archive_sha256": "a6685e9b30da4c2b9ed807e8344d7248447daf1d5ab5b7af4fa3755545f96a4d",
-        "notice_complete": false,
-        "blocker": "The exact revision provides a licence declaration and Apple SDK caveat in LICENSE.md, but no complete licence terms. Preserve the declaration; do not substitute generic licence text."
-      }
+        "notice_complete": true,
+        "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
+      },
+      "resolved": true,
+      "resolution": "Resolved by the product-owner decision: exact crate sources and upstream LICENSE.md declaration/caveat are retained; declared SPDX terms are reproduced verbatim from hash-pinned SPDX license-list-data; authors/copyright lines are retained."
     }
-  ]
+  ],
+  "resolved_decision": {
+    "status": "resolved",
+    "terms": "For each crate, reproduce the declared SPDX licence text from packaging/release/rust-spdx-sources.json and retain the exact upstream LICENSE.md declaration and Apple SDK caveat verbatim.",
+    "attribution": "Retain the crate authors/copyright lines found in the upstream licence and source headers.",
+    "source": "The source archive retains the exact crate source trees and manifests at the pinned revisions."
+  }
 }
