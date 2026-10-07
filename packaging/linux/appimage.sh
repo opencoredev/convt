@@ -8,9 +8,16 @@ bundle_epoch=$(cat "$out/source-date-epoch" 2>/dev/null) || { echo "Missing $out
 [[ -z ${SOURCE_DATE_EPOCH:-} || $SOURCE_DATE_EPOCH == "$bundle_epoch" ]] || { echo "SOURCE_DATE_EPOCH differs from the bundle's $bundle_epoch" >&2; exit 1; }
 export SOURCE_DATE_EPOCH=$bundle_epoch
 # Both the tool and embedded runtime are pinned; appimagetool must not
-# silently download its own unpinned runtime.
-python3 "$repo/packaging/release/appimage-source-build.py" --cache "$cache"
-cp "$cache/appimage-source/rebuilt/runtime-x86_64" "$cache/runtime-source-built-x86_64"
+# silently download its own unpinned runtime. Fetch the locked source
+# closure first — CI runners start with an empty packaging/.cache.
+python3 "$repo/packaging/release/appimage-source-closure.py" fetch --cache "$cache"
+runtime="$cache/appimage-source/rebuilt/runtime-x86_64"
+expected=$(python3 -c 'import json,pathlib; print(json.loads(pathlib.Path("packaging/release/appimage-source-closure.lock.json").read_text())["build"]["runtime_sha256"])')
+actual=$(python3 -c 'import hashlib,pathlib,sys; p=pathlib.Path(sys.argv[1]); print(hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "")' "$runtime")
+if [[ $actual != "$expected" ]]; then
+  python3 "$repo/packaging/release/appimage-source-build.py" --cache "$cache"
+fi
+cp "$runtime" "$cache/runtime-source-built-x86_64"
 python3 "$repo/packaging/linux/fetch.py" "$cache" "$repo/packaging/linux/appimage-inputs.lock.json"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

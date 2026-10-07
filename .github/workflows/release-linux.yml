@@ -109,6 +109,11 @@ jobs:
             printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
           fi
           echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
+      - name: Restore AppImage source cache
+        uses: actions/cache@v4
+        with:
+          path: packaging/.cache/appimage-source
+          key: appimage-source-${{ hashFiles('packaging/release/appimage-source-closure.lock.json', 'packaging/release/appimage-source-build.sh') }}
       - name: Rebuild twice and compare unsigned artifacts
         env:
           DRY_RUN: ${{ inputs.dry_run }}
