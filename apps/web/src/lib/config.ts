@@ -19,8 +19,8 @@ export const links = {
   privacy: "/privacy",
 } as const;
 
-/** PLACEHOLDER: the API host is not deployed (plan P9). */
-export const apiBaseUrl = "https://api.convt.app";
+/** Interim Railway host until api.convt.app resolves (CNV-36); switch back then. */
+export const apiBaseUrl = "https://convt-api-production.up.railway.app";
 
 /** How long a sign-in code and its link work. Matches `codeMinutes` in src/server/auth.ts. */
 export const magicLinkMinutes = 15;
