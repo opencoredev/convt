@@ -354,32 +354,28 @@ export function billingView(input: {
   const desktop = liveDesktopLicense(licenses);
   const ownsDesktop = desktop !== undefined;
   const polarPortal = Boolean(input.polarCustomerId);
+  const proEnded =
+    pro !== null &&
+    (pro.status === "canceled" ||
+      pro.status === "unpaid" ||
+      pro.status === "incomplete_expired" ||
+      pro.status === "paused" ||
+      (pro.endedAt !== null && pro.endedAt <= now));
   let plan: Billing["plan"] = null;
-  if (pro) {
+  if (pro && !proEnded) {
     const interval = pro.interval === "year" ? "year" : "month";
     const price = proPrice[interval].total;
     const end = pro.currentPeriodEnd ? formatDate(iso(pro.currentPeriodEnd)) : null;
     const includes =
       "Includes the desktop app on your computers, every update while you're subscribed, and API access.";
-    const ended =
-      pro.status === "canceled" ||
-      pro.status === "unpaid" ||
-      pro.status === "incomplete_expired" ||
-      pro.status === "paused" ||
-      (pro.endedAt !== null && pro.endedAt <= now);
     const onTrial =
-      !ended &&
-      (pro.status === "trialing" ||
-        (pro.status === "incomplete" && pro.trialEndsAt !== null && pro.trialEndsAt > now));
+      pro.status === "trialing" ||
+      (pro.status === "incomplete" && pro.trialEndsAt !== null && pro.trialEndsAt > now);
     let status: NonNullable<Billing["plan"]>["status"];
     let summary: string;
     const cancelsOn =
-      !ended && pro.cancelAtPeriodEnd && pro.currentPeriodEnd ? isoDay(pro.currentPeriodEnd) : null;
-    if (ended) {
-      status = "canceled";
-      const on = formatDate(iso(pro.endedAt ?? pro.currentPeriodEnd ?? now));
-      summary = `Ended ${on}. Your last key keeps working for every build released before then.`;
-    } else if (onTrial) {
+      pro.cancelAtPeriodEnd && pro.currentPeriodEnd ? isoDay(pro.currentPeriodEnd) : null;
+    if (onTrial) {
       status = "trialing";
       const trialEnd = pro.trialEndsAt ?? pro.currentPeriodEnd;
       const until = trialEnd ? formatDate(iso(trialEnd)) : "the trial ends";
@@ -413,6 +409,17 @@ export function billingView(input: {
         ? `Paid once. Updates until ${until}. Your license is on this account and works offline.`
         : "Paid once. Your license is on this account and works offline.",
       interval: null,
+      cancelsOn: null,
+    };
+  } else if (pro) {
+    const interval = pro.interval === "year" ? "year" : "month";
+    const on = formatDate(iso(pro.endedAt ?? pro.currentPeriodEnd ?? now));
+    plan = {
+      kind: "pro",
+      name: `Pro, ${interval === "year" ? "yearly" : "monthly"}`,
+      status: "canceled",
+      summary: `Ended ${on}. Your last key keeps working for every build released before then.`,
+      interval,
       cancelsOn: null,
     };
   }

@@ -733,4 +733,26 @@ describe("Desktop ownership and Polar portal", () => {
     expect(shown.polarPortal).toBe(true);
     expect(showPolarBilling(shown)).toBe(true);
   });
+
+  test("a lapsed Pro with a live Desktop license shows Desktop, not canceled Pro", () => {
+    const b = billingView({
+      user,
+      subscriptions: [
+        sub({ interval: "month", status: "canceled", endedAt: new Date("2026-09-14T00:00:00Z") }),
+      ],
+      licenses: [live],
+      invoices: [],
+      card: null,
+      openApiCheckout: false,
+      now,
+    });
+    expect(b.plan).toMatchObject({
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+    });
+    expect(b.ownsDesktop).toBe(true);
+    expect(b.hadPro).toBe(true);
+    expect(showGetDesktop(b)).toBe(false);
+  });
 });
