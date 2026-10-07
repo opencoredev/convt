@@ -1,6 +1,8 @@
 import { lazy, Suspense } from "react";
 import { HeadContent, Scripts, createRootRoute, useMatches } from "@tanstack/react-router";
 
+import { PostHogProvider } from "#/components/posthog-provider";
+import { getPublicConfig } from "#/server/public-config";
 import appCss from "../styles.css?url";
 
 declare module "@tanstack/react-router" {
@@ -29,6 +31,10 @@ const Devtools = import.meta.env.DEV
   : null;
 
 export const Route = createRootRoute({
+  loader: async () => {
+    const config = await getPublicConfig();
+    return { posthog: config.posthog };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -63,7 +69,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <PostHogRoot>{children}</PostHogRoot>
         {Devtools && (
           <Suspense fallback={null}>
             <Devtools />
@@ -73,4 +79,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </body>
     </html>
   );
+}
+
+function PostHogRoot({ children }: { children: React.ReactNode }) {
+  const { posthog } = Route.useLoaderData();
+  return <PostHogProvider config={posthog}>{children}</PostHogProvider>;
 }

@@ -11,3 +11,8 @@ OAUTH_MOCK_URL=http://127.0.0.1:4100
 
 # Production and staging use MAIL_TRANSPORT=sequenzy and the SEQUENZY_API_KEY
 # Worker secret. MAIL_FROM is convt <hello@convt.app>. Local mail stays in Mailpit.
+
+# Optional: PostHog web analytics (public project API key). Leave unset locally
+# to skip tracking. Production sets these in wrangler.jsonc vars.
+# POSTHOG_KEY=phc_...
+# POSTHOG_HOST=https://us.i.posthog.com
