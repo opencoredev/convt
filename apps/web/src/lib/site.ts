@@ -29,16 +29,34 @@ export const SUPPORT_EMAIL = "support@convt.app";
 /** PLACEHOLDER: privacy and data-request inbox. */
 export const PRIVACY_EMAIL = "privacy@convt.app";
 
+/** Refund policies the terms can state; `legal.refunds` picks one. */
+export type RefundPolicy = "14-days" | "30-days" | "case-by-case";
+
 /**
- * PLACEHOLDER legal facts for the privacy policy and terms. Leo fills these in
- * after legal review; the pages show them highlighted until then.
+ * Facts the privacy policy and terms state about who provides convt. Values marked
+ * TODO(CNV-48) are Leo's decisions, listed in the CNV-48 pull request, which must not
+ * merge until he sets them. Until then each holds wording that reads cleanly on the page
+ * without naming an entity or a country: the brand name the footer already uses, no
+ * address, and the law of wherever the provider is established.
  */
-export const legal = {
-  entity: "[Legal entity name]",
-  address: "[Registered address]",
-  jurisdiction: "[Governing law and courts]",
-  effectiveDate: "[Effective date]",
-} as const;
+export const legal: {
+  entity: string;
+  address: string | null;
+  governingLaw: string;
+  refunds: RefundPolicy;
+  effectiveDate: string;
+} = {
+  /** TODO(CNV-48): the company or sole trader who sells and runs convt. */
+  entity: "convt",
+  /** TODO(CNV-48): postal address shown in the privacy policy; null hides it. */
+  address: null,
+  /** TODO(CNV-48): completes "These terms are governed by …", including the courts. */
+  governingLaw: "the law of the country where convt's provider is established",
+  /** TODO(CNV-48): which refund policy the terms state (see RefundPolicy). */
+  refunds: "14-days",
+  /** TODO(CNV-48): the day this text takes effect, normally the day it ships. */
+  effectiveDate: "7 October 2026",
+};
 
 /** Internal routes the landing page and the site footer link to. */
 export const routes = {
