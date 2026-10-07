@@ -133,6 +133,7 @@ function Recommended({ os }: { os: Os }) {
         </div>
         <DownloadButton artifact={slot?.artifact ?? null} large />
         {slot?.artifact && <Sha value={slot.artifact.sha256} />}
+        {os === "macos" && <HomebrewInstall />}
         <p className="text-[13px]/5 text-ink-2">
           Not your system?{" "}
           <TextLink href="#platforms" className="font-normal">
@@ -195,6 +196,19 @@ function PlatformCard({ os, current }: { os: Os; current: boolean }) {
           </li>
         ))}
       </ul>
+      {os === "macos" && <HomebrewInstall />}
     </section>
+  );
+}
+
+function HomebrewInstall() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[13px]/5 text-ink-2">Or install with Homebrew (Apple silicon):</p>
+      <pre className="overflow-x-auto rounded-lg bg-sunken px-3 py-2 font-mono text-[12px]/5">
+        {`brew tap opencoredev/convt https://github.com/opencoredev/convt
+brew install --cask convt`}
+      </pre>
+    </div>
   );
 }

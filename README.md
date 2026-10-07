@@ -15,7 +15,16 @@ Local file conversion for your own machine. Right-click a file, pick a format, a
 
 ## Install
 
-The CLI works from this repo today. Ordinary source builds are unrestricted. Desktop builds will appear on the [download page](https://convt.app/download) (Linux first). Packaged builds start a 7-day trial on the first conversion.
+macOS (Apple silicon) with Homebrew:
+
+```bash
+brew tap opencoredev/convt https://github.com/opencoredev/convt
+brew install --cask convt
+```
+
+That installs the signed app and puts the `convt` CLI on your `PATH`. Linux and Windows builds are on the [download page](https://convt.app/download). There is no Linux Homebrew formula yet; use the `.deb`, `.rpm` or AppImage.
+
+The CLI also works from this repo. Ordinary source builds are unrestricted. Packaged builds start a 7-day trial on the first conversion.
 
 ```bash
 bun run setup

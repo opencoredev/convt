@@ -25,18 +25,11 @@ def copy_artifact(a,dest):
     return p
 mac=artifacts.get(('macos-arm64','dmg'))
 if mac:
-    text(Path('homebrew/convt.rb'),f'''cask "convt" do
-  version "{version}"
-  sha256 "{mac['sha256']}"
-  url "{mac['url']}"
-  name "convt"
-  desc "Local file conversion"
-  homepage "https://convt.app"
-  depends_on macos: ">= :ventura"
-  depends_on arch: :arm64
-  app "convt.app"
-end
-''')
+    from importlib.util import module_from_spec, spec_from_file_location
+    homebrew_spec=spec_from_file_location('homebrew_cask',Path(__file__).with_name('homebrew_cask.py'))
+    homebrew=module_from_spec(homebrew_spec); homebrew_spec.loader.exec_module(homebrew)
+    source=Path(__file__).resolve().parents[2]/'Casks'/'convt.rb'
+    text(Path('homebrew/convt.rb'),homebrew.bump_cask(source.read_text(),version=version,sha256=mac['sha256']))
 windows=artifacts.get(('windows-x86_64','msi')) or artifacts.get(('windows-x86_64','exe'))
 if windows:
     text(Path('winget/Convt.Convt.installer.yaml'),f'''PackageIdentifier: Convt.Convt

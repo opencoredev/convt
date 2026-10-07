@@ -39,4 +39,6 @@ test("/download has no checksum or source Coming soon sections", () => {
   expect(page).not.toContain("verify-title");
   expect(page).toContain("DownloadButton");
   expect(page).toContain("For your computer");
+  expect(page).toContain("brew install --cask convt");
+  expect(page).toContain("brew tap opencoredev/convt");
 });
