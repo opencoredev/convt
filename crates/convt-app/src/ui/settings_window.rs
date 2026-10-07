@@ -10,6 +10,7 @@ use super::theme::{
     self, Choice, Palette, mono, primary_button, secondary_button, text, text_button,
 };
 use super::{describe, error_text, open_folder};
+use crate::finder::EXTENSION_SETTINGS;
 use crate::model::AppState;
 use crate::settings::{Settings, auto_concurrency};
 
@@ -25,10 +26,6 @@ const TABS: [(SettingsTab, &str, &str); 3] = [
     (SettingsTab::Presets, "tab-presets", "Presets"),
     (SettingsTab::License, "tab-license", "License"),
 ];
-
-/// The URL that opens Login Items & Extensions in macOS System Settings.
-const EXTENSION_SETTINGS: &str =
-    "x-apple.systempreferences:com.apple.LoginItems-Settings.extension";
 
 /// The dropdown that is open, if any.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,11 +319,39 @@ impl SettingsView {
             )
         };
 
-        let finder = cfg!(target_os = "macos").then(|| {
-            field(
+        // Always on macOS; on other platforms only when a test set finder_on.
+        let finder = (cfg!(target_os = "macos") || state.finder_on.is_some()).then(|| {
+            let (status, button) = match state.finder_on {
+                Some(true) => (
+                    "On. Right-click a file in Finder to convert.",
+                    "Manage in System Settings",
+                ),
+                Some(false) => (
+                    "Off. Open System Settings, scroll to Extensions, and turn on convt.",
+                    "Open System Settings",
+                ),
+                None => (
+                    "Open System Settings, scroll to Extensions, and turn on convt.",
+                    "Open System Settings",
+                ),
+            };
+            field_top(
                 "Finder menu",
-                text_button("manage-finder", "Manage in System Settings", p.green, 12.)
-                    .on_click(|_, _, cx| cx.open_url(EXTENSION_SETTINGS)),
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .id("finder-status")
+                            .test_support()
+                            .aria_label(status)
+                            .child(text(12., 16., p.secondary).child(status)),
+                    )
+                    .child(
+                        text_button("manage-finder", button, p.green, 12.)
+                            .on_click(|_, _, cx| cx.open_url(EXTENSION_SETTINGS)),
+                    ),
                 p,
             )
         });

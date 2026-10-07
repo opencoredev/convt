@@ -16,7 +16,7 @@ None of this builds or runs on Linux. It needs Xcode and a Mac.
 
 `packaging/macos/bundle.sh` compiles the extension with `swiftc` (no Xcode project) and assembles the whole app; see `packaging/macos/README.md`. The extension doesn't link the Rust core, so it needs no uniffi bindings or XCFramework. `crates/convt-ffi` stays for other integrations.
 
-The first-run window's Finder step polls `pluginkit -m -i app.convt.desktop.FinderSync` every second while that step shows; once the extension is on, the step reads "The Finder menu is on" and Continue moves on.
+The first-run window's Finder step, Activity and Settings all read `pluginkit -m -i app.convt.desktop.FinderSync`. The app polls every second on macOS so those surfaces update when the user comes back from System Settings. Once the extension is on, the first-run step reads "The Finder menu is on" and Continue moves on. Skipping or closing first run still leaves a recover card on Activity (and a status row in Settings) until the extension is on. The Finder step's System Settings picture is a preview, not a switch: the real control is Open System Settings, then scroll to Extensions.
 
 ## Finder progress while converting (not built)
 

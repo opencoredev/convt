@@ -120,9 +120,10 @@ pub fn route(request: Request, cx: &mut App) {
     }
 }
 
-/// Opens the main window, or the first-run window the first time a licensed
-/// build opens. A build from source that doesn't check licenses never shows
-/// the first-run window.
+/// Opens the main window, or the first-run window until a licensed build
+/// finishes it. Closing mid-setup leaves first run unfinished, so the next
+/// launch shows it again. A build from source that doesn't check licenses
+/// never shows the first-run window.
 pub fn show_main(cx: &mut App) {
     let app = model::shared(cx);
     let first_run = {
@@ -130,9 +131,6 @@ pub fn show_main(cx: &mut App) {
         state.license_enforced() && !state.settings.first_run_done
     };
     if first_run {
-        app.update(cx, |s, cx| {
-            s.update_settings(|s| s.first_run_done = true, cx)
-        });
         open_first_run(cx);
     } else {
         open_main(cx);

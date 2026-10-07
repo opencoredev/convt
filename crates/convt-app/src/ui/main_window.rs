@@ -12,6 +12,7 @@ use gpui_kit::*;
 use super::theme::{self, Palette, mono, primary_button, text, text_button};
 use super::{LICENSE_PRICE, SettingsTab, error_text, file_size, human_size, time_left};
 use crate::clock::Local;
+use crate::finder::EXTENSION_SETTINGS;
 use crate::history::{Outcome, Record};
 use crate::jobs::{Entry, Status};
 use crate::model::{self, AppState};
@@ -357,6 +358,15 @@ impl MainView {
             rows.push(record_row(record, &self.app, p).into_any_element());
         }
         let empty = rows.is_empty();
+        let finder_off = state.finder_on == Some(false);
+        let hint = if finder_off {
+            "Drop files here, or use Add files. Turn on the Finder menu above to convert from a right-click.".to_string()
+        } else {
+            format!(
+                "Drop files here, or right-click a file in {} and pick a format.",
+                theme::file_manager()
+            )
+        };
         div()
             .id("activity")
             .flex()
@@ -371,6 +381,7 @@ impl MainView {
                     .clone()
                     .map(|e| div().pb(px(8.)).child(error_text(e, p))),
             )
+            .children(finder_off.then(|| finder_setup_card(p)))
             .when(empty, |d| {
                 d.child(
                     div()
@@ -384,10 +395,7 @@ impl MainView {
                         .gap(px(4.))
                         .py(px(60.))
                         .child(text(13., 16., p.secondary).child("Nothing converted yet."))
-                        .child(text(12., 16., p.tertiary).child(format!(
-                            "Drop files here, or right-click a file in {} and pick a format.",
-                            theme::file_manager()
-                        ))),
+                        .child(text(12., 16., p.tertiary).child(hint)),
                 )
             })
             .children(rows)
@@ -455,6 +463,40 @@ fn choices_for(registry: &convt_core::Registry, kind: Kind) -> Vec<&'static Form
         })
         .take(10)
         .collect()
+}
+
+/// Shown on Activity until the Finder extension is on, so skipping or
+/// closing first run still has a way back.
+fn finder_setup_card(p: &Palette) -> impl IntoElement {
+    div()
+        .id("finder-setup")
+        .test_support()
+        .aria_label("Turn on the Finder menu")
+        .flex()
+        .flex_col()
+        .gap(px(8.))
+        .mb(px(8.))
+        .p(px(14.))
+        .rounded(px(8.))
+        .bg(p.green_tint)
+        .border_1()
+        .border_color(p.green)
+        .child(
+            text(13., 16., p.text)
+                .font_weight(FontWeight::SEMIBOLD)
+                .child("Turn on the Finder menu"),
+        )
+        .child(
+            text(12., 16., p.secondary).child(
+                "Right-click Convert with convt needs the Finder extension. Open System Settings, scroll to Extensions, and turn on convt.",
+            ),
+        )
+        .child(
+            div().flex().child(
+                primary_button("enable-finder", "Open System Settings", 12., false)
+                    .on_click(|_, _, cx| cx.open_url(EXTENSION_SETTINGS)),
+            ),
+        )
 }
 
 /// The trial or license card at the bottom of the sidebar. Nothing once

@@ -3,6 +3,7 @@
 
 mod account;
 mod clock;
+mod finder;
 mod history;
 mod instance;
 mod jobs;
