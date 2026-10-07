@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
 
 import { cx } from "#/components/app/ui";
 import { DownloadButton, Sha } from "#/components/site/download";
@@ -8,7 +7,6 @@ import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
 import {
   isOs,
   kindLabels,
-  osFromUserAgent,
   osNames,
   osOrder,
   releaseFromManifest,
@@ -17,6 +15,7 @@ import {
 } from "#/lib/platform";
 import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
 import { fetchLatestManifest } from "#/server/latest-release";
+import { visitorOs } from "#/server/visitor-os";
 import { routes, seo } from "#/lib/site";
 
 // The newest GitHub release's manifest (packaging/release/manifest.schema.json), read
@@ -34,20 +33,13 @@ const loadRelease = createServerFn({ method: "GET" }).handler(async () =>
   releaseFromManifest((await fetchLatestManifest()) ?? bundled),
 );
 
-const detectOs = createServerFn({ method: "GET" }).handler(() =>
-  osFromUserAgent(getRequestHeader("user-agent") ?? ""),
-);
-
 export const Route = createFileRoute("/_site/download")({
   validateSearch: (search: Record<string, unknown>): { os?: Os } =>
     isOs(search.os) ? { os: search.os } : {},
   loaderDeps: ({ search }) => ({ os: search.os }),
-  // The User-Agent picks the build on the first load; client navigations read it locally.
-  // Check `window`, not `navigator`: Workers define navigator with their own user agent.
+  // The User-Agent picks the build unless the link names one.
   loader: async ({ deps }) => ({
-    os:
-      deps.os ??
-      (typeof window === "undefined" ? await detectOs() : osFromUserAgent(navigator.userAgent)),
+    os: deps.os ?? (await visitorOs()),
     release: await loadRelease(),
   }),
   head: () =>
