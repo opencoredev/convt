@@ -2,7 +2,7 @@
 //! chains to the platform hook; network work is always best effort.
 use std::backtrace::Backtrace;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 const POSTHOG_KEY: &str = "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw";
@@ -89,15 +89,14 @@ fn enabled() -> bool {
     }
     // CNV-55 stores the desktop telemetry toggle in settings.toml. Read the
     // raw key here so this branch stays mergeable before telemetry.rs lands.
-    if let Some(path) = crate::settings::Settings::path() {
-        if let Ok(text) = std::fs::read_to_string(path) {
-            if text.lines().any(|line| {
-                let line = line.trim();
-                line.starts_with("telemetry_enabled") && line.contains("false")
-            }) {
-                return false;
-            }
-        }
+    if let Some(path) = crate::settings::Settings::path()
+        && let Ok(text) = std::fs::read_to_string(path)
+        && text.lines().any(|line| {
+            let line = line.trim();
+            line.starts_with("telemetry_enabled") && line.contains("false")
+        })
+    {
+        return false;
     }
     if cfg!(debug_assertions) {
         return std::env::var("CONVT_TELEMETRY").ok().as_deref() == Some("1");
@@ -197,10 +196,10 @@ fn resend() {
             if sent.exists() {
                 continue;
             }
-            if let Ok(text) = fs::read_to_string(&path) {
-                if send(event("panic", &text, &text, None)).is_ok() {
-                    let _ = fs::write(sent, b"sent");
-                }
+            if let Ok(text) = fs::read_to_string(&path)
+                && send(event("panic", &text, &text, None)).is_ok()
+            {
+                let _ = fs::write(sent, b"sent");
             }
         }
     });
