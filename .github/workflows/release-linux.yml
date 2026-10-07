@@ -71,6 +71,10 @@ jobs:
             test "$CONVT_LICENSE_PUBKEY" = FifI4kZfp25-La18pwNa4CJ751s4hDP68D60bp9rQoY
           fi
           test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
+      - name: Verify downloaded AppImage pins
+        run: |
+          python3 -m unittest discover -s packaging/linux -p test_appimage_inputs.py
+          python3 packaging/linux/fetch.py --downloaded-only "$RUNNER_TEMP/appimage-pins" packaging/linux/appimage-inputs.lock.json
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: oven-sh/setup-bun@v2
         with:
