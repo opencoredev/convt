@@ -31,8 +31,52 @@ def dump(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
 
 
+ANSI = re.compile(r'\x1b\[[0-9;]*[mK]')
+# Cargo prints "12.34s" under a minute and "2m 05s" after that.
+DURATION = re.compile(r'\bin (?:\d+m )?\d+(?:\.\d+)?s\b')
+RUSTC_TMP = re.compile(r'/tmp/rustc[A-Za-z0-9]+')
+PROBE_COMMAND = (
+    'cargo build --offline --locked --release --target ' + TARGET + ' -p convt-cli -p convt-app'
+)
+
+
+def canonical_probe_stderr(text, tree, home):
+    """Render cargo probe logs so two rebuild directories produce the same bytes.
+
+    The probe is a real `cargo build` after temporarily moving unresolved SDK
+    crates. All current blockers are resolved, so CI runs a full compile. Cargo
+    then writes parallel `Compiling` lines and `Finished ... in Ns` to stderr.
+    Path substitution alone is not enough: run 37621664130 differed only in
+    `remove-sdk-only-probe.json` (sha c52fc0a1… vs a40e2c47…) after `$SOURCE`
+    / `$EMPTY_CARGO_HOME` replacement.
+    """
+    text = ANSI.sub('', text or '')
+    text = text.replace(str(tree), '$SOURCE').replace(str(home), '$EMPTY_CARGO_HOME')
+    text = DURATION.sub('in $DURATION', text)
+    text = RUSTC_TMP.sub('$RUSTC_TMP', text)
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    return ''.join(line + '\n' for line in sorted(lines))
+
+
+def sdk_remove_probe(exit_code, stderr, tree, home, removed_packages=()):
+    """Receipt for the original-lock SDK-removal probe. Must be rebuild-stable."""
+    text = canonical_probe_stderr(stderr, tree, home)
+    if str(tree) in text or str(home) in text:
+        raise ValueError('SDK probe receipt leaked a rebuild path')
+    if DURATION.search(text):
+        raise ValueError('SDK probe receipt leaked a cargo duration')
+    return {
+        'command': PROBE_COMMAND,
+        'empty_cargo_home': True,
+        'exit_code': exit_code,
+        'removed_packages': list(removed_packages),
+        'stderr': text,
+    }
+
+
 def cargo(tree, home, *args, bootstrap=False):
-    env = dict(os.environ, CARGO_HOME=str(home), CARGO_NET_OFFLINE='true')
+    env = dict(os.environ, CARGO_HOME=str(home), CARGO_NET_OFFLINE='true',
+               CARGO_TERM_COLOR='never', CARGO_TERM_PROGRESS_WHEN='never')
     env.pop('RUSTC_BOOTSTRAP', None)
     if bootstrap:
         env['RUSTC_BOOTSTRAP'] = '1'
@@ -246,20 +290,19 @@ def derive(tree, vendor):
         stash = Path(temporary) / 'removed-sdk'
         stash.mkdir()
         moved = []
+        removed_packages = []
         for identity in sorted(blocked & packages.keys()):
             directory = packages[identity]
             shutil.move(str(directory), stash / directory.name)
             moved.append(directory)
+            removed_packages.append({'name': identity[0], 'version': identity[1]})
         probe = cargo(tree, home, 'build', '--offline', '--locked', '--release',
                       '--target', TARGET, '-p', ROOTS[0], '-p', ROOTS[1])
         for directory in moved:
             shutil.move(str(stash / directory.name), directory)
         receipt_dir.mkdir(parents=True)
-        # Keep only deterministic probe fields. Cargo stderr order/paths vary
-        # across rebuilds even after path substitution (run 37621664130).
-        dump(receipt_dir / 'remove-sdk-only-probe.json', {
-            'command': 'cargo build --offline --locked --release --target ' + TARGET + ' -p convt-cli -p convt-app',
-            'empty_cargo_home': True, 'exit_code': probe.returncode})
+        dump(receipt_dir / 'remove-sdk-only-probe.json',
+             sdk_remove_probe(probe.returncode, probe.stderr, tree, home, removed_packages))
         dump(receipt_dir / 'original-unit-graph.json', canonical_graph(before, tree))
         pins = tomllib.loads((tree / 'Cargo.lock').read_text())['package']
         originals = {}
