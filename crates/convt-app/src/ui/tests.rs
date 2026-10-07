@@ -3384,6 +3384,17 @@ fn update_key() -> SigningKey {
 }
 
 /// A signed manifest issued an hour ago, listing `builds` as (version, date).
+// Builds the update tests serve, relative to the running version so a version
+// bump never turns a "newer" fixture into an older one. A build of the running
+// version with a later date is an update; `next_minor()` is newer still.
+use crate::account::VERSION;
+
+fn next_minor() -> String {
+    let mut parts = VERSION.split('.').map(|p| p.parse::<u64>().unwrap());
+    let (major, minor) = (parts.next().unwrap(), parts.next().unwrap());
+    format!("{major}.{}.0", minor + 1)
+}
+
 fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8> {
     use base64::Engine as _;
     use ed25519_dalek::Signer as _;
@@ -3442,21 +3453,22 @@ fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 
 #[gpui_kit::test]
 fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
+    let next = next_minor();
     // The license covers builds through 2026-10-03.
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-03")));
     let builds = [
         ("0.1.0", "2026-10-01"),
-        ("0.2.0", "2026-10-03"),
-        ("0.3.0", "2026-10-04"),
+        (VERSION, "2026-10-03"),
+        (next.as_str(), "2026-10-04"),
     ];
     f.releases.serve(Ok(manifest(7, &builds, &update_key())));
     launch_check(&f, cx);
     assert_eq!(
         wait_for_check(&f, cx),
         Update::Available {
-            version: "0.2.0".into(),
+            version: VERSION.into(),
             date: "2026-10-03".into(),
-            uncovered: Some("0.3.0".into()),
+            uncovered: Some(next.clone()),
         }
     );
     cx.read(|cx| {
@@ -3469,7 +3481,7 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     let (main, _) = f.main(cx);
     assert_eq!(
         label(cx, main, "update-card").as_deref(),
-        Some("Update available: convt 0.2.0")
+        Some(format!("Update available: convt {VERSION}").as_str())
     );
     click(cx, main, "update-download");
     assert_eq!(
@@ -3478,7 +3490,10 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     );
     let (settings, _) = f.settings(SettingsTab::General, cx);
     let status = label(cx, settings, "update-status").unwrap();
-    assert!(status.contains("0.2.0 is out") && status.contains("0.3.0 needs a renewed license"));
+    assert!(
+        status.contains(&format!("{VERSION} is out"))
+            && status.contains(&format!("{next} needs a renewed license"))
+    );
 
     // A second launch the same day asks nothing.
     launch_check(&f, cx);
@@ -3492,17 +3507,17 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), (VERSION, "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(
         manual_check(&f, cx),
-        Update::NotCovered { version, .. } if version == "0.2.0"
+        Update::NotCovered { version, .. } if version == VERSION
     ));
     let (main, _) = f.main(cx);
     assert_eq!(
         label(cx, main, "update-card").as_deref(),
-        Some("New version: convt 0.2.0 needs a renewed license")
+        Some(format!("New version: convt {VERSION} needs a renewed license").as_str())
     );
     click(cx, main, "update-renew");
     assert_eq!(
@@ -3530,7 +3545,7 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
 fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppContext) {
     use base64::Engine as _;
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
-    let newer = [("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")];
+    let newer = [("0.1.0", "2026-10-01"), (VERSION, "2026-10-03")];
     // Accept sequence 10 first.
     f.releases.serve(Ok(manifest(10, &newer, &update_key())));
     assert!(matches!(manual_check(&f, cx), Update::Available { .. }));
@@ -3595,7 +3610,7 @@ fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppConte
 fn update_checks_off_make_no_request(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     f.releases
-        .serve(Ok(manifest(1, &[("0.2.0", "2026-10-03")], &update_key())));
+        .serve(Ok(manifest(1, &[(VERSION, "2026-10-03")], &update_key())));
     let (settings, _) = f.settings(SettingsTab::General, cx);
     assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("On"));
     click(cx, settings, "update-checks");
@@ -3637,18 +3652,19 @@ fn a_build_without_an_update_key_never_fetches(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
+    let next = next_minor();
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
     let states = [
         Update::Idle,
         Update::Checking,
         Update::UpToDate,
         Update::Available {
-            version: "0.2.0".into(),
+            version: VERSION.into(),
             date: "2026-10-03".into(),
-            uncovered: Some("0.3.0".into()),
+            uncovered: Some(next.clone()),
         },
         Update::NotCovered {
-            version: "0.2.0".into(),
+            version: VERSION.into(),
             date: "2026-10-03".into(),
             purchase_url: "https://convt.test/pricing".into(),
         },
@@ -3685,7 +3701,7 @@ fn break_settings(dir: &Path) {
 #[gpui_kit::test]
 fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
-    let newer = [("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")];
+    let newer = [("0.1.0", "2026-10-01"), (VERSION, "2026-10-03")];
     f.releases.serve(Ok(manifest(8, &newer, &update_key())));
     // The sequence can't be saved: the result is not shown or remembered.
     let dir = f.dir.path().to_path_buf();
@@ -3715,7 +3731,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), (VERSION, "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
@@ -3728,7 +3744,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
             .unwrap();
     });
     cx.read(|cx| {
-        assert!(matches!(&f.app.read(cx).update, Update::Available { version, .. } if version == "0.2.0"))
+        assert!(matches!(&f.app.read(cx).update, Update::Available { version, .. } if version == VERSION))
     });
     // And a renewal through convt.app does the same.
     let f2 = Fixture::signed_in(
@@ -3738,7 +3754,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     );
     f2.releases.serve(Ok(manifest(
         3,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), (VERSION, "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(manual_check(&f2, cx), Update::NotCovered { .. }));
@@ -3761,7 +3777,7 @@ fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppCo
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-09-15")));
     f.releases.serve(Ok(manifest(
         2,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), (VERSION, "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
