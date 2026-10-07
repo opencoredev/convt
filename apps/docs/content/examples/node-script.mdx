@@ -74,7 +74,7 @@ export async function formatFor(name) {
 }
 
 /**
- * Converts bytes and returns [{ name, url }] for each output.
+ * Converts bytes and returns { job, outputs }.
  * Cancels the job if anything fails, so its reservation is released.
  */
 export async function convert({ bytes, from, to, timeoutMs = 11 * 60_000, pollMs = 1000 }) {
@@ -97,7 +97,7 @@ export async function convert({ bytes, from, to, timeoutMs = 11 * 60_000, pollMs
       throw new ConvtError(current.error_code ?? current.status, `job ${current.status}`);
 
     const { outputs } = await request(`/v1/jobs/${job.id}/download`, { signal });
-    return outputs;
+    return { job: current, outputs };
   } catch (error) {
     await request(`/v1/jobs/${job.id}/cancel`, { method: "POST" }).catch(() => {});
     throw error;
@@ -111,13 +111,13 @@ export async function convert({ bytes, from, to, timeoutMs = 11 * 60_000, pollMs
  */
 export async function convertFile(path, to, options = {}) {
   const bytes = await readFile(path);
-  const outputs = await convert({ ...options, bytes, from: await formatFor(path), to });
+  const { outputs } = await convert({ ...options, bytes, from: await formatFor(path), to });
   const stem = basename(path, extname(path));
   const saved = [];
   for (const output of outputs) {
     const res = await fetch(output.url);
     if (!res.ok) throw new ConvtError("download_failed", await res.text(), res.status);
-    const name = basename(output.name).replace(/^input/, stem);
+    const name = basename(output.name).replace(/^input/, () => stem);
     await writeFile(name, Buffer.from(await res.arrayBuffer()));
     saved.push(name);
   }

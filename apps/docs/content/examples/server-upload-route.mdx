@@ -23,12 +23,12 @@ export async function handleConvert(request) {
     return new Response("file too large", { status: 413 });
 
   try {
-    const outputs = await convert({
+    const { job, outputs } = await convert({
       bytes: new Uint8Array(await file.arrayBuffer()),
       from: await formatFor(file.name),
       to,
     });
-    return Response.json({ outputs });
+    return Response.json({ job: job.id, outputs });
   } catch (error) {
     console.error(error);
     return new Response(error.message, { status: 502 });
@@ -36,7 +36,7 @@ export async function handleConvert(request) {
 }
 
 // Bun: bun server.mjs
-if (typeof Bun !== "undefined") {
+if (typeof Bun !== "undefined" && import.meta.main) {
   Bun.serve({
     port: 3000,
     fetch: (request) =>
@@ -54,8 +54,9 @@ const body = new FormData();
 body.append("file", fileInput.files[0]);
 body.append("to", "webp");
 const res = await fetch("/api/convert", { method: "POST", body });
-const { outputs } = await res.json();
+const { job, outputs } = await res.json();
 link.href = outputs[0].url;
+// Keep `job` if the user may download again after the signed URL expires.
 ```
 
 The signed URLs expire after 5 minutes. To let users download later, store the job id and call `GET /v1/jobs/{id}/download` for fresh URLs when they click, any time in the 24 hours before the job expires.

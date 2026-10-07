@@ -12,8 +12,11 @@ Once it is published, the SDK runs all five steps in one call. Pass `baseUrl` wh
 ```ts
 import { Convt } from "@convt/sdk";
 
+const apiKey = process.env.CONVT_API_KEY;
+if (!apiKey) throw new Error("set CONVT_API_KEY");
+
 const convt = new Convt({
-  apiKey: process.env.CONVT_API_KEY,
+  apiKey,
   baseUrl: "{{api}}",
 });
 
