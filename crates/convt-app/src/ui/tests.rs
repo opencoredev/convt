@@ -424,8 +424,16 @@ impl Fixture {
         }
     }
 
-    /// A 4x4 PNG in the fixture directory.
+    /// A 4x4 still in the fixture directory. The name's extension picks the format.
     fn png(&self, name: &str) -> PathBuf {
+        self.rgb(name)
+    }
+
+    fn bmp(&self, name: &str) -> PathBuf {
+        self.rgb(name)
+    }
+
+    fn rgb(&self, name: &str) -> PathBuf {
         let path = self.dir.path().join(name);
         image::RgbImage::from_pixel(4, 4, image::Rgb([200, 40, 40]))
             .save(&path)
@@ -577,6 +585,10 @@ fn wait_until(cx: &mut TestAppContext, what: &str, done: impl Fn(&App) -> bool) 
 
 fn is_jpeg(path: &Path) -> bool {
     std::fs::read(path).is_ok_and(|bytes| bytes.starts_with(&[0xFF, 0xD8, 0xFF]))
+}
+
+fn is_png(path: &Path) -> bool {
+    std::fs::read(path).is_ok_and(|bytes| bytes.starts_with(b"\x89PNG"))
 }
 
 fn is_webp(path: &Path) -> bool {
@@ -822,20 +834,20 @@ fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let a = f.png("a.png");
-    let b = f.png("b.png");
+    let a = f.bmp("a.bmp");
+    let b = f.bmp("b.bmp");
     let (window, view) = f.main(cx);
     assert!(shown(cx, window, "empty"));
     assert_eq!(
         label(cx, window, "defaults").as_deref(),
-        Some("Images → WebP, Video → MP4, Audio → MP3, Documents → PDF")
+        Some("Photos → JPEG, Images → PNG, Video → MP4, Audio → MP3, Documents → PDF")
     );
 
-    // The same file twice converts once.
+    // The same file twice converts once. Stills that aren't photos become PNG.
     view.update(cx, |v, cx| v.add(&[a.clone(), b, a], cx));
     assert_eq!(f.jobs(cx), 2);
     wait_until(cx, "both files", |cx| f.app.read(cx).recent.len() == 2);
-    assert!(is_webp(&f.dir.path().join("a.webp")) && is_webp(&f.dir.path().join("b.webp")));
+    assert!(is_png(&f.dir.path().join("a.png")) && is_png(&f.dir.path().join("b.png")));
     let records = cx.read(|cx| f.app.read(cx).recent.clone());
     for record in &records {
         let status = label(cx, window, &format!("record-status-{}", record.id)).unwrap();
@@ -849,12 +861,12 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
     click(cx, window, "default-images-jpeg");
     cx.read(|cx| assert_eq!(f.app.read(cx).settings.defaults.images, "jpeg"));
     assert!(f.settings_file().contains("images = \"jpeg\""));
-    let c = f.png("c.png");
+    let c = f.bmp("c.bmp");
     view.update(cx, |v, cx| v.add(&[c], cx));
     wait_until(cx, "c.jpg", |cx| f.app.read(cx).recent.len() == 3);
     assert!(is_jpeg(&f.dir.path().join("c.jpg")));
 
-    // A file with no usable default (a JPEG with JPEG as the default) asks.
+    // A file with no usable default (a JPEG with JPEG as the images default) asks.
     let windows = cx.update(|cx| cx.windows().len());
     let jpg = f.dir.path().join("c.jpg");
     view.update(cx, |v, cx| v.add(&[jpg], cx));
@@ -1304,6 +1316,8 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     set_input(cx, window, &input, &key);
     click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
+    let body = label(cx, window, "first-run-body").expect("done body");
+    assert!(body.contains("JPEG") && body.contains("PNG"), "{body}");
     assert!(f.dir.path().join("license.key").exists());
 
     // "Start converting" finishes first run and opens the main window.
@@ -1504,22 +1518,22 @@ fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppCon
 #[gpui_kit::test]
 fn the_popover_converts_a_dropped_file_and_copies_it(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let png = f.png("Screenshot.png");
+    let bmp = f.bmp("Screenshot.bmp");
     let (window, view) = cx.update(super::open_popover).unwrap();
     assert!(shown(cx, window, "drop-bar"));
-    view.update(cx, |v, cx| v.drop_files(&[png], cx));
+    view.update(cx, |v, cx| v.drop_files(&[bmp], cx));
     let job = f.last_job(cx);
     wait_for_label(cx, window, &format!("copied-{job}"), |s| {
         s == "Copied to your clipboard"
     });
     let item = cx.read_from_clipboard().expect("something was copied");
-    let output = f.dir.path().join("Screenshot.webp");
-    assert!(is_webp(&output));
+    let output = f.dir.path().join("Screenshot.png");
+    assert!(is_png(&output));
     assert!(
         item.entries().iter().any(|e| matches!(
             e,
             ClipboardEntry::Image(image)
-                if image.format == ImageFormat::Webp
+                if image.format == ImageFormat::Png
                     && image.bytes == std::fs::read(&output).unwrap()
         )),
         "{item:?}"
@@ -1557,8 +1571,63 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
     let (main, view) = window_of::<MainView>(cx);
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
     assert_eq!(label(cx, main, "automation-2").as_deref(), Some("On"));
+    let intro = label(cx, main, "automations-intro").expect("intro");
+    assert!(intro.contains("screenshot"), "{intro}");
+    assert_eq!(
+        label(cx, main, "automation-0-copy").as_deref(),
+        Some("Copy the converted file")
+    );
+    click(cx, main, "automation-0-copy");
+    cx.read(|cx| assert!(!f.app.read(cx).settings.automations[0].copies_to_clipboard()));
     click(cx, main, "automation-0");
     cx.read(|cx| assert!(!f.app.read(cx).settings.automations[0].enabled));
+}
+
+#[gpui_kit::test]
+fn a_screenshot_automation_converts_and_can_copy(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let shots = f.dir.path().join("shots");
+    std::fs::create_dir(&shots).unwrap();
+    f.app.update(cx, |s, cx| {
+        s.update_settings(
+            |set| {
+                set.automations[0].folder = Some(shots.clone());
+                set.automations[0].copy_to_clipboard = Some(true);
+                set.automations[1].enabled = false;
+            },
+            cx,
+        );
+        s.poll_automations(cx);
+    });
+
+    let input = shots.join("Screenshot 1.bmp");
+    image::RgbImage::from_pixel(4, 4, image::Rgb([200, 40, 40]))
+        .save(&input)
+        .unwrap();
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    wait_until(cx, "the screenshot", |cx| f.app.read(cx).recent.len() == 1);
+    let output = shots.join("Screenshot 1.png");
+    assert!(is_png(&output));
+    let item = cx.read_from_clipboard().expect("the result was copied");
+    assert!(
+        item.entries().iter().any(|e| matches!(
+            e,
+            ClipboardEntry::Image(image)
+                if image.format == ImageFormat::Png
+                    && image.bytes == std::fs::read(&output).unwrap()
+        )),
+        "{item:?}"
+    );
+
+    // Ordinary photos in the same Desktop-like folder are left alone.
+    image::RgbImage::from_pixel(4, 4, image::Rgb([20, 80, 200]))
+        .save(shots.join("IMG_2041.bmp"))
+        .unwrap();
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    assert_eq!(cx.read(|cx| f.app.read(cx).recent.len()), 1);
+    assert!(!shots.join("IMG_2041.png").exists());
 }
 
 #[gpui_kit::test]
