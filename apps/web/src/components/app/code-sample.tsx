@@ -1,62 +1,71 @@
 import { useId, useRef, useState } from "react";
 
-import { apiBaseUrl } from "#/lib/config";
-
 import { cx } from "./ui";
 
-// Each example follows the jobs API. The SDK handles upload and polling.
-const samples = [
-  {
-    id: "node",
-    label: "Node",
-    code: `import { Convt } from "@convt/sdk";
+// Each example runs the whole jobs flow against the API: reserve, upload, start,
+// poll, download. They are tested as written; keep them runnable.
+function samplesFor(api: string) {
+  return [
+    {
+      id: "curl",
+      label: "cURL",
+      code: `# Needs curl and jq. Set CONVT_KEY to your API key.
+api=${api}
+auth="Authorization: Bearer $CONVT_KEY"
+job=$(curl -fsS $api/v1/jobs -H "$auth" -H "Content-Type: application/json" \\
+  -d "{\\"input_format\\":\\"png\\",\\"target_format\\":\\"webp\\",\\"input_bytes\\":$(wc -c < photo.png)}")
+id=$(jq -r .job.id <<<"$job")
+curl -fsS -X PUT --upload-file photo.png "$(jq -r .upload_url <<<"$job")"
+curl -fsS -X POST $api/v1/jobs/$id/start -H "$auth" >/dev/null
+while status=$(curl -fsS $api/v1/jobs/$id -H "$auth" | jq -r .status);
+  [ "$status" = queued ] || [ "$status" = running ]; do sleep 1; done
+echo "$status"
+curl -fsS $api/v1/jobs/$id/download -H "$auth" \\
+  | jq -r '.outputs[0].url' | xargs curl -fsS -o photo.webp`,
+    },
+    {
+      id: "node",
+      label: "Node",
+      code: `// Node 20 or later. Set CONVT_KEY to your API key.
+import { readFile, writeFile } from "node:fs/promises";
 
-// Set CONVT_API_KEY in your environment.
-const convt = new Convt();
-const out = await convt.convert("report.docx", {
-  to: "pdf",
-});
-await out.save("report.pdf");`,
-  },
-  {
-    id: "curl",
-    label: "cURL",
-    code: `# Create a reservation for a 104-byte SVG.
-job=$(curl -fsS ${apiBaseUrl}/v1/jobs \\
-  -H "Authorization: Bearer $CONVT_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"input_format":"svg","target_format":"png","input_bytes":104}')
-# PUT your file to upload_url, then POST /v1/jobs/{id}/start.
-# Poll GET /v1/jobs/{id}; on success, GET its /download URLs.
-# The SDK performs each of these steps for you.`,
-  },
-  {
-    id: "browser",
-    label: "Browser",
-    code: `import { Convt } from "@convt/sdk";
+const api = "${api}";
+const auth = { Authorization: \`Bearer \${process.env.CONVT_KEY}\` };
+const call = (path, init = {}) =>
+  fetch(api + path, { ...init, headers: { ...auth, ...init.headers } }).then((r) => r.json());
 
-// Use a short-lived token issued by your server.
-const convt = new Convt({
-  token: () => fetchToken(),
-  baseUrl: "${apiBaseUrl}",
+const input = await readFile("photo.png");
+const created = await call("/v1/jobs", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ input_format: "png", target_format: "webp", input_bytes: input.length }),
 });
-const out = await convt.convert(file, { to: "pdf" });
-const blob = await out.blob();`,
-  },
-  {
-    id: "cli",
-    label: "CLI",
-    code: `# The desktop CLI converts on your machine.
+await fetch(created.upload_url, { method: "PUT", body: input });
+const id = created.job.id;
+let job = await call(\`/v1/jobs/\${id}/start\`, { method: "POST" });
+while (job.status === "queued" || job.status === "running") {
+  await new Promise((r) => setTimeout(r, 1000));
+  job = await call(\`/v1/jobs/\${id}\`);
+}
+const { outputs } = await call(\`/v1/jobs/\${id}/download\`);
+await writeFile("photo.webp", Buffer.from(await (await fetch(outputs[0].url)).arrayBuffer()));`,
+    },
+    {
+      id: "cli",
+      label: "CLI",
+      code: `# The desktop CLI converts on your machine.
 # It needs no API key and uploads nothing.
-convt report.docx --to pdf`,
-  },
-] as const;
+convt photo.png --to webp`,
+    },
+  ] as const;
+}
 
-type SampleId = (typeof samples)[number]["id"];
+type SampleId = ReturnType<typeof samplesFor>[number]["id"];
 
-export function CodeSample() {
+export function CodeSample({ apiUrl }: { apiUrl: string }) {
+  const samples = samplesFor(apiUrl);
   const base = useId();
-  const [active, setActive] = useState<SampleId>("node");
+  const [active, setActive] = useState<SampleId>("curl");
   const [copied, setCopied] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const current = samples.find((s) => s.id === active) ?? samples[0];

@@ -36,6 +36,7 @@ const apiLabel = {
   none: null,
   pending: "PENDING",
   enrolled: "ACTIVE",
+  credit: "CREDIT",
   payment_failed: "PAYMENT FAILED",
   ended: "ENDED",
 } as const;
@@ -69,6 +70,7 @@ function BillingPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const plan = billing.plan;
+  const paidApi = billing.api.state !== "none" && billing.api.state !== "credit";
   const otherInterval = plan?.interval === "year" ? "month" : "year";
   const otherLabel = otherInterval === "year" ? "yearly" : "monthly";
 
@@ -262,13 +264,22 @@ function BillingPage() {
           {apiLabel[billing.api.state] ? (
             <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-line pt-3.5">
               <span className="text-[13px]/4 font-medium">API, pay per conversion</span>
-              <Badge size="sm" tone={billing.api.state === "enrolled" ? "green" : "neutral"}>
+              <Badge
+                size="sm"
+                tone={
+                  billing.api.state === "enrolled" || billing.api.state === "credit"
+                    ? "green"
+                    : "neutral"
+                }
+              >
                 {apiLabel[billing.api.state]}
               </Badge>
               <span className="text-[13px]/4 text-ink-2">
-                {billing.api.spendCapCents !== null
-                  ? `Spend cap ${formatMoney(billing.api.spendCapCents)} a month`
-                  : "No spend cap"}
+                {billing.api.state === "credit"
+                  ? `${formatMoney(billing.api.spendCapCents ?? 0)} of credit, no card needed`
+                  : billing.api.spendCapCents !== null
+                    ? `Spend cap ${formatMoney(billing.api.spendCapCents)} a month`
+                    : "No spend cap"}
                 {billing.api.endsOn ? `. Ends ${formatDate(billing.api.endsOn)}` : ""}
               </span>
               <a
@@ -306,12 +317,12 @@ function BillingPage() {
             <p className="text-[13px]/4 text-ink-2">No card on file.</p>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {billing.card || plan || billing.api.state !== "none" ? (
+            {billing.card || plan || paidApi ? (
               <TextButton disabled={portal.busy} onClick={portal.open}>
                 {billing.card ? "Update card" : "Add card"}
               </TextButton>
             ) : null}
-            {plan || billing.api.state !== "none" ? (
+            {plan || paidApi ? (
               <TextButton tone="muted" disabled={portal.busy} onClick={portal.open}>
                 Manage billing
               </TextButton>
@@ -323,7 +334,7 @@ function BillingPage() {
       <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4.5">
         <h2 className="text-[13px]/4 text-ink-2 sm:w-[200px] sm:shrink-0">Receipts go to</h2>
         <p className="min-w-0 flex-1 font-mono text-[13px]/4 break-all">{billing.receiptEmail}</p>
-        {plan || billing.api.state !== "none" ? (
+        {plan || paidApi ? (
           <TextButton disabled={portal.busy} onClick={portal.open}>
             Change
           </TextButton>

@@ -38,7 +38,7 @@ impl Meter for PolarMeter {
     }
 }
 pub async fn drain(pool: &PgPool, meter: &dyn Meter) -> anyhow::Result<usize> {
-    let events=sqlx::query_as!(MeterEvent, r#"select id,job_id as "job_id!",user_id as "user_id!",quantity,occurred_at from usage_events where kind='api_conversion' and reported_at is null and user_id is not null order by occurred_at limit 100"#).fetch_all(pool).await?;
+    let events=sqlx::query_as!(MeterEvent, r#"select e.id,e.job_id as "job_id!",e.user_id as "user_id!",e.quantity,e.occurred_at from usage_events e join subscriptions s on s.id=e.subscription_id where e.kind='api_conversion' and e.reported_at is null and e.user_id is not null and s.provider='polar' order by e.occurred_at limit 100"#).fetch_all(pool).await?;
     let mut sent = 0;
     for e in events {
         meter.send(&e).await?;

@@ -136,7 +136,7 @@ export async function reconcileFrequent(ctx: BillingContext, only?: FrequentStep
           ctx.db,
           sql`
       select provider_subscription_id from subscriptions
-      where provider_subscription_id not like 'seed_%'
+      where provider = 'polar' and provider_subscription_id not like 'seed_%'
         and (status in ('incomplete', 'trialing', 'active', 'past_due', 'paused', 'unpaid')
           or ended_at > ${new Date(started.getTime() - 35 * 86_400_000)})`,
         );

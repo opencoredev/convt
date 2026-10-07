@@ -520,3 +520,24 @@ async fn api_and_pro_share_a_serialized_storage_budget() {
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
     db.drop().await;
 }
+#[tokio::test]
+async fn grant_credit_is_spendable_and_never_metered() {
+    let Some(db) = test_db().await else { return };
+    // A credit grant as `bun run billing:grant-credit` writes it: no period end, cap = credit.
+    sqlx::query("insert into users (id,name,email,email_verified) values ('usr_g','','usr_g@convt.test',true)").execute(&db.owner).await.unwrap();
+    sqlx::query("insert into subscriptions (id,provider,user_id,email,kind,status,provider_subscription_id,current_period_start,spend_cap_cents,card_seen_at) values ('sub_g','grant','usr_g','usr_g@convt.test','api','active','grant_sub_g',now()-interval '40 days',2,now())").execute(&db.owner).await.unwrap();
+    sqlx::query("insert into api_keys (id,user_id,name,prefix,secret_hash) values ('key_g','usr_g','test','cvt_live_grant000',$1)").bind(&crate::api_keys::hash_key("grant")[..]).execute(&db.owner).await.unwrap();
+    let who = Principal {
+        user_id: "usr_g".into(),
+        key_id: Some("key_g".into()),
+    };
+    let first = jobs::create(&db.server, &who, &data(10)).await.unwrap();
+    jobs::create(&db.server, &who, &data(10)).await.unwrap();
+    // Two cents granted, two jobs reserved: the third is refused.
+    assert!(jobs::create(&db.server, &who, &data(10)).await.is_err());
+    sqlx::query("insert into usage_events (id,user_id,subscription_id,job_id,kind,quantity,amount_cents,occurred_at) values ('use_g','usr_g','sub_g',$1,'api_conversion',1,1,now())").bind(&first.id).execute(&db.owner).await.unwrap();
+    let meter = RetryMeter::default();
+    assert_eq!(meter::drain(&db.server, &meter).await.unwrap(), 0);
+    assert!(meter.seen.lock().unwrap().is_empty());
+    db.drop().await;
+}

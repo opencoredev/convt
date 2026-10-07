@@ -18,6 +18,7 @@ const labels: Record<ApiEnrollment["state"], string | null> = {
   none: null,
   pending: "PENDING",
   enrolled: "ACTIVE",
+  credit: "CREDIT",
   payment_failed: "PAYMENT FAILED",
   ended: "ENDED",
 };
@@ -133,14 +134,23 @@ export function ApiEnrollmentCard({
           API billing
         </h2>
         {labels[state] ? (
-          <Badge size="sm" tone={state === "enrolled" ? "green" : "neutral"}>
+          <Badge size="sm" tone={state === "enrolled" || state === "credit" ? "green" : "neutral"}>
             {labels[state]}
           </Badge>
         ) : null}
       </div>
 
       {canEnroll && !available ? (
-        <p className="text-[13px]/5 text-ink-2">API billing is coming soon.</p>
+        <p className="text-[13px]/5 text-ink-2">
+          Card billing for the API isn't open yet. To try the API now, ask for test credit at{" "}
+          <a
+            href="mailto:hello@convt.app"
+            className="font-medium text-green hover:underline hover:underline-offset-2"
+          >
+            hello@convt.app
+          </a>
+          .
+        </p>
       ) : canEnroll && blocked ? (
         <p className="text-[13px]/5 text-ink-2">
           API billing can't start yet: our payment provider has to allow a second subscription on an
@@ -168,6 +178,13 @@ export function ApiEnrollmentCard({
             $20 is a good start. Anything from $1 to $10,000; you can change it later.
           </p>
         </>
+      ) : state === "credit" ? (
+        <p className="text-[13px]/5 text-ink-2">
+          Your account has{" "}
+          <span className="font-mono text-ink">{formatMoney(enrollment.spendCapCents ?? 0)}</span>{" "}
+          of API credit from convt. Each successful conversion uses 1¢, and no card is needed. New
+          jobs are refused once the credit runs out.
+        </p>
       ) : state === "pending" ? (
         <p className="text-[13px]/5 text-ink-2">
           We're waiting for the payment provider to confirm your card. This page updates when it

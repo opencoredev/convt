@@ -36,6 +36,7 @@ bun run db:seed               # fixture accounts (*@convt.test) in this checkout
 bun run db:migrate            # also db:up, db:down, db:rollback, db:reset
 bun run db:ci                 # schema drift, down files, DB integration tests, convt-server sqlx check
 bun run billing:outbox list   # ambiguous or dead emails; `resolve <id> sent|resend`
+bun run billing:grant-credit EMAIL DOLLARS   # prepaid API credit, no card (provider `grant`)
 bun run license:keygen PATH   # a production signing key, written outside the repo
 bun run build && bun run check-types && bun run check
 ```

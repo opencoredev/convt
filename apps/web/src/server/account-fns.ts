@@ -21,6 +21,7 @@ import {
 } from "@convt/db/queries";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
+import { env } from "cloudflare:workers";
 
 import { availableProviders } from "./env";
 import { billing } from "./billing";
@@ -122,6 +123,8 @@ export const fetchApiOverview = createServerFn({ method: "GET" })
         : true;
     return {
       sales: appEnv.sales,
+      /** The cloud API's base URL, or null while this deployment has none. */
+      apiUrl: typeof env.CONVT_API_URL === "string" ? env.CONVT_API_URL.replace(/\/$/, "") : null,
       enrollment,
       enrollBlocked: multipleAllowed === false,
       thisMonth: month.count,

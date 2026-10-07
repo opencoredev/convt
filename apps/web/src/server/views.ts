@@ -47,6 +47,8 @@ export type SubscriptionRow = {
   endedAt: Date | null;
   spendCapCents: number | null;
   cardSeenAt?: Date | null;
+  /** `polar`, or `grant` for API credit we granted by hand. */
+  provider?: string;
   createdAt: Date;
 };
 
@@ -302,6 +304,12 @@ export function apiEnrollment(
       endsOn: null,
     };
   }
+  if (api.provider === "grant")
+    return {
+      state: api.status === "active" ? "credit" : "ended",
+      spendCapCents: api.spendCapCents,
+      endsOn: null,
+    };
   const endsOn =
     api.cancelAtPeriodEnd && api.currentPeriodEnd ? isoDay(api.currentPeriodEnd) : null;
   if (api.status === "past_due" || api.status === "unpaid")

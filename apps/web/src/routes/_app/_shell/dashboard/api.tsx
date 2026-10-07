@@ -19,8 +19,8 @@ import {
   table,
 } from "#/components/app/ui";
 import { getApiOverview } from "#/lib/account";
-import { links } from "#/lib/config";
-import { formatDate, formatNumber, formatShortDate } from "#/lib/format";
+import { apiBaseUrl, links } from "#/lib/config";
+import { formatDate, formatMoney, formatNumber, formatShortDate } from "#/lib/format";
 
 export const Route = createFileRoute("/_app/_shell/dashboard/api")({
   head: () => ({ meta: [{ title: "API · convt" }] }),
@@ -36,6 +36,9 @@ const docLinks = [
 
 function ApiPage() {
   const api = Route.useLoaderData();
+  const covered = api.enrollment.state === "enrolled" || api.enrollment.state === "credit";
+  const credit = api.enrollment.state === "credit";
+  const canCreate = covered && api.apiUrl !== null;
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -76,7 +79,7 @@ function ApiPage() {
         <div className="flex flex-col gap-2">
           <PageTitle>API</PageTitle>
           <p className="text-[13px]/4 text-ink-2">
-            Convert files from your own code. Billed per conversion at the end of each month.
+            Convert files in the cloud from your own code. Each successful conversion costs 1¢.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -87,26 +90,22 @@ function ApiPage() {
             </span>
           </SecondaryLink>
           <PrimaryButton
-            disabled={busy || api.sales !== "all" || api.enrollment.state !== "enrolled"}
-            title={
-              api.enrollment.state !== "enrolled" ? "Add a card under API billing first" : undefined
-            }
+            disabled={busy || !canCreate}
+            title={canCreate ? undefined : "API keys need credit or a card under API billing"}
             onClick={() => {
               setCreating(true);
               setShownKey(null);
             }}
           >
-            {api.sales === "all" ? "Create key" : "Coming soon"}
+            Create key
           </PrimaryButton>
         </div>
       </div>
 
-      {api.sales === "all" ? (
+      {api.sales === "all" && (
         <SecondaryLink href="/dashboard/api/convert" className="self-start">
           Convert in your browser
         </SecondaryLink>
-      ) : (
-        <p className="text-sm text-ink-2">Cloud conversions are coming soon.</p>
       )}
       {error && (
         <p role="alert" className="text-sm text-error">
@@ -137,7 +136,10 @@ function ApiPage() {
       {shownKey && (
         <Card className="flex flex-col gap-3 p-5">
           <SectionTitle>Your new API key</SectionTitle>
-          <p className="text-sm text-ink-2">Save this key now. It will not be shown again.</p>
+          <p className="text-sm text-ink-2">
+            Copy this key now. It won't be shown again. Send it as{" "}
+            <code className="font-mono text-xs">Authorization: Bearer &lt;key&gt;</code>.
+          </p>
           <input
             aria-label="New API key"
             readOnly
@@ -150,25 +152,37 @@ function ApiPage() {
           </TextButton>
         </Card>
       )}
-      <Card className="flex flex-wrap gap-6 px-6 py-4 text-sm">
-        <div>
-          <span className="text-ink-2">Spent </span>
-          <span className="font-mono">${(api.spend.used / 100).toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="text-ink-2">Reserved </span>
-          <span className="font-mono">${(api.spend.reserved / 100).toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="text-ink-2">Spend cap </span>
-          <span className="font-mono">${(api.spend.limit / 100).toFixed(2)}</span>
-        </div>
-        {api.spend.allowed && api.spend.used + api.spend.reserved >= api.spend.limit && (
-          <p role="status" className="text-error">
-            Spend cap reached. Raise it under API billing to create more jobs.
-          </p>
-        )}
-      </Card>
+      {covered && (
+        <Card className="flex flex-wrap gap-6 px-6 py-4 text-sm">
+          {credit && (
+            <div>
+              <span className="text-ink-2">Credit left </span>
+              <span className="font-mono">
+                {formatMoney(Math.max(0, api.spend.limit - api.spend.used - api.spend.reserved))}
+              </span>
+            </div>
+          )}
+          <div>
+            <span className="text-ink-2">{credit ? "Used " : "Spent "}</span>
+            <span className="font-mono">{formatMoney(api.spend.used)}</span>
+          </div>
+          <div>
+            <span className="text-ink-2">Reserved </span>
+            <span className="font-mono">{formatMoney(api.spend.reserved)}</span>
+          </div>
+          <div>
+            <span className="text-ink-2">{credit ? "Granted " : "Spend cap "}</span>
+            <span className="font-mono">{formatMoney(api.spend.limit)}</span>
+          </div>
+          {api.spend.allowed && api.spend.used + api.spend.reserved >= api.spend.limit && (
+            <p role="status" className="text-error">
+              {credit
+                ? "Credit used up. New jobs are refused until more is added."
+                : "Spend cap reached. Raise it under API billing to create more jobs."}
+            </p>
+          )}
+        </Card>
+      )}
       <ApiEnrollmentCard
         enrollment={api.enrollment}
         blocked={api.enrollBlocked}
@@ -253,8 +267,16 @@ function ApiPage() {
 
       <section aria-labelledby="quick-start-title" className="flex flex-col gap-3">
         <SectionTitle id="quick-start-title">Quick start</SectionTitle>
+        <p className="max-w-[68ch] text-[13px]/5 text-ink-2">
+          Send your key as a Bearer token to{" "}
+          <code className="font-mono text-xs text-ink">{api.apiUrl ?? apiBaseUrl}</code>. A
+          conversion takes four calls: create a job, upload the file to its{" "}
+          <code className="font-mono text-xs">upload_url</code>, start it, then poll until it
+          succeeds and download the output. Each successful conversion costs 1¢; failed ones are
+          free.
+        </p>
         <div className="flex flex-col gap-4 lg:flex-row">
-          <CodeSample />
+          <CodeSample apiUrl={api.apiUrl ?? apiBaseUrl} />
           <Card className="flex flex-col overflow-clip lg:w-[340px] lg:shrink-0">
             <a
               href={links.docs}

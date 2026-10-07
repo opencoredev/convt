@@ -17,6 +17,12 @@ The worker image includes bundled Linux x86_64 FFmpeg, FFprobe, PDFium and libhe
 
 Apply the additive migrations with the owner role. Give the web Worker `convt_web` credentials and both API and workers `convt_server` credentials. Startup checks migration hashes. Never use the owner connection for a service. Connect the web Worker to Railway Postgres through Hyperdrive as described in P6.
 
+## Current production deployment
+
+The API runs on Railway as the `convt-api` service in project `convt`, at `https://convt-api-production.up.railway.app`, with the private Railway Bucket `convt-jobs`. Railway failed the worker host gate: its containers lack CAP_SYS_ADMIN (no tmpfs mounts), get a read-only cgroup tree and cannot mknod, though Landlock ABI 7, seccomp, chroot and setuid work. The worker therefore runs as a Docker container on a host that passes the gate, started with `crates/convt-worker/deploy/host/run.sh`. It only makes outbound connections: to the bucket, and to Railway Postgres through `pg-tls-forward.py`, which verifies the pinned certificate because Railway's leaf is marked CA:TRUE and rustls refuses it.
+
+Card billing for the API is not open (`SALES=desktop`). `bun run billing:grant-credit <email> <dollars>` grants prepaid credit instead: an API subscription with provider `grant`, a spend cap equal to the credit and no period end. The worker never meters grant usage to Polar, and the billing actions, reconciler and deletion skip grant rows.
+
 ## Pass the worker host gate
 
 The parent runs as root to prepare a private chroot, assign a separate never-reused UID and drop the child's groups and capabilities. It alone reads database and storage credentials. Every conversion starts in a fresh child with an empty environment and closed inherited descriptors. The private root contains its input, trusted engine binaries and libraries, selected configuration and a writable output directory. It has no `/proc`, parent files or service secrets. Scratch is inside the output directory.

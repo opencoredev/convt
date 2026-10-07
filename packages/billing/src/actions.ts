@@ -12,7 +12,7 @@ import { maxCapCents, minCapCents } from "./checkout";
 
 const liveSub = (kind: "pro" | "api", userId: string, now: Date) => sql`
   select id, provider_subscription_id, status, interval, cancel_at_period_end from subscriptions
-  where user_id = ${userId} and kind = ${kind}
+  where user_id = ${userId} and kind = ${kind} and provider = 'polar'
     and status in ('trialing', 'active', 'past_due', 'unpaid', 'incomplete')
     and (ended_at is null or ended_at > ${now})
   order by created_at desc limit 1`;
@@ -144,7 +144,8 @@ export async function setSpendCap(
       tx,
       sql`
       select id from subscriptions
-      where user_id = ${userId} and kind = 'api' and status not in ('canceled', 'incomplete_expired')
+      where user_id = ${userId} and kind = 'api' and provider = 'polar'
+        and status not in ('canceled', 'incomplete_expired')
         and (ended_at is null or ended_at > ${now})
       order by created_at desc limit 1
       for update`,

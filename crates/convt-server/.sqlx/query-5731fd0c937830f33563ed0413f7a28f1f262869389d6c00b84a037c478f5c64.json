@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id,job_id as \"job_id!\",user_id as \"user_id!\",quantity,occurred_at from usage_events where kind='api_conversion' and reported_at is null and user_id is not null order by occurred_at limit 100",
+  "query": "select e.id,e.job_id as \"job_id!\",e.user_id as \"user_id!\",e.quantity,e.occurred_at from usage_events e join subscriptions s on s.id=e.subscription_id where e.kind='api_conversion' and e.reported_at is null and e.user_id is not null and s.provider='polar' order by e.occurred_at limit 100",
   "describe": {
     "columns": [
       {
@@ -70,5 +70,5 @@
       false
     ]
   },
-  "hash": "24e66e703a9fa19c92b89a5f8e52cc3d1eda125e08a5cb8b0225c99352f20857"
+  "hash": "5731fd0c937830f33563ed0413f7a28f1f262869389d6c00b84a037c478f5c64"
 }

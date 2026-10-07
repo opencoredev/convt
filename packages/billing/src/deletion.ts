@@ -44,7 +44,7 @@ export async function requestDeletion(
 
 const liveSql = (userId: string, now: Date) => sql`
   select id, provider_subscription_id, kind from subscriptions
-  where user_id = ${userId} and status not in ('canceled', 'incomplete_expired')
+  where user_id = ${userId} and provider = 'polar' and status not in ('canceled', 'incomplete_expired')
     and (ended_at is null or ended_at > ${now})`;
 
 /** One step for one deletion. Returns its status afterwards. */

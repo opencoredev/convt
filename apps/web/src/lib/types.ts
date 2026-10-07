@@ -62,7 +62,8 @@ export type Invoice = {
 
 /** API enrollment, from the newest API subscription (and an unfinished checkout). */
 export type ApiEnrollment = {
-  state: "none" | "pending" | "enrolled" | "payment_failed" | "ended";
+  /** `credit`: a prepaid grant from us, no card. Its spend cap is the credit. */
+  state: "none" | "pending" | "enrolled" | "credit" | "payment_failed" | "ended";
   spendCapCents: number | null;
   /** ISO date when billing ends, if set to end. */
   endsOn: string | null;

@@ -371,6 +371,21 @@ describe("billing per state", () => {
     );
     expect(bv([api({ status: "canceled", endedAt: days(-1) })]).api.state).toBe("ended");
   });
+
+  test("API credit: a grant shows its credit, never billing states", () => {
+    const grant = (v: Partial<SubscriptionRow>) =>
+      sub({
+        kind: "api",
+        interval: null,
+        provider: "grant",
+        spendCapCents: 2500,
+        currentPeriodEnd: null,
+        cardSeenAt: days(-1),
+        ...v,
+      });
+    expect(bv([grant({})]).api).toEqual({ state: "credit", spendCapCents: 2500, endsOn: null });
+    expect(bv([grant({ status: "canceled", endedAt: days(-1) })]).api.state).toBe("ended");
+  });
 });
 
 describe("revoked licenses", () => {
