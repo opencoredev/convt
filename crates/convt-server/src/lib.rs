@@ -26,6 +26,12 @@ use serde::Serialize;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+/// Selects rustls's crypto provider. Call once at startup, before any TLS
+/// connection (Postgres with `sslmode`, object storage, Polar).
+pub fn install_crypto() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+
 #[derive(Serialize)]
 struct FormatInfo {
     id: &'static str,

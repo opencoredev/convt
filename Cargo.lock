@@ -1611,6 +1611,7 @@ dependencies = [
  "hmac 0.12.1",
  "reqwest 0.13.5",
  "rust-s3",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",

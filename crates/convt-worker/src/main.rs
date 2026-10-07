@@ -17,6 +17,7 @@ fn main() -> anyhow::Result<()> {
     allow(unused_variables, irrefutable_let_patterns)
 )]
 async fn run(args: Vec<String>) -> anyhow::Result<()> {
+    convt_server::install_crypto();
     #[cfg(target_os = "linux")]
     if let Some(action) = args.first().map(String::as_str)
         && action.starts_with("--sandbox-")
