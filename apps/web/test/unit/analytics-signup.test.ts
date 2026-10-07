@@ -117,7 +117,7 @@ test("the auth hook skips capture when the request opted out", () => {
 
 test("captureEvent fails on a non-2xx PostHog response and accepts 2xx", async () => {
   const original = globalThis.fetch;
-  globalThis.fetch = (async () => new Response("down", { status: 503 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response("down", { status: 503 })) as unknown as typeof fetch;
   try {
     await expect(
       captureEvent(
@@ -128,7 +128,7 @@ test("captureEvent fails on a non-2xx PostHog response and accepts 2xx", async (
   } finally {
     globalThis.fetch = original;
   }
-  globalThis.fetch = (async () => new Response("ok", { status: 200 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch;
   try {
     await captureEvent(
       { key: "phc_test", host: "https://us.i.posthog.com" },

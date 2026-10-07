@@ -45,7 +45,7 @@ test("claimed licenses become one purchase event per order or subscription", () 
 
 test("captureEvent fails on a non-2xx PostHog response", async () => {
   const original = globalThis.fetch;
-  globalThis.fetch = (async () => new Response("down", { status: 503 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response("down", { status: 503 })) as unknown as typeof fetch;
   try {
     await expect(
       captureEvent(
