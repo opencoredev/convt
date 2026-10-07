@@ -1200,8 +1200,8 @@
     },
     {
       "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/20e97c4b113b79586c29ac57738548939a34d22e",
-      "sha256": "19ce83a9ea64fe800b69c76a37633ca24dcbb9d7d3115957700bd1d37ed46fce",
-      "size_bytes": 276068528,
+      "sha256": "109f4a8ef224cabf1af253765a979b025a79e30abff61cb94927955cc0d679ba",
+      "size_bytes": 276067684,
       "cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
       "checkout_path": null,
       "revision": "20e97c4b113b79586c29ac57738548939a34d22e",
@@ -1235,7 +1235,8 @@
         }
       ],
       "retrieval": {
-        "type": "canonical-gitiles-archive"
+        "type": "canonical-gitiles-archive",
+        "sort_members": true
       }
     }
   ],

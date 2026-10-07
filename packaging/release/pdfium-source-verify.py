@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import gzip
+import shutil
 import tempfile
 import time
 import urllib.request
@@ -44,7 +45,38 @@ def cache_path(item):
     return path
 
 
-def canonicalize(source, output):
+def canonicalize(source, output, *, sort_members=False):
+    # Codeload/Gitiles can reshuffle member order between regenerations. Sorting
+    # makes the locked digest stable when sort_members is requested.
+    if sort_members:
+        with tempfile.TemporaryDirectory(prefix='canon-sort-', dir=CACHE) as temporary:
+            root = Path(temporary)
+            with tarfile.open(source, 'r:gz') as archive:
+                members = archive.getmembers()
+                for member in members:
+                    if not member.isfile():
+                        continue
+                    dest = root / member.name
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.extractfile(member) as src, dest.open('wb') as stream:
+                        shutil.copyfileobj(src, stream)
+                members = sorted(members, key=lambda member: member.name)
+            with output.open('wb') as raw, \
+                    gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0, compresslevel=9) as stream, \
+                    tarfile.open(fileobj=stream, mode='w|', format=tarfile.PAX_FORMAT) as result:
+                for member in members:
+                    member.uid = member.gid = 0
+                    member.uname = member.gname = ''
+                    member.mtime = 0
+                    member.pax_headers = {}
+                    if member.isfile():
+                        path = root / member.name
+                        member.size = path.stat().st_size
+                        with path.open('rb') as payload:
+                            result.addfile(member, payload)
+                    else:
+                        result.addfile(member)
+        return
     with tarfile.open(source, 'r|gz') as archive, output.open('wb') as raw, \
             gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0, compresslevel=9) as stream, \
             tarfile.open(fileobj=stream, mode='w|', format=tarfile.PAX_FORMAT) as result:
@@ -89,7 +121,11 @@ def fetch(item, path):
             # Gitiles and codeload regenerate archives on request, so their
             # bytes drift. Re-tar the members with fixed metadata and hash that.
             canonical = Path(temporary) / 'canonical.tar.gz'
-            canonicalize(downloaded, canonical)
+            canonicalize(
+                downloaded,
+                canonical,
+                sort_members=bool(retrieval.get('sort_members')),
+            )
             downloaded = canonical
         elif retrieval.get('type') == 'canonical-github-release':
             canonical = Path(temporary) / 'canonical.json'
