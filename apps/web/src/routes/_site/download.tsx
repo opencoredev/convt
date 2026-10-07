@@ -16,6 +16,7 @@ import {
   type Os,
   type Slot,
 } from "#/lib/platform";
+import { primarySlot } from "#/lib/install-guide";
 import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
 import { fetchLatestManifest } from "#/server/latest-release";
 import { routes, seo } from "#/lib/site";
@@ -64,7 +65,7 @@ export const Route = createFileRoute("/_site/download")({
 function DownloadPage() {
   const { os, release } = Route.useLoaderData();
   const published = release.slots.some((s) => s.artifact);
-  const primary = os ? release.slots.find((s) => s.os === os) : undefined;
+  const primary = os ? primarySlot(release.slots, os) : undefined;
   return (
     <div className={cx(siteColumn, "flex flex-col gap-16 pt-12 pb-24 md:gap-20 md:pt-20")}>
       <div className="flex flex-col items-center gap-8 text-center">

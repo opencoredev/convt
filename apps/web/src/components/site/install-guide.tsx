@@ -121,7 +121,7 @@ function MacArt({ step }: { step: number }) {
   if (step === 0) {
     return (
       <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <FolderGlyph x="36" y="22" label="Downloads" />
+        <FolderGlyph x={36} y={22} label="Downloads" />
         <g transform="translate(86 18)">
           <FileGlyph label=".dmg" />
         </g>
@@ -147,7 +147,7 @@ function MacArt({ step }: { step: number }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <FolderGlyph x="78" y="28" label="Applications" />
+        <FolderGlyph x={78} y={28} label="Applications" />
       </svg>
     );
   }
@@ -176,7 +176,7 @@ function WindowsArt({ step }: { step: number }) {
   if (step === 0) {
     return (
       <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <FolderGlyph x="36" y="22" label="Downloads" />
+        <FolderGlyph x={36} y={22} label="Downloads" />
         <g transform="translate(86 18)">
           <FileGlyph label=".msi" />
         </g>
@@ -226,7 +226,7 @@ function LinuxArt({ step }: { step: number }) {
   if (step === 0) {
     return (
       <svg width="160" height="120" viewBox="0 0 160 120" aria-hidden="true">
-        <FolderGlyph x="36" y="22" label="Downloads" />
+        <FolderGlyph x={36} y={22} label="Downloads" />
         <g transform="translate(86 18)">
           <FileGlyph label="app" />
         </g>

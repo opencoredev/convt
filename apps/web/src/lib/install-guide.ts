@@ -1,6 +1,12 @@
 import type { ArtifactKind } from "./release-manifest";
 
-import type { Os } from "./platform";
+import type { Os, Slot } from "./platform";
+
+/** The download the page leads with: a published build for `os`, else the first slot. */
+export function primarySlot(slots: Slot[], os: Os): Slot | undefined {
+  const osSlots = slots.filter((s) => s.os === os);
+  return osSlots.find((s) => s.artifact) ?? osSlots[0];
+}
 
 export type InstallStep = {
   title: string;

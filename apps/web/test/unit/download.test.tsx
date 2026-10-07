@@ -4,7 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { DownloadButton } from "../../src/components/site/download";
 import { InstallGuide } from "../../src/components/site/install-guide";
-import { installSteps } from "../../src/lib/install-guide";
+import { installSteps, primarySlot } from "../../src/lib/install-guide";
+import { releaseFromManifest } from "../../src/lib/platform";
+import { parseReleaseManifest } from "../../src/lib/release-manifest";
 
 const page = readFileSync(new URL("../../src/routes/_site/download.tsx", import.meta.url), "utf8");
 
@@ -60,4 +62,44 @@ test("/download has no checksum or source Coming soon sections", () => {
   expect(page).not.toContain("Sha");
   expect(page).toContain("DownloadButton");
   expect(page).toContain("InstallGuide");
+});
+
+test("a published Linux AppImage is the primary download even if listed after empties", () => {
+  const sha = "a".repeat(64);
+  const release = releaseFromManifest(
+    parseReleaseManifest({
+      schema_version: 1,
+      sequence: 1,
+      issued_at: 1_790_000_000,
+      expires_at: 1_890_000_000,
+      distribution_ready: true,
+      purchase_url: "https://convt.app/pricing",
+      builds: [
+        {
+          version: "0.1.0",
+          build_date: "2026-10-07",
+          artifacts: [
+            {
+              platform: "linux-x86_64",
+              kind: "AppImage",
+              url: "https://github.com/opencoredev/convt/releases/download/v0.1.0/convt.AppImage",
+              size: 42,
+              sha256: sha,
+            },
+          ],
+          source: {
+            platform: "source",
+            kind: "tar.gz",
+            url: "https://github.com/opencoredev/convt/releases/download/v0.1.0/src.tar.gz",
+            size: 1,
+            sha256: sha,
+          },
+        },
+      ],
+    }),
+  );
+  const linux = primarySlot(release.slots, "linux");
+  expect(linux?.kind).toBe("AppImage");
+  expect(linux?.artifact?.url).toContain("convt.AppImage");
+  expect(primarySlot(release.slots, "macos")?.artifact).toBeNull();
 });
