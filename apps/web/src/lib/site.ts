@@ -55,6 +55,7 @@ export const routes = {
   contact: "/contact",
   brand: "/brand",
   signIn: "/sign-in",
+  dashboard: "/dashboard",
 } as const;
 
 /** Checkout for the $29 Desktop License; works signed out. */

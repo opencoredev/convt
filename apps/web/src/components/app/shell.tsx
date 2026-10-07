@@ -105,7 +105,8 @@ export function AppShell({ account, children }: { account: Account; children: Re
   );
 }
 
-function Avatar({ account }: { account: Account }) {
+/** The account's picture, or its first initial. 28px unless `className` sets a size. */
+export function Avatar({ account, className }: { account: Account; className?: string }) {
   const style = { boxShadow: "var(--avatar-ring) 0 0 0 1px" };
   if (account.avatarUrl) {
     return (
@@ -115,7 +116,7 @@ function Avatar({ account }: { account: Account }) {
         width={28}
         height={28}
         style={style}
-        className="size-7 shrink-0 rounded-full object-cover"
+        className={cx("size-7 shrink-0 rounded-full object-cover", className)}
       />
     );
   }
@@ -123,7 +124,10 @@ function Avatar({ account }: { account: Account }) {
     <span
       aria-hidden="true"
       style={style}
-      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sunken text-xs font-medium text-ink-2"
+      className={cx(
+        "flex size-7 shrink-0 items-center justify-center rounded-full bg-sunken text-xs font-medium text-ink-2",
+        className,
+      )}
     >
       {account.name.slice(0, 1).toUpperCase()}
     </span>

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 
+import { Avatar } from "#/components/app/shell";
 import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
 import { Mark } from "#/components/logo";
 import { routes } from "#/lib/site";
+import type { Account } from "#/lib/types";
 
 import { footerColumns, headerLinks } from "./links";
 
@@ -17,8 +19,9 @@ const navLink = cx(
 /**
  * Frame for the public pages other than the landing page: header, main column and
  * footer. Follows the visitor's light or dark setting like the account pages.
+ * `account` is the signed-in account, or null to offer sign-in.
  */
-export function SitePage({ children }: { children: ReactNode }) {
+export function SitePage({ account, children }: { account: Account | null; children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col overflow-x-clip bg-page text-ink">
       <a
@@ -27,7 +30,7 @@ export function SitePage({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <SiteHeader />
+      <SiteHeader account={account} />
       <main id="main" className="flex-1">
         {children}
       </main>
@@ -36,7 +39,7 @@ export function SitePage({ children }: { children: ReactNode }) {
   );
 }
 
-function SiteHeader() {
+function SiteHeader({ account }: { account: Account | null }) {
   return (
     <header className="relative border-b border-line">
       <div className={cx(siteColumn, "flex items-center justify-between gap-4 py-4")}>
@@ -63,12 +66,23 @@ function SiteHeader() {
         </nav>
         <div className="flex items-center gap-2">
           <span className="hidden sm:contents">
-            <SecondaryLink href={routes.signIn}>Sign in</SecondaryLink>
+            {account ? (
+              <SecondaryLink
+                href={routes.dashboard}
+                className="gap-2 py-[5px] pl-[5px]"
+                aria-label={`Dashboard, signed in as ${account.email}`}
+              >
+                <Avatar account={account} className="size-[18px] text-[10px]" />
+                Dashboard
+              </SecondaryLink>
+            ) : (
+              <SecondaryLink href={routes.signIn}>Sign in</SecondaryLink>
+            )}
           </span>
           <PrimaryLink href={routes.download} className="py-[7px] text-[13px]/4">
             Download
           </PrimaryLink>
-          <MobileMenu />
+          <MobileMenu account={account} />
         </div>
       </div>
     </header>
@@ -76,7 +90,10 @@ function SiteHeader() {
 }
 
 // A <details> disclosure, so the menu works before hydration and without script.
-function MobileMenu() {
+function MobileMenu({ account }: { account: Account | null }) {
+  const accountLink = account
+    ? { label: "Dashboard", href: routes.dashboard }
+    : { label: "Sign in", href: routes.signIn };
   return (
     <details className="group md:hidden">
       <summary
@@ -108,7 +125,7 @@ function MobileMenu() {
         className="absolute inset-x-0 top-full z-40 border-b border-line bg-page shadow-note"
       >
         <ul className={cx(siteColumn, "flex flex-col py-2")}>
-          {[...headerLinks, { label: "Sign in", href: routes.signIn }].map((link) => (
+          {[...headerLinks, accountLink].map((link) => (
             <li key={link.href}>
               <a
                 href={link.href}
