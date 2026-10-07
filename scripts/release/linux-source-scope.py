@@ -257,7 +257,13 @@ def derive(tree, vendor):
         receipt_dir.mkdir(parents=True)
         dump(receipt_dir / 'remove-sdk-only-probe.json', {
             'command': 'cargo build --offline --locked --release --target ' + TARGET + ' -p convt-cli -p convt-app',
-            'empty_cargo_home': True, 'exit_code': probe.returncode, 'stderr': probe.stderr.replace(str(tree), '$SOURCE').replace(str(home), '$EMPTY_CARGO_HOME')})
+            'empty_cargo_home': True, 'exit_code': probe.returncode,
+            # Cargo's progress lines arrive in parallel completion order with
+            # wall-clock times; keep warnings and errors so two identical builds
+            # write identical receipts.
+            'stderr': re.sub(r'^\s*(?:Compiling|Finished|Building|Fresh|Checking|Locking|Adding) .*\n?', '',
+                             probe.stderr.replace(str(tree), '$SOURCE').replace(str(home), '$EMPTY_CARGO_HOME'),
+                             flags=re.M)})
         dump(receipt_dir / 'original-unit-graph.json', canonical_graph(before, tree))
         pins = tomllib.loads((tree / 'Cargo.lock').read_text())['package']
         originals = {}
