@@ -129,9 +129,32 @@ fn last_window_closed(cx: &mut App, _: gpui_kit::WindowId) {
         return;
     }
     let state = model::shared(cx);
-    if state.read(cx).queue.active() == 0 {
+    let keep_running = cfg!(target_os = "macos") && state.read(cx).settings.menu_bar_icon;
+    if keep_running {
+        // macOS keeps the process alive when the menu bar item is enabled.
+        // Calling cx.quit() from the window-closed observer starts GPUI's
+        // teardown while AppKit is still unwinding the last NSWindow; a
+        // deferred update callback can then cross that teardown boundary.
+        return;
+    }
+    if should_quit_after_last_window(keep_running, state.read(cx).queue.active()) {
         cx.quit();
     } else {
         state.update(cx, |s, _| s.quit_when_idle = true);
+    }
+}
+
+fn should_quit_after_last_window(menu_bar_icon: bool, active_jobs: usize) -> bool {
+    !menu_bar_icon && active_jobs == 0
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn menu_bar_mode_keeps_the_process_alive_after_last_window() {
+        assert!(!super::should_quit_after_last_window(true, 0));
+        assert!(!super::should_quit_after_last_window(true, 2));
+        assert!(super::should_quit_after_last_window(false, 0));
+        assert!(!super::should_quit_after_last_window(false, 1));
     }
 }

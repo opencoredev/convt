@@ -8,6 +8,7 @@ RUN apt-get update \
 WORKDIR /build
 ENV SQLX_OFFLINE=true
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/ vendor/
 COPY crates/ crates/
 COPY packages/db/migrations/ packages/db/migrations/
 RUN cargo build --locked --release -p convt-worker \
