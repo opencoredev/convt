@@ -9,12 +9,7 @@ import { sql } from "drizzle-orm";
 
 import { type BillingContext, one } from "./context";
 import { ingestFacts } from "./ingest";
-import {
-  emptyFacts,
-  type DisputeFact,
-  type OrderFact,
-  type ScanKind,
-} from "./provider";
+import { emptyFacts, type DisputeFact, type OrderFact, type ScanKind } from "./provider";
 
 export type BackfillMissing = {
   providerOrderId: string;
@@ -159,11 +154,7 @@ async function applyOrder(
   countCreate: boolean,
 ) {
   try {
-    const applied = await ingestFacts(
-      ctx,
-      { ...emptyFacts(), orders: [o], disputes },
-      "backfill",
-    );
+    const applied = await ingestFacts(ctx, { ...emptyFacts(), orders: [o], disputes }, "backfill");
     if (applied.rejected) {
       out.rejected++;
       ctx.log(`[billing] backfill rejected ${o.providerOrderId}: ${applied.rejected}`);

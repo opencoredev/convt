@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  backfillPolarOrders,
-  backfillSkipReason,
-  maxBackfillPages,
-} from "../../src/backfill";
+import { backfillPolarOrders, backfillSkipReason, maxBackfillPages } from "../../src/backfill";
 import { emptyFacts, type OrderFact, type ScanKind } from "../../src/provider";
 
 describe("backfill skip reasons", () => {

@@ -14,9 +14,7 @@ export function showGetDesktop(billing: Pick<Billing, "ownsDesktop">): boolean {
 }
 
 /** Polar portal links: Manage billing / Change receipt email. */
-export function showPolarBilling(
-  billing: Pick<Billing, "polarPortal" | "plan" | "api">,
-): boolean {
+export function showPolarBilling(billing: Pick<Billing, "polarPortal" | "plan" | "api">): boolean {
   return billing.polarPortal && (billing.plan !== null || billing.api.state !== "none");
 }
 

@@ -714,7 +714,11 @@ describe("Desktop ownership and Polar portal", () => {
       expect(b.ownsDesktop).toBe(false);
       expect(b.plan).toBeNull();
     }
-    const revoked = { ...live, revokedAt: new Date("2026-10-05T10:00:00Z"), revokeReason: "dispute_lost" };
+    const revoked = {
+      ...live,
+      revokedAt: new Date("2026-10-05T10:00:00Z"),
+      revokeReason: "dispute_lost",
+    };
     expect(view([revoked], [desktopInvoice("paid")]).ownsDesktop).toBe(false);
     expect(view([live]).ownsDesktop).toBe(true);
     expect(view([live]).plan?.kind).toBe("desktop");
