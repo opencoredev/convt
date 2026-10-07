@@ -24,7 +24,7 @@ export function Pricing({
       </div>
       <div className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
         <DesktopPlan launched={launched} />
-        <ProPlan available={sales === "all"} launched={launched} />
+        <ProPlan launched={launched} />
       </div>
       <ApiCard available={sales === "all"} launched={launched} />
     </Container>
@@ -108,7 +108,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
   );
 }
 
-function ProPlan({ available, launched }: { available: boolean; launched: boolean }) {
+function ProPlan({ launched }: { launched: boolean }) {
   const [yearly, setYearly] = useState(false);
   return (
     <div className={cx(planCard, "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]")}>
@@ -144,7 +144,7 @@ function ProPlan({ available, launched }: { available: boolean; launched: boolea
           "Every future update included",
         ]}
       />
-      {launched && available ? (
+      {launched ? (
         <ButtonLink
           variant="primary"
           href={buyProUrl(yearly ? "year" : "month")}

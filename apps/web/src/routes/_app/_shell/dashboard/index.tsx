@@ -31,15 +31,15 @@ function OverviewPage() {
       >
         <div className="flex flex-col gap-4 rounded-[10px] bg-raised px-5 py-4.5 shadow-float sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">
-            <h2 className="text-[17px]/5.5 font-semibold tracking-[-0.02em]">convt for Mac</h2>
+            <h2 className="text-[17px]/5.5 font-semibold tracking-[-0.02em]">Download convt</h2>
             <p className="text-[13px]/4 text-ink-2">
               {data.license
                 ? "Your license is on this account. Sign in inside the app to unlock it."
-                : "Every format works free for 7 days. Pick a plan when you're ready."}
+                : "Every format works free for 7 days. No account or card to start."}
             </p>
           </div>
-          <PrimaryLink href={links.downloadMac} className="shrink-0 self-start sm:self-auto">
-            Download for macOS
+          <PrimaryLink href={links.download} className="shrink-0 self-start sm:self-auto">
+            Download
           </PrimaryLink>
         </div>
       </section>
@@ -68,9 +68,14 @@ function OverviewPage() {
             detail="Desktop is $29 once. Pro is $12 a month."
             meta="7-day free trial"
             action={
-              <a href={links.pricing} className={linkAction}>
-                See pricing
-              </a>
+              <span className="flex items-center gap-3">
+                <a href={links.buyDesktop} className={linkAction}>
+                  Get Desktop
+                </a>
+                <a href={links.buyPro} className={linkAction}>
+                  Get Pro
+                </a>
+              </span>
             }
           />
         )}
@@ -95,9 +100,14 @@ function OverviewPage() {
             detail="Buying Desktop or Pro puts a key here."
             meta="Works offline"
             action={
-              <a href={links.pricing} className={linkAction}>
-                See pricing
-              </a>
+              <span className="flex items-center gap-3">
+                <a href={links.buyDesktop} className={linkAction}>
+                  Get Desktop
+                </a>
+                <a href={links.buyPro} className={linkAction}>
+                  Get Pro
+                </a>
+              </span>
             }
           />
         )}

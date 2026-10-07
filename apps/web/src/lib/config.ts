@@ -9,8 +9,10 @@ export const links = {
   /** PLACEHOLDER: webhooks are not designed in the API yet. */
   webhooks: "https://docs.convt.app/webhooks",
   help: "/contact",
-  /** The download page, which offers the macOS build first to Mac visitors. */
-  downloadMac: "/download?os=macos",
+  /** The download page; it picks the visitor's OS, including Linux when that build exists. */
+  download: "/download",
+  buyDesktop: "/checkout/desktop",
+  buyPro: "/checkout/pro?interval=month",
   /** The pricing section on the landing page. */
   pricing: "/#pricing",
   terms: "/terms",
