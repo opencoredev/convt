@@ -87,6 +87,18 @@ fn enabled() -> bool {
     if std::env::var("DO_NOT_TRACK").ok().as_deref() == Some("1") {
         return false;
     }
+    // CNV-55 stores the desktop telemetry toggle in settings.toml. Read the
+    // raw key here so this branch stays mergeable before telemetry.rs lands.
+    if let Some(path) = crate::settings::Settings::path() {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            if text.lines().any(|line| {
+                let line = line.trim();
+                line.starts_with("telemetry_enabled") && line.contains("false")
+            }) {
+                return false;
+            }
+        }
+    }
     if cfg!(debug_assertions) {
         return std::env::var("CONVT_TELEMETRY").ok().as_deref() == Some("1");
     }
