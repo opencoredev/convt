@@ -73,16 +73,18 @@ Pick the paths your change touches. For a routing change, also check that `targe
 
 ## Licensing
 
-Builds from source skip the license check, so `convert` works without a key. To try the trial and activation flow, make a development key pair and opt in at run time. Always set `CONVT_LICENSE_STORE=file`: without it a key goes to the user's real Secret Service keyring.
+Builds from source skip the license check, so `convert` works without a key. To try the licensing and activation flow, make a development key pair and opt in at run time. Always set `CONVT_LICENSE_STORE=file`: without it a key goes to the user's real Secret Service keyring.
 
 ```sh
 cargo run -p convt-license --example dev-keys -- keygen       # writes .convt-dev/ (gitignored)
 key=$(cargo run -q -p convt-license --example dev-keys -- issue you@example.com 2027-10-02)
 export CONVT_CONFIG_DIR="$work/cfg" CONVT_DATA_DIR="$work/data" CONVT_LICENSE_STORE=file
 export CONVT_LICENSE_ENFORCE=1 CONVT_LICENSE_PUBKEY=$(cat .convt-dev/license.pub)
-$c license                                          # Free trial: 7 days, starting with ...
-$c "$work/in/sample.png" --to jpeg -o "$work/out"   # starts the trial: $work/data/trial
-echo 2026-01-01 > "$work/data/trial"; $c "$work/in/sample.png" --to jpeg -o "$work/out"   # trial ended, exit 1
+$c license                                          # no trial: start it from the app (needs sign-in)
+$c "$work/in/sample.png" --to jpeg -o "$work/out"   # refused, exit 1; converting never starts a trial
+trial=$(cargo run -q -p convt-license --example dev-keys -- issue tester "$(date -u -d '+3 days' +%F)" trial)
+echo "$trial" | $c license activate                 # refused: trial keys come only from sign-in
+echo "$(date -u -d '-2 days' +%F)" > "$work/data/trial"; $c license   # an old trial file is carried over once: 5 days left
 echo "$key" | $c license activate && $c license     # key in $work/cfg/license.key, mode 0600
 $c license remove
 ```

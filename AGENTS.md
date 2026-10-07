@@ -2,7 +2,7 @@
 
 Local file conversion: right-click a file, pick a format. The engine is Rust; the desktop UI is GPUI; the site is TanStack Start. Licensed AGPL-3.0-only.
 
-Users are people who want to convert files without uploading them. Conversions run on the user's machine. The paid cloud API (convt-server and convt-worker, on Railway) is the only part that receives files. Release 0.2.0 ships the desktop app and CLI for macOS on Apple silicon and Windows x86_64; the Linux packages build from `packaging/linux` but are not in a release yet. Payments run through convt-billing (Polar as merchant of record); locally only against a mock. Pricing and licensing are product decisions: do not add a free tier, telemetry, or network calls to the desktop app or CLI without being asked.
+Users are people who want to convert files without uploading them. Conversions run on the user's machine. The paid cloud API (convt-server and convt-worker, on Railway) is the only part that receives files. Release 0.2.0 ships the desktop app and CLI for macOS on Apple silicon and Windows x86_64; the Linux packages build from `packaging/linux` but are not in a release yet. Payments run through convt-billing (Polar as merchant of record); locally only against a mock. Pricing and licensing are product decisions: do not add a free tier, telemetry, or network calls to the desktop app or CLI without being asked. The desktop trial needs a convt.app sign-in: starting it, renewal and the update check are the app's sanctioned network calls (see `crates/convt-app/src/account.rs`).
 
 ## Layout
 
@@ -12,7 +12,7 @@ Users are people who want to convert files without uploading them. Conversions r
 - `crates/convt-app`: the desktop app, built on GPUI through `gpui-kit`. Excluded from `default-members` because it needs system UI libraries.
 - `crates/convt-shell`: the Windows Explorer menu's COM handler (a DLL). It asks the installed `convt targets --menu` for targets and launches the app to convert. No installer bundles it yet: `packaging/windows/build.ps1` builds only the CLI and app. `integrations/windows/README.md` describes the intended install.
 - `crates/convt-ffi`: uniffi bindings for the OS integrations.
-- `crates/convt-license`: Ed25519 offline license keys with an `updates_until` window, and (feature `client`) the trial and key storage every client shares.
+- `crates/convt-license`: Ed25519 offline license keys with an `updates_until` window (a `trial` plan key instead expires on its last day by the current date), and (feature `client`) the key storage, trial migration, clock guard and device hash every client shares.
 - `crates/convt-update`: offline verification of signed update manifests against license coverage. Callers own the download.
 - `crates/convt-server`: the cloud jobs API (upload, start, status, download, cancel) with a Postgres queue and object storage, deployed to Railway. `openapi.json` is the contract.
 - `crates/convt-worker`: claims queued jobs and runs each conversion in a fresh sandboxed process; `deploy/railway` holds its image.
@@ -74,7 +74,7 @@ bun run changeset             # describe a user-visible change for the release n
 - Tests that need FFmpeg, PDFium or LibreOffice belong in engine crates and must skip cleanly when the tool is missing.
 - `convt-core` stays free of native and platform dependencies. Platform code lives in engines, the app, or `integrations/`.
 - Every client (CLI, app, Finder extension, Linux menus, worker) gets conversions from `convt_engines::default_registry()`. Do not add a conversion path that bypasses it.
-- License verification is offline. Never commit a signing key; tests generate their own. Only convt-billing signs keys, and only from paid coverage.
+- License verification is offline. Never commit a signing key; tests generate their own. Only convt-billing signs keys: paid keys only from paid coverage, trial keys only from a `trials` row (one per account and per device) or a `trialing` Pro subscription.
 - `packages/db` owns the schema. A schema change is a Drizzle edit plus `drizzle-kit generate`, its down file in `migrations/down`, its grants in `sql/privileges.sql`, and `cargo sqlx prepare` if convt-server's queries change; `bun run db:ci` checks all of it. Production migrations are forward-only.
 - Every account query takes the user id from the verified session, never from the request. Financial rows are never deleted, and `usage_events` is append-only in the database.
 - Local services belong to one checkout: `scripts/db.sh` names and labels them by checkout path, and destructive commands pass its ownership guard. Never point them at another database.

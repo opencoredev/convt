@@ -57,7 +57,7 @@ const questions: { q: string; a: ReactNode }[] = [
   },
   {
     q: "How does the free trial work?",
-    a: "The app works fully for 7 days from your first conversion, with no account and no card. convt Pro has its own 7-day trial when you subscribe.",
+    a: "Click Start 7-day trial in the app and sign in to convt.app; the app then works fully for 7 days, with no card. Each account and each computer gets one trial. convt Pro has its own 7-day trial when you subscribe.",
   },
   {
     q: "What happens when my 12 months of updates end?",

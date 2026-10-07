@@ -17,7 +17,7 @@ Local file conversion for your own machine. Right-click a file, pick a format, a
 
 ## Install
 
-Download the app from [convt.app/download](https://convt.app/download). Release 0.2.0 has a disk image for macOS on Apple silicon and an MSI installer for Windows x86_64. The Linux packages (AppImage, .deb, .rpm and a tarball) build from `packaging/linux` but are not in a release yet. Packaged builds start a 7-day trial on the first conversion.
+Download the app from [convt.app/download](https://convt.app/download). Release 0.2.0 has a disk image for macOS on Apple silicon and an MSI installer for Windows x86_64. The Linux packages (AppImage, .deb, .rpm and a tarball) build from `packaging/linux` but are not in a release yet. Packaged builds offer a 7-day trial that starts when you sign in to convt.app from the app.
 
 To build from source:
 
