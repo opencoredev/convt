@@ -338,16 +338,6 @@ function liveDesktopLicense(licenses: LicenseRow[]): LicenseRow | undefined {
   return licenses.find((l) => l.plan === "desktop" && l.revokedAt === null);
 }
 
-function desktopInvoiceOpen(invoices: InvoiceRow[]): boolean {
-  return invoices.some(
-    (i) =>
-      i.description.startsWith("Desktop License") &&
-      i.status !== "refunded" &&
-      i.status !== "void" &&
-      i.status !== "uncollectible",
-  );
-}
-
 export function billingView(input: {
   user: UserRow;
   subscriptions: SubscriptionRow[];
@@ -356,11 +346,14 @@ export function billingView(input: {
   card: Billing["card"];
   openApiCheckout: boolean;
   now: Date;
+  /** Polar customer we can open a portal session for; null for a guest-only claim with none stored. */
+  polarCustomerId?: string | null;
 }): Billing {
   const { user, subscriptions, licenses, invoices, now } = input;
   const pro = currentProSubscription(subscriptions, now) ?? openProTrial(subscriptions, now);
   const desktop = liveDesktopLicense(licenses);
-  const ownsDesktop = desktop !== undefined || desktopInvoiceOpen(invoices);
+  const ownsDesktop = desktop !== undefined;
+  const polarPortal = Boolean(input.polarCustomerId);
   let plan: Billing["plan"] = null;
   if (pro) {
     const interval = pro.interval === "year" ? "year" : "month";
@@ -427,6 +420,7 @@ export function billingView(input: {
     plan,
     hadPro: subscriptions.some((s) => s.kind === "pro"),
     ownsDesktop,
+    polarPortal,
     api: apiEnrollment(subscriptions, input.openApiCheckout, now),
     card: input.card,
     receiptEmail: user.email,

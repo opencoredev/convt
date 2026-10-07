@@ -12,7 +12,7 @@ Needs `BILLING_DATABASE_URL` and the Polar / catalog env convt-billing uses (`PO
 bun run billing:backfill
 ```
 
-Prints JSON: `scanned`, `missing` (Polar orders we have no `orders` row for), `alreadyPresent`. Writes nothing.
+Prints JSON: `scanned`, `missing` (Polar orders we have no `orders` or `invoices` row for), `alreadyPresent`, `skipped` (unpaid, refunded, void, or disputed). Writes nothing. Pages Polar until the last page; it does not stop after a fixed count.
 
 ## Apply
 

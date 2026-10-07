@@ -16,6 +16,7 @@ import {
   userAccounts,
   userInvoices,
   userLicenses,
+  userPolarCustomerId,
   userSessions,
   userSubscriptions,
 } from "@convt/db/queries";
@@ -100,6 +101,7 @@ export const fetchBilling = createServerFn({ method: "GET" })
         card,
         openApiCheckout: (await openApiCheckout(db, userId, now)) !== null,
         now,
+        polarCustomerId: await userPolarCustomerId(db, userId),
       }),
     };
   });

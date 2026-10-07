@@ -20,6 +20,7 @@ import {
   billingCardCopy,
   billingHasNoPlan,
   showGetDesktop,
+  showPolarBilling,
 } from "#/lib/billing-display";
 import { links } from "#/lib/config";
 import { formatDate, formatMoney } from "#/lib/format";
@@ -79,6 +80,7 @@ function BillingPage() {
   const apiLine = apiSpendLine(billing.api);
   const cardCopy = billingCardCopy(billing);
   const offerDesktop = showGetDesktop(billing);
+  const polarBilling = showPolarBilling(billing);
   const isDesktop = plan?.kind === "desktop";
   const isPro = plan?.kind === "pro";
   const otherInterval = plan?.interval === "year" ? "month" : "year";
@@ -347,7 +349,7 @@ function BillingPage() {
                 {billing.card ? "Update card" : "Add card"}
               </TextButton>
             ) : null}
-            {plan || billing.api.state !== "none" ? (
+            {polarBilling ? (
               <TextButton tone="muted" disabled={portal.busy} onClick={portal.open}>
                 Manage billing
               </TextButton>
@@ -359,7 +361,7 @@ function BillingPage() {
       <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4.5">
         <h2 className="text-[13px]/4 text-ink-2 sm:w-[200px] sm:shrink-0">Receipts go to</h2>
         <p className="min-w-0 flex-1 font-mono text-[13px]/4 break-all">{billing.receiptEmail}</p>
-        {plan || billing.api.state !== "none" ? (
+        {polarBilling ? (
           <TextButton disabled={portal.busy} onClick={portal.open}>
             Change
           </TextButton>

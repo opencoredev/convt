@@ -5,6 +5,7 @@ import {
   billingCardCopy,
   billingHasNoPlan,
   showGetDesktop,
+  showPolarBilling,
 } from "../../src/lib/billing-display";
 import {
   accountView,
@@ -290,6 +291,7 @@ describe("billing per state", () => {
     inv = [] as typeof invoices,
     openApiCheckout = false,
     licenses: LicenseRow[] = [],
+    polarCustomerId: string | null = null,
   ) =>
     billingView({
       user,
@@ -299,6 +301,7 @@ describe("billing per state", () => {
       card: null,
       openApiCheckout,
       now,
+      polarCustomerId,
     });
 
   test("no plan", () => {
@@ -668,5 +671,62 @@ describe("checkout success", () => {
     });
     expect(checkoutGiveUp("desktop", false)).toEqual({ state: "email" });
     expect(checkoutGiveUp("pro", false)).toEqual({ state: "email" });
+  });
+});
+
+describe("Desktop ownership and Polar portal", () => {
+  const desktopInvoice = (status: string) => ({
+    id: "inv_desk_open",
+    description: "Desktop License, 12 months of updates",
+    amountCents: 2900,
+    issuedAt: new Date("2026-10-07T00:00:00Z"),
+    status,
+  });
+  const live = {
+    id: "lic_live_desktop",
+    plan: "desktop",
+    trial: false,
+    issuedOn: "2026-08-20",
+    updatesUntil: "2027-08-20",
+    revokedAt: null as Date | null,
+    orderPaidAt: new Date("2026-08-20T10:00:00Z"),
+    subscriptionInterval: null as string | null,
+  };
+  const view = (
+    licenses: LicenseRow[] = [],
+    invoices: Array<ReturnType<typeof desktopInvoice>> = [],
+    polarCustomerId: string | null = null,
+  ) =>
+    billingView({
+      user,
+      subscriptions: [],
+      licenses,
+      invoices,
+      card: null,
+      openApiCheckout: false,
+      now,
+      polarCustomerId,
+    });
+
+  test("an unpaid or disputed Desktop invoice is not ownership without a live license", () => {
+    for (const status of ["open", "paid", "uncollectible", "draft"]) {
+      const b = view([], [desktopInvoice(status)]);
+      expect(b.ownsDesktop).toBe(false);
+      expect(b.plan).toBeNull();
+    }
+    const revoked = { ...live, revokedAt: new Date("2026-10-05T10:00:00Z"), revokeReason: "dispute_lost" };
+    expect(view([revoked], [desktopInvoice("paid")]).ownsDesktop).toBe(false);
+    expect(view([live]).ownsDesktop).toBe(true);
+    expect(view([live]).plan?.kind).toBe("desktop");
+  });
+
+  test("claimed guest Desktop hides Polar billing controls unless a Polar customer is stored", () => {
+    const hidden = view([live], [], null);
+    expect(hidden.plan?.kind).toBe("desktop");
+    expect(hidden.polarPortal).toBe(false);
+    expect(showPolarBilling(hidden)).toBe(false);
+    const shown = view([live], [], "cus_guest_polar");
+    expect(shown.polarPortal).toBe(true);
+    expect(showPolarBilling(shown)).toBe(true);
   });
 });

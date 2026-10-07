@@ -84,6 +84,8 @@ export type Billing = {
   hadPro: boolean;
   /** A live (not refunded or disputed) Desktop license. */
   ownsDesktop: boolean;
+  /** Polar can open a customer portal for this account (including a claimed guest customer). */
+  polarPortal: boolean;
   api: ApiEnrollment;
   card: { brand: string; last4: string; expires: string } | null;
   receiptEmail: string;
