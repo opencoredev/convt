@@ -43,11 +43,16 @@ if args.include_windows:
     root = f'convt-{args.version}-windows-source'
     with tarfile.open(windows_source) as archive:
         for name, digest in expected.items():
-            member = archive.extractfile(f'{root}/sources/{name}')
+            try:
+                member = archive.extractfile(f'{root}/sources/{name}')
+            except KeyError:
+                member = None
             if member is None or hashlib.sha256(member.read()).hexdigest() != digest:
                 raise ValueError(f'Windows source archive lacks pinned source {name}')
+        names = set(archive.getnames())
         for name in ('recipe/packaging/windows/build-ffmpeg.sh', 'ffmpeg-build/receipt.json'):
-            archive.getmember(f'{root}/{name}')
+            if f'{root}/{name}' not in names:
+                raise ValueError(f'Windows source archive lacks {name}')
 # Coverage comes from the source builder; never promote it merely because binaries exist.
 audit = json.loads((linux / 'source-audit.json').read_text())
 required = {'linux-x86_64', 'macos-arm64'}

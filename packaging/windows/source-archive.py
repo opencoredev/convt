@@ -64,6 +64,12 @@ def main():
         raise SystemExit('FFmpeg build receipt differs from ffmpeg-source.lock.json')
     sources = [(s, build / 'sources' / s['name']) for s in ffmpeg_lock['sources']]
     sources += [(s, cache / s['name']) for s in inputs_lock['files'] if s.get('kind') in ('source', 'patches')]
+    # x265 is in both locks: the same tarball, so archive it once.
+    unique = {}
+    for item, path in sources:
+        if unique.setdefault(item['name'], (item, path))[0]['sha256'] != item['sha256']:
+            raise SystemExit(f"Locks disagree on {item['name']}")
+    sources = list(unique.values())
     root = f'convt-{version}-windows-source'
     entries = [(f'{root}/README.txt', README.format(version=version).encode())]
     for item, path in sources:
