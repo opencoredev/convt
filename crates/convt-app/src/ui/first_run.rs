@@ -379,7 +379,8 @@ impl FirstRunView {
                 ])
         };
         let separator = || div().h(px(1.)).my(px(4.)).mx(px(4.)).bg(p.hairline);
-        let highlight = rgb(0x2F6FE4);
+        // The light --green in both appearances: white on it is 5.4:1.
+        let highlight = rgb(0x127A47);
         div()
             .flex()
             .flex_col()

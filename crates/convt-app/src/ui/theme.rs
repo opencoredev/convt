@@ -82,6 +82,9 @@ pub struct Palette {
     pub hairline: Hsla,
     /// Dividers between rows of a group or list.
     pub row_divider: Hsla,
+    /// Neutral badges and tags, and their outline.
+    pub chip: Hsla,
+    pub chip_border: Hsla,
     pub text: Hsla,
     pub secondary: Hsla,
     pub tertiary: Hsla,
@@ -117,74 +120,83 @@ fn ca(hex: u32) -> Hsla {
     rgba(hex).into()
 }
 
+/// Both palettes are the convt.app tokens (`apps/web/src/styles.css`); the
+/// comments name the web token each color comes from. The few colors the web
+/// has no token for are marked "derived".
 impl Palette {
     pub fn light() -> Self {
         Self {
             dark: false,
-            window: c(0xFFFFFF),
-            chrome: c(0xF6F6F5),
-            chrome_border: c(0xE6E6E4),
-            recessed: c(0xF9F9F8),
-            surface: c(0xFFFFFF),
-            border: c(0xE6E6E3),
-            control_border: c(0xD9D9D6),
-            hairline: c(0xEBEBE9),
-            row_divider: c(0xF0F0EE),
-            text: c(0x0A0A0A),
-            secondary: c(0x5D615F),
-            tertiary: c(0x7A7F7C),
-            hover: ca(0x0A0A0A0A),
-            selected: ca(0x0A0A0A12),
-            green: c(0x1A9A5B),
-            green_text: c(0x127A47),
-            green_tint: c(0xEDF7F1),
-            green_border: c(0xA9DABF),
-            error: c(0xC0362C),
-            error_tint: c(0xFDF2F1),
-            error_border: c(0xF1C7C2),
-            track: c(0xEBEBE9),
-            toggle_off: c(0xD4D4D1),
-            mark_off: c(0xC2C4C2),
-            thumb: c(0xFFFFFF),
-            thumb_border: c(0xDEDEDB),
-            overlay: c(0xFFFFFF),
-            shadow: ca(0x0A1E1438),
-            shadow_soft: ca(0x0000001A),
+            window: c(0xFFFFFF),         // --page
+            chrome: c(0xF7F8F7),         // --sunken
+            chrome_border: c(0xE6E8E7),  // --line
+            recessed: c(0xF7F8F7),       // --sunken
+            surface: c(0xFFFFFF),        // --raised
+            border: c(0xE6E8E7),         // --line
+            control_border: c(0xD5D9D7), // --line-strong
+            hairline: c(0xE6E8E7),       // --line
+            row_divider: c(0xEEF0EF),    // --divider
+            chip: c(0xF5F7F6),           // --chip
+            chip_border: c(0xE0E3E1),    // --chip-line
+            text: c(0x0A0A0A),           // --ink
+            secondary: c(0x6B6F6D),      // --ink-2
+            tertiary: c(0x6C716E),       // --ink-3
+            hover: c(0xF3F4F3),          // --hover
+            selected: c(0xE6E8E7),       // --line
+            green: c(0x127A47),          // --green
+            green_text: c(0x127A47),     // --green
+            green_tint: c(0xEEF7F2),     // --green-tint
+            green_border: c(0xCFE6D9),   // --green-line
+            error: c(0xB3261E),          // --error
+            error_tint: c(0xFCF3F2),     // derived: --error over --page, as --green-tint
+            error_border: c(0xF0D4D1),   // --error-line
+            track: c(0xE6E8E7),          // --line
+            toggle_off: c(0xD0D3D1),     // --separator
+            // Derived: a step past --line-strong, so an empty box keeps its edge.
+            mark_off: c(0xB4B9B6),
+            thumb: c(0xFFFFFF),          // --raised
+            thumb_border: c(0xE0E3E1),   // --chip-line
+            overlay: c(0xFFFFFF),        // --raised
+            shadow: ca(0x0A3C231F),      // --shadow-float
+            shadow_soft: ca(0x0A1E1426), // --shadow-note
         }
     }
 
     pub fn dark() -> Self {
         Self {
             dark: true,
-            window: c(0x171918),
-            chrome: c(0x1C1E1D),
-            chrome_border: c(0x272A29),
-            recessed: c(0x141615),
-            surface: c(0x1E2120),
-            border: c(0x2A2D2C),
-            control_border: c(0x363A38),
-            hairline: c(0x262928),
-            row_divider: c(0x222524),
-            text: c(0xEDEFEE),
-            secondary: c(0xA3A8A5),
-            tertiary: c(0x7F8481),
-            hover: ca(0xFFFFFF0A),
-            selected: ca(0xFFFFFF14),
-            green: c(0x3FCB84),
-            green_text: c(0x4ED492),
-            green_tint: c(0x132A1E),
-            green_border: c(0x245E40),
-            error: c(0xF2786D),
-            error_tint: c(0x2A1817),
-            error_border: c(0x5C2C28),
-            track: c(0x2C302E),
-            toggle_off: c(0x404442),
-            mark_off: c(0x5F6562),
-            thumb: c(0x232625),
-            thumb_border: ca(0xFFFFFF14),
-            overlay: c(0x232625),
-            shadow: ca(0x00000099),
-            shadow_soft: ca(0x00000066),
+            window: c(0x0A0B0B),          // --page
+            chrome: c(0x111312),          // --raised
+            chrome_border: c(0x232726),   // --line
+            recessed: c(0x161918),        // --sunken
+            surface: c(0x111312),         // --raised
+            border: c(0x232726),          // --line
+            control_border: c(0x2E3331),  // --line-strong
+            hairline: c(0x232726),        // --line
+            row_divider: c(0x232726),     // --divider
+            chip: c(0x161918),            // --chip
+            chip_border: c(0x2E3331),     // --chip-line
+            text: c(0xEDEFEE),            // --ink
+            secondary: c(0xA1A6A3),       // --ink-2
+            tertiary: c(0x868B88),        // --ink-3
+            hover: c(0x1C201E),           // --hover
+            selected: c(0x232726),        // --line
+            green: c(0x3FCB84),           // --green
+            green_text: c(0x3FCB84),      // --green
+            green_tint: c(0x12261B),      // --green-tint
+            green_border: ca(0x3FCB8433), // --green-line
+            error: c(0xF2786D),           // --error
+            error_tint: c(0x261716),      // derived: --error over --page, as --green-tint
+            error_border: ca(0xF2786D33), // --error-line
+            track: c(0x232726),           // --line
+            toggle_off: c(0x2E3331),      // --separator
+            // Derived: a step past --line-strong, so an empty box keeps its edge.
+            mark_off: c(0x5A605D),
+            thumb: c(0x161918),           // --sunken
+            thumb_border: ca(0xFFFFFF14), // --shadow-float ring
+            overlay: c(0x1C201E),         // --hover, as the web's floating cards
+            shadow: ca(0x00000099),       // --shadow-float
+            shadow_soft: ca(0x00000066),  // --shadow-float
         }
     }
 }
@@ -332,13 +344,14 @@ pub fn shadow(color: Hsla, y: f32, blur: f32) -> BoxShadow {
     }
 }
 
-/// The resting shadow of raised controls and cards.
+/// The resting shadow of raised controls and cards (the web's
+/// `--shadow-button` drop).
 fn raise(p: &Palette) -> Vec<BoxShadow> {
     vec![shadow(
         if p.dark {
-            ca(0x00000059)
+            ca(0x00000066)
         } else {
-            ca(0x0A0A0A0D)
+            ca(0x0000000F)
         },
         1.,
         2.,
@@ -358,6 +371,9 @@ pub fn clickable(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Cl
         .test_support()
         .aria_label(label)
 }
+
+/// The top and bottom of the primary button's gradient.
+const PRIMARY_FILL: (u32, u32) = (0x127A47, 0x0F6B3E);
 
 /// How a [`Button`] looks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -435,7 +451,6 @@ impl Button {
             (30., 14., 13.)
         };
         let fg = match self.look {
-            // White on #168A51 to #117444 is at least 4.5:1, the AA target.
             Look::Primary => c(0xFFFFFF),
             Look::Secondary => self.color.unwrap_or(p.text),
             Look::Ghost => self.color.unwrap_or(p.secondary),
@@ -451,22 +466,26 @@ impl Button {
             .px(px(if ghost { pad - 2. } else { pad }))
             .rounded(px(radius::CONTROL));
         let base = match self.look {
+            // The web's `.btn-primary` ring and shadows. Its fill (#22A867 to
+            // #1B9259) gives white text about 3:1, so the fill starts at
+            // --green instead: at least 5.3:1, past the AA target of 4.5.
             Look::Primary => base
                 .bg(linear_gradient(
                     180.,
-                    linear_color_stop(c(0x168A51), 0.),
-                    linear_color_stop(c(0x117444), 1.),
+                    linear_color_stop(c(PRIMARY_FILL.0), 0.),
+                    linear_color_stop(c(PRIMARY_FILL.1), 1.),
                 ))
                 .shadow(vec![
                     BoxShadow {
-                        color: ca(0xFFFFFF33),
+                        color: ca(0xFFFFFF47),
                         offset: point(px(0.), px(1.)),
                         blur_radius: px(0.),
                         spread_radius: px(0.),
                         inset: true,
                     },
-                    inset_ring(ca(0x0B5C3466), 1.),
-                    shadow(ca(0x0A3C2333), 1., 2.),
+                    inset_ring(c(0x157F4A), 1.),
+                    shadow(ca(0x0A3C2340), 1., 2.),
+                    shadow(ca(0x0A3C231F), 2., 6.),
                 ])
                 .when(!self.disabled, |d| d.hover(|s| s.opacity(0.92))),
             Look::Secondary => base
@@ -816,7 +835,7 @@ pub enum Tone {
 impl Tone {
     fn colors(self, p: &Palette) -> (Hsla, Hsla, Hsla) {
         match self {
-            Tone::Neutral => (p.recessed, p.border, p.secondary),
+            Tone::Neutral => (p.chip, p.chip_border, p.secondary),
             Tone::Green => (p.green_tint, p.green_border, p.green_text),
             Tone::Error => (p.error_tint, p.error_border, p.error),
         }
@@ -1191,5 +1210,66 @@ pub fn file_manager_name() -> &'static str {
         "Finder"
     } else {
         "the file manager"
+    }
+}
+
+#[cfg(test)]
+mod contrast {
+    use super::{Hsla, PRIMARY_FILL, Palette, c};
+
+    fn luminance(color: Hsla) -> f32 {
+        let c = color.to_rgb();
+        let f = |v: f32| {
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+    }
+
+    fn ratio(a: Hsla, b: Hsla) -> f32 {
+        let (a, b) = (luminance(a), luminance(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    /// Every text color reaches WCAG AA (4.5:1) on every background it is
+    /// drawn on, in both appearances.
+    #[test]
+    fn text_meets_aa() {
+        for p in [Palette::light(), Palette::dark()] {
+            let grounds = [
+                ("window", p.window),
+                ("chrome", p.chrome),
+                ("recessed", p.recessed),
+                ("surface", p.surface),
+                ("hover", p.hover),
+                ("chip", p.chip),
+                ("overlay", p.overlay),
+                ("green_tint", p.green_tint),
+                ("error_tint", p.error_tint),
+            ];
+            let inks = [
+                ("text", p.text),
+                ("secondary", p.secondary),
+                ("tertiary", p.tertiary),
+                ("green_text", p.green_text),
+                ("error", p.error),
+            ];
+            for (ink, fg) in inks {
+                for (ground, bg) in grounds {
+                    let r = ratio(fg, bg);
+                    assert!(r >= 4.5, "{ink} on {ground} is {r:.2}:1 (dark: {})", p.dark);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn white_on_primary_meets_aa() {
+        for fill in [PRIMARY_FILL.0, PRIMARY_FILL.1] {
+            assert!(ratio(c(0xFFFFFF), c(fill)) >= 4.5, "{fill:06X}");
+        }
     }
 }
