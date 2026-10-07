@@ -136,6 +136,8 @@ fn run_tool_attempt(
     if !CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst) {
         std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     }
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x08000000);
     let mut child = cmd.spawn()?;
     let mut stderr = child.stderr.take().expect("piped");
     let (err_tx, err_rx) = mpsc::channel();

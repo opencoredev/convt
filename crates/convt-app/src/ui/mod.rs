@@ -107,6 +107,9 @@ pub fn route(request: Request, cx: &mut App) {
         // Silent conversions never download: a document that needs the pack
         // fails here and opens Quick convert, which offers it.
         app.update(cx, |s, cx| s.refresh_pack(cx));
+        if request.show_progress {
+            open_main(cx);
+        }
         let silent = app.update(cx, |s, cx| s.convert_silently(&request, cx));
         if let Err(e) = silent {
             tracing::info!(reason = %e, "opening Quick convert instead of converting in place");
@@ -138,9 +141,16 @@ pub fn show_main(cx: &mut App) {
 
 fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
     let app = model::shared(cx);
-    show(size(px(1040.), px(640.)), "convt", cx, |window, cx| {
+    let opened = show(size(px(1040.), px(640.)), "convt", cx, |window, cx| {
         cx.new(|cx| MainView::new(app, window, cx))
-    })
+    });
+    if let Some((handle, view)) = &opened {
+        let _ = handle.update(cx, |_, window, _| window.activate_window());
+        view.update(cx, |view, cx| {
+            view.set_page(main_window::Page::Activity, cx)
+        });
+    }
+    opened
 }
 
 fn open_first_run(cx: &mut App) {
