@@ -74,8 +74,8 @@ def archive(tree, output, version, epoch, verification):
     components=json.loads((tree/'packaging/linux/license-components.lock.json').read_text())
     platform_gaps = closure.get('platform_gaps', {})
     covered_platforms = ['linux-x86_64']
-    if not platform_gaps.get('macos-universal'):
-        covered_platforms.append('macos-universal')
+    if not platform_gaps.get('macos-arm64'):
+        covered_platforms.append('macos-arm64')
     audit={'schema_version':1,'distribution_ready':not gaps,
            'tree_sha256':json.loads((tree/'release-tree.json').read_text())['tree_sha256'],
            'covered_platforms':covered_platforms,'platform_gaps':platform_gaps,

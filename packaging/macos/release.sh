@@ -8,7 +8,7 @@
 #   CONVT_NOTARY_PROFILE  a notarytool keychain profile, created once with
 #                         xcrun notarytool store-credentials convt-notary \
 #                           --key <api-key.p8> --key-id <KEY_ID> --issuer <ISSUER_ID>
-#   CONVT_MAC_ARCHS       "arm64 x86_64" for the universal release (default)
+#   CONVT_MAC_ARCHS       "arm64" for the Apple silicon release (default)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 : "${CONVT_SIGN_IDENTITY:?set CONVT_SIGN_IDENTITY to a Developer ID Application identity}"
@@ -17,7 +17,7 @@ case "$CONVT_SIGN_IDENTITY" in
   "Developer ID Application:"*) ;;
   *) echo "notarization needs a Developer ID Application identity, not $CONVT_SIGN_IDENTITY" >&2; exit 1 ;;
 esac
-export CONVT_MAC_ARCHS=${CONVT_MAC_ARCHS:-arm64 x86_64} CONVT_HARDENED=1
+export CONVT_MAC_ARCHS=${CONVT_MAC_ARCHS:-arm64} CONVT_HARDENED=1
 out=${CONVT_MAC_OUT:-$here/out}
 unset CONVT_MAC_UNSOURCED_FFMPEG
 "$here/bundle.sh"

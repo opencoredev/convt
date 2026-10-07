@@ -35,7 +35,7 @@ Rust sources under `third-party/rust` cover all Linux CLI and app compilation un
 
 `scripts/release/rebuild-cli.sh` rebuilds and runs the archived CLI in a clean, network-disabled container with empty Cargo and target directories. It mounts only the Rust compiler as a declared prerequisite and checks a real SVG-to-PNG conversion. The local release pipeline runs that actual archive check before generating manifests. The source audit also compiles the full derived CLI/app release graph with empty caches before creating the archive.
 
-The arm64 Mac bundle now uses FFmpeg built from [pinned sources](../packaging/release/macos-source-notes.md); the x86_64 cross-build is retained but remains unqualified until its receipt can execute. `packaging/macos/release-status.json` lists what blocks Mac artifacts, and the audit copies it into `platform_gaps`. A Linux-ready source audit cannot authorize Mac or Windows artifacts. Adding an uncovered platform makes the manifest unavailable for distribution.
+The Mac release is Apple silicon (arm64) only and uses FFmpeg built from [pinned sources](../packaging/release/macos-source-notes.md). No x86_64 slice is built or shipped. `packaging/macos/release-status.json` lists what blocks Mac artifacts, and the audit copies it into `platform_gaps`. A Linux-ready source audit cannot authorize Mac or Windows artifacts. Adding an uncovered platform makes the manifest unavailable for distribution.
 
 Document packs are separate artifacts. They require matching sources, pinned platform digests and explicit installation. Update discovery must never fetch them. [The document-pack contract](document-pack.md) owns that flow.
 
@@ -57,7 +57,7 @@ Compare unsigned artifacts first. `scripts/release/sign-linux.sh UNSIGNED SIGNED
 
 The uploader stages immutable version objects. It does not move a stable update pointer. Publish immutable artifacts and their matching source first, verify the objects and signatures, then atomically replace the stable manifests. Never delete a covered historical release. Publish source links from the download page, About and server API for the matching build. The web, app and server owners implement those consumers.
 
-The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned universal bundle/sign/notarize recipes; Windows uses Azure workload identity and Trusted Signing for nested binaries before building and signing the installer. The Windows lock remains fail-closed until its native dependencies have verified pins, sources and notices. Successful authentication or signing alone does not bypass publication gates.
+The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows uses Azure workload identity and Trusted Signing for nested binaries before building and signing the installer. The Windows lock remains fail-closed until its native dependencies have verified pins, sources and notices. Successful authentication or signing alone does not bypass publication gates.
 
 ## Launch checklist
 

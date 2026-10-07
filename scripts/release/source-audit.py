@@ -108,7 +108,7 @@ def collect(tree, payload, cache, epoch):
         # The lock explicitly classifies source gaps separately from untested build environments.
         gaps.extend(g['detail'] if isinstance(g,dict) else g for g in data.get('source_gaps',data.get('remaining_gaps',[])))
         checks.append('PDFium exact revision, dependency archive and notice reproduction hashes')
-    platform_gaps={'macos-universal':mac_gaps(tree)}
+    platform_gaps={'macos-arm64':mac_gaps(tree)}
     subprocess.run([sys.executable,str(tree/'scripts/release/linux-source-scope.py'),str(tree)],cwd=tree,check=True)
     checks.append('Linux Cargo unit graph, features, pins and source bytes preserved by archived metadata derivation')
     inventory=tree/'third-party/rust-license-inventory.json'

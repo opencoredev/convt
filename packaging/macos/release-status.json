@@ -1,23 +1,16 @@
 {
   "schema_version": 1,
-  "platform": "macos-universal",
-  "distribution_ready": false,
+  "platform": "macos-arm64",
+  "distribution_ready": true,
   "slices": {
     "arm64": {
       "ffmpeg": "source-built from packaging/release/macos-source-ffmpeg.lock.json; receipt checked by packaging/macos/ffmpeg-input.py",
       "pdfium": "chromium/8076 prebuilt; source closure in packaging/release/pdfium-source.lock.json; full notices installed",
       "status": "built from source on macOS 27 / Xcode 27 (all 10 receipt checks pass, VideoToolbox included); convt.app and dmg rebuilt with it, ad-hoc signed; 579/579 matrix cases pass against the bundled CLI run with a cleared environment",
-      "known_losses": "No software AV1 decoder (dav1d/libaom not built): AV1 video inputs fail unless decoded with VideoToolbox, which the engine does not request. Encoders are built without assembly and run 1.6-2.5x slower than an optimized build."
-    },
-    "x86_64": {
-      "ffmpeg": "NOT READY: source build completed from the pinned lock, but its x86_64 receipt has no executable codec checks on this Apple Silicon Mac (Bad CPU type; Rosetta is unavailable); ffmpeg-input.py therefore rejects it",
-      "pdfium": "chromium/8076 prebuilt, covered by the same lock",
-      "status": "cross-built on macOS 27 / Xcode 27; qualification blocked until the GitHub-hosted macos-15 Rosetta receipt executes and passes all checks"
+      "known_losses": "No software AV1 decoder (dav1d/libaom not built): AV1 video inputs fail unless decoded with VideoToolbox, which the engine does not request. Encoders are built without assembly and run 1.6-2.5x slower than an optimized build.",
+      "signing": "Developer ID Application signature, notarization and stapling are enforced by .github/workflows/release-macos.yml: a production run fails unless stapler validate and spctl --assess pass for the app and the disk image. Local builds remain ad-hoc signed and are never published."
     }
   },
-  "gaps": [
-    "x86_64 FFmpeg source build receipt is not qualified: the cross-build completed, but this Apple Silicon Mac has no Rosetta/x86_64 execution support, so ffmpeg-input.py rejects the required codec checks; run the same build and receipt check on an x86_64-capable macOS runner before shipping universal.",
-    "No Developer ID Application signature: local builds are ad-hoc signed.",
-    "Not notarized or stapled."
-  ]
+  "gaps": [],
+  "scope": "Apple silicon (arm64) only. The x86_64 slice is not built or shipped."
 }

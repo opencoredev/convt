@@ -99,7 +99,7 @@ fn artifact(a: &Artifact, source: bool) -> bool {
             matches!(
                 (a.platform.as_str(), a.kind.as_str()),
                 ("linux-x86_64", "tar.gz" | "AppImage" | "deb" | "rpm")
-                    | ("macos-universal", "dmg" | "zip")
+                    | ("macos-arm64", "dmg" | "zip")
                     | ("windows-x86_64", "msi" | "exe" | "zip")
             )
         }
@@ -318,7 +318,7 @@ mod tests {
                 "0.1.0",
                 "2026-10-01",
                 "2026-10-03",
-                "macos-universal",
+                "macos-arm64",
                 "dmg"
             )
             .unwrap()

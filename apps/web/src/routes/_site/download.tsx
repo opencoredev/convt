@@ -54,7 +54,7 @@ export const Route = createFileRoute("/_site/download")({
     seo({
       title: "Download convt for macOS, Windows and Linux",
       description:
-        "convt for macOS (universal), Windows and Linux (AppImage, .deb, .rpm, tarball), with checksums and the matching source code.",
+        "convt for macOS (Apple silicon), Windows and Linux (AppImage, .deb, .rpm, tarball), with checksums and the matching source code.",
       path: routes.download,
     }),
   component: DownloadPage,
@@ -119,7 +119,7 @@ function DownloadPage() {
           {[
             ["macOS", "shasum -a 256 convt-*.dmg"],
             ["Linux", "sha256sum convt-*"],
-            ["Windows (PowerShell)", "Get-FileHash convt-*.exe"],
+            ["Windows (PowerShell)", "Get-FileHash convt-*.msi"],
           ].map(([label, command]) => (
             <div key={label} className="flex flex-col gap-1.5">
               <dt className="text-xs/4 text-ink-2">{label}</dt>
@@ -137,7 +137,7 @@ function DownloadPage() {
 }
 
 function slotMeta(slot: Slot) {
-  const arch = slot.arch === "universal" ? "Universal" : slot.arch;
+  const arch = slot.arch === "arm64" && slot.os === "macos" ? "Apple silicon" : slot.arch;
   return slot.artifact
     ? `${arch} · ${formatBytes(slot.artifact.size)}`
     : `${arch} · ${kindLabels[slot.kind].note}`;

@@ -23,7 +23,7 @@ def copy_artifact(a,dest):
     if hashlib.sha256(src.read_bytes()).hexdigest()!=a['sha256']:raise ValueError('manifest hash mismatch: '+name)
     p=output/dest/name;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(src,p)
     return p
-mac=artifacts.get(('macos-universal','dmg'))
+mac=artifacts.get(('macos-arm64','dmg'))
 if mac:
     text(Path('homebrew/convt.rb'),f'''cask "convt" do
   version "{version}"
@@ -101,7 +101,7 @@ createrepo_c --revision "$SOURCE_DATE_EPOCH" --set-timestamp-to-revision .
 gpg --batch --yes --local-user "$CONVT_REPO_SIGNING_KEY_ID" --armor --detach-sign repodata/repomd.xml
 ''')
 text(Path('STATUS.json'),json.dumps({'distribution_ready':m['distribution_ready'],'version':version,
-    'homebrew':'rendered' if mac else 'awaiting notarized macos-universal dmg',
+    'homebrew':'rendered' if mac else 'awaiting notarized macos-arm64 dmg',
     'winget':'rendered' if windows else 'awaiting signed Windows installer',
     'apt':'unsigned staging index' if deb else 'missing deb',
     'dnf':'packages and sign/index recipe' if rpm else 'missing rpm'},indent=2)+'\n')

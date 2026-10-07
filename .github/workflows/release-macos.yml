@@ -29,8 +29,7 @@ permissions:
   contents: read
 jobs:
   macos:
-    # GitHub-hosted macos-15 arm64 images include Rosetta 2. The x86_64
-    # receipt is executed below so a cross-build cannot silently qualify it.
+    # Apple silicon only: the release ships a single arm64 slice.
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -56,28 +55,35 @@ jobs:
           test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - name: Verify Rosetta can execute the x86_64 receipt
-        run: |
-          test "$(uname -m)" = arm64
-          arch -x86_64 /usr/bin/true
-          test "$(arch -x86_64 /usr/bin/uname -m)" = x86_64
+      - name: Require an Apple silicon runner
+        run: test "$(uname -m)" = arm64
       - name: Install pinned source-build tools
         run: brew install meson ninja pkg-config
-      - name: Build and qualify source FFmpeg for both slices
+      # The source build takes most of the job. Its cache key covers every
+      # input; bundle.sh still re-runs the receipt checks on a restored build.
+      - name: Restore the source FFmpeg build
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: packaging/.cache/macos-source-built-arm64
+          key: macos-ffmpeg-arm64-${{ hashFiles('packaging/release/macos-source-ffmpeg.lock.json', 'packaging/release/macos-source-ffmpeg-build.sh', 'packaging/macos/ffmpeg-input.py') }}
+      - name: Build and qualify source FFmpeg for arm64
         env:
           CONVT_BUNDLE_CACHE: ${{ github.workspace }}/packaging/.cache
           CONVT_BUILD_JOBS: "4"
+          CACHE_HIT: ${{ steps.ffmpeg-cache.outputs.cache-hit }}
         run: |
           python3 packaging/release/pdfium-source-verify.py --fetch packaging/release/macos-source-ffmpeg.lock.json
-          bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64
-          arch -x86_64 bash packaging/release/macos-source-ffmpeg-build.sh --arch x86_64
-          arch -x86_64 /usr/bin/python3 packaging/macos/ffmpeg-input.py \
-            "$CONVT_BUNDLE_CACHE/macos-source-built-x86_64" x86_64 \
-            packaging/release/macos-source-ffmpeg.lock.json "$RUNNER_TEMP/x86_64-notices"
+          if [ "$CACHE_HIT" != true ]; then
+            bash packaging/release/macos-source-ffmpeg-build.sh --arch arm64
+          fi
+          /usr/bin/python3 packaging/macos/ffmpeg-input.py \
+            "$CONVT_BUNDLE_CACHE/macos-source-built-arm64" arm64 \
+            packaging/release/macos-source-ffmpeg.lock.json "$RUNNER_TEMP/arm64-notices"
       - name: Import Developer ID certificate
         if: ${{ !inputs.dry_run }}
         env:
@@ -92,14 +98,14 @@ jobs:
           security import "$RUNNER_TEMP/certificate.p12" -k "$RUNNER_TEMP/release.keychain-db" -P "$PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/release.keychain-db"
           security list-keychains -d user -s "$RUNNER_TEMP/release.keychain-db"
-      - name: Build universal app and signed notarized image
+      - name: Build arm64 app and signed notarized image
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           CONVT_SIGN_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ vars.APPLE_API_ISSUER_ID }}
-          CONVT_MAC_ARCHS: arm64 x86_64
+          CONVT_MAC_ARCHS: arm64
           CONVT_MAC_OUT: packaging/out/macos
           CONVT_NOTARY_PROFILE: convt-release
         run: |
@@ -113,25 +119,31 @@ jobs:
             test -n "$APPLE_API_KEY_P8"
             api_key="$RUNNER_TEMP/convt-api-key.p8"
             umask 077
-            printf '%s' "$APPLE_API_KEY_P8" > "$api_key"
+            # Accept the .p8 as PEM text or as base64 of the file.
+            if printf '%s' "$APPLE_API_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+              printf '%s\n' "$APPLE_API_KEY_P8" > "$api_key"
+            else
+              printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$api_key"
+            fi
+            grep -q 'BEGIN PRIVATE KEY' "$api_key"
             xcrun notarytool store-credentials "$CONVT_NOTARY_PROFILE" --key "$api_key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --keychain "$RUNNER_TEMP/release.keychain-db"
             bash packaging/macos/release.sh
             rm -f "$api_key"
           fi
-          lipo -verify_arch arm64 x86_64 packaging/out/macos/convt.app/Contents/MacOS/convt-app
+          lipo -verify_arch arm64 packaging/out/macos/convt.app/Contents/MacOS/convt-app
           codesign --verify --deep --strict --verbose=2 packaging/out/macos/convt.app
           # Standardize the filename consumed by the release manifest generator.
-          cp packaging/out/macos/convt-*-universal.dmg packaging/out/convt-macos-universal.dmg
+          cp packaging/out/macos/convt-*-arm64.dmg packaging/out/convt-macos-arm64.dmg
           if [ "$DRY_RUN" = false ]; then
             xcrun stapler validate packaging/out/macos/convt.app
-            xcrun stapler validate packaging/out/convt-macos-universal.dmg
+            xcrun stapler validate packaging/out/convt-macos-arm64.dmg
             spctl --assess --type execute --verbose=2 packaging/out/macos/convt.app
-            spctl --assess --type open --context context:primary-signature --verbose=2 packaging/out/convt-macos-universal.dmg
+            spctl --assess --type open --context context:primary-signature --verbose=2 packaging/out/convt-macos-arm64.dmg
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-release-review
-          path: packaging/out/convt-macos-universal.dmg
+          path: packaging/out/convt-macos-arm64.dmg
           if-no-files-found: error
       - name: Remove certificate and keychain
         if: always()

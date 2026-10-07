@@ -161,8 +161,8 @@ if (cmd === "keygen") {
     } else if (name.includes("linux-x86_64") && name.endsWith(".tar.gz")) {
       platform = "linux-x86_64";
       kind = "tar.gz";
-    } else if (/macos-universal.*\.(dmg|zip)$/.test(name)) {
-      platform = "macos-universal";
+    } else if (/macos-arm64.*\.(dmg|zip)$/.test(name)) {
+      platform = "macos-arm64";
       kind = name.split(".").at(-1)!;
     } else if (/windows-x86_64.*\.(msi|exe|zip)$/.test(name)) {
       platform = "windows-x86_64";

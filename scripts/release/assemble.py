@@ -28,12 +28,12 @@ tarballs = list(linux.glob('*linux-x86_64*.tar.gz'))
 if len(tarballs) != 1:
     raise ValueError('Expected one Linux binary tarball')
 assets.extend(tarballs)
-assets.append(macos / 'convt-macos-universal.dmg')
+assets.append(macos / 'convt-macos-arm64.dmg')
 if args.include_windows:
     assets.append(windows / f'convt-{args.version}-windows-x86_64.msi')
 # Coverage comes from the source builder; never promote it merely because binaries exist.
 audit = json.loads((linux / 'source-audit.json').read_text())
-required = {'linux-x86_64', 'macos-universal'}
+required = {'linux-x86_64', 'macos-arm64'}
 if args.include_windows:
     required.add('windows-x86_64')
 if (audit.get('distribution_ready') is not True or audit.get('gaps') != []

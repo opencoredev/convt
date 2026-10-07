@@ -24,7 +24,7 @@ const manifest = (ready: boolean) => ({
       version: "0.1.0",
       build_date: "2026-10-07",
       artifacts: [
-        artifact("macos-universal", "dmg", "convt-0.1.0-macos-universal.dmg"),
+        artifact("macos-arm64", "dmg", "convt-0.1.0-macos-arm64.dmg"),
         artifact("linux-x86_64", "deb", "convt_0.1.0_amd64.deb"),
         artifact("windows-x86_64", "zip", "convt-0.1.0-windows-x86_64.zip"),
       ],
@@ -45,7 +45,7 @@ describe("release manifest", () => {
     const release = releaseFromManifest(parseReleaseManifest(manifest(true)));
     const kinds = (os: string) => release.slots.filter((s) => s.os === os).map((s) => s.kind);
     expect(kinds("linux")).toEqual(["AppImage", "deb", "rpm", "tar.gz"]);
-    expect(kinds("windows")).toEqual(["exe", "zip"]);
+    expect(kinds("windows")).toEqual(["msi", "zip"]);
     expect(release.slots.find((s) => s.kind === "dmg")?.artifact?.size).toBe(1234);
     expect(release.slots.find((s) => s.kind === "rpm")?.artifact).toBeNull();
     expect(release.source?.url).toEndWith("convt-0.1.0-source.tar.gz");
