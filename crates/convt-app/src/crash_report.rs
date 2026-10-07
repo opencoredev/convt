@@ -9,6 +9,7 @@ const POSTHOG_KEY: &str = "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw";
 const POSTHOG_URL: &str = "https://us.i.posthog.com/batch/";
 
 pub fn logs_dir() -> Option<PathBuf> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let home = std::env::var_os("HOME").map(PathBuf::from);
     #[cfg(target_os = "macos")]
     {
