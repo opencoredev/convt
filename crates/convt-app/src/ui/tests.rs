@@ -24,7 +24,7 @@ use super::first_run::{FirstRunView, Step};
 use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
-use super::{Open, PopoverView, theme};
+use super::{AboutView, Open, PopoverView, menus, theme};
 use crate::history::Outcome;
 use crate::jobs::JobId;
 use crate::model::{AppState, PackPhase, Paths, Shared};
@@ -2087,6 +2087,10 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         let (popover, _) = cx.update(super::open_popover).unwrap();
         assert!(fits(cx, popover, "open-settings"), "popover");
 
+        cx.update(super::show_about);
+        let (about, _) = window_of::<AboutView>(cx);
+        assert!(fits(cx, about, "about-source"), "About");
+
         cx.update(super::show_main);
         let (main, _) = window_of::<MainView>(cx);
         assert!(fits(cx, main, "trial-buy"), "main window");
@@ -3926,4 +3930,247 @@ fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppCo
         !status.contains("keeps working") && status.contains("renew to convert again"),
         "{status}"
     );
+}
+
+/// The menu bar as macOS shows it: each menu with its item names, "-" for
+/// a separator.
+fn menu_bar(cx: &mut TestAppContext) -> Vec<(String, Vec<String>)> {
+    use gpui_kit::OwnedMenuItem;
+    cx.update(|cx| {
+        cx.set_menus(menus::menus());
+        cx.get_menus().unwrap()
+    })
+    .into_iter()
+    .map(|menu| {
+        let items = menu
+            .items
+            .iter()
+            .map(|item| match item {
+                OwnedMenuItem::Separator => "-".to_string(),
+                OwnedMenuItem::Action { name, .. } => name.clone(),
+                OwnedMenuItem::Submenu(m) => m.name.to_string(),
+                OwnedMenuItem::SystemMenu(m) => m.name.to_string(),
+            })
+            .collect();
+        (menu.name.to_string(), items)
+    })
+    .collect()
+}
+
+#[gpui_kit::test]
+fn the_menu_bar_has_the_menus_mac_apps_have(cx: &mut TestAppContext) {
+    let bar = menu_bar(cx);
+    let names: Vec<&str> = bar.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["convt", "File", "Edit", "Window", "Help"]);
+    let items = |menu: &str| -> Vec<String> {
+        bar.iter()
+            .find(|(n, _)| n == menu)
+            .map(|(_, items)| items.clone())
+            .unwrap()
+    };
+    assert_eq!(
+        items("convt"),
+        [
+            "About convt",
+            "-",
+            "Check for Updates…",
+            "Settings…",
+            "-",
+            "Services",
+            "-",
+            "Hide convt",
+            "Hide Others",
+            "Show All",
+            "-",
+            "Quit convt",
+        ]
+    );
+    assert_eq!(items("File"), ["Add Files…", "-", "Close Window"]);
+    assert_eq!(
+        items("Edit"),
+        ["Undo", "Redo", "-", "Cut", "Copy", "Paste", "Select All"]
+    );
+    assert_eq!(items("Window"), ["Minimize", "Zoom", "-", "Activity"]);
+    assert_eq!(
+        items("Help"),
+        ["convt Help", "Release Notes", "-", "Contact Support"]
+    );
+}
+
+#[gpui_kit::test]
+fn the_menu_shortcuts_are_the_usual_ones(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        menus::init(cx);
+        cx.bind_keys(menus::key_bindings());
+    });
+    let (main, _) = f.main(cx);
+    cx.simulate_keystrokes(main, "cmd-,");
+    cx.run_until_parked();
+    let (settings, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::General));
+    let windows = cx.update(|cx| cx.windows().len());
+    // Close Window closes the key window, as macOS makes the one typed in.
+    settings
+        .update(cx, |_, window, _| window.activate_window())
+        .unwrap();
+    cx.run_until_parked();
+    cx.simulate_keystrokes(settings, "cmd-w");
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows - 1);
+}
+
+#[gpui_kit::test]
+fn check_for_updates_checks_now_and_shows_the_result(cx: &mut TestAppContext) {
+    // Automatic checks are off: the menu item checks anyway, as Check now does.
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.update_checks = false, cx)
+        });
+        menus::init(cx);
+    });
+    f.releases
+        .serve(Ok(manifest(2, &[("0.9.0", "2026-10-03")], &update_key())));
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.update(|cx| cx.dispatch_action(&menus::CheckForUpdates));
+    let (settings, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::General));
+    assert!(
+        matches!(wait_for_check(&f, cx), Update::Available { version, .. } if version == "0.9.0")
+    );
+    assert_eq!(f.releases.fetches(), 1);
+    // Settings opens scrolled to the Updates card, so Download is in view.
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("convt 0.9.0 is available")
+    );
+    assert!(fits(cx, settings, "update-download"));
+    assert!(fits(cx, settings, "update-checks"));
+
+    // Up to date, and an error, show in the same place.
+    f.releases
+        .serve(Ok(manifest(3, &[("0.1.0", "2026-10-01")], &update_key())));
+    cx.update(|cx| cx.dispatch_action(&menus::CheckForUpdates));
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("You're up to date.")
+    );
+    f.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| cx.dispatch_action(&menus::CheckForUpdates));
+    assert!(matches!(wait_for_check(&f, cx), Update::Failed(_)));
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("Couldn't check for updates. convt.app couldn't be reached.")
+    );
+    assert_eq!(f.releases.fetches(), 3);
+    // Still only one Settings window.
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows + 1);
+}
+
+#[gpui_kit::test]
+fn about_and_help_open_what_they_say(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        menus::init(cx);
+    });
+    cx.update(|cx| cx.dispatch_action(&menus::About));
+    let (about, _) = window_of::<AboutView>(cx);
+    let version = label(cx, about, "about-version").unwrap();
+    assert!(
+        version.starts_with(&format!("Version {} · built ", crate::account::VERSION)),
+        "{version}"
+    );
+    click(cx, about, "about-source");
+    assert_eq!(cx.opened_url().as_deref(), Some(menus::SOURCE_URL));
+    click(cx, about, "about-notes");
+    assert_eq!(
+        cx.opened_url(),
+        Some(format!(
+            "https://convt.app/changelog#v{}",
+            crate::account::VERSION
+        ))
+    );
+    // A second About brings the same window forward.
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.update(|cx| cx.dispatch_action(&menus::About));
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows);
+
+    for (action, url) in [
+        (
+            Box::new(menus::OpenHelp) as Box<dyn gpui_kit::Action>,
+            "https://convt.app/docs",
+        ),
+        (
+            Box::new(menus::OpenReleaseNotes),
+            "https://convt.app/changelog",
+        ),
+        (Box::new(menus::ContactSupport), "https://convt.app/contact"),
+    ] {
+        cx.update(|cx| cx.dispatch_action(&*action));
+        assert_eq!(cx.opened_url().as_deref(), Some(url));
+    }
+
+    cx.update(|cx| cx.dispatch_action(&menus::ShowActivity));
+    let (_, main) = window_of::<MainView>(cx);
+    cx.read(|cx| assert_eq!(main.read(cx).page, Page::Activity));
+    cx.update(|cx| cx.dispatch_action(&menus::OpenSettings));
+    window_of::<SettingsView>(cx);
+}
+
+#[gpui_kit::test]
+fn the_edit_menu_reaches_the_text_fields(cx: &mut TestAppContext) {
+    use gpui_kit::{Focusable as _, OwnedMenuItem};
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    let (settings, view) = f.settings(SettingsTab::License, cx);
+    let field = cx.read(|cx| view.read(cx).license_key.clone());
+    set_input(cx, settings, &field, "CONVT-1234");
+    cx.update_window(settings, |_, window, cx| {
+        window.focus(&field.read(cx).focus_handle(cx), cx)
+    })
+    .unwrap();
+    let edit = cx.update(|cx| {
+        cx.set_menus(menus::menus());
+        cx.get_menus().unwrap()
+    });
+    let edit = edit.into_iter().find(|m| m.name == "Edit").unwrap();
+    let action = |name: &str| {
+        edit.items
+            .iter()
+            .find_map(|item| match item {
+                OwnedMenuItem::Action {
+                    name: n, action, ..
+                } if n == name => Some(action.boxed_clone()),
+                _ => None,
+            })
+            .unwrap()
+    };
+    for name in ["Select All", "Copy"] {
+        let action = action(name);
+        cx.update_window(settings, |_, window, cx| window.dispatch_action(action, cx))
+            .unwrap();
+    }
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
+        Some("CONVT-1234")
+    );
+    let cut = action("Cut");
+    cx.update_window(settings, |_, window, cx| window.dispatch_action(cut, cx))
+        .unwrap();
+    cx.run_until_parked();
+    cx.read(|cx| assert_eq!(field.read(cx).value().as_ref(), ""));
+    let undo = action("Undo");
+    cx.update_window(settings, |_, window, cx| window.dispatch_action(undo, cx))
+        .unwrap();
+    cx.run_until_parked();
+    cx.read(|cx| assert_eq!(field.read(cx).value().as_ref(), "CONVT-1234"));
 }

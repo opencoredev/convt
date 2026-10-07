@@ -2,9 +2,11 @@
 //! convert opens for files sent without a target; Settings and the first-run
 //! window are their own windows; the menu bar popover belongs to the tray.
 
+mod about;
 mod account;
 mod first_run;
 mod main_window;
+pub mod menus;
 mod pack;
 mod popover;
 mod quick;
@@ -21,6 +23,7 @@ use convt_license::client::{BUY_URL, DOWNLOAD_URL, State};
 use gpui_kit::component::IconName;
 use gpui_kit::*;
 
+pub use about::AboutView;
 pub use first_run::FirstRunView;
 pub use main_window::MainView;
 pub use popover::PopoverView;
@@ -126,16 +129,16 @@ pub fn route(request: Request, cx: &mut App) {
 /// launch shows it again. A build from source that doesn't check licenses
 /// never shows the first-run window.
 pub fn show_main(cx: &mut App) {
-    let app = model::shared(cx);
-    let first_run = {
-        let state = app.read(cx);
-        state.license_enforced() && !state.settings.first_run_done
-    };
-    if first_run {
+    if first_run_pending(cx) {
         open_first_run(cx);
     } else {
         open_main(cx);
     }
+}
+
+fn first_run_pending(cx: &App) -> bool {
+    let state = model::shared(cx).read(cx);
+    state.license_enforced() && !state.settings.first_run_done
 }
 
 fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
@@ -150,6 +153,27 @@ fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
         });
     }
     opened
+}
+
+/// File > Add Files…: the main window's file picker. Until first run is
+/// done, the first-run window comes forward instead.
+pub fn add_files(cx: &mut App) {
+    if first_run_pending(cx) {
+        open_first_run(cx);
+    } else if let Some((_, view)) = open_main(cx) {
+        view.update(cx, |view, cx| view.pick_files(cx));
+    }
+}
+
+/// Opens About convt.
+pub fn show_about(cx: &mut App) {
+    let app = model::shared(cx);
+    show(
+        size(px(about::ABOUT_SIZE.0), px(about::ABOUT_SIZE.1)),
+        "About convt",
+        cx,
+        |window, cx| cx.new(|cx| AboutView::new(app, window, cx)),
+    );
 }
 
 /// The first-run window's size.

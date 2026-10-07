@@ -90,6 +90,7 @@ fn run(primary: instance::Primary, first: Request) {
         cx.set_app_identity("app.convt.desktop", "convt");
         gpui_kit::init(cx);
         ui::theme::init(cx);
+        ui::menus::init(cx);
         let state = cx.new(|cx| AppState::new(Arc::new(pack::Engines), Paths::from_env(), cx));
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);

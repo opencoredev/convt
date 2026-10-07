@@ -76,7 +76,7 @@ impl MainView {
         cx.notify();
     }
 
-    fn pick_files(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn pick_files(&mut self, cx: &mut Context<Self>) {
         let picked = cx.prompt_for_paths(add_files_prompt(cx.can_select_mixed_files_and_dirs()));
         cx.spawn(async move |this, cx| {
             if let Ok(Ok(Some(paths))) = picked.await {
