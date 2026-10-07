@@ -451,7 +451,7 @@
           "storage_unavailable"
         ],
         "x-enum-descriptions": {
-          "unauthorized": "401 without a Bearer header; 403 when the key is invalid or revoked, or the web credential expired.",
+          "unauthorized": "401, 403. 401 without a Bearer header; 403 when the key is invalid or revoked, or the web credential expired.",
           "file_too_large": "400. input_bytes is below 1 or above 2,000,000,000.",
           "unsupported_format": "400. Unknown format, the same format twice, or a pair the cloud cannot convert.",
           "size_mismatch": "400. The upload's size differs from input_bytes. The job is cancelled.",
