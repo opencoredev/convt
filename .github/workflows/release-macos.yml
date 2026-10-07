@@ -65,6 +65,8 @@ jobs:
           test "$(uname -m)" = arm64
           arch -x86_64 /usr/bin/true
           test "$(arch -x86_64 /usr/bin/uname -m)" = x86_64
+      - name: Install pinned source-build tools
+        run: brew install meson ninja pkg-config
       - name: Build and qualify source FFmpeg for both slices
         env:
           CONVT_BUNDLE_CACHE: ${{ github.workspace }}/packaging/.cache
