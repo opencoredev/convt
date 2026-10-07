@@ -72,7 +72,19 @@ function Native($Name, $Subdir, $Options) {
         }
     }
     $Build = Join-Path $Source 'build-convt'
-    & $CMake -S (Join-Path $Source $Subdir) -B $Build -G $Generator -A x64 "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_POLICY_VERSION_MINIMUM=3.5 @Options
+    # Quote / array-splat every -D. pwsh splits an unquoted -DFOO=3.5 into
+    # CMAKE_POLICY_VERSION_MINIMUM=3 and a stray path ".5" (CNV-37 follow-up).
+    $CMakeArgs = @(
+        '-S', (Join-Path $Source $Subdir)
+        '-B', $Build
+        '-G', $Generator
+        '-A', 'x64'
+        "-DCMAKE_INSTALL_PREFIX=$Prefix"
+        "-DCMAKE_PREFIX_PATH=$Prefix"
+        '-DCMAKE_INSTALL_LIBDIR=lib'
+        '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
+    ) + @($Options)
+    & $CMake @CMakeArgs
     if ($LASTEXITCODE -ne 0) { throw "Configure $Name" }
     & $CMake --build $Build --config Release --parallel 4
     if ($LASTEXITCODE -ne 0) { throw "Build $Name" }
