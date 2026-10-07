@@ -134,8 +134,8 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>Site analytics:</span> convt.app uses PostHog (US) to record
-              page views and clicks on this website so we can see which pages are used. That is
-              only on convt.app. The desktop app and the command line tool still send nothing.
+              page views and clicks on this website so we can see which pages are used. That is only
+              on convt.app. The desktop app and the command line tool still send nothing.
             </>,
           ]}
         />
