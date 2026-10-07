@@ -43,6 +43,10 @@ export type ReleaseManifest = {
 const platforms: Platform[] = ["linux-x86_64", "macos-arm64", "windows-x86_64", "source"];
 const kinds: ArtifactKind[] = ["tar.gz", "AppImage", "deb", "rpm", "dmg", "zip", "msi", "exe"];
 
+export function isArtifactKind(value: unknown): value is ArtifactKind {
+  return typeof value === "string" && (kinds as readonly string[]).includes(value);
+}
+
 function fail(path: string, message: string): never {
   throw new Error(`release manifest: ${path} ${message}`);
 }
