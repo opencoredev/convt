@@ -9,7 +9,7 @@
   // Local development overrides these from apps/web/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",
-    "SALES": "desktop",
+    "SALES": "all",
     "BETTER_AUTH_URL": "https://convt.app",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
@@ -34,7 +34,7 @@
       "routes": [],
       "vars": {
         "ENV": "staging",
-        "SALES": "desktop",
+        "SALES": "all",
         "BETTER_AUTH_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
