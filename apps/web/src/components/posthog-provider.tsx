@@ -14,6 +14,7 @@ function initPostHog(config: { key: string; host: string }) {
     capture_pageview: false,
     capture_pageleave: true,
     capture_exceptions: true,
+    capture_exceptions: true,
   });
   initialized = true;
 }
