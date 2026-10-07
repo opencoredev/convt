@@ -1,65 +1,59 @@
 import { useState } from "react";
 
-import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
-import { fileName, type ManifestArtifact } from "#/lib/release-manifest";
+import { cx, focusRing } from "#/components/app/ui";
 
-/** Shown where a build or source archive is not published yet, instead of a link. */
-export function ComingSoon({ large }: { large?: boolean }) {
-  return (
-    <span
+/** A SHA-256 checksum with a button that copies all of it. `block` shows it in full, wrapped. */
+export function Sha({ value, block }: { value: string; block?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = (
+    <button
+      type="button"
+      onClick={async () => {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      aria-label={copied ? "Checksum copied" : "Copy SHA-256 checksum"}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-lg bg-chip font-medium text-ink-2 shadow-[inset_0_0_0_1px_var(--chip-line)]",
-        large ? "h-10 w-full text-sm/4.5" : "px-2.5 py-1.5 text-xs/4",
+        "shrink-0 cursor-pointer rounded-sm font-sans text-xs/4 font-medium text-[#157f4a] hover:underline hover:underline-offset-2 dark:text-green",
+        focusRing,
       )}
     >
-      Coming soon
-    </span>
+      {copied ? "Copied" : "Copy"}
+    </button>
   );
-}
-
-export function DownloadButton({
-  artifact,
-  large,
-}: {
-  artifact: ManifestArtifact | null;
-  large?: boolean;
-}) {
-  if (!artifact) return <ComingSoon large={large} />;
-  const file = fileName(artifact.url);
-  return large ? (
-    <PrimaryLink href={artifact.url} download={file} className="h-10 w-full">
-      Download {file}
-    </PrimaryLink>
-  ) : (
-    <SecondaryLink href={artifact.url} download={file} className="shrink-0">
-      Download
-    </SecondaryLink>
-  );
-}
-
-/** A SHA-256 checksum, shortened on screen, with a button that copies all of it. */
-export function Sha({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
+  if (block)
+    return (
+      <div className="flex flex-col gap-1.5 rounded-lg bg-sunken px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--line)]">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-[11px]/3.5 text-ink-2 uppercase">SHA-256</span>
+          {copy}
+        </div>
+        <span className="font-mono text-[11.5px]/[17px] break-all text-ink-2">{value}</span>
+      </div>
+    );
   return (
     <div className="flex min-w-0 items-center gap-2 font-mono text-[11.5px]/4 text-ink-2">
       <span className="shrink-0">SHA-256</span>
-      <span className="min-w-0 truncate text-ink-2" title={value}>
+      <span className="min-w-0 truncate" title={value}>
         {value}
       </span>
-      <button
-        type="button"
-        onClick={async () => {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
-        className={cx(
-          "shrink-0 cursor-pointer rounded-sm font-sans text-xs/4 font-medium text-[#157f4a] dark:text-green hover:underline",
-          focusRing,
-        )}
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
+      {copy}
     </div>
+  );
+}
+
+export function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className={className}>
+      <path
+        d="M8 2.5v8m0 0L4.75 7.25M8 10.5l3.25-3.25M3 13.5h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
