@@ -41,6 +41,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Verify dispatched commit
         if: github.event_name == 'workflow_dispatch'
+        shell: bash
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
@@ -93,6 +94,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Verify dispatched commit
         if: github.event_name == 'workflow_dispatch'
+        shell: bash
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
