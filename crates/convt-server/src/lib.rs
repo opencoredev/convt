@@ -78,7 +78,7 @@ pub fn app() -> Router {
                 crate::posthog::capture(&message, "convt-server request");
                 axum::http::Response::builder()
                     .status(500)
-                    .body("internal server error".into())
+                    .body(axum::body::Body::from("internal server error"))
                     .unwrap()
             },
         ))
