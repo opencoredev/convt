@@ -155,6 +155,7 @@ const sections: LegalSection[] = [
           only on the website, never in the app or the command line tool. PostHog processes the data
           for us in the United States.
         </p>
+        <p>We also collect scrubbed crash and error reports from the website and desktop app, with the same opt-out as analytics.</p>
         <p>When analytics are on, each page you open sends PostHog:</p>
         <List
           items={[

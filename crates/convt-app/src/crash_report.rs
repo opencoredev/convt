@@ -130,8 +130,8 @@ fn event(kind: &str, value: &str, stack: &str, error_kind: Option<&str>) -> serd
     if let Some(k) = error_kind {
         props.insert("error_kind".into(), k.into());
     }
-    serde_json::json!({"event":"$exception","api_key":POSTHOG_KEY,"properties":props,
-        "$exception_list":[{"type":kind,"value":scrub(value),"stacktrace":{"frames":[frame],"raw":scrub(stack)}}]})
+    props.insert("$exception_list".into(), serde_json::json!([{"type":kind,"value":scrub(value),"stacktrace":{"frames":[frame],"raw":scrub(stack)}}]));
+    serde_json::json!({"event":"$exception","api_key":POSTHOG_KEY,"properties":props})
 }
 
 fn send(value: serde_json::Value) -> Result<(), ()> {
@@ -235,6 +235,18 @@ pub fn install() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exception_schema_is_nested_in_properties() {
+        let value = event("panic", "boom", "stack", None);
+        assert!(
+            value
+                .get("properties")
+                .and_then(|p| p.get("$exception_list"))
+                .is_some()
+        );
+        assert!(value.get("$exception_list").is_none());
+    }
     #[test]
     fn scrubs_platform_paths() {
         for s in [
