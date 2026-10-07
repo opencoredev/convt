@@ -502,7 +502,8 @@ mod tests {
     /// a dead network mount would freeze the window.
     #[test]
     fn asking_for_a_frame_touches_no_files() {
-        let source = include_str!("thumbs.rs");
+        // A Windows checkout may have CRLF line endings.
+        let source = include_str!("thumbs.rs").replace("\r\n", "\n");
         for (name, end) in [("pub fn video_frame", "\n}\n"), ("fn frame(", "\n    }\n")] {
             let body = &source[source.find(name).unwrap()..];
             let body = &body[..body.find(end).unwrap()];
