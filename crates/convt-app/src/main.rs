@@ -98,9 +98,9 @@ fn run(primary: instance::Primary, first: Request) {
         // One of the two network calls the app makes by itself: while signed in, at
         // most once a day, ask convt.app for the current Pro key.
         state.update(cx, |s, cx| s.renew_on_launch(cx));
-        // The other: when update checks are on, at most once a day, fetch the
-        // signed list of releases.
-        state.update(cx, |s, cx| s.check_updates_on_launch(cx));
+        // The other: while automatic update checks are on, at launch and then
+        // every few hours, fetch the signed list of releases.
+        state.update(cx, |s, cx| s.start_update_checks(cx));
 
         primary.listen(move |req| drop(tx.unbounded_send(req)));
         cx.spawn(async move |cx| {

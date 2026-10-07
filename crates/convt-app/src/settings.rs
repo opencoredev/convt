@@ -29,10 +29,12 @@ pub struct Settings {
     /// The UTC day (`YYYY-MM-DD`) the app last asked convt.app for the
     /// current Pro key, so launches renew at most once a day.
     pub license_checked: Option<String>,
-    /// Check convt.app once a day for a newer build. On by default.
+    /// Check convt.app for a newer build at launch and every few hours. On
+    /// by default. Check now works either way.
     pub update_checks: bool,
-    /// The UTC day (`YYYY-MM-DD`) of the last update check.
-    pub update_checked: Option<String>,
+    /// When (Unix seconds) an update check last got an answer that checked
+    /// out. Older files kept the day in `update_checked`, which is ignored.
+    pub update_checked_at: Option<u64>,
     /// The highest update manifest `sequence` accepted, so an older signed
     /// manifest can't be replayed to hide a newer release.
     pub update_sequence: u64,
@@ -53,7 +55,7 @@ impl Default for Settings {
             first_run_done: false,
             license_checked: None,
             update_checks: true,
-            update_checked: None,
+            update_checked_at: None,
             update_sequence: 0,
             defaults: Defaults::default(),
             automations: crate::placeholder::example_automations(),
@@ -244,14 +246,17 @@ mod tests {
         assert_eq!(s.concurrency(), 2);
         assert!(matches!(s.output(), Output::Dir(_)));
 
-        // Unknown keys, such as `account` from before desktop sign-in, are ignored.
+        // Unknown keys, such as `account` from before desktop sign-in and the
+        // daily `update_checked`, are ignored.
         std::fs::write(
             &path,
-            "notifications = false\nfuture_key = 1\naccount = \"a@b.c\"\n",
+            "notifications = false\nfuture_key = 1\naccount = \"a@b.c\"\n\
+             update_checked = \"2026-10-05\"\n",
         )
         .unwrap();
         let s = Settings::load(&path).unwrap();
         assert!(!s.notifications && s.output_dir.is_none());
+        assert_eq!(s.update_checked_at, None);
         assert!(matches!(s.output(), Output::Beside));
         assert_eq!(s.defaults, Defaults::default());
         assert!(!s.first_run_done && s.menu_bar_icon);

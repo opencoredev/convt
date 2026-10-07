@@ -3469,7 +3469,7 @@ fn wait_for_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 }
 
 fn launch_check(f: &Fixture, cx: &mut TestAppContext) {
-    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
 }
 
 fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
@@ -3499,7 +3499,7 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     cx.read(|cx| {
         let s = &f.app.read(cx).settings;
         assert_eq!(s.update_sequence, 7);
-        assert_eq!(s.update_checked.as_deref(), Some(today().as_str()));
+        assert!(s.update_checked_at.is_some());
     });
     assert!(f.settings_file().contains("update_sequence = 7"));
 
@@ -3517,11 +3517,43 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     let status = label(cx, settings, "update-status").unwrap();
     assert!(status.contains("0.2.0 is out") && status.contains("0.3.0 needs a renewed license"));
 
-    // A second launch the same day asks nothing.
+    // Every launch checks, even the same day.
     launch_check(&f, cx);
+    wait_for_check(&f, cx);
+    assert_eq!(f.releases.fetches(), 2);
+    // Nothing was downloaded or installed: the only fetches were the list.
+}
+
+#[gpui_kit::test]
+fn a_running_app_checks_again_every_few_hours(cx: &mut TestAppContext) {
+    use crate::update::{CHECK_INTERVAL, SCHEDULE_TICK};
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    f.releases
+        .serve(Ok(manifest(1, &[("0.1.0", "2026-10-01")], &update_key())));
+    launch_check(&f, cx);
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert_eq!(f.releases.fetches(), 1);
+    assert!(CHECK_INTERVAL >= Duration::from_secs(4 * 3600));
+    assert!(CHECK_INTERVAL <= Duration::from_secs(6 * 3600));
+
+    // The schedule looks again soon, but the last check is recent.
+    cx.executor().advance_clock(SCHEDULE_TICK);
     cx.run_until_parked();
     assert_eq!(f.releases.fetches(), 1);
-    // Nothing was downloaded or installed: the only fetch was the list.
+
+    // Once the interval has passed, the next tick checks.
+    let long_ago = crate::update::now_unix() - CHECK_INTERVAL.as_secs();
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_attempted = Some(long_ago)));
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    wait_for_check(&f, cx);
+    assert_eq!(f.releases.fetches(), 2);
+
+    // With automatic checks off, a due tick asks nothing.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.set_update_checks(false, cx)));
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_attempted = Some(long_ago)));
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 2);
 }
 
 #[gpui_kit::test]
@@ -3629,7 +3661,7 @@ fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
-fn update_checks_off_make_no_request(cx: &mut TestAppContext) {
+fn update_checks_off_ask_only_when_the_user_does(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     f.releases
         .serve(Ok(manifest(1, &[("0.2.0", "2026-10-03")], &update_key())));
@@ -3641,18 +3673,19 @@ fn update_checks_off_make_no_request(cx: &mut TestAppContext) {
     assert!(
         label(cx, settings, "update-status")
             .unwrap()
-            .starts_with("Off.")
+            .starts_with("Automatic checks are off.")
     );
     launch_check(&f, cx);
-    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
     cx.run_until_parked();
     assert_eq!(f.releases.fetches(), 0);
-    assert!(!shown(cx, settings, "check-updates"));
-    // Switching it back on is a click, so it checks right away. A trial
-    // covers every build.
-    click(cx, settings, "update-checks");
+    // Check now still works: the user asked. A trial covers every build.
+    click(cx, settings, "check-updates");
     assert!(matches!(wait_for_check(&f, cx), Update::Available { .. }));
     assert_eq!(f.releases.fetches(), 1);
+    // Switching it back on is a click, so it checks right away.
+    click(cx, settings, "update-checks");
+    wait_for_check(&f, cx);
+    assert_eq!(f.releases.fetches(), 2);
     assert!(
         label(cx, settings, "network-updates")
             .unwrap()
@@ -3735,15 +3768,18 @@ fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext
     cx.read(|cx| assert_eq!(f.app.read(cx).settings.update_sequence, 0));
     let (main, _) = f.main(cx);
     assert!(!shown(cx, main, "update-card"));
-    // The day can't be recorded: no request at all.
-    cx.update(|cx| f.app.update(cx, |s, _| s.settings.update_checked = None));
+    // A launch check with settings still unsaveable is refused the same way.
     launch_check(&f, cx);
-    cx.run_until_parked();
-    assert_eq!(f.releases.fetches(), 1);
+    let update = wait_for_check(&f, cx);
+    assert!(
+        matches!(&update, Update::Failed(m) if m.contains("couldn't be saved")),
+        "{update:?}"
+    );
+    assert_eq!(f.releases.fetches(), 2);
     cx.read(|cx| {
-        assert!(
-            matches!(&f.app.read(cx).update, Update::Failed(m) if m.contains("couldn't be saved"))
-        )
+        let s = &f.app.read(cx).settings;
+        assert_eq!(s.update_sequence, 0);
+        assert_eq!(s.update_checked_at, None);
     });
 }
 

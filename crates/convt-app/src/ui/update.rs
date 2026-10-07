@@ -11,6 +11,7 @@ use gpui_kit::component::IconName;
 use super::theme::{
     self, Button, Clickable, Palette, Tone, radius, size, space, styled, text_button,
 };
+use crate::clock::Local;
 use crate::model::AppState;
 use crate::update::Update;
 
@@ -25,6 +26,21 @@ fn line(id: &'static str, message: impl Into<SharedString>, color: Hsla) -> Clic
 
 fn open(url: String) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     move |_, _, cx| cx.open_url(&url)
+}
+
+/// "Last checked today at 4:08 PM", or "Not checked yet".
+pub(super) fn last_checked(at: Option<u64>) -> String {
+    let Some(at) = at else {
+        return "Not checked yet".into();
+    };
+    let when = Local::at(at as i64);
+    let day = when.day_label(&Local::now());
+    let day = if day == "Today" || day == "Yesterday" {
+        day.to_lowercase()
+    } else {
+        format!("on {day}")
+    };
+    format!("Last checked {day} at {}", when.time())
 }
 
 /// The sidebar card: only when a newer build is out.
@@ -96,19 +112,13 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
         move |_, _, cx| app.update(cx, |s, cx| s.set_update_checks(!on, cx))
     });
     let toggle = theme::row(
-        "Check for updates",
-        Some(theme::detail("Once a day and when you click Check now", p)),
+        "Check automatically",
+        Some(theme::detail("At launch and every 5 hours", p)),
         switch,
         p,
     )
     .into_any_element();
-    let last = state
-        .settings
-        .update_checked
-        .as_deref()
-        .map_or("Not checked yet.".to_string(), |d| {
-            format!("Last checked {d}.")
-        });
+    let last = format!("{}.", last_checked(state.settings.update_checked_at));
     let check_now = Button::secondary("check-updates", "Check now")
         .icon(IconName::RefreshCw)
         .small()
@@ -117,17 +127,16 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
             let app = app.clone();
             move |_, _, cx| app.update(cx, |s, cx| s.check_updates(cx))
         });
-    let (status, action): (Clickable, Option<Clickable>) = if !on {
-        (
-            line(
-                "update-status",
-                "Off. convt won't look for new versions.",
-                p.secondary,
-            ),
-            None,
-        )
-    } else {
+    let (status, action): (Clickable, Option<Clickable>) = {
         match &state.update {
+            Update::Idle if !on => (
+                line(
+                    "update-status",
+                    "Automatic checks are off. convt looks only when you click Check now.",
+                    p.secondary,
+                ),
+                None,
+            ),
             Update::Idle => (line("update-status", last, p.secondary), None),
             Update::Checking => (line("update-status", "Checking…", p.secondary), None),
             Update::UpToDate => (
@@ -207,9 +216,7 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
                 .items_center()
                 .gap(px(space::SM))
                 .children(action)
-                .when(on && state.update != Update::Checking, |d| {
-                    d.child(check_now)
-                }),
+                .when(state.update != Update::Checking, |d| d.child(check_now)),
         )
         .into_any_element();
     vec![toggle, status_row]

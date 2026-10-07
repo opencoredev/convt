@@ -909,9 +909,9 @@ impl SettingsView {
 pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     (
         "network-updates",
-        "Update checks: while they're on, once a day at launch and when you click Check now, \
-         convt downloads the signed list of releases from convt.app. The request carries the \
-         app version and nothing about your files.",
+        "Update checks: while automatic checks are on, at every launch and every 5 hours, and \
+         whenever you click Check now, convt downloads the signed list of releases from \
+         convt.app. The request carries the app version and nothing about your files.",
     ),
     (
         "network-refresh",

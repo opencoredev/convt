@@ -248,6 +248,10 @@ pub struct AppState {
     /// What the last update check found.
     pub update: Update,
     pub(crate) _update_task: Option<Task<()>>,
+    /// When (Unix seconds) the last update check started, this session.
+    pub(crate) update_attempted: Option<u64>,
+    /// Wakes every [`crate::update::SCHEDULE_TICK`] to run checks that are due.
+    pub(crate) _update_schedule: Option<Task<()>>,
     /// The last manifest accepted this session, to select again when the
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
@@ -335,6 +339,8 @@ impl AppState {
             update_config: paths.update,
             update: Update::Idle,
             _update_task: None,
+            update_attempted: None,
+            _update_schedule: None,
             update_manifest: None,
             batch: Batch::default(),
             silent: HashSet::new(),

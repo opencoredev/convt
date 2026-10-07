@@ -62,10 +62,11 @@ const sections: LegalSection[] = [
         <List
           items={[
             <>
-              <span className={strong}>Update check.</span> At most once a day, while update checks
-              are on in Settings, the app downloads a list of available versions from convt.app. The
-              request carries your IP address and app version, like any web request, and nothing
-              about your files. You can turn it off.
+              <span className={strong}>Update check.</span> While automatic update checks are on in
+              Settings, the app downloads a list of available versions from convt.app at every
+              launch and every 5 hours while it runs, and whenever you click Check now. The request
+              carries your IP address and app version, like any web request, and nothing about your
+              files. You can turn automatic checks off.
             </>,
             <>
               <span className={strong}>Pro renewal.</span> If you have signed in to convt Pro from

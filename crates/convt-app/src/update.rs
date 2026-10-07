@@ -1,5 +1,6 @@
-//! The update check: at most once a UTC day at launch, and from "Check now"
-//! in Settings, while update checks are on (the default). It downloads the
+//! The update check: at every launch and then every [`CHECK_INTERVAL`] while
+//! the app runs, as long as automatic checks are on (the default), and
+//! whenever the user clicks Check now or Check for Updates…. It downloads the
 //! signed manifest, verifies it with `convt_update` against the key this
 //! build trusts, refuses anything older than the highest manifest sequence it
 //! accepted before, and picks the newest build this machine's license covers.
@@ -12,14 +13,22 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use convt_license::client::{State, today};
-use convt_license::date;
+use convt_license::client::State;
 use convt_update::{Error as ManifestError, MAX_MANIFEST_BYTES};
 use ed25519_dalek::VerifyingKey;
 use gpui_kit::Context;
 
 use crate::account::{VERSION, background};
 use crate::model::AppState;
+
+/// How long a running app waits between automatic checks.
+pub const CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60 * 60);
+
+/// How often the schedule looks at the clock. Timers can stop while the
+/// computer sleeps, so the schedule compares wall-clock times instead of
+/// waiting out one long timer, and a check that came due during sleep runs
+/// soon after waking.
+pub const SCHEDULE_TICK: Duration = Duration::from_secs(15 * 60);
 
 /// Why the manifest couldn't be fetched.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,7 +179,7 @@ pub enum Update {
     Failed(String),
 }
 
-fn now_unix() -> u64 {
+pub(crate) fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
@@ -255,36 +264,47 @@ fn updates_until(state: &State) -> String {
 }
 
 impl AppState {
-    /// The launch check: once a UTC day, only while update checks are on.
-    pub fn check_updates_on_launch(&mut self, cx: &mut Context<Self>) {
-        let today = date::from_days(today());
-        if self.settings.update_checks
-            && self.settings.update_checked.as_deref() != Some(today.as_str())
-        {
+    /// Checks now if automatic checks are on, then keeps checking every
+    /// [`CHECK_INTERVAL`] while the app runs. Call once, at launch.
+    pub fn start_update_checks(&mut self, cx: &mut Context<Self>) {
+        if self.settings.update_checks {
+            self.check_updates(cx);
+        }
+        self._update_schedule = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(SCHEDULE_TICK).await;
+                if this.update(cx, |s, cx| s.check_updates_if_due(cx)).is_err() {
+                    break;
+                }
+            }
+        }));
+    }
+
+    /// The scheduled check: only while automatic checks are on, and only
+    /// once [`CHECK_INTERVAL`] has passed since the last check started.
+    pub fn check_updates_if_due(&mut self, cx: &mut Context<Self>) {
+        let due = self
+            .update_attempted
+            .is_none_or(|at| now_unix().saturating_sub(at) >= CHECK_INTERVAL.as_secs());
+        if self.settings.update_checks && due {
             self.check_updates(cx);
         }
     }
 
-    /// Checks now. Does nothing while update checks are off or a check runs.
-    /// The day is recorded before the request and the accepted sequence
-    /// before the result shows; if either can't be saved, nothing is accepted,
-    /// so a restart can neither repeat the day's request nor replay an older
-    /// manifest.
+    /// Checks now: the user asked, so this runs whether or not automatic
+    /// checks are on. Does nothing while a check runs. The accepted sequence
+    /// and the time are saved before the result shows; if they can't be,
+    /// nothing is accepted, so a restart can't replay an older manifest.
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.update_checks || self.update == Update::Checking {
+        if self.update == Update::Checking {
             return;
         }
+        self.update_attempted = Some(now_unix());
         let Some(key) = self.update_config.key else {
             self.update = Update::Failed("This build has no key to check updates with.".into());
             cx.notify();
             return;
         };
-        let today = date::from_days(today());
-        if let Err(e) = self.save_settings_now(|s| s.update_checked = Some(today), cx) {
-            self.update = Update::Failed(format!("Settings couldn't be saved: {e}"));
-            cx.notify();
-            return;
-        }
         self.update = Update::Checking;
         let fetch = self.update_config.fetch.clone();
         let minimum = self.settings.update_sequence;
@@ -296,7 +316,14 @@ impl AppState {
                     Err(note) => Update::Failed(note),
                     Ok((bytes, sequence)) => {
                         let seq = sequence.max(state.settings.update_sequence);
-                        match state.save_settings_now(|s| s.update_sequence = seq, cx) {
+                        let saved = state.save_settings_now(
+                            |s| {
+                                s.update_sequence = seq;
+                                s.update_checked_at = Some(now_unix());
+                            },
+                            cx,
+                        );
+                        match saved {
                             Err(e) => Update::Failed(format!(
                                 "The list of releases was ignored because settings couldn't be saved: {e}"
                             )),
@@ -331,15 +358,12 @@ impl AppState {
         );
     }
 
-    /// Turns update checks on or off. Turning them on checks right away.
+    /// Turns automatic checks on or off. Turning them on checks right away;
+    /// turning them off keeps what the last check found.
     pub fn set_update_checks(&mut self, on: bool, cx: &mut Context<Self>) {
         self.update_settings(|s| s.update_checks = on, cx);
         if on {
             self.check_updates(cx);
-        } else {
-            self._update_task = None;
-            self.update = Update::Idle;
-            cx.notify();
         }
     }
 }
