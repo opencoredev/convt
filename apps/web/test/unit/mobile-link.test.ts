@@ -6,7 +6,14 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { loadCatalog } from "@convt/billing/catalog";
 
 import { activeOffer, launchOffer } from "../../src/lib/launch-offer";
-import { isMobileDevice, isMobileUserAgent, normalizeEmail } from "../../src/lib/mobile";
+import {
+  isMobileDevice,
+  isMobileUserAgent,
+  mobileCss,
+  mobileFromUserAgent,
+  mobileMaxWidth,
+  normalizeEmail,
+} from "../../src/lib/mobile";
 import type { MailMessage } from "../../src/server/mail";
 import {
   mobileLinkLimits,
@@ -59,6 +66,25 @@ describe("mobile detection", () => {
   test("the server, without touch information, sees only the user agent", () => {
     expect(isMobileUserAgent(ua.iphone)).toBe(true);
     expect(isMobileUserAgent(ua.mac)).toBe(false);
+    expect(mobileFromUserAgent(ua.iphone)).toBe("yes");
+    expect(mobileFromUserAgent(ua.android)).toBe("yes");
+    // Possibly iPadOS: CSS decides with a coarse pointer.
+    expect(mobileFromUserAgent(ua.mac)).toBe("maybe");
+    expect(mobileFromUserAgent(ua.windows)).toBe("no");
+  });
+
+  test("the CSS gates use the same width as the browser check, inclusive", () => {
+    expect(isMobileDevice({ userAgent: ua.iphone, maxTouchPoints: 5, viewportWidth: 1024 })).toBe(
+      true,
+    );
+    for (const c of [
+      mobileCss.any.show,
+      mobileCss.any.hide,
+      mobileCss.touch.show,
+      mobileCss.touch.hide,
+    ])
+      expect(c).toContain(`[@media(max-width:${mobileMaxWidth}px)`);
+    expect(mobileCss.touch.show).toContain("pointer:coarse");
   });
 });
 

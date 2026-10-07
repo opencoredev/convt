@@ -19,7 +19,7 @@ import {
   type Os,
   type Slot,
 } from "#/lib/platform";
-import { isMobileUserAgent } from "#/lib/mobile";
+import { mobileCss, mobileFromUserAgent } from "#/lib/mobile";
 import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
 import { fetchLatestManifest } from "#/server/latest-release";
 import { routes, seo } from "#/lib/site";
@@ -44,7 +44,7 @@ const detectOs = createServerFn({ method: "GET" }).handler(() =>
 );
 
 const detectMobile = createServerFn({ method: "GET" }).handler(() =>
-  isMobileUserAgent(getRequestHeader("user-agent") ?? ""),
+  mobileFromUserAgent(getRequestHeader("user-agent") ?? ""),
 );
 
 export const Route = createFileRoute("/_site/download")({
@@ -61,7 +61,7 @@ export const Route = createFileRoute("/_site/download")({
     mobile:
       typeof window === "undefined"
         ? await detectMobile()
-        : isMobileUserAgent(navigator.userAgent, navigator.maxTouchPoints),
+        : mobileFromUserAgent(navigator.userAgent),
   }),
   head: () =>
     seo({
@@ -105,8 +105,16 @@ function DownloadPage() {
         )}
       </div>
 
-      {mobile && <MobileEmailNote source="download" />}
-      <div className={mobile ? "max-[1024px]:hidden" : undefined}>
+      {mobile !== "no" && <MobileEmailNote source="download" touchOnly={mobile === "maybe"} />}
+      <div
+        className={
+          mobile === "yes"
+            ? mobileCss.any.hide
+            : mobile === "maybe"
+              ? mobileCss.touch.hide
+              : undefined
+        }
+      >
         {os ? <Recommended os={os} /> : <NoDesktop />}
       </div>
 

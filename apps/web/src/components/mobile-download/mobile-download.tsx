@@ -12,7 +12,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type MouseEve
 
 import { cx, focusRing } from "#/components/app/ui";
 import { activeOffer } from "#/lib/launch-offer";
-import { isMobileBrowser, normalizeEmail, type CaptureSource } from "#/lib/mobile";
+import { isMobileBrowser, mobileCss, normalizeEmail, type CaptureSource } from "#/lib/mobile";
 import { sendMobileDownloadLink } from "#/server/mobile-link-fns";
 
 type FormState =
@@ -251,13 +251,20 @@ export function useMobileDownloadIntercept(source: CaptureSource) {
 }
 
 /**
- * The card in a page's flow, for a visitor whose user agent the server already knows is
- * a phone or tablet. CSS shows it only at mobile widths (`mobileMaxWidth` in
- * src/lib/mobile.ts), so the server's HTML is already right and nothing swaps on load.
+ * The card in a page's flow, for a visitor whose user agent says phone or tablet. CSS
+ * shows it only at mobile widths (`mobileMaxWidth` in src/lib/mobile.ts), and with
+ * `touchOnly` (a Mac user agent, possibly iPadOS) only with a coarse pointer too, so
+ * the server's HTML is already right and nothing swaps on load.
  */
-export function MobileEmailNote({ source }: { source: CaptureSource }) {
+export function MobileEmailNote({
+  source,
+  touchOnly,
+}: {
+  source: CaptureSource;
+  touchOnly?: boolean;
+}) {
   return (
-    <div className="hidden max-[1024px]:block">
+    <div className={touchOnly ? mobileCss.touch.show : mobileCss.any.show}>
       <MobileEmailCard source={source} />
     </div>
   );

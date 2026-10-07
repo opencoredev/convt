@@ -5,8 +5,21 @@
 /** Widest viewport that still counts as mobile: phones, and tablets in portrait. */
 export const mobileMaxWidth = 1024;
 
-/** The media query the server-rendered card uses for the viewport half of the check. */
-export const mobileMedia = `(max-width: ${mobileMaxWidth}px)`;
+/**
+ * The viewport half of the check in CSS, for server-rendered markup: `show` and `hide`
+ * classes, and the same for a Mac user agent that also needs a coarse pointer (iPadOS).
+ * Written out in full so Tailwind finds them; `max-[1024px]:` would stop at 1023px.
+ */
+export const mobileCss = {
+  any: {
+    show: "hidden [@media(max-width:1024px)]:block",
+    hide: "[@media(max-width:1024px)]:hidden",
+  },
+  touch: {
+    show: "hidden [@media(max-width:1024px)_and_(pointer:coarse)]:block",
+    hide: "[@media(max-width:1024px)_and_(pointer:coarse)]:hidden",
+  },
+} as const;
 
 /**
  * True for iOS, iPadOS and Android user agents. iPadOS Safari reports a desktop Mac
@@ -16,6 +29,18 @@ export const mobileMedia = `(max-width: ${mobileMaxWidth}px)`;
 export function isMobileUserAgent(ua: string, maxTouchPoints = 0): boolean {
   if (/iPhone|iPad|iPod|Android/i.test(ua)) return true;
   return /Macintosh/i.test(ua) && maxTouchPoints > 1;
+}
+
+/**
+ * What a user agent alone says, for the server's first render. "maybe" is a Mac user
+ * agent, which iPadOS Safari sends too; the page lets CSS settle it with a coarse
+ * pointer at a mobile width, so a real Mac keeps the normal download.
+ */
+export type UserAgentMobile = "yes" | "maybe" | "no";
+
+export function mobileFromUserAgent(ua: string): UserAgentMobile {
+  if (isMobileUserAgent(ua)) return "yes";
+  return /Macintosh/i.test(ua) ? "maybe" : "no";
 }
 
 export type DeviceSignals = { userAgent: string; maxTouchPoints: number; viewportWidth: number };

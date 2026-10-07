@@ -74,7 +74,9 @@ export async function requestMobileLink(
   if ((await deps.consume(`mobile-link:ip:${input.ip}`, limits.ip.windowMs)) > limits.ip.max)
     return { ok: false, error: "too_many" };
   // A second tap inside the duplicate window was already answered: no email, and it
-  // does not use up one of the address's tries.
+  // does not use up one of the address's tries. Accepted gap: if two requests race and
+  // the first send fails, the second has already answered ok; the first caller sees
+  // the error, and its retry sends because a failure releases this bucket.
   const recent = `mobile-link:recent:${hash}`;
   if ((await deps.consume(recent, limits.duplicateWindowMs)) > 1) return { ok: true };
   if ((await deps.consume(`mobile-link:email:${hash}`, limits.email.windowMs)) > limits.email.max) {

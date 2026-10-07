@@ -17,7 +17,9 @@ export type MailMessage = {
 
 export async function sendMail(config: AppEnv["mail"], message: MailMessage): Promise<void> {
   if (config.transport === "log") {
-    console.info(`[mail] to ${message.to}: ${redactText(message.subject)}`);
+    console.info(
+      `[mail] to ${message.to.replace(/^[^@]*/, "***")}: ${redactText(message.subject)}`,
+    );
     return;
   }
   if (config.transport === "mailpit") {
