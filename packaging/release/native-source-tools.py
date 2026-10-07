@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import tarfile
@@ -85,6 +86,76 @@ SEMANTIC_EVIDENCE = {
     "runtime-version.txt",
 }
 
+# squashfuse SQ_CHECK_DECOMPRESS FUNCTION names → autoconf cache variables.
+SQUASHFUSE_SEARCH_VARS = {
+    "ZLIB": "ac_cv_search_uncompress",
+    "ZSTD": "ac_cv_search_ZSTD_decompress",
+    "XZ": "ac_cv_search_lzma_stream_buffer_decode",
+    "LZO": "ac_cv_search_lzo1x_decompress_safe",
+    "LZ4": "ac_cv_search_LZ4_decompress_safe",
+}
+
+_AUTOCONF_ASSIGN = re.compile(r"^(?:\|\s*)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.MULTILINE)
+
+
+def _unquote_autoconf(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+        return value[1:-1]
+    return value
+
+
+def last_autoconf_value(text, name):
+    """Last name=value in an autoconf config.log, ignoring shell fragments."""
+    found = None
+    for match in _AUTOCONF_ASSIGN.finditer(text):
+        if match.group(1) != name:
+            continue
+        raw = match.group(2).strip()
+        if raw.startswith("$"):
+            continue
+        found = _unquote_autoconf(raw)
+    return found
+
+
+def squashfuse_codec_name(item):
+    return item.split("/", 1)[0].upper()
+
+
+def locked_squashfuse_codecs(lock):
+    closure = lock.get("compression_closure") or {}
+    enabled = tuple(squashfuse_codec_name(item) for item in closure.get("enabled", ("zlib", "zstd")))
+    excluded = tuple(
+        squashfuse_codec_name(item) for item in closure.get("excluded", ("xz/liblzma", "lzo", "lz4")))
+    return enabled, excluded
+
+
+def verify_squashfuse_config_log(text, lock):
+    """Require the locked ZLIB+ZSTD-only set. Autoconf quotes `sq_decompressors`."""
+    enabled, excluded = locked_squashfuse_codecs(lock)
+    listed = last_autoconf_value(text, "sq_decompressors")
+    tokens = tuple(listed.split()) if listed is not None else None
+    found = set()
+    probes_seen = False
+    for codec, var in SQUASHFUSE_SEARCH_VARS.items():
+        value = last_autoconf_value(text, var)
+        if value is None:
+            continue
+        probes_seen = True
+        if value not in {"", "no"}:
+            found.add(codec)
+    if tokens is None and not probes_seen:
+        raise ValueError("Configure log missing locked decompressor list " + " ".join(enabled))
+    if tokens is not None and set(tokens) != set(enabled):
+        raise ValueError(
+            f"Configure log decompressor list {list(tokens)} != locked {list(enabled)}")
+    if probes_seen:
+        if not set(enabled).issubset(found):
+            raise ValueError("Configure log missing locked decompressor list " + " ".join(enabled))
+        unexpected = sorted(found.intersection(excluded))
+        if unexpected:
+            raise ValueError(f"Configure log enabled excluded decompressors: {unexpected}")
+
 
 def verify_evidence_contents(entry, data, lock):
     """Pinned files stay SHA-256 locked. Unpinned logs still have to match the closure."""
@@ -96,8 +167,7 @@ def verify_evidence_contents(entry, data, lock):
         if missing:
             raise ValueError(f"Linker trace missing locked inputs: {missing}")
     elif name == "squashfuse-config.log":
-        if "sq_decompressors=ZLIB ZSTD" not in text:
-            raise ValueError("Configure log missing locked decompressor list ZLIB ZSTD")
+        verify_squashfuse_config_log(text, lock)
     elif name == "runtime-version.txt":
         # The tool writes the version on stderr; this file is stdout-only.
         # binary_checks runs the pinned runtime and compares stdout+stderr.
