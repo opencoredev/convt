@@ -2,6 +2,7 @@
 // ad blocker cannot drop it. Events carry the user id and no email, name or other
 // PII. `$insert_id` makes a live capture and the backfill the same event.
 
+import { analyticsAllowedFromHeaders } from "#/lib/analytics-consent";
 import { stripQuery } from "#/lib/analytics-sanitize";
 import {
   parseAttributionCookie,
@@ -48,6 +49,40 @@ export function withoutPii(
 
 export function userSignedUpInsertId(userId: string): string {
   return `user_signed_up:${userId}`;
+}
+
+/** Same insert id billing uses, so a live Polar event and a later claim are one event. */
+export function licensePurchasedEvent(
+  userId: string,
+  plan: "desktop" | "pro",
+  subjectId: string,
+): AnalyticsEvent {
+  return {
+    event: "license_purchased",
+    distinctId: userId,
+    insertId: `license_purchased:${plan}:${subjectId}`,
+    properties: { plan },
+  };
+}
+
+export function purchaseEventsFromLicenses(
+  userId: string,
+  licenses: Array<{ plan: string; orderId?: string | null; subscriptionId?: string | null }>,
+): AnalyticsEvent[] {
+  const events: AnalyticsEvent[] = [];
+  const seen = new Set<string>();
+  for (const license of licenses) {
+    const event =
+      license.plan === "desktop" && license.orderId
+        ? licensePurchasedEvent(userId, "desktop", license.orderId)
+        : license.plan === "pro" && license.subscriptionId
+          ? licensePurchasedEvent(userId, "pro", license.subscriptionId)
+          : null;
+    if (!event || seen.has(event.insertId!)) continue;
+    seen.add(event.insertId!);
+    events.push(event);
+  }
+  return events;
 }
 
 export function userSignedUpEvent(
@@ -122,8 +157,9 @@ export function signupEventFromAuthHook(
   userId: string,
   ctx: AuthHookContext,
   siteOrigin: string,
-): AnalyticsEvent {
+): AnalyticsEvent | null {
   const headers = ctx?.headers ?? ctx?.request?.headers;
+  if (!analyticsAllowedFromHeaders(headers)) return null;
   const body = (ctx?.body ?? {}) as Record<string, unknown>;
   return userSignedUpEvent(
     userId,
@@ -148,19 +184,20 @@ export async function captureEvent(
     ...withoutPii(event.properties ?? {}),
   };
   if (event.insertId) properties.$insert_id = event.insertId;
-  try {
-    await fetch(`${config.host.replace(/\/$/, "")}/capture/`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        api_key: config.key,
-        event: event.event,
-        distinct_id: event.distinctId,
-        properties,
-        timestamp: event.timestamp ?? new Date().toISOString(),
-      }),
-    });
-  } catch {
-    // PostHog is best-effort; a failed capture must not fail sign-up.
+  const res = await fetch(`${config.host.replace(/\/$/, "")}/capture/`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      api_key: config.key,
+      event: event.event,
+      distinct_id: event.distinctId,
+      properties,
+      timestamp: event.timestamp ?? new Date().toISOString(),
+    }),
+    signal: AbortSignal.timeout(3000),
+  });
+  if (!res.ok) {
+    console.warn(`[analytics] ${event.event} capture returned ${res.status}`);
+    throw new Error(`posthog ${res.status}`);
   }
 }

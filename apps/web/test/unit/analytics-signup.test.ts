@@ -8,6 +8,7 @@ import {
 } from "../../src/lib/analytics-attribution";
 import { syncIdentifiedUser } from "../../src/lib/identify-user";
 import {
+  captureEvent,
   signupEventFromAuthHook,
   signupProperties,
   userSignedUpEvent,
@@ -87,8 +88,55 @@ test("the auth hook builds the event from the request, not the user row", () => 
     },
     "https://convt.app",
   );
-  expect(event.properties).toEqual({ signup_method: "github", source: "/download" });
-  expect(event.distinctId).toBe("usr_1");
+  expect(event?.properties).toEqual({ signup_method: "github", source: "/download" });
+  expect(event?.distinctId).toBe("usr_1");
+});
+
+test("the auth hook skips capture when the request opted out", () => {
+  const ctx = {
+    path: "/sign-in/email-otp",
+    headers: new Headers({ dnt: "1" }),
+    body: { callbackURL: "/dashboard" },
+  };
+  expect(signupEventFromAuthHook("usr_1", ctx, "https://convt.app")).toBeNull();
+  expect(
+    signupEventFromAuthHook(
+      "usr_1",
+      { ...ctx, headers: new Headers({ "sec-gpc": "1" }) },
+      "https://convt.app",
+    ),
+  ).toBeNull();
+  expect(
+    signupEventFromAuthHook(
+      "usr_1",
+      { ...ctx, headers: new Headers({ cookie: "convt_analytics=off" }) },
+      "https://convt.app",
+    ),
+  ).toBeNull();
+});
+
+test("captureEvent fails on a non-2xx PostHog response and accepts 2xx", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("down", { status: 503 })) as typeof fetch;
+  try {
+    await expect(
+      captureEvent(
+        { key: "phc_test", host: "https://us.i.posthog.com" },
+        { event: "user_signed_up", distinctId: "usr_1" },
+      ),
+    ).rejects.toThrow(/503/);
+  } finally {
+    globalThis.fetch = original;
+  }
+  globalThis.fetch = (async () => new Response("ok", { status: 200 })) as typeof fetch;
+  try {
+    await captureEvent(
+      { key: "phc_test", host: "https://us.i.posthog.com" },
+      { event: "user_signed_up", distinctId: "usr_1" },
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test("attribution sanitizes the landing path and UTM and refuses mailboxes", () => {

@@ -10,6 +10,7 @@ import {
   ConfigError,
   captureEvent,
   createBillingService,
+  emitAnalytics,
   currentProKey,
   createPolarProvider,
   loadCatalog,
@@ -110,6 +111,12 @@ async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Respon
       return text(400, "invalid body");
     }
     const result = await s.service.handleWebhook(request.method, raw, request.headers);
+    if (result.analytics?.length)
+      ctx.waitUntil(
+        emitAnalytics((event) => captureEvent(s.env.posthog, event), result.analytics).catch((e) =>
+          console.warn("[billing] analytics", (e as Error).message),
+        ),
+      );
     if (result.drain)
       ctx.waitUntil(
         s.service

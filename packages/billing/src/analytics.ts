@@ -33,6 +33,33 @@ export function desktopTrialStartedEvent(userId: string, subscriptionId: string)
   };
 }
 
+export type LicensePurchaseRef = {
+  plan: string;
+  orderId?: string | null;
+  subscriptionId?: string | null;
+};
+
+/** Idempotent purchase events for licenses attached by claim_purchases. */
+export function purchaseEventsFromLicenses(
+  userId: string,
+  licenses: LicensePurchaseRef[],
+): AnalyticsEvent[] {
+  const events: AnalyticsEvent[] = [];
+  const seen = new Set<string>();
+  for (const license of licenses) {
+    const event =
+      license.plan === "desktop" && license.orderId
+        ? licensePurchasedEvent(userId, "desktop", license.orderId)
+        : license.plan === "pro" && license.subscriptionId
+          ? licensePurchasedEvent(userId, "pro", license.subscriptionId)
+          : null;
+    if (!event || seen.has(event.insertId!)) continue;
+    seen.add(event.insertId!);
+    events.push(event);
+  }
+  return events;
+}
+
 export async function emitAnalytics(
   capture: CaptureAnalytics | undefined,
   events: AnalyticsEvent[] | undefined,
@@ -58,19 +85,20 @@ export async function captureEvent(
     ...event.properties,
   };
   if (event.insertId) properties.$insert_id = event.insertId;
-  try {
-    await fetch(`${config.host.replace(/\/$/, "")}/capture/`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        api_key: config.key,
-        event: event.event,
-        distinct_id: event.distinctId,
-        properties,
-        timestamp: event.timestamp ?? new Date().toISOString(),
-      }),
-    });
-  } catch {
-    // Best-effort.
+  const res = await fetch(`${config.host.replace(/\/$/, "")}/capture/`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      api_key: config.key,
+      event: event.event,
+      distinct_id: event.distinctId,
+      properties,
+      timestamp: event.timestamp ?? new Date().toISOString(),
+    }),
+    signal: AbortSignal.timeout(3000),
+  });
+  if (!res.ok) {
+    console.warn(`[analytics] ${event.event} capture returned ${res.status}`);
+    throw new Error(`posthog ${res.status}`);
   }
 }

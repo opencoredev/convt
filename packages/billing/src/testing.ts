@@ -136,7 +136,13 @@ export async function createHarness(opts: { startMs?: number } = {}) {
       } = {},
     ) {
       const headers = mock.sign(opts.body ? { ...d, body: opts.body } : d, opts);
-      return service.handleWebhook("POST", bytes(opts.body ?? d.body), new Headers(headers));
+      const result = await service.handleWebhook(
+        "POST",
+        bytes(opts.body ?? d.body),
+        new Headers(headers),
+      );
+      if (result.analytics?.length) analytics.push(...result.analytics);
+      return result;
     },
     /** Delivers every held event in order (or the given order). */
     async deliverAll(order?: (ds: HeldDelivery[]) => HeldDelivery[]) {

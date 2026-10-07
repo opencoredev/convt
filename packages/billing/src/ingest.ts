@@ -5,7 +5,12 @@
 
 import { sql } from "drizzle-orm";
 
-import { desktopTrialStartedEvent, emitAnalytics, type AnalyticsEvent } from "./analytics";
+import {
+  desktopTrialStartedEvent,
+  emitAnalytics,
+  purchaseEventsFromLicenses,
+  type AnalyticsEvent,
+} from "./analytics";
 import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
 import { convergeDesktop, convergePro, convergeApi } from "./converge";
@@ -885,7 +890,31 @@ export async function applyFacts(
     else if (s?.kind === "api") await convergeApi(ctx, tx, subId, now);
   }
   for (const u of users) touched.userIds.add(u);
-  for (const u of touched.userIds) await tx.execute(sql`select * from claim_purchases(${u})`);
+  for (const u of touched.userIds) {
+    const claimed = await one<{ claimed_licenses: number }>(
+      tx,
+      sql`select claimed_licenses from claim_purchases(${u})`,
+    );
+    if (!claimed || Number(claimed.claimed_licenses) === 0) continue;
+    const licenses = await rows<{
+      plan: string;
+      order_id: string | null;
+      subscription_id: string | null;
+    }>(
+      tx,
+      sql`select plan, order_id, subscription_id from licenses where user_id = ${u} and revoked_at is null`,
+    );
+    touched.events.push(
+      ...purchaseEventsFromLicenses(
+        u,
+        licenses.map((license) => ({
+          plan: license.plan,
+          orderId: license.order_id,
+          subscriptionId: license.subscription_id,
+        })),
+      ),
+    );
+  }
   return {
     rejected: null,
     notes: touched.notes,

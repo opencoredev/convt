@@ -112,7 +112,9 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
         "user-agent": "convt-tests",
         ...init.headers,
       };
-      if (init.jar?.cookies.size) headers.cookie = init.jar.header();
+      if (init.jar?.cookies.size) {
+        headers.cookie = [init.jar.header(), init.headers?.cookie].filter(Boolean).join("; ");
+      }
       let body: string | undefined;
       if (init.body !== undefined) {
         headers["content-type"] = "application/json";
