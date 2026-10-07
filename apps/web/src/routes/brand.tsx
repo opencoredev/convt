@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { BrandPage } from "#/components/brand/brand-page";
+import { accountFromSession } from "#/lib/account";
 import { seo } from "#/lib/site";
+import { getSession } from "#/server/session";
 
 export const Route = createFileRoute("/brand")({
   // Designed dark, like the landing page. __root reads this and puts `dark` on <html>.
@@ -15,5 +17,12 @@ export const Route = createFileRoute("/brand")({
     });
     return { ...tags, meta: [...tags.meta, { name: "theme-color", content: "#0a0b0b" }] };
   },
-  component: BrandPage,
+  loader: async () => {
+    const session = await getSession();
+    return { account: session ? accountFromSession(session) : null };
+  },
+  component: () => {
+    const { account } = Route.useLoaderData();
+    return <BrandPage account={account} />;
+  },
 });

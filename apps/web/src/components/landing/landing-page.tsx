@@ -1,3 +1,5 @@
+import type { Account } from "#/lib/types";
+
 import { CallToAction, Footer } from "./closing";
 import { Engines } from "./engines";
 import { Formats } from "./formats";
@@ -7,7 +9,13 @@ import { Pricing } from "./pricing";
 import { focusRing } from "./ui";
 
 /** convt.app home page. Always dark; the route sets `dark` on <html>. */
-export function LandingPage({ sales }: { sales: "desktop" | "all" }) {
+export function LandingPage({
+  sales,
+  account,
+}: {
+  sales: "desktop" | "all";
+  account: Account | null;
+}) {
   return (
     <div className="min-h-screen overflow-x-clip bg-page text-ink">
       <a
@@ -16,7 +24,7 @@ export function LandingPage({ sales }: { sales: "desktop" | "all" }) {
       >
         Skip to content
       </a>
-      <Nav />
+      <Nav account={account} path="/" />
       <main id="main">
         <Hero />
         <Formats />

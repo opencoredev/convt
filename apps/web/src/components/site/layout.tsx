@@ -1,20 +1,15 @@
+import { useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { Avatar } from "#/components/app/shell";
-import { cx, focusRing, PrimaryLink, SecondaryLink } from "#/components/app/ui";
+import { Nav } from "#/components/landing/nav";
+import { cx, focusRing } from "#/components/app/ui";
 import { Mark } from "#/components/logo";
-import { routes } from "#/lib/site";
 import type { Account } from "#/lib/types";
 
-import { footerColumns, headerLinks } from "./links";
+import { footerColumns } from "./links";
 
 /** Width of the public pages' column: 1080px of content plus the side padding. */
 export const siteColumn = "mx-auto w-full max-w-[1120px] px-5";
-
-const navLink = cx(
-  "rounded-sm text-sm/4.5 text-ink-nav transition-colors hover:text-ink",
-  focusRing,
-);
 
 /**
  * Frame for the public pages other than the landing page: header, main column and
@@ -30,7 +25,9 @@ export function SitePage({ account, children }: { account: Account | null; child
       >
         Skip to content
       </a>
-      <SiteHeader account={account} />
+      <div className="border-b border-line">
+        <SiteNav account={account} />
+      </div>
       <main id="main" className="flex-1">
         {children}
       </main>
@@ -39,106 +36,9 @@ export function SitePage({ account, children }: { account: Account | null; child
   );
 }
 
-function SiteHeader({ account }: { account: Account | null }) {
-  return (
-    <header className="relative border-b border-line">
-      <div className={cx(siteColumn, "flex items-center justify-between gap-4 py-4")}>
-        <a
-          href="/"
-          className={cx(
-            "flex items-center gap-2 rounded-sm text-[17px]/5.5 font-semibold tracking-[-0.02em]",
-            focusRing,
-          )}
-        >
-          <Mark />
-          convt
-        </a>
-        <nav aria-label="Main" className="hidden md:block">
-          <ul className="flex gap-7">
-            {headerLinks.map((link) => (
-              <li key={link.href}>
-                <a href={link.href} className={navLink}>
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="flex items-center gap-2">
-          <span className="hidden sm:contents">
-            {account ? (
-              <SecondaryLink
-                href={routes.dashboard}
-                className="gap-2 py-[5px] pl-[5px]"
-                aria-label={`Dashboard, signed in as ${account.email}`}
-              >
-                <Avatar account={account} className="size-[18px] text-[10px]" />
-                Dashboard
-              </SecondaryLink>
-            ) : (
-              <SecondaryLink href={routes.signIn}>Sign in</SecondaryLink>
-            )}
-          </span>
-          <PrimaryLink href={routes.download} className="py-[7px] text-[13px]/4">
-            Download
-          </PrimaryLink>
-          <MobileMenu account={account} />
-        </div>
-      </div>
-    </header>
-  );
-}
-
-// A <details> disclosure, so the menu works before hydration and without script.
-function MobileMenu({ account }: { account: Account | null }) {
-  const accountLink = account
-    ? { label: "Dashboard", href: routes.dashboard }
-    : { label: "Sign in", href: routes.signIn };
-  return (
-    <details className="group md:hidden">
-      <summary
-        className={cx(
-          "flex size-8 cursor-pointer list-none items-center justify-center rounded-lg text-ink shadow-button hover:bg-hover [&::-webkit-details-marker]:hidden",
-          focusRing,
-        )}
-      >
-        <span className="sr-only">Menu</span>
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            className="group-open:hidden"
-            d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <path
-            className="hidden group-open:block"
-            d="M4 4l8 8M12 4l-8 8"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
-      </summary>
-      <nav
-        aria-label="Main"
-        className="absolute inset-x-0 top-full z-40 border-b border-line bg-page shadow-note"
-      >
-        <ul className={cx(siteColumn, "flex flex-col py-2")}>
-          {[...headerLinks, accountLink].map((link) => (
-            <li key={link.href}>
-              <a
-                href={link.href}
-                className={cx("flex rounded-sm py-3 text-[15px]/5 text-ink", focusRing)}
-              >
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </details>
-  );
+function SiteNav({ account }: { account: Account | null }) {
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  return <Nav account={account} path={path} className="max-w-[1120px]!" />;
 }
 
 function SiteFooter() {

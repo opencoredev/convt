@@ -4,8 +4,10 @@ import geistMonoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin
 import geistUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
 
 import { getPublicConfig } from "#/server/public-config";
+import { getSession } from "#/server/session";
 
 import { LandingPage } from "#/components/landing/landing-page";
+import { accountFromSession } from "#/lib/account";
 import { SITE_NAME, SITE_ORIGIN, seo } from "#/lib/site";
 
 const title = "convt: convert any file with a right-click";
@@ -70,6 +72,15 @@ export const Route = createFileRoute("/")({
       scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
     };
   },
-  loader: () => getPublicConfig(),
-  component: () => <LandingPage sales={Route.useLoaderData().sales} />,
+  loader: async () => {
+    const [config, session] = await Promise.all([getPublicConfig(), getSession()]);
+    return {
+      sales: config.sales,
+      account: session ? accountFromSession(session) : null,
+    };
+  },
+  component: () => {
+    const { sales, account } = Route.useLoaderData();
+    return <LandingPage sales={sales} account={account} />;
+  },
 });

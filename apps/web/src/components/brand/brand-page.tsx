@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import type { Account } from "#/lib/types";
+
 import { CallToAction, Footer } from "../landing/closing";
 import { Nav } from "../landing/nav";
 import { Container, cx, focusRing } from "../landing/ui";
@@ -101,7 +103,7 @@ const palettes: Palette[] = [
 const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
 const vars = (values: Record<string, string>) => values as CSSProperties;
 
-export function BrandPage() {
+export function BrandPage({ account }: { account: Account | null }) {
   useReveal();
   return (
     <div className="min-h-screen overflow-x-clip bg-page text-ink">
@@ -111,7 +113,7 @@ export function BrandPage() {
       >
         Skip to content
       </a>
-      <Nav />
+      <Nav account={account} path="/brand" />
       <main id="main">
         <Intro />
         <Logos />

@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 
 import { Nav } from "#/components/landing/nav";
 import type { Account } from "#/lib/types";
@@ -17,6 +17,7 @@ const tabs = [
 export const column = "mx-auto w-full max-w-[1120px] px-5";
 
 export function AppShell({ account, children }: { account: Account; children: React.ReactNode }) {
+  const path = useRouterState({ select: (state) => state.location.pathname });
   return (
     <div className="min-h-screen bg-page text-ink">
       <a
@@ -27,7 +28,7 @@ export function AppShell({ account, children }: { account: Account; children: Re
       </a>
       {/* The tabs sit under the site nav, outside its <header>, behind one rule. */}
       <div className="border-b border-line">
-        <Nav account={account} className="max-w-[1120px]!" />
+        <Nav account={account} path={path} className="max-w-[1120px]!" />
         <nav aria-label="Account" className={cx(column, "overflow-x-auto")}>
           <ul className="flex gap-6">
             {tabs.map((tab) => (

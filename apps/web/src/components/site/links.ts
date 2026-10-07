@@ -30,7 +30,7 @@ export const footerColumns = [
   },
 ];
 
-/** Header links on the public pages other than the landing page. */
+/** Header links on every public page that uses the shared site nav. */
 export const headerLinks = [
   { label: "Download", href: routes.download },
   { label: "Formats", href: routes.formats },
