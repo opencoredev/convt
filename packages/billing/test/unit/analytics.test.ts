@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 
 import {
+  ANALYTICS_CONSENT_COOKIE,
+  analyticsAllowedFromHeaders,
+  analyticsEventsToCapture,
   captureEvent,
   desktopTrialStartedEvent,
   emitAnalytics,
@@ -56,6 +59,19 @@ test("captureEvent fails on a non-2xx PostHog response", async () => {
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("DNT, GPC and the privacy cookie skip purchase capture", () => {
+  const event = licensePurchasedEvent("usr_1", "desktop", "ord_1");
+  expect(analyticsAllowedFromHeaders(null)).toBe(true);
+  expect(analyticsAllowedFromHeaders(new Headers())).toBe(true);
+  expect(analyticsEventsToCapture([event], new Headers())).toEqual([event]);
+  expect(analyticsEventsToCapture([event], new Headers({ dnt: "1" }))).toEqual([]);
+  expect(analyticsEventsToCapture([event], new Headers({ dnt: "yes" }))).toEqual([]);
+  expect(analyticsEventsToCapture([event], new Headers({ "sec-gpc": "1" }))).toEqual([]);
+  expect(
+    analyticsEventsToCapture([event], new Headers({ cookie: `${ANALYTICS_CONSENT_COOKIE}=off` })),
+  ).toEqual([]);
 });
 
 test("emitAnalytics is a no-op without a sink and swallows capture errors", async () => {

@@ -6,7 +6,7 @@ import { analyticsAllowedFromHeaders } from "#/lib/analytics-consent";
 import { stripQuery } from "#/lib/analytics-sanitize";
 import {
   parseAttributionCookie,
-  signupMethodFromAuthPath,
+  signupMethodFromAuthContext,
   utmFromAttribution,
   type SignupAttribution,
 } from "#/lib/analytics-attribution";
@@ -26,6 +26,7 @@ export type AuthHookContext = {
   headers?: Headers;
   body?: unknown;
   request?: Request;
+  params?: { id?: string };
 } | null;
 
 const PII_KEY = /email|phone|image|avatar|^name$/i;
@@ -120,6 +121,8 @@ function pathOnly(value: string | undefined, siteOrigin?: string): string | unde
 
 export function signupProperties(input: {
   path?: string;
+  providerId?: string;
+  requestUrl?: string;
   cookie?: string | null;
   callbackURL?: string;
   referer?: string | null;
@@ -127,7 +130,11 @@ export function signupProperties(input: {
 }): Record<string, string> {
   const fromCookie = parseAttributionCookie(input.cookie);
   const props: Record<string, string> = {
-    signup_method: signupMethodFromAuthPath(input.path ?? ""),
+    signup_method: signupMethodFromAuthContext({
+      path: input.path,
+      providerId: input.providerId,
+      requestUrl: input.requestUrl,
+    }),
   };
   const source =
     fromCookie?.source ??
@@ -165,6 +172,9 @@ export function signupEventFromAuthHook(
     userId,
     signupProperties({
       path: ctx?.path,
+      providerId:
+        ctx?.params?.id ?? (typeof body.provider === "string" ? body.provider : undefined),
+      requestUrl: ctx?.request?.url,
       cookie: headers?.get("cookie"),
       callbackURL: typeof body.callbackURL === "string" ? body.callbackURL : undefined,
       referer: headers?.get("referer") ?? headers?.get("referrer"),

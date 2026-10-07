@@ -8,6 +8,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type BillingRpc as Rpc,
   ConfigError,
+  analyticsEventsToCapture,
   captureEvent,
   createBillingService,
   emitAnalytics,
@@ -111,9 +112,10 @@ async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Respon
       return text(400, "invalid body");
     }
     const result = await s.service.handleWebhook(request.method, raw, request.headers);
-    if (result.analytics?.length)
+    const pending = analyticsEventsToCapture(result.analytics, request.headers);
+    if (pending.length)
       ctx.waitUntil(
-        emitAnalytics((event) => captureEvent(s.env.posthog, event), result.analytics).catch((e) =>
+        emitAnalytics((event) => captureEvent(s.env.posthog, event), pending).catch((e) =>
           console.warn("[billing] analytics", (e as Error).message),
         ),
       );

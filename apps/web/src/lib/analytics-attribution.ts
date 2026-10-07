@@ -25,6 +25,31 @@ export function signupMethodFromAuthPath(path: string): SignupMethod {
   return "unknown";
 }
 
+/**
+ * Better Auth's OAuth callback is `/callback/:id`; `path` is that pattern and
+ * the provider is `params.id`. Fall back to the request URL when the hook
+ * context omits params.
+ */
+export function signupMethodFromAuthContext(input: {
+  path?: string;
+  providerId?: string;
+  requestUrl?: string;
+}): SignupMethod {
+  let pathname = "";
+  if (input.requestUrl) {
+    try {
+      pathname = new URL(input.requestUrl).pathname;
+    } catch {
+      pathname = input.requestUrl;
+    }
+  }
+  for (const candidate of [input.providerId, input.path, pathname]) {
+    const method = signupMethodFromAuthPath(candidate ?? "");
+    if (method !== "unknown") return method;
+  }
+  return "unknown";
+}
+
 export function isSafeAttributionValue(value: string): boolean {
   return value.length > 0 && value.length <= 100 && !value.includes("@") && !/[\s<>]/.test(value);
 }

@@ -60,6 +60,30 @@ export function purchaseEventsFromLicenses(
   return events;
 }
 
+/** Same first-party cookie the privacy switch sets on convt.app. */
+export const ANALYTICS_CONSENT_COOKIE = "convt_analytics";
+
+type HeaderMap = { get(name: string): string | null };
+
+/** DNT, GPC, or `convt_analytics=off` — the same three opt-outs the site honors. */
+export function analyticsAllowedFromHeaders(headers: HeaderMap | null | undefined): boolean {
+  if (!headers) return true;
+  const dnt = headers.get("dnt");
+  if (dnt === "1" || dnt?.toLowerCase() === "yes") return false;
+  if (headers.get("sec-gpc") === "1") return false;
+  const cookie = headers.get("cookie") ?? "";
+  return !new RegExp(`(?:^|;\\s*)${ANALYTICS_CONSENT_COOKIE}=off(?:;|$)`).test(cookie);
+}
+
+/** Events the Worker may send after Polar replies. Empty when the request opted out. */
+export function analyticsEventsToCapture(
+  events: AnalyticsEvent[] | undefined,
+  headers: HeaderMap | null | undefined,
+): AnalyticsEvent[] {
+  if (!events?.length || !analyticsAllowedFromHeaders(headers)) return [];
+  return events;
+}
+
 export async function emitAnalytics(
   capture: CaptureAnalytics | undefined,
   events: AnalyticsEvent[] | undefined,

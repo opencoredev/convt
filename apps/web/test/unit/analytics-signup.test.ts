@@ -4,6 +4,7 @@ import {
   attributionFromSearch,
   parseAttributionCookie,
   sanitizeAttribution,
+  signupMethodFromAuthContext,
   signupMethodFromAuthPath,
 } from "../../src/lib/analytics-attribution";
 import { syncIdentifiedUser } from "../../src/lib/identify-user";
@@ -20,7 +21,17 @@ test("signup method comes from the auth path, never from a mailbox", () => {
   expect(signupMethodFromAuthPath("/sign-in/email-otp")).toBe("email");
   expect(signupMethodFromAuthPath("/callback/github")).toBe("github");
   expect(signupMethodFromAuthPath("/oauth2/callback/google")).toBe("google");
+  expect(signupMethodFromAuthPath("/callback/:id")).toBe("unknown");
   expect(signupMethodFromAuthPath("/get-session")).toBe("unknown");
+  expect(signupMethodFromAuthContext({ path: "/callback/:id", providerId: "github" })).toBe(
+    "github",
+  );
+  expect(
+    signupMethodFromAuthContext({
+      path: "/callback/:id",
+      requestUrl: "http://localhost:3999/api/auth/callback/google?code=x",
+    }),
+  ).toBe("google");
 });
 
 test("signup properties keep the method, source and UTM and drop PII", () => {
@@ -79,12 +90,14 @@ test("the auth hook builds the event from the request, not the user row", () => 
   const event = signupEventFromAuthHook(
     "usr_1",
     {
-      path: "/callback/github",
+      path: "/callback/:id",
+      params: { id: "github" },
       headers: new Headers({
         cookie: `convt_signup=${encodeURIComponent(JSON.stringify({ source: "/download" }))}`,
         referer: "https://github.com/login",
       }),
       body: { callbackURL: "/dashboard" },
+      request: new Request("http://localhost:3999/api/auth/callback/github?code=x"),
     },
     "https://convt.app",
   );
