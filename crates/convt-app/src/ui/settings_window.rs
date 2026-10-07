@@ -294,6 +294,17 @@ impl SettingsView {
                 })
             }
         });
+        let telemetry = theme::checkbox(
+            "telemetry",
+            "Send anonymous usage statistics",
+            settings.telemetry,
+            p,
+        )
+        .on_click({
+            let app = app.clone();
+            let on = settings.telemetry;
+            move |_, _, cx| app.update(cx, |s, cx| s.update_settings(|s| s.telemetry = !on, cx))
+        });
         let menu_bar = theme::switch("menu-bar-icon", settings.menu_bar_icon, false, p).on_click({
             let app = app.clone();
             let on = settings.menu_bar_icon;
@@ -375,7 +386,8 @@ impl SettingsView {
                             .flex_col()
                             .gap(px(8.))
                             .child(notifications)
-                            .child(reveal),
+                            .child(reveal)
+                            .child(telemetry),
                         p,
                     )),
             )

@@ -2,7 +2,7 @@
 
 Local file conversion: right-click a file, pick a format. The engine is Rust; the desktop UI is GPUI; the site is TanStack Start. Licensed AGPL-3.0-only.
 
-Users are people who want to convert files without uploading them. Conversions run on the user's machine; the paid cloud tier (convt-server and convt-worker) is the only part that receives files, and it is not built yet. Payments run through convt-billing (Polar as merchant of record); locally only against a mock. Pricing and licensing are product decisions: do not add a free tier, telemetry, or network calls to the desktop app or CLI without being asked.
+Users are people who want to convert files without uploading them. Conversions run on the user's machine; the paid cloud tier (convt-server and convt-worker) is the only part that receives files, and it is not built yet. Payments run through convt-billing (Polar as merchant of record); locally only against a mock. Pricing and licensing are product decisions: do not add a free tier, telemetry, or network calls to the desktop app or CLI without being asked. The desktop app's explicitly approved telemetry is anonymous, opt-out, disabled by `DO_NOT_TRACK`, and source/dev builds are off by default; it never sends paths, filenames, contents, or error text. The CLI and menu integrations remain silent.
 
 ## Layout
 

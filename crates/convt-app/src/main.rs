@@ -14,6 +14,7 @@ mod pack;
 mod placeholder;
 mod request;
 mod settings;
+mod telemetry;
 mod thumbs;
 mod tray;
 mod ui;
@@ -91,6 +92,10 @@ fn run(primary: instance::Primary, first: Request) {
         gpui_kit::init(cx);
         ui::theme::init(cx);
         let state = cx.new(|cx| AppState::new(Arc::new(pack::Engines), Paths::from_env(), cx));
+        state.update(cx, |s, _| {
+            s.telemetry
+                .capture("app_opened", s.telemetry.common(&s.license))
+        });
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);
         cx.set_global(Shared(state.clone()));

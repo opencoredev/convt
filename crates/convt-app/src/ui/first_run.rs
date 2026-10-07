@@ -439,7 +439,7 @@ impl Render for FirstRunView {
             Step::Plan => (
                 "Try it or unlock it",
                 format!(
-                    "The trial runs for 7 days with every feature. A {LICENSE_PRICE} license keeps convt working for good, with a year of updates."
+                    "The trial runs for 7 days with every feature. A {LICENSE_PRICE} license keeps convt working for good, with a year of updates. Anonymous usage statistics are on by default; turn them off in Settings."
                 ),
                 cfg!(target_os = "macos").then_some("Back"),
                 "Continue",

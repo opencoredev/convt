@@ -248,6 +248,8 @@ impl AppState {
                 .map_err(|e| format!("Signed in, but the sign-in couldn't be saved: {e}"))
         }) {
             Ok(session) => {
+                self.telemetry
+                    .identify(&crate::telemetry::opaque_account_id(&session.email));
                 self.account.session = Some(session);
                 self.account.sign_in = SignIn::Idle;
                 // Signing in was the user's action; fetch the Pro key now.
