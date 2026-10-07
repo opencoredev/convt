@@ -54,9 +54,17 @@ jobs:
       - name: Install media fixture tools (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          echo "CONVT_MATRIX_AV1_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          export DEBIAN_FRONTEND=noninteractive
+          for attempt in 1 2 3; do
+            if timeout 180 sudo -E apt-get update -y \
+              && timeout 180 sudo -E apt-get install -y --no-install-recommends ffmpeg; then
+              echo "CONVT_MATRIX_AV1_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "apt failed (attempt $attempt); retrying" >&2
+            sleep $((attempt * 15))
+          done
+          exit 1
       - name: Install media fixture tools (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -69,9 +77,18 @@ jobs:
       - name: Install GPUI system libraries
         if: runner.os == 'Linux' && matrix.suite == 'desktop'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libxcb1-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libasound2-dev libzstd-dev
+          export DEBIAN_FRONTEND=noninteractive
+          for attempt in 1 2 3; do
+            if timeout 180 sudo -E apt-get update -y \
+              && timeout 180 sudo -E apt-get install -y --no-install-recommends \
+                libxcb1-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
+                libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libasound2-dev libzstd-dev; then
+              exit 0
+            fi
+            echo "apt failed (attempt $attempt); retrying" >&2
+            sleep $((attempt * 15))
+          done
+          exit 1
       - run: cargo fmt --all --check
         if: runner.os == 'Linux'
       - name: Clippy (core)
