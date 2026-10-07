@@ -79,10 +79,10 @@ pub(crate) fn finish_heif_output(
         return Ok(());
     };
     let Some(heif) = heif_display_orientation(&file) else {
-        if decoder_orientation(dest)? == Orientation::NoTransforms {
-            if let Some(exif) = heif_exif_orientation(&file) {
-                apply_if_still_stored(dest, to, options, exif, heif_ispe(&file))?;
-            }
+        if decoder_orientation(dest)? == Orientation::NoTransforms
+            && let Some(exif) = heif_exif_orientation(&file)
+        {
+            apply_if_still_stored(dest, to, options, exif, heif_ispe(&file))?;
         }
         return Ok(());
     };
