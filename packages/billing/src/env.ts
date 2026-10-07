@@ -7,10 +7,11 @@ import { importSigningKey, parseSeed, publicKeyOf } from "@convt/license";
 import type { CatalogEnv } from "./catalog";
 
 export type BillingEnv = {
-  env: "production" | "development" | "test";
+  env: "production" | "staging" | "development" | "test";
   catalogEnv: CatalogEnv;
   polar: { accessToken: string; apiUrl: string; webhookSecret: string; portalOrigin: string };
   mail:
+    | { transport: "sequenzy"; apiKey: string; from: string }
     | { transport: "resend"; apiKey: string; apiUrl: string; from: string }
     | { transport: "log"; from: string };
   siteUrl: string;
@@ -48,16 +49,21 @@ export class ConfigError extends Error {
 
 export function readBillingEnv(raw: RawEnv): BillingEnv {
   const envName = str(raw, "ENV") ?? "production";
-  if (envName !== "production" && envName !== "development" && envName !== "test")
-    throw new ConfigError(`ENV must be production, development or test, not ${envName}`);
-  const production = envName === "production";
+  if (
+    envName !== "production" &&
+    envName !== "staging" &&
+    envName !== "development" &&
+    envName !== "test"
+  )
+    throw new ConfigError(`ENV must be production, staging, development or test, not ${envName}`);
+  const production = envName === "production" || envName === "staging";
   const need = (k: string) => {
     const v = str(raw, k);
     if (!v) throw new ConfigError(`${k} is not set`);
     return v;
   };
   const catalogEnv = (str(raw, "BILLING_CATALOG") ??
-    (production ? "production" : "local")) as CatalogEnv;
+    (envName === "staging" ? "sandbox" : production ? "production" : "local")) as CatalogEnv;
   if (!["local", "sandbox", "production"].includes(catalogEnv))
     throw new ConfigError(`unknown BILLING_CATALOG ${catalogEnv}`);
   const apiUrl =
@@ -77,14 +83,18 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
       apiUrl: str(raw, "RESEND_API_URL") ?? "https://api.resend.com",
       from,
     };
+  } else if (transport === "sequenzy") {
+    mail = { transport, apiKey: need("SEQUENZY_API_KEY"), from };
   } else if (transport === "log") {
     if (production) throw new ConfigError("MAIL_TRANSPORT=log is refused in production");
     mail = { transport, from };
   } else throw new ConfigError(`unknown MAIL_TRANSPORT ${transport}`);
 
   if (production) {
-    if (catalogEnv !== "production")
-      throw new ConfigError("production must use the production catalog");
+    if (catalogEnv !== (envName === "staging" ? "sandbox" : "production"))
+      throw new ConfigError(
+        `${envName} must use the ${envName === "staging" ? "sandbox" : "production"} catalog`,
+      );
     // `bun run deploy` in apps/billing sets this from the checkout's dev key, so a
     // deploy that skipped it fails closed instead of skipping the dev-key check.
     const devKeys = (str(raw, "DEV_LICENSE_PUBKEYS") ?? "").split(",").map((k) => k.trim());
@@ -117,7 +127,7 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
     mail,
     siteUrl,
     alertEmail: str(raw, "ALERT_EMAIL") ?? null,
-    downloadUrl: str(raw, "DOWNLOAD_URL") ?? `${siteUrl}/download/mac`,
+    downloadUrl: str(raw, "DOWNLOAD_URL") ?? `${siteUrl}/download`,
     signingSeed: need("LICENSE_SIGNING_KEY"),
     licensePublicKey: str(raw, "LICENSE_PUBLIC_KEY") ?? null,
     devPublicKeys: (str(raw, "DEV_LICENSE_PUBKEYS") ?? "")
@@ -140,12 +150,12 @@ export async function loadSigningKey(e: BillingEnv): Promise<CryptoKey> {
     throw new ConfigError("LICENSE_SIGNING_KEY is malformed");
   }
   const pub = await publicKeyOf(key);
-  if (e.env === "production") {
+  if (e.env === "production" || e.env === "staging") {
     if (!e.licensePublicKey) throw new ConfigError("LICENSE_PUBLIC_KEY is required in production");
     if (pub !== e.licensePublicKey)
       throw new ConfigError("LICENSE_SIGNING_KEY does not match LICENSE_PUBLIC_KEY");
   }
-  if (e.env === "production" && e.devPublicKeys.includes(pub))
+  if ((e.env === "production" || e.env === "staging") && e.devPublicKeys.includes(pub))
     throw new ConfigError("a dev signing key is refused in production");
   return key;
 }

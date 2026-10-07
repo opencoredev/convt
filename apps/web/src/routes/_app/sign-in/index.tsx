@@ -8,6 +8,7 @@ import { cx, focusRing } from "#/components/app/ui";
 import { authErrorMessage, sendSignInCode, startSocialSignIn } from "#/lib/auth-client";
 import { safeRedirect } from "#/lib/safe-redirect";
 import { authSearch, siteOrigin, type AuthSearch } from "#/lib/sign-in";
+import { getPublicConfig } from "#/server/public-config";
 import { getSession } from "#/server/session";
 
 export const Route = createFileRoute("/_app/sign-in/")({
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/_app/sign-in/")({
     if (session && !session.user.emailVerified) throw redirect({ to: "/sign-in/verify-email" });
     if (session) throw redirect({ href: safeRedirect(search.redirect, siteOrigin()) });
   },
+  loader: () => getPublicConfig(),
   head: () => ({ meta: [{ title: "Sign in · convt" }] }),
   component: SignInPage,
 });
@@ -34,6 +36,7 @@ const providers = [
 
 function SignInPage() {
   const { email: initialEmail, redirect: redirectTo, error: callbackError } = Route.useSearch();
+  const available = Route.useLoaderData().providers;
   const navigate = useNavigate();
   const placeholder = usePlaceholderAction();
   const emailId = useId();
@@ -111,27 +114,29 @@ function SignInPage() {
           <span className="h-px flex-1 bg-line" />
         </div>
         <div className="flex gap-2">
-          {providers.map((provider) => (
-            <button
-              key={provider.id}
-              type="button"
-              onClick={async () => {
-                if (provider.id === "apple") return placeholder("Signing in with Apple");
-                setError(null);
-                const result = await startSocialSignIn(
-                  provider.id,
-                  safeRedirect(redirectTo, siteOrigin()),
-                );
-                if (!result.ok) setError(result.message);
-              }}
-              className={cx(
-                "h-10 flex-1 cursor-pointer rounded-lg bg-raised text-[13px]/4 font-medium shadow-button hover:bg-hover dark:bg-sunken",
-                focusRing,
-              )}
-            >
-              {provider.label}
-            </button>
-          ))}
+          {providers
+            .filter((provider) => provider.id === "apple" || available[provider.id])
+            .map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                onClick={async () => {
+                  if (provider.id === "apple") return placeholder("Signing in with Apple");
+                  setError(null);
+                  const result = await startSocialSignIn(
+                    provider.id,
+                    safeRedirect(redirectTo, siteOrigin()),
+                  );
+                  if (!result.ok) setError(result.message);
+                }}
+                className={cx(
+                  "h-10 flex-1 cursor-pointer rounded-lg bg-raised text-[13px]/4 font-medium shadow-button hover:bg-hover dark:bg-sunken",
+                  focusRing,
+                )}
+              >
+                {provider.label}
+              </button>
+            ))}
         </div>
       </div>
 

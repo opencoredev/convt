@@ -58,6 +58,8 @@ const messages: Record<string, string> = {
   not_found: "There's no plan to change.",
   provider_error: "The payment provider didn't answer. Try again in a minute.",
   bad_cap: "Enter a whole amount of cents between $1 and $10,000.",
+  discount:
+    "Your launch discount covers monthly billing only. You can switch to yearly after it ends.",
 };
 
 const result = (r: { ok: true } | { ok: false; reason: string }): ActionResult =>
@@ -107,6 +109,8 @@ export const enrollApi = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data, context: { userId, user, appEnv } }) => {
+    if (appEnv.sales !== "all")
+      return { ok: false as const, message: "API billing is coming soon." };
     const cents = parseCapDollars(data.cap);
     if (cents === null) return { ok: false as const, message: messages.bad_cap };
     const created = await billing().createCheckout({

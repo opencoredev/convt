@@ -135,7 +135,7 @@ The webhook endpoint is created on API version `2026-10`, the version the adapte
 
 ### Where it runs
 
-A second Worker, `apps/billing` (`convt-billing`), owns every write to billing state and every billing secret: the webhook route, the crons, and an RPC entrypoint the site reaches through a service binding (checkout, checkout result sync, portal URL, subscription changes, spend cap, receipt URL, account deletion). It is routed at `convt.app/webhooks/*` with no other public route. The production signing key, the webhook secret and the Polar and Resend tokens never sit in the Worker that renders pages and runs Better Auth. It connects as a new role, `convt_billing`, through its own Hyperdrive config. Shared logic lives in `packages/billing` so it runs in Bun tests as well as in the Worker.
+A second Worker, `apps/billing` (`convt-billing`), owns every write to billing state and every billing secret: the webhook route, the crons, and an RPC entrypoint the site reaches through a service binding (checkout, checkout result sync, portal URL, subscription changes, spend cap, receipt URL, account deletion). It is routed at `convt.app/webhooks/*` with no other public route. The production signing key, the webhook secret and the Polar token never sit in the Worker that renders pages and runs Better Auth; each Worker has its own Sequenzy key for transactional mail. It connects as a new role, `convt_billing`, through its own Hyperdrive config. Shared logic lives in `packages/billing` so it runs in Bun tests as well as in the Worker.
 
 ### Verification, before parsing
 
@@ -176,7 +176,7 @@ A fetched fact can correct any mutable field: statuses, periods, cancel flags, a
 
 ### Checks against our records
 
-- Product and price ids in the catalog for this environment; currency `usd`; no discount.
+- Product and price ids in the catalog for this environment; currency `usd`; no discount except a code listed in the catalog's `discounts` for that product (the `PRODUCTHUNT` launch offer: 30% off Desktop and Pro monthly), whose amount must be its percentage of the subtotal, within a cent.
 - Desktop and Pro `subscription_create` and `subscription_cycle` orders: each full-period coverage item equals the catalog price.
 - Pro `subscription_update` orders: every item uses a catalog Pro price, and each item's absolute amount is at most the yearly price.
 - A Desktop order or a new subscription names a `checkouts` row we created for that product; if the row names a user, the customer's `external_id` is that user.
@@ -304,16 +304,18 @@ Plain TypeScript functions in a new `packages/mail` (the site keeps its copy of 
 
 ### Outbox
 
+Production and staging now use Sequenzy (`MAIL_TRANSPORT=sequenzy`, secret `SEQUENZY_API_KEY`, sender `convt <hello@convt.app>`). Resend remains an optional transport. Local sign-in mail goes to Mailpit, and local billing uses the Resend mock forwarding to Mailpit. Sequenzy sends HTML through `POST /api/v1/transactional/send` with click and open tracking disabled. Its keys replay for 14 days; billing retains the conservative 23-hour ambiguity cutoff shared with Resend. HTTP 429 honors `Retry-After`; network failures and 5xx remain unknown outcomes.
+
 Rows are inserted in the ingest transaction with `on conflict (dedupe_key) do nothing`, holding the kind, recipient, user and subject id. The drain runs after each commit and every minute:
 
 1. **Claim.** Up to 20 due rows with `FOR UPDATE SKIP LOCKED`: `status = 'sending'`, `locked_until = now() + 2 minutes`, `claim_generation + 1`. Commit.
 2. **Freeze.** On a row's first claim, before any send, check relevance (a revoked license, a trial no longer trialing, a subscription active again make it `skipped`), then render once and store the exact request: `payload` (from, to, subject, text, html, tags with the outbox id), `template_version`, `payload_sha256`. Commit. Later attempts send these stored bytes unchanged, so a deploy that changes a template cannot make Resend refuse a retry.
-3. **Send.** Set `first_attempt_at` (once) and `last_attempt_at`, commit, then call Resend with `Idempotency-Key: <outbox id>`.
+3. **Send.** Set `first_attempt_at` (once) and `last_attempt_at`, commit, then call the selected provider with `Idempotency-Key: <outbox id>`.
 4. **Complete,** fenced: `update ... where id = $1 and claim_generation = $2`, so a worker whose lease expired cannot mark a row another worker owns.
    - Success: `sent` with the message id.
    - 409 `concurrent_idempotent_requests`, 429, 5xx, a timeout or a network error: `pending` with backoff of 1, 5, 30 minutes, then 2, 6 and 12 hours. Retries reuse the frozen payload and key.
    - 409 `invalid_idempotent_request` (impossible with a frozen payload) or a 4xx address error: `dead`, alerted.
-   - If the next attempt would fall later than 23 hours after `first_attempt_at` and an earlier attempt had an unknown outcome (timeout, network error, 5xx), Resend's key may have expired, so a retry could send a second copy. The row becomes `ambiguous` instead, is not retried, and goes into the digest with its outbox id, which is a tag on the email so Leo can look it up in Resend. `bun run billing:outbox resolve <id> sent|resend` records his decision; `resend` sends under a new key.
+   - If the next attempt would fall later than 23 hours after `first_attempt_at` and an earlier attempt had an unknown outcome (timeout, network error, 5xx), Resend's key may have expired, so a retry could send a second copy. The row becomes `ambiguous` instead, is not retried, and goes into the digest with its outbox id. For Sequenzy, investigate the provider's records using the row's recipient and attempt timestamps; no Resend tags are sent. With the optional Resend transport, the outbox id is also an email tag. Leave the row ambiguous if acceptance cannot be confirmed. `bun run billing:outbox resolve <id> sent|resend` records Leo's decision; `resend` sends under a new key.
 5. **Retention.** `last_error` keeps only the HTTP status, the provider's error code and at most 200 characters passed through the P6 redactor (no addresses, tokens or keys). `payload` is nulled 25 hours after a row reaches `sent`, `skipped` or `dead`; the metadata row is deleted after 400 days. `convt_billing` may delete only `email_outbox` and `webhook_events` rows, and only through these retention jobs.
 
 The local mock implements Resend's `POST /emails` with the documented idempotency semantics, a 24-hour key store on the mock's clock, both 409 codes, and fault modes: accept but time out, delay acceptance, return 5xx. Accepted messages are forwarded to Mailpit. The production `resend` transport points at it locally, so the same code path is tested.
@@ -382,7 +384,7 @@ Seed changes: `trial@` loses its trial key; new fixtures `refunded@convt.test` (
 Integration tests in Bun against the P6 disposable Postgres, as the real roles, with the mock in process and an injected clock:
 
 - **Forged signatures:** wrong secret; one body byte changed; a valid signature for another `webhook-id`; timestamps 6 minutes old and ahead; missing headers; garbage signature header; one bad and one good signature (accepted); both key schemes accepted; oversized body. Every forgery leaves all tables unchanged.
-- **Business checks:** unknown product or price, wrong amount, a discount, EUR, a checkout we did not create, another user's checkout, a changed customer id. Each `rejected`, no license.
+- **Business checks:** unknown product or price, wrong amount, an unknown discount, a listed discount with the wrong amount, EUR, a checkout we did not create, another user's checkout, a changed customer id. Each `rejected`, no license.
 - **Trials:** a trialing subscription and its $0 paid order issue nothing; conversion with a paid order issues one key; a trial cancelled before its end issues nothing; a returning customer's checkout has `allow_trial` false.
 - **Pro coverage:** one key per paid period; switch to yearly with payment success (key with the later end), payment failure (nothing changes, nothing issued), zero charge (nothing issued), credit-funded downgrade (nothing until monthly coverage passes the yearly date, then one key, including a period paid wholly from the credit); `next_period` through the interface.
 - **Duplicates:** one delivery 5 times; one order through `order.created`, `order.paid` and `order.updated` with distinct event ids: one order, one license, one outbox row.
@@ -444,6 +446,8 @@ No Paper artboard is known for these (the file was unreachable). They are built 
 
 None are needed to build and verify P7 through step 9.
 
+Done on 2026-10-06: both "convt" Polar organizations (production `6098e410-4ea7-48fd-b677-7b261b8e0f7c`, sandbox `c9b2ccbd-28a8-4f07-984b-66b59c06a410`) have the four products and the `api_conversion` meter, and their ids are in `catalog.ts`. The products carry no license-key benefit. Production is still in Polar's account review.
+
 | What                                                                                                                                                      | Where it goes                                                                                                                                                     |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Polar organizations for production and sandbox                                                                                                            | Payout and tax details in Polar.                                                                                                                                  |
@@ -453,5 +457,5 @@ None are needed to build and verify P7 through step 9.
 | A webhook endpoint `https://convt.app/webhooks/polar`, API version `2026-10`, subscribed to the events in section 1                                       | Its secret as `POLAR_WEBHOOK_SECRET` on `convt-billing`.                                                                                                          |
 | The production license signing key, generated offline with a new `bun run license:keygen` that writes the seed outside the repo and prints the public key | `LICENSE_SIGNING_KEY` secret on `convt-billing` only; the public key becomes `CONVT_LICENSE_PUBKEY` for release builds (P11); the seed in Leo's password manager. |
 | The `convt_billing` role password and a Hyperdrive config as `convt_billing`, caching disabled                                                            | Its id as `HYPERDRIVE_BILLING` in `apps/billing/wrangler.jsonc`.                                                                                                  |
-| `RESEND_API_KEY` (from P6) also on `convt-billing`; `ALERT_EMAIL`                                                                                         | Worker secret and var.                                                                                                                                            |
+| `SEQUENZY_API_KEY` (from P6) also on `convt-billing`; `ALERT_EMAIL`                                                                                       | Worker secret and var.                                                                                                                                            |
 | A real API price, in whole cents until P9 defines more                                                                                                    | `catalog.ts` and the Polar meter price.                                                                                                                           |

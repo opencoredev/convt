@@ -14,7 +14,9 @@ export function billing(): BillingRpc {
 
 /** `__Host-convt_checkout` in production (Secure, no Domain); `convt_checkout` on local http. */
 export function checkoutCookieName(appEnv: AppEnv): string {
-  return appEnv.env === "production" ? "__Host-convt_checkout" : "convt_checkout";
+  return appEnv.env === "production" || appEnv.env === "staging"
+    ? "__Host-convt_checkout"
+    : "convt_checkout";
 }
 
 export function checkoutCookie(appEnv: AppEnv, value: string, maxAgeSeconds: number): string {
@@ -26,7 +28,7 @@ export function checkoutCookie(appEnv: AppEnv, value: string, maxAgeSeconds: num
     "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`,
   ];
-  if (appEnv.env === "production") parts.push("Secure");
+  if (appEnv.env === "production" || appEnv.env === "staging") parts.push("Secure");
   return parts.join("; ");
 }
 

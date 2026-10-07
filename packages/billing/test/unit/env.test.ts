@@ -81,3 +81,49 @@ describe("production guards", () => {
     );
   });
 });
+
+test("staging uses sandbox with public URLs and a separate non-dev signing key", async () => {
+  const staging = {
+    ...prod,
+    ENV: "staging",
+    SITE_URL: "https://convt-web-staging.example.workers.dev",
+  };
+  const e = readBillingEnv(staging);
+  expect(e.catalogEnv).toBe("sandbox");
+  expect(e.polar.apiUrl).toBe("https://sandbox-api.polar.sh");
+  expect(() => readBillingEnv({ ...staging, BILLING_CATALOG: "production" })).toThrow(
+    /sandbox catalog/,
+  );
+  expect(() => readBillingEnv({ ...staging, BILLING_CATALOG: "local" })).toThrow(/sandbox catalog/);
+  expect(() => readBillingEnv({ ...staging, RESEND_API_URL: "http://localhost:4000" })).toThrow(
+    /https/,
+  );
+  await expect(loadSigningKey(e)).rejects.toThrow(/LICENSE_PUBLIC_KEY/);
+  const pub = await publicKeyOf(
+    await importSigningKey(new Uint8Array(Buffer.from(seed, "base64url"))),
+  );
+  await loadSigningKey(readBillingEnv({ ...staging, LICENSE_PUBLIC_KEY: pub }));
+  await expect(
+    loadSigningKey(
+      readBillingEnv({ ...staging, LICENSE_PUBLIC_KEY: pub, DEV_LICENSE_PUBKEYS: pub }),
+    ),
+  ).rejects.toThrow(/dev signing key/);
+});
+
+test("license mail defaults to the site's download page and allows an override", () => {
+  expect(readBillingEnv(prod).downloadUrl).toBe("https://convt.app/download");
+  expect(
+    readBillingEnv({ ...prod, DOWNLOAD_URL: "https://downloads.convt.app/release" }).downloadUrl,
+  ).toBe("https://downloads.convt.app/release");
+});
+
+test("Sequenzy requires its own key in production and staging, leaving Resend optional", () => {
+  for (const ENV of ["production", "staging"]) {
+    const raw = { ...prod, ENV, MAIL_TRANSPORT: "sequenzy" };
+    expect(() => readBillingEnv(raw)).toThrow(/SEQUENZY_API_KEY/);
+    expect(() => readBillingEnv({ ...raw, SEQUENZY_API_KEY: "  " })).toThrow(/SEQUENZY_API_KEY/);
+    expect(
+      readBillingEnv({ ...raw, RESEND_API_KEY: undefined, SEQUENZY_API_KEY: "sq_test" }).mail,
+    ).toEqual({ transport: "sequenzy", apiKey: "sq_test", from: "convt <hello@convt.app>" });
+  }
+});

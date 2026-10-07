@@ -4,12 +4,14 @@
 // its server-side URL is loopback.
 
 export type AppEnv = {
-  env: "production" | "development" | "test";
+  env: "production" | "staging" | "development" | "test";
+  sales: "desktop" | "all";
   authUrl: string;
   authSecret: string;
   mail:
     | { transport: "mailpit"; url: string; from: string }
     | { transport: "log"; from: string }
+    | { transport: "sequenzy"; apiKey: string; from: string }
     | { transport: "resend"; apiKey: string; from: string };
   oauthMock: { url: string; publicUrl: string } | null;
   github: { clientId: string; clientSecret: string } | null;
@@ -34,9 +36,16 @@ const str = (raw: RawEnv, key: string) => {
 
 export function readEnv(raw: RawEnv): AppEnv {
   const envName = str(raw, "ENV") ?? "production";
-  if (envName !== "production" && envName !== "development" && envName !== "test")
-    throw new Error(`ENV must be production, development or test, not ${envName}`);
-  const production = envName === "production";
+  if (
+    envName !== "production" &&
+    envName !== "staging" &&
+    envName !== "development" &&
+    envName !== "test"
+  )
+    throw new Error(`ENV must be production, staging, development or test, not ${envName}`);
+  const production = envName === "production" || envName === "staging";
+  const sales = str(raw, "SALES") ?? (production ? "desktop" : "all");
+  if (sales !== "desktop" && sales !== "all") throw new Error("SALES must be desktop or all");
   const authUrl = str(raw, "BETTER_AUTH_URL");
   const authSecret = str(raw, "BETTER_AUTH_SECRET");
   if (!authUrl) throw new Error("BETTER_AUTH_URL is not set");
@@ -50,6 +59,10 @@ export function readEnv(raw: RawEnv): AppEnv {
   let mail: AppEnv["mail"];
   if (transport === "resend") {
     mail = { transport, apiKey: str(raw, "RESEND_API_KEY") ?? "", from };
+  } else if (transport === "sequenzy") {
+    const apiKey = str(raw, "SEQUENZY_API_KEY");
+    if (!apiKey) throw new Error("SEQUENZY_API_KEY is not set");
+    mail = { transport, apiKey, from };
   } else if (transport === "mailpit" || transport === "log") {
     if (production) throw new Error(`MAIL_TRANSPORT=${transport} is refused in production`);
     if (transport === "mailpit") {
@@ -80,6 +93,7 @@ export function readEnv(raw: RawEnv): AppEnv {
   };
   return {
     env: envName,
+    sales,
     authUrl: authUrl.replace(/\/$/, ""),
     authSecret,
     mail,
@@ -87,4 +101,10 @@ export function readEnv(raw: RawEnv): AppEnv {
     github: pair("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"),
     google: pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
   };
+}
+
+/** Matches createAuth's real providers and its all-or-nothing local OAuth mock. */
+export function availableProviders(env: AppEnv) {
+  const mock = env.oauthMock !== null && env.github === null && env.google === null;
+  return { github: env.github !== null || mock, google: env.google !== null || mock };
 }

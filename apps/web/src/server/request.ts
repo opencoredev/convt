@@ -7,6 +7,7 @@
 import { createDb } from "@convt/db";
 import { createMiddleware } from "@tanstack/react-start";
 import { env as rawEnv, waitUntil } from "cloudflare:workers";
+import { billingForwarding } from "./billing-forwarding";
 import { LazyClient } from "./lazy-client";
 
 import type { RequestScope } from "./auth";
@@ -22,10 +23,9 @@ export const requestMiddleware = createMiddleware({ type: "request" }).server(
     // In production convt.app/webhooks/* is routed to convt-billing and never
     // reaches this Worker. Locally the billing Worker has no port of its own, so
     // the dev server hands it webhooks and its cron trigger.
-    if (url.pathname.startsWith("/webhooks/") || url.pathname.startsWith("/__billing/")) {
-      if (appEnv.env === "production") return new Response("Not found", { status: 404 });
-      return rawEnv.BILLING.fetch(request);
-    }
+    const forwarding = billingForwarding(appEnv.env, url.pathname);
+    if (forwarding === "deny") return new Response("Not found", { status: 404 });
+    if (forwarding === "forward") return rawEnv.BILLING.fetch(request);
     // Better Auth checks Origin on its own endpoints; OAuth providers may POST callbacks.
     // The desktop app's /api/device calls carry no cookies and no Origin; they
     // authenticate by one-time code and verifier or by device token.

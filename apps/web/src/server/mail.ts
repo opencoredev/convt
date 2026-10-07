@@ -1,11 +1,19 @@
+import { sequenzyTransport } from "@convt/mail";
+
 // Outgoing email. `mailpit` posts to a local Mailpit's send API (its web UI shows
-// the messages), `log` prints a redacted line, `resend` is production. The dev
-// transports are refused in production by readEnv.
+// the messages), `log` prints a redacted line, and the provider transports send
+// transactional mail. The dev transports are refused in production by readEnv.
 
 import type { AppEnv } from "./env";
 import { redactText } from "./redact";
 
-export type MailMessage = { to: string; subject: string; text: string; html?: string };
+export type MailMessage = {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  idempotencyKey: string;
+};
 
 export async function sendMail(config: AppEnv["mail"], message: MailMessage): Promise<void> {
   if (config.transport === "log") {
@@ -27,6 +35,18 @@ export async function sendMail(config: AppEnv["mail"], message: MailMessage): Pr
     if (!res.ok) throw new Error(`mailpit answered ${res.status}`);
     return;
   }
+  if (config.transport === "sequenzy") {
+    const result = await sequenzyTransport({ apiKey: config.apiKey }).send(
+      {
+        ...message,
+        from: config.from,
+        html: message.html ?? `<pre>${escapeHtml(message.text)}</pre>`,
+      },
+      message.idempotencyKey,
+    );
+    if (!result.ok) throw new Error(`sequenzy answered ${result.status ?? result.code}`);
+    return;
+  }
   if (!config.apiKey) throw new Error("RESEND_API_KEY is not set");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -40,6 +60,23 @@ export async function sendMail(config: AppEnv["mail"], message: MailMessage): Pr
     }),
   });
   if (!res.ok) throw new Error(`resend answered ${res.status}`);
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
 }
 
 function parseAddress(text: string): { Email: string; Name?: string } {
@@ -72,5 +109,5 @@ export function codeEmail(
     kind === "sign-in"
       ? `${code} is your convt sign-in code`
       : `${code} is your convt confirmation code`;
-  return { to: email, subject, text: lines.join("\n") };
+  return { to: email, subject, text: lines.join("\n"), idempotencyKey: crypto.randomUUID() };
 }

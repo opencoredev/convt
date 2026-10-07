@@ -5,7 +5,7 @@
 
 import { sql } from "drizzle-orm";
 
-import { isPro, type CatalogProduct } from "./catalog";
+import { discountProblem, isPro, type CatalogProduct } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
 import { convergeDesktop, convergePro, convergeApi } from "./converge";
 import { emptyFacts } from "./provider";
@@ -159,7 +159,8 @@ export async function checkFacts(
   for (const s of allSubscriptions(facts)) {
     if (!s.product) return `unknown_product: subscription ${s.providerSubscriptionId}`;
     if (s.currency !== catalog.currency) return `currency: ${s.currency}`;
-    if (s.discountId) return "discount: a subscription with a discount";
+    const sd = discountProblem(catalog, s.discountId, s.product);
+    if (sd) return `discount: ${sd}`;
     const stored = await one<{
       user_id: string | null;
       provider_customer_id: string | null;
@@ -190,8 +191,9 @@ export async function checkFacts(
 
   for (const o of facts.orders) {
     if (o.currency !== catalog.currency) return `currency: ${o.currency}`;
-    if (o.discountId || o.discountCents !== 0) return "discount: an order with a discount";
     if (!o.product) return `unknown_product: order ${o.providerOrderId}`;
+    const od = discountProblem(catalog, o.discountId, o.product, o);
+    if (od) return `discount: ${od}`;
     for (const i of o.items) {
       if (i.priceId !== null && !prices.has(i.priceId)) return `unknown_price: ${i.priceId}`;
     }

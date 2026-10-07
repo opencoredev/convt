@@ -8,3 +8,6 @@ MAIL_TRANSPORT=mailpit
 MAIL_FROM=convt <hello@convt.test>
 MAILPIT_URL=http://127.0.0.1:8025
 OAUTH_MOCK_URL=http://127.0.0.1:4100
+
+# Production and staging use MAIL_TRANSPORT=sequenzy and the SEQUENZY_API_KEY
+# Worker secret. MAIL_FROM is convt <hello@convt.app>. Local mail stays in Mailpit.

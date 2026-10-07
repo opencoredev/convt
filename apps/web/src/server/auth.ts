@@ -256,12 +256,15 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
     onAPIError: { errorURL: `${env.authUrl}/sign-in` },
     advanced: {
       cookiePrefix: "convt",
-      useSecureCookies: env.env === "production",
+      useSecureCookies: env.env === "production" || env.env === "staging",
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       database: { generateId: ({ model }: { model: string }) => newId(idPrefixes[model] ?? "usr") },
       backgroundTasks: { handler: scope.background },
     },
-    logger: { level: env.env === "production" ? "warn" : "info", log: redactingLog },
+    logger: {
+      level: env.env === "production" || env.env === "staging" ? "warn" : "info",
+      log: redactingLog,
+    },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         const path = ctx.path;

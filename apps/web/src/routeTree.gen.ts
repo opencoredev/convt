@@ -26,6 +26,7 @@ import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as CheckoutDesktopRouteImport } from './routes/checkout/desktop'
 import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
+import { Route as UpdatesManifestDotjsonRouteImport } from './routes/updates/manifest[.]json'
 import { Route as AppShellAccountRouteImport } from './routes/_app/_shell/account'
 import { Route as AppCheckoutSuccessRouteImport } from './routes/_app/checkout/success'
 import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
@@ -123,6 +124,11 @@ const CheckoutDesktopRoute = CheckoutDesktopRouteImport.update({
 const CheckoutProRoute = CheckoutProRouteImport.update({
   id: '/checkout/pro',
   path: '/checkout/pro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UpdatesManifestDotjsonRoute = UpdatesManifestDotjsonRouteImport.update({
+  id: '/updates/manifest.json',
+  path: '/updates/manifest.json',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppShellAccountRoute = AppShellAccountRouteImport.update({
@@ -224,6 +230,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof SiteTermsRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
+  '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/terms': typeof SiteTermsRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
+  '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
@@ -292,6 +300,7 @@ export interface FileRoutesById {
   '/_site/terms': typeof SiteTermsRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
+  '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/_app/_shell/account': typeof AppShellAccountRoute
   '/_app/checkout/success': typeof AppCheckoutSuccessRoute
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
@@ -326,6 +335,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/checkout/desktop'
     | '/checkout/pro'
+    | '/updates/manifest.json'
     | '/account'
     | '/checkout/success'
     | '/sign-in/check-email'
@@ -358,6 +368,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/checkout/desktop'
     | '/checkout/pro'
+    | '/updates/manifest.json'
     | '/account'
     | '/checkout/success'
     | '/sign-in/check-email'
@@ -393,6 +404,7 @@ export interface FileRouteTypes {
     | '/_site/terms'
     | '/checkout/desktop'
     | '/checkout/pro'
+    | '/updates/manifest.json'
     | '/_app/_shell/account'
     | '/_app/checkout/success'
     | '/_app/sign-in/check-email'
@@ -421,6 +433,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   CheckoutDesktopRoute: typeof CheckoutDesktopRoute
   CheckoutProRoute: typeof CheckoutProRoute
+  UpdatesManifestDotjsonRoute: typeof UpdatesManifestDotjsonRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDeviceLicenseRoute: typeof ApiDeviceLicenseRoute
   ApiDeviceSignOutRoute: typeof ApiDeviceSignOutRoute
@@ -546,6 +559,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout/pro'
       fullPath: '/checkout/pro'
       preLoaderRoute: typeof CheckoutProRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/updates/manifest.json': {
+      id: '/updates/manifest.json'
+      path: '/updates/manifest.json'
+      fullPath: '/updates/manifest.json'
+      preLoaderRoute: typeof UpdatesManifestDotjsonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/_shell/account': {
@@ -739,6 +759,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   CheckoutDesktopRoute: CheckoutDesktopRoute,
   CheckoutProRoute: CheckoutProRoute,
+  UpdatesManifestDotjsonRoute: UpdatesManifestDotjsonRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDeviceLicenseRoute: ApiDeviceLicenseRoute,
   ApiDeviceSignOutRoute: ApiDeviceSignOutRoute,

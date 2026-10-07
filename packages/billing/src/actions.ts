@@ -4,6 +4,7 @@
 
 import { sql } from "drizzle-orm";
 
+import { discountProblem } from "./catalog";
 import { type BillingContext, one } from "./context";
 import { ingestFacts } from "./ingest";
 import { emptyFacts, type SubscriptionFact } from "./provider";
@@ -24,7 +25,10 @@ async function ingestSubscription(ctx: BillingContext, fact: SubscriptionFact) {
 
 export type ActionResult =
   | { ok: true }
-  | { ok: false; reason: "not_found" | "declined" | "provider_error" | "bad_cap" | "trial" };
+  | {
+      ok: false;
+      reason: "not_found" | "declined" | "provider_error" | "bad_cap" | "trial" | "discount";
+    };
 
 export async function switchInterval(
   ctx: BillingContext,
@@ -39,6 +43,11 @@ export async function switchInterval(
   if (sub.interval === to) return { ok: true };
   const product = to === "year" ? "pro_year" : "pro_month";
   try {
+    // Polar keeps a subscription's discount through a product change. A code that
+    // does not cover the new product would get the switch charged and then rejected.
+    const current = await ctx.provider.getSubscription(sub.provider_subscription_id);
+    if (current.discountId && discountProblem(ctx.catalog, current.discountId, product))
+      return { ok: false, reason: "discount" };
     const r = await ctx.provider.changeProduct(
       sub.provider_subscription_id,
       product,

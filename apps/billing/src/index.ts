@@ -19,7 +19,7 @@ import {
   validateCatalog,
 } from "@convt/billing";
 import { createDb } from "@convt/db";
-import { logTransport, resendTransport } from "@convt/mail";
+import { logTransport, resendTransport, sequenzyTransport } from "@convt/mail";
 import pg from "pg";
 
 type Env = Record<string, unknown> & { HYPERDRIVE_BILLING: { connectionString: string } };
@@ -51,7 +51,9 @@ function setup(raw: Env) {
     mail:
       env.mail.transport === "resend"
         ? resendTransport({ apiKey: env.mail.apiKey, baseUrl: env.mail.apiUrl })
-        : logTransport(),
+        : env.mail.transport === "sequenzy"
+          ? sequenzyTransport({ apiKey: env.mail.apiKey })
+          : logTransport(),
     signingKey: () => key,
     config: {
       siteUrl: env.siteUrl,
@@ -59,7 +61,10 @@ function setup(raw: Env) {
       alertEmail: env.alertEmail,
       downloadUrl: env.downloadUrl,
       budgetMs: 5000,
-      checkoutCookie: env.env === "production" ? "__Host-convt_checkout" : "convt_checkout",
+      checkoutCookie:
+        env.env === "production" || env.env === "staging"
+          ? "__Host-convt_checkout"
+          : "convt_checkout",
     },
   });
   cached = { env, key, service };
@@ -73,6 +78,7 @@ const text = (status: number, body: string) =>
   });
 
 export async function runCron(service: BillingService, cron: string) {
+  if (cron === "*/10 * * * *") return { cleanup: await service.cleanupAuth() };
   if (cron === "*/15 * * * *") return { reconcile: await service.reconcileFrequent() };
   if (cron === "17 3 * * *") return { daily: await service.reconcileDaily() };
   return { outbox: await service.drainOutbox(), deletions: await service.runDeletions() };
@@ -80,6 +86,8 @@ export async function runCron(service: BillingService, cron: string) {
 
 async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Response> {
   const url = new URL(request.url);
+  if (url.pathname === "/__billing/scheduled" && raw.ENV !== "development")
+    return text(404, "not found");
   let s: ReturnType<typeof setup>;
   try {
     s = setup(raw);
@@ -110,7 +118,7 @@ async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Respon
   }
   // Local development only: run a cron by name (Wrangler's /__scheduled is not
   // reachable for an auxiliary Worker under the Vite plugin).
-  if (url.pathname === "/__billing/scheduled" && s.env.env !== "production") {
+  if (url.pathname === "/__billing/scheduled" && s.env.env === "development") {
     const cron = url.searchParams.get("cron") ?? "* * * * *";
     return Response.json(await runCron(s.service, cron));
   }

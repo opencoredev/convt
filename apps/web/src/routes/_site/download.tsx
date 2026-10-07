@@ -16,18 +16,23 @@ import {
   type Slot,
 } from "#/lib/platform";
 import { fileName, formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
+import { fetchLatestManifest } from "#/server/latest-release";
 import { GITHUB_URL, routes, seo } from "#/lib/site";
 
-// content/release-manifest.json is the release pipeline's manifest
-// (packaging/release/manifest.schema.json). It is optional: before the first release
-// there is no file and every download says "Coming soon". The glob resolves at build
-// time; scripts/generate-content.ts validates the file before every build.
+// The newest GitHub release's manifest (packaging/release/manifest.schema.json), read
+// on each load. content/release-manifest.json is the fallback when GitHub has none or
+// can't be reached; without either, every download says "Coming soon". The glob
+// resolves at build time; scripts/generate-content.ts validates the file.
 const files = import.meta.glob("../../../content/release-manifest.json", {
   eager: true,
   import: "default",
 });
 const raw = Object.values(files)[0];
-const release = releaseFromManifest(raw ? parseReleaseManifest(raw) : null);
+const bundled = raw ? parseReleaseManifest(raw) : null;
+
+const loadRelease = createServerFn({ method: "GET" }).handler(async () =>
+  releaseFromManifest((await fetchLatestManifest()) ?? bundled),
+);
 
 const detectOs = createServerFn({ method: "GET" }).handler(() =>
   osFromUserAgent(getRequestHeader("user-agent") ?? ""),
@@ -43,6 +48,7 @@ export const Route = createFileRoute("/_site/download")({
     os:
       deps.os ??
       (typeof window === "undefined" ? await detectOs() : osFromUserAgent(navigator.userAgent)),
+    release: await loadRelease(),
   }),
   head: () =>
     seo({
@@ -54,10 +60,9 @@ export const Route = createFileRoute("/_site/download")({
   component: DownloadPage,
 });
 
-const published = release.slots.some((s) => s.artifact);
-
 function DownloadPage() {
-  const { os } = Route.useLoaderData();
+  const { os, release } = Route.useLoaderData();
+  const published = release.slots.some((s) => s.artifact);
   return (
     <div className={cx(siteColumn, "flex flex-col gap-16 pt-12 pb-20 md:gap-20 md:pt-16")}>
       <div className="flex flex-col gap-6">
@@ -139,6 +144,7 @@ function slotMeta(slot: Slot) {
 }
 
 function Recommended({ os }: { os: Os }) {
+  const { release } = Route.useLoaderData();
   const slot = release.slots.find((s) => s.os === os);
   return (
     <section
@@ -184,6 +190,7 @@ function NoDesktop() {
 }
 
 function PlatformCard({ os, current }: { os: Os; current: boolean }) {
+  const { release } = Route.useLoaderData();
   const slots = release.slots.filter((s) => s.os === os);
   return (
     <section
@@ -225,6 +232,7 @@ function PlatformCard({ os, current }: { os: Os; current: boolean }) {
 }
 
 function SourceSection() {
+  const { release } = Route.useLoaderData();
   const source = release.source;
   return (
     <section

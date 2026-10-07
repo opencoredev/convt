@@ -36,6 +36,13 @@
       "when": 1791224669978,
       "tag": "0004_cloud_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791321450359,
+      "tag": "0005_billing_auth_cleanup",
+      "breakpoints": true
     }
   ]
 }

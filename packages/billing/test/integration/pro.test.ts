@@ -156,6 +156,20 @@ describe("paid coverage", () => {
     expect(h.mock.subscription(subId)!.product_id).toBe(localProducts.pro_month.productId);
   });
 
+  test("a switch to yearly is refused while the monthly-only launch code applies", async () => {
+    const { u, subId } = await paidMonthly("switch-ph@convt.test");
+    h.mock.mutateQuietly("subscription", subId, (x) => {
+      x.discountId = "disc_local_producthunt";
+    });
+    expect(await h.service.switchInterval(u.id, "year")).toEqual({
+      ok: false,
+      reason: "discount",
+    });
+    await h.deliverAll();
+    expect((await keys(subId)).length).toBe(1);
+    expect(h.mock.subscription(subId)!.product_id).toBe(localProducts.pro_month.productId);
+  });
+
   test("a zero-charge switch with no balance applied funds nothing", async () => {
     const { u, subId } = await paidMonthly("switch3@convt.test");
     const s = h.mock.subscription(subId)!;

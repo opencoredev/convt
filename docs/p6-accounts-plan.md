@@ -293,7 +293,7 @@ Root scripts: `db:up`, `db:down`, `db:migrate`, `db:rollback` (one step), `db:re
 
 ### Email and OAuth in development
 
-- Mail goes through `sendMail(message)`, with transports `mailpit` (Mailpit's HTTP send API; its web UI shows the messages), `log` and later `resend`. `mailpit` and `log` are refused in production.
+- Mail goes through `sendMail(message)`, with transports `mailpit` (Mailpit's HTTP send API; its web UI shows the messages), `log`, `sequenzy` (production) and optional `resend`. `mailpit` and `log` are refused in production.
 - `tools/oauth-mock` is a small Bun server that speaks enough OAuth 2 and OIDC for both providers: an authorize page listing fixture identities, a token endpoint, a userinfo endpoint and, for Google, a signed ID token with its JWKS. Fixture identities: Gmail with `email_verified` true; Workspace with a matching `hd`; a non-Gmail address with `email_verified` true and no `hd`; Google unverified; GitHub with a verified primary email; GitHub whose public email differs from its primary; GitHub with no email; an error response. Tests pick an identity with a query parameter.
 
 ### Test layers
@@ -381,7 +381,7 @@ None of these are needed to build and verify P6.
 | `BETTER_AUTH_SECRET` (32 random bytes)                                                               | `wrangler secret put BETTER_AUTH_SECRET`. `BETTER_AUTH_URL=https://convt.app` as a var in `wrangler.jsonc`.                              |
 | GitHub OAuth App, callback `https://convt.app/api/auth/callback/github`                              | `GITHUB_CLIENT_ID` as a var, `GITHUB_CLIENT_SECRET` as a Worker secret.                                                                  |
 | Google OAuth client (Web) with consent screen, callback `https://convt.app/api/auth/callback/google` | `GOOGLE_CLIENT_ID` as a var, `GOOGLE_CLIENT_SECRET` as a Worker secret.                                                                  |
-| Email provider account (Resend by default) and its DNS records on convt.app                          | `RESEND_API_KEY` as a Worker secret, `MAIL_FROM` as a var. The DNS change needs Leo's approval.                                          |
+| Sequenzy account (convt.app is verified)                                                             | `SEQUENZY_API_KEY` as a Worker secret, `MAIL_TRANSPORT=sequenzy` and `MAIL_FROM=convt <hello@convt.app>` as vars.                        |
 
 ## Step 1 spike results (2026-10-04)
 

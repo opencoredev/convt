@@ -22,6 +22,7 @@ import {
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 
+import { availableProviders } from "./env";
 import { billing } from "./billing";
 import { signedInUser } from "./context";
 import { authed } from "./session";
@@ -81,26 +82,29 @@ export const fetchLicenseKey = createServerFn({ method: "POST" })
 
 export const fetchBilling = createServerFn({ method: "GET" })
   .middleware([authed])
-  .handler(async ({ context: { db, userId } }) => {
+  .handler(async ({ context: { db, userId, appEnv } }) => {
     const now = new Date();
     const user = await signedInUser(db, userId);
     // The provider holds cards; ask convt-billing, and show none if it cannot answer.
     const card = await billing()
       .card(userId)
       .catch(() => null);
-    return billingView({
-      user,
-      subscriptions: await userSubscriptions(db, userId),
-      invoices: await userInvoices(db, userId),
-      card,
-      openApiCheckout: (await openApiCheckout(db, userId, now)) !== null,
-      now,
-    });
+    return {
+      sales: appEnv.sales,
+      ...billingView({
+        user,
+        subscriptions: await userSubscriptions(db, userId),
+        invoices: await userInvoices(db, userId),
+        card,
+        openApiCheckout: (await openApiCheckout(db, userId, now)) !== null,
+        now,
+      }),
+    };
   });
 
 export const fetchApiOverview = createServerFn({ method: "GET" })
   .middleware([authed])
-  .handler(async ({ context: { db, userId } }) => {
+  .handler(async ({ context: { db, userId, appEnv } }) => {
     const now = new Date();
     const perDay = await apiUsagePerDay(db, userId, now);
     const month = await apiConversionsThisMonth(db, userId, now);
@@ -111,12 +115,13 @@ export const fetchApiOverview = createServerFn({ method: "GET" })
     );
     // Only asked when it matters: an account that could start enrolling.
     const multipleAllowed =
-      enrollment.state === "none" || enrollment.state === "ended"
+      appEnv.sales === "all" && (enrollment.state === "none" || enrollment.state === "ended")
         ? await billing()
             .multipleSubscriptionsAllowed()
             .catch(() => null)
         : true;
     return {
+      sales: appEnv.sales,
       enrollment,
       enrollBlocked: multipleAllowed === false,
       thisMonth: month.count,
@@ -130,9 +135,9 @@ export const fetchApiOverview = createServerFn({ method: "GET" })
 
 export const fetchAccountSettings = createServerFn({ method: "GET" })
   .middleware([authed])
-  .handler(async ({ context: { db, userId, sessionId } }) => {
+  .handler(async ({ context: { db, userId, sessionId, appEnv } }) => {
     const now = new Date();
-    return settingsView({
+    const settings = settingsView({
       user: await signedInUser(db, userId),
       accounts: await userAccounts(db, userId),
       sessions: await userSessions(db, userId, now),
@@ -141,6 +146,15 @@ export const fetchAccountSettings = createServerFn({ method: "GET" })
       deletion: await openDeletion(db, userId),
       now,
     });
+    const providers = availableProviders(appEnv);
+    return {
+      ...settings,
+      // An unconfigured provider can't be connected, but a method already linked
+      // stays listed so its owner can see and remove it.
+      methods: settings.methods.filter(
+        (m) => (m.id !== "github" && m.id !== "google") || providers[m.id] || m.accountId !== null,
+      ),
+    };
   });
 
 export const saveName = createServerFn({ method: "POST" })

@@ -181,3 +181,33 @@ describe("readEnv", () => {
     expect(() => readEnv({ ...base, BETTER_AUTH_SECRET: "short" })).toThrow(/SECRET/);
   });
 });
+
+test("staging has production auth guards and Desktop-only sales", () => {
+  const base = {
+    ENV: "staging",
+    BETTER_AUTH_URL: "https://staging.convt.test",
+    BETTER_AUTH_SECRET: "x".repeat(64),
+  };
+  expect(readEnv(base).sales).toBe("desktop");
+  expect(readEnv(base).mail.transport).toBe("resend");
+  expect(() => readEnv({ ...base, BETTER_AUTH_URL: "http://staging.convt.test" })).toThrow(/https/);
+  expect(() => readEnv({ ...base, OAUTH_MOCK_URL: "http://localhost:4100" })).toThrow(/refused/);
+});
+
+test("Sequenzy requires its own key in production and staging", () => {
+  for (const ENV of ["production", "staging"]) {
+    const raw = {
+      ENV,
+      BETTER_AUTH_URL: "https://convt.app",
+      BETTER_AUTH_SECRET: "x".repeat(64),
+      MAIL_TRANSPORT: "sequenzy",
+    };
+    expect(() => readEnv(raw)).toThrow(/SEQUENZY_API_KEY/);
+    expect(() => readEnv({ ...raw, SEQUENZY_API_KEY: " " })).toThrow(/SEQUENZY_API_KEY/);
+    expect(readEnv({ ...raw, SEQUENZY_API_KEY: "sq_test" }).mail).toEqual({
+      transport: "sequenzy",
+      apiKey: "sq_test",
+      from: "convt <hello@convt.app>",
+    });
+  }
+});

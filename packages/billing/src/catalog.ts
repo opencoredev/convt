@@ -1,7 +1,7 @@
 // The products convt sells, per environment: the provider's product and price ids,
 // amounts and intervals, and the switch policy. Only these products create
-// entitlements. Leo fills in the sandbox and production ids once the Polar
-// organizations exist (docs/p7-billing-plan.md, "Accounts and secrets").
+// entitlements. The sandbox and production ids come from the "convt" Polar
+// organizations (docs/p7-billing-plan.md, "Accounts and secrets").
 
 export type CatalogEnv = "local" | "sandbox" | "production";
 export type CatalogProduct = "desktop" | "pro_month" | "pro_year" | "api";
@@ -19,13 +19,30 @@ export type CatalogEntry = {
   trialDays: number | null;
 };
 
+/** A percentage discount code billing accepts on the listed products. */
+export type CatalogDiscount = {
+  code: string;
+  basisPoints: number;
+  products: CatalogProduct[];
+};
+
 export type Catalog = {
   env: CatalogEnv;
   currency: "usd";
   products: Record<CatalogProduct, CatalogEntry>;
+  /** By the provider's discount id. An order or subscription with any other discount is rejected. */
+  discounts: Record<string, CatalogDiscount>;
   /** Switching between monthly and yearly takes effect at once, both ways. */
   switchPolicy: Record<ProProduct, Proration>;
   meterName: "api_conversion";
+};
+
+// The Product Hunt launch offer: 30% off Desktop, or off the first 3 months of Pro
+// monthly, until the end of 31 October 2026 Pacific time (the code's ends_at in Polar).
+const productHunt: CatalogDiscount = {
+  code: "PRODUCTHUNT",
+  basisPoints: 3000,
+  products: ["desktop", "pro_month"],
 };
 
 const local: Catalog = {
@@ -68,28 +85,75 @@ const local: Catalog = {
   },
   switchPolicy: { pro_month: "invoice", pro_year: "invoice" },
   meterName: "api_conversion",
+  discounts: { disc_local_producthunt: productHunt },
 };
 
-/** PLACEHOLDER ids: Leo creates the products in Polar and replaces these. */
-const placeholder = (env: "sandbox" | "production"): Catalog => ({
+/** The same products in a Polar organization: only the ids differ from `local`. */
+const withIds = (
+  env: "sandbox" | "production",
+  ids: Record<CatalogProduct, { productId: string; priceId: string }>,
+  discounts: Catalog["discounts"],
+): Catalog => ({
   ...local,
   env,
+  discounts,
   products: Object.fromEntries(
-    Object.entries(local.products).map(([k, v]) => [
-      k,
-      {
-        ...v,
-        productId: `PLACEHOLDER_${env}_${k}_product`,
-        priceId: `PLACEHOLDER_${env}_${k}_price`,
-      },
-    ]),
+    Object.entries(local.products).map(([k, v]) => [k, { ...v, ...ids[k as CatalogProduct] }]),
   ) as Catalog["products"],
 });
 
+// The Polar sandbox organization "convt" (c9b2ccbd-28a8-4f07-984b-66b59c06a410).
+const sandbox = withIds(
+  "sandbox",
+  {
+    desktop: {
+      productId: "31a1a071-bec9-4b7e-a5dd-e9a52eb7d3ab",
+      priceId: "20024212-c2be-4d23-819e-151b704a3a3e",
+    },
+    pro_month: {
+      productId: "274ac0a7-b561-4a2b-a378-cbefc994e558",
+      priceId: "4f9c498a-7c19-468e-b40a-99c77a6de2dc",
+    },
+    pro_year: {
+      productId: "b93eb48c-0940-431e-870a-8ab8eff3f1de",
+      priceId: "bde32120-f1a6-4f9d-be04-7b358d2f0556",
+    },
+    api: {
+      productId: "1d42d41b-15e6-4b21-81ce-8e4f2d0dfb3d",
+      priceId: "4922ee3c-ee15-46fd-9aaa-bc25922fb9a9",
+    },
+  },
+  { "cbc510ac-177c-450b-b5ca-26bcd8a345a7": productHunt },
+);
+
+// The production organization "convt" (6098e410-4ea7-48fd-b677-7b261b8e0f7c).
+const production = withIds(
+  "production",
+  {
+    desktop: {
+      productId: "9d3028c1-1e4f-4d12-9641-59960eb58679",
+      priceId: "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
+    },
+    pro_month: {
+      productId: "366bad05-07e3-41ca-b620-ce3d1ae5db3c",
+      priceId: "ba25c579-8e8d-4e90-9536-02e291822979",
+    },
+    pro_year: {
+      productId: "57e8ab1a-2ec5-4c9c-8f6d-2095bc01855d",
+      priceId: "1ea3fe0a-2145-417c-b8ed-347016b0f2a8",
+    },
+    api: {
+      productId: "34e9b296-afb4-4880-a87c-fca1be914f36",
+      priceId: "4c5fdab8-63de-400e-a353-efba78c85820",
+    },
+  },
+  { "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt },
+);
+
 const catalogs: Record<CatalogEnv, Catalog> = {
   local,
-  sandbox: placeholder("sandbox"),
-  production: placeholder("production"),
+  sandbox,
+  production,
 };
 
 /**
@@ -113,6 +177,11 @@ export function validateCatalog(c: Catalog): string[] {
     } else if (!Number.isInteger(e.amountCents) || (e.amountCents ?? 0) <= 0) {
       problems.push(`${name}: the price must be a positive whole number of cents`);
     }
+  }
+  for (const [id, d] of Object.entries(c.discounts)) {
+    if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints >= 10000)
+      problems.push(`discount ${id}: basis points must be between 1 and 9999`);
+    if (d.products.includes("api")) problems.push(`discount ${id}: the API is never discounted`);
   }
   if (
     c.env !== "local" &&
@@ -146,3 +215,26 @@ export function productByPriceId(c: Catalog, priceId: string | null): CatalogPro
 
 export const isPro = (p: CatalogProduct | null): p is ProProduct =>
   p === "pro_month" || p === "pro_year";
+
+/**
+ * Why a discount on `product` is not acceptable, or null. `discountCents` is checked
+ * against the code's percentage of `subtotalCents` when given (orders only).
+ */
+export function discountProblem(
+  c: Catalog,
+  discountId: string | null,
+  product: CatalogProduct,
+  amounts?: { discountCents: number; subtotalCents: number },
+): string | null {
+  if (!discountId)
+    return amounts && amounts.discountCents !== 0 ? "a discount without a code" : null;
+  const d = c.discounts[discountId];
+  if (!d) return `unknown discount ${discountId}`;
+  if (!d.products.includes(product)) return `${d.code} does not apply to ${product}`;
+  if (amounts) {
+    const expected = Math.round((amounts.subtotalCents * d.basisPoints) / 10000);
+    if (Math.abs(amounts.discountCents - expected) > 1)
+      return `${d.code} on ${amounts.subtotalCents} is ${expected}, the order took ${amounts.discountCents}`;
+  }
+  return null;
+}
