@@ -64,4 +64,38 @@ class MacStatus(unittest.TestCase):
   else:
    self.assertTrue(gaps)
 
+class CrateGraphLines(unittest.TestCase):
+ def test_colored_duplicate_marker_is_name_and_version(self):
+  # Exact cargo 1.95 line when CARGO_TERM_COLOR=always and CARGO_HOME is empty.
+  line='proc-macro2 v1.0.107 \x1b[33m\x1b[2m(*)\x1b[39m\x1b[22m'
+  self.assertEqual(audit.parse_crate_line(line), ('proc-macro2', '1.0.107'))
+ def test_split_parser_breaks_on_colored_duplicate_marker(self):
+  line='proc-macro2 v1.0.107 \x1b[33m\x1b[2m(*)\x1b[39m\x1b[22m'
+  parsed=tuple(line.split(' (')[0].replace(' v',' ',1).split())
+  self.assertEqual(len(parsed), 3)
+  with self.assertRaisesRegex(ValueError, 'too many values to unpack'):
+   n, v = parsed
+ def test_common_cargo_tree_suffixes(self):
+  cases={
+   'serde v1.0.229': ('serde', '1.0.229'),
+   'serde_derive v1.0.229 (proc-macro)': ('serde_derive', '1.0.229'),
+   'proc-macro2 v1.0.107 (*)': ('proc-macro2', '1.0.107'),
+   'convt-app v0.2.0 (/workspace/crates/convt-app)': ('convt-app', '0.2.0'),
+   'zed-font-kit v0.14.1-zed': ('zed-font-kit', '0.14.1-zed'),
+   'wasi v0.11.0+wasi-snapshot-preview1': ('wasi', '0.11.0+wasi-snapshot-preview1'),
+  }
+  for line, expected in cases.items():
+   self.assertEqual(audit.parse_crate_line(line), expected, line)
+ def test_unrecognized_line_is_explicit(self):
+  with self.assertRaisesRegex(ValueError, 'unrecognized cargo tree'):
+   audit.parse_crate_line('too many values here without a version')
+ def test_identities_unpack_as_name_version(self):
+  output='\n'.join([
+   'objc2-app-kit v0.3.2',
+   'proc-macro2 v1.0.107 \x1b[33m\x1b[2m(*)\x1b[39m\x1b[22m',
+   'serde_derive v1.0.229 (proc-macro)',
+  ])
+  unpacked=sorted(f'{n} {v}' for n, v in audit.crate_identities(output))
+  self.assertEqual(unpacked, ['objc2-app-kit 0.3.2', 'proc-macro2 1.0.107', 'serde_derive 1.0.229'])
+
 if __name__=='__main__':unittest.main()
