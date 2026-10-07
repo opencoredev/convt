@@ -22,6 +22,11 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/opencoredev/convt"
 authors = ["Convt"]
 
+[patch.crates-io]
+# gpui-pre-macos 0.3.7 unwraps NSString UTF-8 pointers while GPUI is starting.
+# Keep the fix local until the upstream release containing the safe conversion.
+gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
+
 [workspace.dependencies]
 convt-core = { path = "crates/convt-core" }
 convt-engines = { path = "crates/convt-engines" }
