@@ -157,7 +157,7 @@ function Body({ state }: { state: State }) {
           </p>
           <Actions
             primary={{ href: "/dashboard/billing", label: "Go to Billing" }}
-            secondary={{ href: links.downloadMac, label: "Download convt" }}
+            secondary={{ href: links.download, label: "Download convt" }}
           />
         </>
       );
@@ -265,7 +265,7 @@ function Ready({ state }: { state: Extract<CheckoutView, { state: "ready" }> }) 
         <li>Open in convt asks the app to confirm before it adds the key.</li>
       </ul>
       <Actions
-        primary={{ href: links.downloadMac, label: "Download convt" }}
+        primary={{ href: links.download, label: "Download convt" }}
         secondary={{ href: "/dashboard/licenses", label: "Go to Licenses" }}
       />
     </>

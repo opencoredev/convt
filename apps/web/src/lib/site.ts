@@ -9,8 +9,8 @@ export const GITHUB_URL = "https://github.com/opencoredev/convt";
 
 /**
  * True since launch (7 October 2026): the landing page links downloads, sign-in, the
- * Desktop checkout and the footer pages. Setting it to false swaps those links for
- * placeholder labels and hides the footer links. SALES still keeps Pro and the API off.
+ * Desktop and Pro checkouts and the footer pages. Setting it to false swaps those
+ * links for placeholder labels and hides the footer links. SALES still keeps the API off.
  */
 export const LAUNCHED = true;
 

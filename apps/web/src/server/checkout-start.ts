@@ -18,11 +18,6 @@ function to(url: string, cookie?: string) {
 
 export async function startCheckout(request: Request, context: unknown, kind: "desktop" | "pro") {
   const { scope, appEnv } = requestContext(context);
-  if (kind === "pro" && appEnv.sales !== "all")
-    return new Response("Pro is coming soon. Desktop licenses are available.", {
-      status: 403,
-      headers: { "cache-control": "no-store" },
-    });
   const url = new URL(request.url);
   const session = await createAuth(scope, appEnv).api.getSession({ headers: request.headers });
   const user = session?.user.emailVerified
