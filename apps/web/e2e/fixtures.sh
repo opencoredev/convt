@@ -16,7 +16,7 @@ expectations=(
   "desktop|dashboard|Desktop" "desktop|dashboard|Active on 1 Mac" "desktop|dashboard|Dana's MacBook Air"
   "desktop|dashboard/licenses|Desktop License, bought" "desktop|dashboard/billing|Desktop (lifetime)"
   "desktop|dashboard/billing|Desktop License, 12 months of updates"
-  "desktop|dashboard/billing|No card needed."
+  "desktop|dashboard/billing|LIFETIME"
   "pro|dashboard|Renews" "pro|dashboard|Updates included" "pro|dashboard|API this month"
   "pro|dashboard/licenses|Pro, yearly" "pro|dashboard/licenses|Desktop License, bought"
   "pro|dashboard/billing|ACTIVE" "pro|dashboard/billing|API, pay per conversion" "pro|dashboard/billing|\$96.00"
@@ -41,6 +41,9 @@ for fixture in new trial desktop pro lapsed api; do
       check "$fixture /$page shows \"$want\"" grep -qF "$want" <<<"$text"
     done < <(expected_for "$fixture" "$page")
     check "$fixture /$page has no sample-data badge or preview note" bash -c '! grep -qE "Sample data|Preview only" <<<"$1"' _ "$text"
+    if [[ $fixture == desktop && $page == dashboard/billing ]]; then
+      check "desktop /dashboard/billing hides Get Desktop" bash -c '! grep -qF "Get Desktop" <<<"$1"' _ "$text"
+    fi
     for w in desktop phone; do
       width "$w"
       for th in light dark; do
