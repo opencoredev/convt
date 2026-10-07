@@ -259,15 +259,7 @@ function LinuxArt({ kind, step }: { kind: ArtifactKind; step: number }) {
   return <AppWindow />;
 }
 
-function ArchiveArt({
-  kind,
-  os,
-  step,
-}: {
-  kind: ArtifactKind;
-  os: Os;
-  step: number;
-}) {
+function ArchiveArt({ kind, os, step }: { kind: ArtifactKind; os: Os; step: number }) {
   if (step === 0) return <DownloadsFile label={fileLabel(kind)} />;
   if (step === 1) {
     if (os === "macos") {
