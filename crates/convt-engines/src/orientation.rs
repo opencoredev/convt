@@ -184,7 +184,10 @@ pub(crate) fn orientation_from_exif_bytes(data: &[u8]) -> Option<Orientation> {
 /// still apply.
 pub(crate) fn heif_display_orientation(data: &[u8]) -> Option<Orientation> {
     let (irot, imir) = heif_transforms(data)?;
-    Some(heif_transforms_to_orientation(irot.unwrap_or(0), imir))
+    match heif_transforms_to_orientation(irot.unwrap_or(0), imir) {
+        Orientation::NoTransforms => None,
+        other => Some(other),
+    }
 }
 
 pub(crate) fn heif_transforms_to_orientation(irot_angle: u8, imir: Option<u8>) -> Orientation {
@@ -523,6 +526,123 @@ pub(crate) fn inject_heif_transforms(
     add_to_size(&mut out, iprp.offset, ipma_delta)?;
     add_to_size(&mut out, meta.offset, ipma_delta)?;
     bump_iloc_offsets(&mut out, insert_at, extra.len() as i64 + ipma_delta)?;
+    Ok(out)
+}
+
+/// Drops `irot` / `imir` from `ipco` and their `ipma` associations so a
+/// later inject does not stack a second transform on an identity `irot`
+/// that ImageIO often writes.
+#[cfg(test)]
+pub(crate) fn strip_heif_transforms(data: &[u8]) -> Result<Vec<u8>> {
+    let Some(ipco) = find_located(data, b"ipco") else {
+        return Ok(data.to_vec());
+    };
+    let Some(ipma) = find_located(data, b"ipma") else {
+        return Ok(data.to_vec());
+    };
+    let Some(iprp) = find_located(data, b"iprp") else {
+        return Ok(data.to_vec());
+    };
+    let Some(meta) = find_located(data, b"meta") else {
+        return Ok(data.to_vec());
+    };
+
+    let mut keep = Vec::new();
+    let mut removed = Vec::new();
+    let mut index = 0usize;
+    walk_located(
+        &data[ipco.payload..ipco.end],
+        ipco.payload,
+        false,
+        &mut |loc, typ| {
+            index += 1;
+            if typ == *b"irot" || typ == *b"imir" {
+                removed.push(index);
+            } else {
+                keep.extend_from_slice(&data[loc.offset..loc.end]);
+            }
+        },
+    );
+    if removed.is_empty() {
+        return Ok(data.to_vec());
+    }
+    if ipma.offset < ipco.end {
+        return Err(failed("ipma precedes ipco"));
+    }
+
+    let new_ipma = strip_ipma_properties(&data[ipma.payload..ipma.end], &removed)?;
+    let mut out = data.to_vec();
+    let ipco_delta = keep.len() as i64 - (ipco.end - ipco.payload) as i64;
+    out.splice(ipco.payload..ipco.end, keep);
+    add_to_size(&mut out, ipco.offset, ipco_delta)?;
+    add_to_size(&mut out, iprp.offset, ipco_delta)?;
+    add_to_size(&mut out, meta.offset, ipco_delta)?;
+
+    let ipma_payload = (ipma.payload as i64 + ipco_delta) as usize;
+    let ipma_end = (ipma.end as i64 + ipco_delta) as usize;
+    let ipma_offset = (ipma.offset as i64 + ipco_delta) as usize;
+    let ipma_delta = new_ipma.len() as i64 - (ipma_end - ipma_payload) as i64;
+    out.splice(ipma_payload..ipma_end, new_ipma);
+    add_to_size(&mut out, ipma_offset, ipma_delta)?;
+    add_to_size(
+        &mut out,
+        (iprp.offset as i64 + ipco_delta) as usize,
+        ipma_delta,
+    )?;
+    add_to_size(&mut out, meta.offset, ipma_delta)?;
+    bump_iloc_offsets(&mut out, ipco.payload, ipco_delta + ipma_delta)?;
+    Ok(out)
+}
+
+#[cfg(test)]
+fn strip_ipma_properties(payload: &[u8], removed: &[usize]) -> Result<Vec<u8>> {
+    if payload.len() < 8 {
+        return Err(failed("short ipma"));
+    }
+    let version = payload[0];
+    let flags = u32::from_be_bytes([0, payload[1], payload[2], payload[3]]);
+    let wide = flags & 1 != 0;
+    let id_size = if version < 1 { 2 } else { 4 };
+    let prop_size = if wide { 2 } else { 1 };
+    let entry_count = u32::from_be_bytes(payload[4..8].try_into().unwrap());
+    let mut i = 8;
+    let mut out = payload[..8].to_vec();
+    for _ in 0..entry_count {
+        if i + id_size + 1 > payload.len() {
+            return Err(failed("truncated ipma"));
+        }
+        out.extend_from_slice(&payload[i..i + id_size]);
+        i += id_size;
+        let count = payload[i] as usize;
+        i += 1;
+        let count_at = out.len();
+        out.push(0);
+        let mut kept = 0u8;
+        for _ in 0..count {
+            if i + prop_size > payload.len() {
+                return Err(failed("truncated ipma associations"));
+            }
+            let (essential, index) = if wide {
+                let v = u16::from_be_bytes(payload[i..i + 2].try_into().unwrap());
+                (v & 0x8000 != 0, (v & 0x7fff) as usize)
+            } else {
+                (payload[i] & 0x80 != 0, (payload[i] & 0x7f) as usize)
+            };
+            i += prop_size;
+            if removed.contains(&index) {
+                continue;
+            }
+            let shifted = index - removed.iter().filter(|r| **r < index).count();
+            if wide {
+                let v = (shifted as u16) | (u16::from(essential) << 15);
+                out.extend_from_slice(&v.to_be_bytes());
+            } else {
+                out.push((u8::from(essential) << 7) | shifted as u8);
+            }
+            kept += 1;
+        }
+        out[count_at] = kept;
+    }
     Ok(out)
 }
 
@@ -1367,6 +1487,22 @@ mod tests {
         );
         assert_eq!(
             heif_exif_orientation(&iphone).map(Orientation::to_exif),
+            Some(6)
+        );
+
+        let with_identity = inject_heif_transforms(&base, Some(0), None).unwrap();
+        assert!(
+            heif_display_orientation(&with_identity).is_none(),
+            "identity irot must not block EXIF"
+        );
+        let stripped = strip_heif_transforms(&with_irot).unwrap();
+        assert!(
+            heif_display_orientation(&stripped).is_none(),
+            "strip must drop irot"
+        );
+        assert_eq!(
+            heif_exif_orientation(&inject_heif_exif(&stripped, 6).unwrap())
+                .map(Orientation::to_exif),
             Some(6)
         );
     }

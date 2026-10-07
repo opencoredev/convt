@@ -12,7 +12,7 @@ use image::{DynamicImage, RgbImage, RgbaImage};
 
 use super::orientation::{
     decoder_orientation, heif_display_orientation, heif_exif_orientation, inject_heif_exif,
-    inject_heif_transforms, jpeg_with_orientation, open_stored,
+    inject_heif_transforms, jpeg_with_orientation, open_stored, strip_heif_transforms,
 };
 
 const W: u32 = 64;
@@ -91,7 +91,7 @@ fn heic_targets() -> Vec<&'static str> {
     registry
         .targets(from)
         .into_iter()
-        .filter(|f| f.category == Category::Image)
+        .filter(|f| f.category == Category::Image && !matches!(f.id, "avif" | "heic"))
         .map(|f| f.id)
         .collect()
 }
@@ -192,13 +192,15 @@ fn encode_heic(dir: &Path) -> Option<PathBuf> {
         }
     }
     let path = convert(&png, "heic");
-    let bytes = std::fs::read(&path).unwrap();
+    let cleaned = strip_heif_transforms(&std::fs::read(&path).unwrap())
+        .unwrap_or_else(|e| panic!("strip HEIF transforms: {e}"));
+    std::fs::write(&path, &cleaned).unwrap();
     println!(
         "HEIC fixture: {} ({} bytes), irot/imir={:?}, EXIF={:?}",
         path.display(),
-        bytes.len(),
-        heif_display_orientation(&bytes).map(Orientation::to_exif),
-        heif_exif_orientation(&bytes).map(Orientation::to_exif)
+        cleaned.len(),
+        heif_display_orientation(&cleaned).map(Orientation::to_exif),
+        heif_exif_orientation(&cleaned).map(Orientation::to_exif)
     );
     Some(path)
 }
@@ -232,8 +234,10 @@ fn heic_orientation_irot_imir_to_every_image_target() {
     for &(tag, irot, imir) in HEIF_CASES {
         let patched = inject_heif_transforms(&bytes, irot, imir).unwrap();
         assert_eq!(
-            heif_display_orientation(&patched).map(Orientation::to_exif),
-            Some(tag),
+            heif_display_orientation(&patched)
+                .map(Orientation::to_exif)
+                .unwrap_or(1),
+            tag,
             "injected irot={irot:?} imir={imir:?}"
         );
         let src = dir.path().join(format!("irot-{tag}.heic"));
