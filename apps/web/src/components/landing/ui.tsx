@@ -42,7 +42,7 @@ export function ButtonLink({
 /** Stands in for a button whose destination is not live yet. Same box, not clickable. */
 export function ComingSoon({
   className,
-  children = "Coming soon",
+  children = "Not available yet",
 }: {
   className?: string;
   children?: ReactNode;

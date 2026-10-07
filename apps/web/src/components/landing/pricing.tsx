@@ -88,7 +88,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
       <Features
         items={[
           "Every format, offline",
-          "macOS, Windows and Linux",
+          "Linux now, macOS and Windows next",
           "12 months of updates",
           "Batch folders and presets",
         ]}
@@ -153,7 +153,9 @@ function ProPlan({ available, launched }: { available: boolean; launched: boolea
           Get convt Pro
         </ButtonLink>
       ) : (
-        <ComingSoon className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]" />
+        <ComingSoon className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]">
+          Pro is not on sale yet
+        </ComingSoon>
       )}
     </div>
   );
@@ -271,7 +273,7 @@ function ApiCard({ available, launched }: { available: boolean; launched: boolea
             </ButtonLink>
           ) : (
             <ComingSoon className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]">
-              Docs coming soon
+              API is not on sale yet
             </ComingSoon>
           )}
         </div>

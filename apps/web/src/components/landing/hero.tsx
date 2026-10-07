@@ -19,10 +19,11 @@ export function Hero() {
             <HeroActions />
           ) : (
             <ComingSoon className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]">
-              Coming soon to macOS, Windows and Linux
+              Not available yet
             </ComingSoon>
           )}
         </div>
+        {LAUNCHED && <PlatformNote />}
         <ProductHuntBadge />
       </div>
       <ConvertPanel />
@@ -35,11 +36,11 @@ function HeroActions() {
     <>
       <ButtonLink
         variant="primary"
-        href={`${routes.download}?os=macos`}
+        href={`${routes.download}?os=linux`}
         className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
       >
         <DownloadIcon />
-        Download for macOS
+        Download for Linux
       </ButtonLink>
       <ButtonLink
         variant="secondary"
@@ -49,6 +50,15 @@ function HeroActions() {
         Star on GitHub
       </ButtonLink>
     </>
+  );
+}
+
+/** Linux builds ship first; macOS and Windows builds are not published yet. */
+function PlatformNote() {
+  return (
+    <p className="-mt-2 text-[14px]/[20px] text-land-muted">
+      Out now for Linux. macOS and Windows are in progress.
+    </p>
   );
 }
 
