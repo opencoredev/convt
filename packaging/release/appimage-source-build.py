@@ -57,9 +57,9 @@ def main():
                "-v", f"{output}:/output", "-v", f"{recipe}:/recipe.sh:ro",
                lock["build"]["image"], "sh", "/recipe.sh"]
     try:
-        subprocess.run(command, check=True, timeout=900)
+        subprocess.run(command, check=True, timeout=2400)
     finally:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=20)
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=120)
     runtime = output / "runtime-x86_64"
     actual = hashlib.sha256(runtime.read_bytes()).hexdigest()
     expected = lock["build"].get("runtime_sha256")
