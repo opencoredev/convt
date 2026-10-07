@@ -24,6 +24,7 @@ mod testing;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -65,6 +66,20 @@ pub fn app() -> Router {
             }),
         )
         .layer(CorsLayer::permissive())
+        .layer(CatchPanicLayer::custom(|panic| {
+            let message = if let Some(s) = panic.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = panic.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "server panic".into()
+            };
+            crate::posthog::capture(&message, "convt-server request");
+            axum::http::Response::builder()
+                .status(500)
+                .body("internal server error".into())
+                .unwrap()
+        }))
         .layer(TraceLayer::new_for_http())
 }
 
