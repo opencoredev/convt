@@ -1,6 +1,7 @@
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
 import { ProductHuntBadge } from "./product-hunt-badge";
+import { useDownloadCtaLabel } from "./use-download-cta";
 import { ButtonLink, ComingSoon, Container, DownloadIcon, MisoPhoto } from "./ui";
 
 export function Hero() {
@@ -23,7 +24,6 @@ export function Hero() {
             </ComingSoon>
           )}
         </div>
-        {LAUNCHED && <PlatformNote />}
         <ProductHuntBadge />
       </div>
       <ConvertPanel />
@@ -32,15 +32,16 @@ export function Hero() {
 }
 
 function HeroActions() {
+  const label = useDownloadCtaLabel();
   return (
     <>
       <ButtonLink
         variant="primary"
-        href={`${routes.download}?os=linux`}
+        href={routes.download}
         className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
       >
         <DownloadIcon />
-        Download for Linux
+        {label}
       </ButtonLink>
       <ButtonLink
         variant="secondary"
@@ -50,15 +51,6 @@ function HeroActions() {
         Star on GitHub
       </ButtonLink>
     </>
-  );
-}
-
-/** Linux builds ship first; macOS and Windows builds are not published yet. */
-function PlatformNote() {
-  return (
-    <p className="-mt-2 text-[14px]/[20px] text-land-muted">
-      Out now for Linux. macOS and Windows are in progress.
-    </p>
   );
 }
 

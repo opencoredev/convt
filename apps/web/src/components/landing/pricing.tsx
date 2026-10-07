@@ -88,7 +88,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
       <Features
         items={[
           "Every format, offline",
-          "Linux now, macOS and Windows next",
+          "macOS, Windows and Linux",
           "12 months of updates",
           "Batch folders and presets",
         ]}
