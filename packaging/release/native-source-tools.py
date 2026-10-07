@@ -184,6 +184,9 @@ def main(default_lock):
     check_rpm_headers(lock, sources, cache, args.rpm_image)
     for check in lock.get("binary_checks", []):
         path = cache / (check["cache"] if "cache" in check else sources[check["source"]]["cache"])
+        # fetch populates locked inputs; the rebuilt runtime does not exist yet.
+        if args.command == "fetch" and not path.exists():
+            continue
         if check.get("sha256") and digest(path.read_bytes()) != check["sha256"]:
             raise ValueError("Built runtime hash mismatch")
         if check.get("static_elf"):
@@ -257,6 +260,9 @@ def main(default_lock):
         shutil.copyfile(args.lock, args.output / args.lock.name)
     for entry in lock.get("build_evidence", []):
         path = cache / entry["cache"]
+        # Provenance is written by the network-none rebuild after fetch.
+        if args.command == "fetch" and not path.exists():
+            continue
         if digest(path.read_bytes()) != entry["sha256"]:
             raise ValueError(f"Build evidence hash mismatch: {path}")
         if args.command == "collect" and args.output:

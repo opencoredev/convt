@@ -8,7 +8,9 @@ bundle_epoch=$(cat "$out/source-date-epoch" 2>/dev/null) || { echo "Missing $out
 [[ -z ${SOURCE_DATE_EPOCH:-} || $SOURCE_DATE_EPOCH == "$bundle_epoch" ]] || { echo "SOURCE_DATE_EPOCH differs from the bundle's $bundle_epoch" >&2; exit 1; }
 export SOURCE_DATE_EPOCH=$bundle_epoch
 # Both the tool and embedded runtime are pinned; appimagetool must not
-# silently download its own unpinned runtime.
+# silently download its own unpinned runtime. Fetch locked sources first —
+# a clean runner has an empty packaging/.cache.
+python3 "$repo/packaging/release/appimage-source-closure.py" fetch --cache "$cache"
 python3 "$repo/packaging/release/appimage-source-build.py" --cache "$cache"
 cp "$cache/appimage-source/rebuilt/runtime-x86_64" "$cache/runtime-source-built-x86_64"
 python3 "$repo/packaging/linux/fetch.py" "$cache" "$repo/packaging/linux/appimage-inputs.lock.json"
