@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "platform": "windows-x86_64",
+  "distribution_ready": true,
+  "ffmpeg": "cross-built with mingw-w64 from packaging/windows/ffmpeg-source.lock.json by packaging/windows/build-ffmpeg.sh; GPL, no nonfree",
+  "codecs": "x265, libde265, aom and libheif built with MSVC from the Ubuntu sources and patches in packaging/windows/inputs.lock.json",
+  "pdfium": "chromium/8076 prebuilt (BSD-3-Clause and permissive third-party code); notices installed",
+  "documents": "LibreOffice 25.8.7 (MPL-2.0) repackaged unmodified from the official MSI and bundled in the MSI; source at https://download.documentfoundation.org/libreoffice/src/25.8.7/",
+  "corresponding_source": "convt-VERSION-windows-source.tar.gz, built by packaging/windows/source-archive.py and checked against both locks by scripts/release/assemble.py",
+  "signing": "Unsigned. Windows shows a SmartScreen warning; accepted for this release.",
+  "gaps": []
+}

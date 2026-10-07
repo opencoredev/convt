@@ -24,18 +24,34 @@ foreach ($File in $Lock.files) {
         throw "Hash mismatch: $($File.name); remove the cached file before retrying"
     }
 }
-Expand-Archive (Join-Path $Cache 'ffmpeg.zip') (Join-Path $Work 'ffmpeg') -Force
-$FFmpeg = Get-ChildItem "$Work/ffmpeg" -Recurse -Filter ffmpeg.exe | Select-Object -First 1
-Copy-Item "$($FFmpeg.DirectoryName)/ffmpeg.exe","$($FFmpeg.DirectoryName)/ffprobe.exe" $Out
+# FFmpeg is cross-built from pinned sources by build-ffmpeg.sh (the release
+# workflow runs it on Linux). Accept it only if its receipt matches the lock.
+$FFmpegBuild = if ($env:CONVT_WINDOWS_FFMPEG) { $env:CONVT_WINDOWS_FFMPEG } else { Join-Path $Cache 'ffmpeg-build' }
+if (!(Test-Path "$FFmpegBuild/receipt.json")) { throw "Source-built FFmpeg missing: run packaging/windows/build-ffmpeg.sh and put its output in $FFmpegBuild" }
+$FFmpegReceipt = Get-Content "$FFmpegBuild/receipt.json" -Raw | ConvertFrom-Json
+$FFmpegLock = Get-Content "$PSScriptRoot/ffmpeg-source.lock.json" -Raw | ConvertFrom-Json
+if (($FFmpegReceipt.source_inputs | ConvertTo-Json -Depth 5 -Compress) -ne ($FFmpegLock.sources | ConvertTo-Json -Depth 5 -Compress)) { throw 'FFmpeg build receipt differs from ffmpeg-source.lock.json' }
+foreach ($Tool in 'ffmpeg.exe','ffprobe.exe') {
+    if ((Get-FileHash "$FFmpegBuild/bin/$Tool" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $FFmpegReceipt.binaries.$Tool) { throw "$Tool differs from its build receipt" }
+    Copy-Item "$FFmpegBuild/bin/$Tool" $Out
+}
 $ErrorActionPreference = 'Continue'
 $BuildConfig = & "$Out/ffmpeg.exe" -buildconf 2>&1
 $BuildConfigExit = $LASTEXITCODE
+$Encoders = (& "$Out/ffmpeg.exe" -hide_banner -encoders 2>&1) -join "`n"
 $ErrorActionPreference = 'Stop'
 $BuildConfig | Out-File "$Out/licenses/ffmpeg-buildconf.txt" -Encoding utf8
 if ($BuildConfigExit -ne 0) { throw 'FFmpeg configuration probe failed' }
 $Config = Get-Content "$Out/licenses/ffmpeg-buildconf.txt" -Raw
 if ($Config -notmatch '--enable-gpl' -or $Config -notmatch '--enable-libx264' -or $Config -match '--enable-nonfree') { throw 'FFmpeg must have GPL libx264 without nonfree components' }
-Copy-Item "$($FFmpeg.DirectoryName)/../LICENSE" "$Out/licenses/ffmpeg-LICENSE.txt"
+# Every encoder the convt FFmpeg engine selects.
+foreach ($Encoder in 'libx264','libx265','libvpx-vp9','libopus','libmp3lame','libvorbis','aac','mpeg4','flac','png','pcm_s16le') {
+    if ($Encoders -notmatch "\s$([regex]::Escape($Encoder))\s") { throw "FFmpeg lacks encoder $Encoder" }
+}
+Copy-Item "$FFmpegBuild/licenses/ffmpeg-source" "$Out/licenses/ffmpeg-source" -Recurse
+Copy-Item "$FFmpegBuild/licenses/toolchain" "$Out/licenses/ffmpeg-toolchain" -Recurse
+Copy-Item "$FFmpegBuild/receipt.json" "$Out/licenses/ffmpeg-build-receipt.json"
+Copy-Item "$FFmpegBuild/licenses/ffmpeg-source/ffmpeg/COPYING.GPLv3" "$Out/licenses/ffmpeg-LICENSE.txt"
 New-Item -ItemType Directory -Force "$Work/pdfium" | Out-Null
 tar -xf "$Cache/pdfium.tgz" -C "$Work/pdfium"
 if ($LASTEXITCODE -ne 0) { throw 'PDFium extraction failed' }
@@ -68,5 +84,14 @@ cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p c
 if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
 Copy-Item target/x86_64-pc-windows-msvc/release/convt.exe,target/x86_64-pc-windows-msvc/release/convt-app.exe $Out
 Copy-Item LICENSE "$Out/LICENSE.txt"
-Copy-Item "$PSScriptRoot/inputs.lock.json","$PSScriptRoot/build-native.ps1","$PSScriptRoot/build-document-pack.py","$PSScriptRoot/document-launcher.rs","$Repo/packaging/linux/libheif-explicit-init.patch" "$Out/licenses/"
+Copy-Item "$PSScriptRoot/inputs.lock.json","$PSScriptRoot/ffmpeg-source.lock.json","$PSScriptRoot/build-ffmpeg.sh","$PSScriptRoot/build-ffmpeg-inside.sh","$PSScriptRoot/build-native.ps1","$PSScriptRoot/build-document-pack.py","$PSScriptRoot/document-launcher.rs","$Repo/packaging/linux/libheif-explicit-init.patch" "$Out/licenses/"
+@"
+convt for Windows: where the source is
+convt (AGPL-3.0-only) and this installer's build scripts: convt-<version>-source.tar.gz
+FFmpeg (GPL-3.0-or-later) and every library linked into ffmpeg.exe and ffprobe.exe,
+plus x265, libde265, aom and libheif: convt-<version>-windows-source.tar.gz
+Both are assets of the same release: https://github.com/opencoredev/convt/releases
+PDFium: https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8076
+LibreOffice 25.8.7 (MPL-2.0): https://download.documentfoundation.org/libreoffice/src/25.8.7/
+"@ | Set-Content "$Out/licenses/SOURCES.txt" -Encoding utf8
 @{ verification_only = [bool]$VerificationOnly; document_pack_sha256 = $Hash; source_date_epoch = $env:SOURCE_DATE_EPOCH } | ConvertTo-Json | Set-Content "$Out/build-receipt.json" -Encoding utf8

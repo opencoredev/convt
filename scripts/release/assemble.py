@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import shutil
 import re
+import tarfile
+import hashlib
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('downloads', type=Path)
@@ -30,7 +32,22 @@ if len(tarballs) != 1:
 assets.extend(tarballs)
 assets.append(macos / 'convt-macos-arm64.dmg')
 if args.include_windows:
-    assets.append(windows / f'convt-{args.version}-windows-x86_64.msi')
+    windows_source = windows / f'convt-{args.version}-windows-source.tar.gz'
+    assets += [windows / f'convt-{args.version}-windows-x86_64.msi', windows_source]
+    # The MSI ships only with its third-party corresponding source: every
+    # pinned tarball from both Windows locks, byte for byte.
+    repo = Path(__file__).resolve().parents[2]
+    expected = {s['name']: s['sha256'] for s in json.loads((repo / 'packaging/windows/ffmpeg-source.lock.json').read_text())['sources']}
+    expected |= {f['name']: f['sha256'] for f in json.loads((repo / 'packaging/windows/inputs.lock.json').read_text())['files']
+                 if f.get('kind') in ('source', 'patches')}
+    root = f'convt-{args.version}-windows-source'
+    with tarfile.open(windows_source) as archive:
+        for name, digest in expected.items():
+            member = archive.extractfile(f'{root}/sources/{name}')
+            if member is None or hashlib.sha256(member.read()).hexdigest() != digest:
+                raise ValueError(f'Windows source archive lacks pinned source {name}')
+        for name in ('recipe/packaging/windows/build-ffmpeg.sh', 'ffmpeg-build/receipt.json'):
+            archive.getmember(f'{root}/{name}')
 # Coverage comes from the source builder; never promote it merely because binaries exist.
 audit = json.loads((linux / 'source-audit.json').read_text())
 required = {'linux-x86_64', 'macos-arm64'}

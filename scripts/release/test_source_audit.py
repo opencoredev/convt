@@ -39,4 +39,19 @@ class MacStatus(unittest.TestCase):
  def test_repository_status_is_not_ready(self):
   self.assertTrue(audit.mac_gaps(Path(__file__).resolve().parents[2]))
 
+class WindowsStatus(unittest.TestCase):
+ def write(self,tree,relative,value):
+  path=tree/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(__import__('json').dumps(value))
+ def test_status_and_lock_must_both_be_ready(self):
+  with tempfile.TemporaryDirectory() as d:
+   tree=Path(d)
+   self.write(tree,'packaging/windows/inputs.lock.json',{'distribution_ready':True,'blockers':[]})
+   self.assertTrue(audit.windows_gaps(tree))
+   self.write(tree,'packaging/windows/release-status.json',{'distribution_ready':True,'gaps':[]})
+   self.assertEqual(audit.windows_gaps(tree),[])
+   self.write(tree,'packaging/windows/inputs.lock.json',{'distribution_ready':False,'blockers':['FFmpeg source']})
+   self.assertEqual(audit.windows_gaps(tree),['FFmpeg source'])
+ def test_repository_windows_is_ready(self):
+  self.assertEqual(audit.windows_gaps(Path(__file__).resolve().parents[2]),[])
+
 if __name__=='__main__':unittest.main()

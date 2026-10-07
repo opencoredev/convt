@@ -179,7 +179,7 @@ jobs:
           fi
           python3 scripts/release/notes.py > "$RUNNER_TEMP/release-notes.md"
           if ! find release -maxdepth 1 -name '*.msi' -print -quit | grep -q .; then
-            printf '\nWindows MSI is omitted from this release. Windows builds require the optional self-hosted leopc runner; macOS and Linux are released independently.\n' >> "$RUNNER_TEMP/release-notes.md"
+            printf '\nThe Windows MSI is omitted from this release because its build did not finish; macOS and Linux are released independently.\n' >> "$RUNNER_TEMP/release-notes.md"
           else
             printf '\nThe Windows per-user MSI and Linux packages are unsigned. macOS is Developer ID signed and notarized.\n' >> "$RUNNER_TEMP/release-notes.md"
           fi

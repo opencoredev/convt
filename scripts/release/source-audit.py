@@ -25,18 +25,30 @@ def retain(tree, cache, destination, item, cache_field='name'):
     return {'path':str(target.relative_to(tree)),'sha256':item['sha256'],'url':item['url']}
 
 
-def mac_gaps(tree):
-    """What still blocks Mac artifacts, from the Mac owner's status file. A
-    missing file blocks, a not-ready file always yields a gap, and a ready
+def status_gaps(tree, relative):
+    """What still blocks a platform's artifacts, from its owner's status file.
+    A missing file blocks, a not-ready file always yields a gap, and a ready
     file may list none."""
-    path=tree/'packaging/macos/release-status.json'
-    if not path.exists():return ['packaging/macos/release-status.json is missing']
+    path=tree/relative
+    if not path.exists():return [f'{relative} is missing']
     status=json.loads(path.read_text())
     gaps=[str(g) for g in status.get('gaps',[])]
     if status.get('distribution_ready') is True:
-        if gaps:raise ValueError('packaging/macos/release-status.json claims readiness with open gaps')
+        if gaps:raise ValueError(f'{relative} claims readiness with open gaps')
         return []
-    return gaps or ['packaging/macos/release-status.json is not ready but lists no gap']
+    return gaps or [f'{relative} is not ready but lists no gap']
+
+def mac_gaps(tree):
+    return status_gaps(tree,'packaging/macos/release-status.json')
+
+def windows_gaps(tree):
+    """Windows also needs its build lock to be ready. The windows source
+    archive itself is checked against the locks by assemble.py."""
+    gaps=status_gaps(tree,'packaging/windows/release-status.json')
+    lock=json.loads((tree/'packaging/windows/inputs.lock.json').read_text())
+    if lock.get('distribution_ready') is not True or lock.get('blockers'):
+        gaps+=[str(b) for b in lock.get('blockers',[])] or ['packaging/windows/inputs.lock.json is not ready']
+    return gaps
 
 def collect(tree, payload, cache, epoch):
     destination=tree/'third-party/native';destination.mkdir(parents=True,exist_ok=True)
@@ -108,7 +120,7 @@ def collect(tree, payload, cache, epoch):
         # The lock explicitly classifies source gaps separately from untested build environments.
         gaps.extend(g['detail'] if isinstance(g,dict) else g for g in data.get('source_gaps',data.get('remaining_gaps',[])))
         checks.append('PDFium exact revision, dependency archive and notice reproduction hashes')
-    platform_gaps={'macos-arm64':mac_gaps(tree)}
+    platform_gaps={'macos-arm64':mac_gaps(tree),'windows-x86_64':windows_gaps(tree)}
     subprocess.run([sys.executable,str(tree/'scripts/release/linux-source-scope.py'),str(tree)],cwd=tree,check=True)
     checks.append('Linux Cargo unit graph, features, pins and source bytes preserved by archived metadata derivation')
     inventory=tree/'third-party/rust-license-inventory.json'

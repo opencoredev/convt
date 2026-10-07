@@ -57,7 +57,7 @@ Compare unsigned artifacts first. `scripts/release/sign-linux.sh UNSIGNED SIGNED
 
 The uploader stages immutable version objects. It does not move a stable update pointer. Publish immutable artifacts and their matching source first, verify the objects and signatures, then atomically replace the stable manifests. Never delete a covered historical release. Publish source links from the download page, About and server API for the matching build. The web, app and server owners implement those consumers.
 
-The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows uses Azure workload identity and Trusted Signing for nested binaries before building and signing the installer. The Windows lock remains fail-closed until its native dependencies have verified pins, sources and notices. Successful authentication or signing alone does not bypass publication gates.
+The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows cross-builds FFmpeg from pinned sources on Linux, builds the unsigned per-user MSI on `windows-latest` and publishes `convt-VERSION-windows-source.tar.gz` beside it; `packaging/windows/release-status.json` feeds the source audit the same way the Mac status file does. Successful authentication or signing alone does not bypass publication gates.
 
 ## Launch checklist
 

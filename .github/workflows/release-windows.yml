@@ -28,9 +28,25 @@ on:
 permissions:
   contents: read
 jobs:
+  ffmpeg:
+    # Cross-build FFmpeg from the pinned sources in the pinned Ubuntu image.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build FFmpeg from pinned sources
+        run: CONVT_BUILD_JOBS=4 bash packaging/windows/build-ffmpeg.sh "$RUNNER_TEMP/ffmpeg-cache" "$RUNNER_TEMP/ffmpeg-build"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-ffmpeg-build
+          path: ${{ runner.temp }}/ffmpeg-build
+          if-no-files-found: error
   windows:
+    needs: ffmpeg
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
       CONVT_LICENSE_PUBKEY: ${{ vars.CONVT_LICENSE_PUBKEY }}
@@ -58,6 +74,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ffmpeg-build
+          path: packaging/cache/windows/ffmpeg-build
       - name: Build the audited Windows payload and installer
         shell: pwsh
         env:
@@ -68,8 +88,16 @@ jobs:
       - name: Package unsigned per-user MSI
         shell: pwsh
         run: ./packaging/windows/installer.ps1
+      - name: Archive the Windows corresponding source
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python packaging/windows/source-archive.py packaging/cache/windows/ffmpeg-build packaging/cache/windows $env:RELEASE_VERSION packaging/out/windows/release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows source archive failed' }
+          Copy-Item packaging/out/windows/*.msi packaging/out/windows/release/
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release-review
-          path: packaging/out/windows/*.msi
+          path: packaging/out/windows/release/*
           if-no-files-found: error
