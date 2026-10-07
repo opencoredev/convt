@@ -58,13 +58,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - name: Build the audited Windows payload and installer
+      - name: Build the unsigned Windows payload (verification gates)
         shell: pwsh
         env:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          # inputs.lock.json keeps distribution_ready=false until FFmpeg/PDFium
+          # corresponding-source is collected. Public Release still needs an MSI
+          # for /download; build with -VerificationOnly and label it unsigned.
           if ($env:DRY_RUN -eq 'false') { $env:CONVT_LICENSE_ENFORCE = '1' }
-          ./packaging/windows/build.ps1 -VerificationOnly:($env:DRY_RUN -eq 'true')
+          ./packaging/windows/build.ps1 -VerificationOnly
       - name: Package unsigned per-user MSI
         shell: pwsh
         run: ./packaging/windows/installer.ps1

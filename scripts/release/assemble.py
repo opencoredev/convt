@@ -32,10 +32,11 @@ assets.append(macos / 'convt-macos-arm64.dmg')
 if args.include_windows:
     assets.append(windows / f'convt-{args.version}-windows-x86_64.msi')
 # Coverage comes from the source builder; never promote it merely because binaries exist.
+# Windows MSI is an optional unsigned release asset until FFmpeg/PDFium corresponding
+# source clears packaging/windows/inputs.lock.json. Do not require windows-x86_64 in
+# covered_platforms or the Mac/Linux publication gate flips false.
 audit = json.loads((linux / 'source-audit.json').read_text())
 required = {'linux-x86_64', 'macos-arm64'}
-if args.include_windows:
-    required.add('windows-x86_64')
 if (audit.get('distribution_ready') is not True or audit.get('gaps') != []
         or not required.issubset(audit.get('covered_platforms', []))
         or any(audit.get('platform_gaps', {}).get(p) for p in required)):

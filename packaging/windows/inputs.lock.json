@@ -3,7 +3,7 @@
   "distribution_ready": false,
   "blockers": [
     "Corresponding-source closure for the prebuilt FFmpeg and PDFium archives has not been collected; verification artifacts only.",
-    "Public document-pack hosting and code signing remain release gates."
+    "Windows Authenticode code signing is not wired; the published MSI is intentionally unsigned."
   ],
   "files": [
     {

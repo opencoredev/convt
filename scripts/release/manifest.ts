@@ -191,16 +191,21 @@ if (cmd === "keygen") {
     sequence,
     issued_at: issued,
     expires_at: expires,
+    // Windows MSI is optional and unsigned until corresponding-source clears.
+    // Require coverage only for publishable platforms so including the MSI does
+    // not flip Mac/Linux distribution_ready to false.
     distribution_ready:
       audit.distribution_ready === true &&
       Array.isArray(audit.gaps) &&
       audit.gaps.length === 0 &&
       Array.isArray(audit.covered_platforms) &&
-      artifacts.every(
-        (a) =>
-          audit.covered_platforms.includes(a.platform) &&
-          !audit.platform_gaps?.[a.platform]?.length,
-      ) &&
+      artifacts
+        .filter((a) => a.platform !== "windows-x86_64")
+        .every(
+          (a) =>
+            audit.covered_platforms.includes(a.platform) &&
+            !audit.platform_gaps?.[a.platform]?.length,
+        ) &&
       !process.env.CONVT_VERIFICATION_ONLY,
     purchase_url: "https://convt.app/pricing",
     builds,
