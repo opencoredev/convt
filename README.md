@@ -16,7 +16,7 @@ Local file conversion for your own machine. Right-click a file, pick a format, a
 
 ## Install
 
-The CLI works from this repo today. Desktop builds will appear on the [download page](https://convt.app/download) (Linux first). A 7-day trial starts on the first conversion.
+The CLI works from this repo today. Ordinary source builds are unrestricted. Desktop builds will appear on the [download page](https://convt.app/download) (Linux first). Packaged builds start a 7-day trial on the first conversion.
 
 ```bash
 bun run setup
