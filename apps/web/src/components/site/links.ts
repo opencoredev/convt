@@ -1,4 +1,4 @@
-import { GITHUB_URL, STATUS_URL, routes } from "#/lib/site";
+import { GITHUB_URL, routes } from "#/lib/site";
 
 /** Footer columns, shared by the landing page and the other public pages. */
 export const footerColumns = [
@@ -16,7 +16,6 @@ export const footerColumns = [
     links: [
       { label: "API docs", href: routes.apiDocs },
       { label: "GitHub", href: GITHUB_URL },
-      { label: "Status", href: STATUS_URL },
     ],
   },
   {

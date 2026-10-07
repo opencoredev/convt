@@ -24,11 +24,11 @@ The release manifest is optional. Without it, or while its `distribution_ready` 
 
 The formats list comes from the registry on the building machine, and `default_registry()` registers only engines that run there. If any engine is unavailable, the script keeps the committed `content/formats.json` and warns. Set `CONVT_FORMATS_STRICT=1` in release builds to fail instead. When `CONVT_LIBHEIF_DIR` is unset and a Linux bundle exists in `packaging/out/convt/lib`, the script uses its libheif. `CONVT_BIN` picks a prebuilt `convt`; `CONVT_FORMATS_SKIP=1` skips regeneration. Turbo caches the build by this package's files, so a crate change alone does not rerun it; run `bun run generate-content` after changing formats or routes.
 
-Placeholder facts (status URL, support and privacy addresses, the legal entity, address, jurisdiction and effective date) live in `src/lib/site.ts`.
+Placeholder facts (support and privacy addresses, the legal entity, address, jurisdiction and effective date) live in `src/lib/site.ts`.
 
 ## Public pages and their content
 
-The landing page is `src/routes/index.tsx` (dark only). The other public pages live under `src/routes/_site/` and follow the visitor's light or dark setting. Their links, the status page URL, the support addresses and the legal placeholders are in `src/lib/site.ts`.
+The landing page is `src/routes/index.tsx` (dark only). The other public pages live under `src/routes/_site/` and follow the visitor's light or dark setting. Their links, the support addresses and the legal placeholders are in `src/lib/site.ts`.
 
 `bun run build` runs `scripts/generate-content.ts` before Vite. It reads these files:
 
