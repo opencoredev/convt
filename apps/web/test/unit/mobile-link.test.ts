@@ -323,9 +323,32 @@ describe("requestMobileLink", () => {
     try {
       const input = { email: "me@example.com", ip: "1.1.1.1", source: "landing" as const };
       expect(await requestMobileLink(input, deps)).toEqual({ ok: false, error: "send_failed" });
+      // An address whose email never went out is not on the list.
+      expect(deps.joined).toHaveLength(0);
       expect(JSON.stringify(errors.mock.calls)).not.toContain("example.com");
       expect(await requestMobileLink(input, deps)).toEqual({ ok: true });
       expect(deps.sent).toHaveLength(1);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("a failed list write still reports the delivered email, without logging the address", async () => {
+    const deps = fakeDeps();
+    deps.join = async () => {
+      throw new Error("db down for me@example.com");
+    };
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(
+        await requestMobileLink(
+          { email: "me@example.com", ip: "1.1.1.1", source: "landing" },
+          deps,
+        ),
+      ).toEqual({ ok: true });
+      expect(deps.sent).toHaveLength(1);
+      expect(errors).toHaveBeenCalled();
+      expect(JSON.stringify(errors.mock.calls)).not.toContain("example.com");
     } finally {
       errors.mockRestore();
     }

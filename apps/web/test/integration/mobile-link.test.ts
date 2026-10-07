@@ -102,8 +102,13 @@ test("a failed send releases the double-tap guard, so a retry sends", async () =
   } finally {
     console.error = quiet;
   }
+  const listed = async () =>
+    (await owner.execute(sql`select 1 from launch_list where email = 'retry@convt.test'`)).rows
+      .length;
+  expect(await listed()).toBe(0);
   expect(await requestMobileLink(input, deps(now, send))).toEqual({ ok: true });
   expect(sent).toHaveLength(1);
+  expect(await listed()).toBe(1);
 });
 
 const listRows = async () =>

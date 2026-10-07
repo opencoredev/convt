@@ -32,6 +32,13 @@ export function parseMobileLinkInput(data: unknown): MobileLinkInput {
   return { email: d.email, source: d.source };
 }
 
+/** An error message for the log, with any email address in it masked. */
+const logSafe = (e: unknown) =>
+  redactText(e instanceof Error ? e.message : String(e), false).replace(
+    /[^\s@<>()"',;:]+@[^\s@<>()"',;:]+/g,
+    "[email]",
+  );
+
 async function sha256Hex(text: string): Promise<string> {
   const digest = new Uint8Array(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
@@ -42,7 +49,9 @@ async function sha256Hex(text: string): Promise<string> {
 /**
  * The address's unsubscribe token: an HMAC of it under the site's auth secret, so it
  * is the same in every email and any of them unsubscribes. 43 base64url characters;
- * the database keeps only its SHA-256.
+ * the database keeps only its SHA-256. Rotating BETTER_AUTH_SECRET breaks the links in
+ * emails sent before the next one to that address; the page then points to the
+ * privacy inbox.
  */
 export async function unsubscribeToken(secret: string, email: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -144,19 +153,23 @@ export async function requestMobileLink(
     `mobile-link-${hash.slice(0, 32)}-${slot}`,
   );
   try {
+    await deps.send(message);
+  } catch (e) {
+    await deps.release(recent).catch(() => {});
+    console.error("[mobile-link] send failed", logSafe(e));
+    return { ok: false, error: "send_failed" };
+  }
+  // Only a delivered email joins the list, so every address on it has had an
+  // unsubscribe link. If this write fails the email still went out; its link then
+  // reports the address as already removed, which is true.
+  try {
     await deps.join({
       email,
       source: input.source,
       unsubscribeTokenHash: await hashUnsubscribeToken(token),
     });
-    await deps.send(message);
-    return { ok: true };
   } catch (e) {
-    await deps.release(recent).catch(() => {});
-    console.error(
-      "[mobile-link] send failed",
-      redactText(e instanceof Error ? e.message : String(e), false),
-    );
-    return { ok: false, error: "send_failed" };
+    console.error("[mobile-link] launch list write failed", logSafe(e));
   }
+  return { ok: true };
 }
