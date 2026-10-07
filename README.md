@@ -8,7 +8,7 @@
 Local file conversion for your own machine. Right-click a file, pick a format, and convt writes the result next to the original. Images, video, audio, PDFs and documents stay on disk: nothing is uploaded.
 
 - 40 formats, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
-- A desktop app built with [GPUI](https://www.gpui.rs), a Finder menu on macOS, an Explorer menu on Windows, and file manager menus on Linux
+- A desktop app built with [GPUI](https://www.gpui.rs), with a Finder menu on macOS and file manager menus on Linux. The Windows Explorer menu is built (`crates/convt-shell`) but not yet in the release installer
 - The `convt` CLI, shipped in the same install
 - Multi-hop routes of at most three steps when no engine can convert directly
 - Optional document pack for Word, Excel and PowerPoint, installed only when you ask
@@ -65,7 +65,7 @@ convt pack status documents
 
 ## Cloud API
 
-The cloud API converts files on convt's servers for a paid plan. You upload a file, start a job, and download the result. [`@convt/sdk`](packages/sdk) wraps those calls in TypeScript; see the [API docs](https://convt.app/docs) for keys, the host to call and the full reference. The API is `crates/convt-server`, and conversions run in sandboxed `crates/convt-worker` processes using the same engines as the app.
+The cloud API converts files on convt's servers for a paid plan. You upload a file, start a job, and download the result. [`@convt/sdk`](packages/sdk) wraps those calls in TypeScript but is not on npm yet; see the [API docs](https://convt.app/docs) for keys, the host to call and the full reference. The API is `crates/convt-server`, and conversions run in sandboxed `crates/convt-worker` processes using the same engines as the app.
 
 ## Documentation
 

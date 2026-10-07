@@ -10,7 +10,7 @@ Users are people who want to convert files without uploading them. Conversions r
 - `crates/convt-engines`: FFmpeg (subprocess), `image`, resvg, PDFium (dynamically loaded from `vendor/pdfium`), LibreOffice (headless subprocess), HEIC via libheif (dynamically loaded) or `sips` on macOS. `default_registry()` registers whatever runs on this machine.
 - `crates/convt-cli`: the `convt` binary. `convt <files or folders> --to <fmt>` with options, `--preset`, `--json` progress, `-r` and `-j`; `convt formats [--json]`, `convt targets <file> [--menu]` (`--menu`: the short list right-click menus offer), `convt engines`, `convt presets`, `convt pack [status|install|remove] documents`, `convt license [status|activate|remove]`.
 - `crates/convt-app`: the desktop app, built on GPUI through `gpui-kit`. Excluded from `default-members` because it needs system UI libraries.
-- `crates/convt-shell`: the Windows Explorer menu's COM handler (a DLL). It asks the installed `convt targets --menu` for targets and launches the app to convert.
+- `crates/convt-shell`: the Windows Explorer menu's COM handler (a DLL). It asks the installed `convt targets --menu` for targets and launches the app to convert. The release MSI (`packaging/windows/build.ps1`) does not bundle it yet; `integrations/windows/README.md` builds a per-user installer that does.
 - `crates/convt-ffi`: uniffi bindings for the OS integrations.
 - `crates/convt-license`: Ed25519 offline license keys with an `updates_until` window, and (feature `client`) the trial and key storage every client shares.
 - `crates/convt-update`: offline verification of signed update manifests against license coverage. Callers own the download.
@@ -22,7 +22,7 @@ Users are people who want to convert files without uploading them. Conversions r
 - `apps/docs`: convt.app/docs, a static [Blume](https://useblume.dev) site deployed as the `convt-docs` Worker on the `convt.app/docs*` routes. The API reference renders `crates/convt-server/openapi.json` through the overlay in `apps/docs/openapi/public.yaml`; the formats page is generated from `crates/convt-server/cloud-formats.json`. `apps/docs/api-host.ts` holds the API host the samples use.
 - `apps/billing`: the `convt-billing` Worker: the Polar webhook route, the billing crons and the `BillingRpc` entrypoint. The only holder of the license signing key and the Polar and Resend secrets; connects as `convt_billing`.
 - `apps/desktop`, `tools/cli`: version metadata for Changesets (`.changeset/README.md`), not code. The binaries come from `crates/convt-app` and `crates/convt-cli`.
-- `packages/sdk`: `@convt/sdk`, the TypeScript client for the cloud API. It defaults to the production API host; pass `baseUrl` to point it elsewhere.
+- `packages/sdk`: `@convt/sdk`, the TypeScript client for the cloud API. Not published to npm yet. Its default host does not resolve yet, so pass `baseUrl`; `apps/docs/api-host.ts` has the host the docs use.
 - `packages/billing`: the billing logic both Workers and the tests share: the catalog, the Polar adapter and webhook verifier, ingest, license issuance, the email outbox, the reconciler and account deletion.
 - `packages/mail`: the transactional email templates and transports (Resend, Mailpit, log).
 - `packages/db`: the Postgres schema (Drizzle), migrations with hand-written down files, grants and triggers, the query functions the web app calls, the fixture seed, and the drift check. convt-server reads the same tables through sqlx.
@@ -41,9 +41,9 @@ bun run rs:check              # fmt + clippy -D warnings
 cargo run -p convt-cli -- photo.png --to webp
 cargo run -p convt-app        # needs the GPUI system libraries
 bun run check                 # oxlint + oxfmt --check
-bun run check-types           # tsc in every package
+bun run check-types           # tsc in packages with a check-types script
 bun run build                 # web app, docs site and SDK
-bun run --cwd packages/sdk test  # each TS package has its own `test` script
+bun run --cwd packages/sdk test  # most TS packages have a `test` script; apps/docs uses `validate`
 bun run --cwd apps/docs dev   # docs on :4321; `validate` checks links, `deploy` ships convt.app/docs
 ```
 
