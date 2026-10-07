@@ -8,21 +8,25 @@
 Local file conversion for your own machine. Right-click a file, pick a format, and convt writes the result next to the original. Images, video, audio, PDFs and documents stay on disk: nothing is uploaded.
 
 - 40 formats, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
-- `convt` CLI today; desktop app coming Linux-first. Finder and Explorer menus are not ready
+- A desktop app built with [GPUI](https://www.gpui.rs), a Finder menu on macOS, an Explorer menu on Windows, and file manager menus on Linux
+- The `convt` CLI, shipped in the same install
 - Multi-hop routes of at most three steps when no engine can convert directly
 - Optional document pack for Word, Excel and PowerPoint, installed only when you ask
+- A paid cloud API and TypeScript SDK for converting files on convt's servers
 - Accounts, checkout and downloads on [convt.app](https://convt.app)
 
 ## Install
 
-The CLI works from this repo today. Ordinary source builds are unrestricted. Desktop builds will appear on the [download page](https://convt.app/download) (Linux first). Packaged builds start a 7-day trial on the first conversion.
+Download the app from [convt.app/download](https://convt.app/download). Release 0.2.0 has a disk image for macOS on Apple silicon and an MSI installer for Windows x86_64. The Linux packages (AppImage, .deb, .rpm and a tarball) build from `packaging/linux` but are not in a release yet. Packaged builds start a 7-day trial on the first conversion.
+
+To build from source:
 
 ```bash
 bun run setup
 cargo run -p convt-cli -- photo.png --to webp
 ```
 
-`bun run setup` installs system packages (asks for sudo on Linux and macOS), the Rust toolchain, Bun dependencies and PDFium. On Windows run `scripts/setup-windows.ps1` in PowerShell.
+`bun run setup` installs system packages (asks for sudo on Linux and macOS), the Rust toolchain, Bun dependencies and PDFium. On Windows run `scripts/setup-windows.ps1` in PowerShell. Ordinary source builds are unrestricted.
 
 ## Usage
 
@@ -59,12 +63,17 @@ convt pack status documents
 
 `convt --help` lists quality, size, pages, DPI, video and job flags. See [AGENTS.md](AGENTS.md) for the rest of the commands in this repo.
 
+## Cloud API
+
+The cloud API converts files on convt's servers for a paid plan. You upload a file, start a job, and download the result. [`@convt/sdk`](packages/sdk) wraps those calls in TypeScript; see the [API docs](https://convt.app/docs) for keys, the host to call and the full reference. The API is `crates/convt-server`, and conversions run in sandboxed `crates/convt-worker` processes using the same engines as the app.
+
 ## Documentation
 
-- **[convt.app](https://convt.app)** — product site, pricing and sign-in
-- **[Download](https://convt.app/download)** — desktop builds and matching source archives
-- **[Formats](https://convt.app/formats)** — every format and the targets it can reach
-- **[AGENTS.md](AGENTS.md)** — crate layout, conventions and how to run the website locally
+- **[convt.app](https://convt.app)**: product site, pricing and sign-in
+- **[Download](https://convt.app/download)**: desktop builds and matching source archives
+- **[Formats](https://convt.app/formats)**: every format and the targets it can reach
+- **[API docs](https://convt.app/docs)**: the cloud API, the SDK and the API reference
+- **[AGENTS.md](AGENTS.md)**: repo layout, conventions, and how to check, test and build
 
 ## License
 
