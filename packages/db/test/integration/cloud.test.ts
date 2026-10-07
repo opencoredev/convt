@@ -29,8 +29,10 @@ test("keys are hashed, owner checked, revocable and enrollment required", async 
 });
 test("annual Pro allowance is monthly and API cap exposes settled plus reserved", async () => {
   const { db } = await tdb.open("web");
+  expect((await cloudAllowance(db, fixtureId("usr", "pro"), "pro")).allowed).toBe(true);
   expect((await cloudAllowance(db, fixtureId("usr", "pro"), "pro")).limit).toBe(50_000_000_000);
-  expect((await cloudAllowance(db, fixtureId("usr", "trial"), "pro")).allowed).toBe(false);
+  expect((await cloudAllowance(db, fixtureId("usr", "trial"), "pro")).allowed).toBe(true);
+  expect((await cloudAllowance(db, fixtureId("usr", "new"), "pro")).allowed).toBe(false);
   const api = await cloudAllowance(db, fixtureId("usr", "pro"), "api");
   expect(api.allowed).toBe(true);
   expect(api.limit).toBeGreaterThan(0);

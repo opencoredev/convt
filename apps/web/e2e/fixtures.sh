@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Every seeded fixture on all four dashboard pages and settings, at 1280 and 390
+# Every seeded fixture on the dashboard pages and settings, at 1280 and 390
 # px, in light and dark, with a text check per state. Needs `bun run db:seed`.
 source "$(dirname "$0")/lib.sh"
 
-pages=(dashboard dashboard/licenses dashboard/billing dashboard/api account)
+pages=(dashboard dashboard/licenses dashboard/billing dashboard/cloud dashboard/api account)
 name_of() { local p=${1//\//-}; echo "${p/dashboard-/}"; }
 
 # fixture | page | text the page must show
@@ -11,19 +11,25 @@ expectations=(
   "new|dashboard|No plan" "new|dashboard|No key yet" "new|dashboard|Not set up"
   "new|dashboard/licenses|No licenses on this account yet." "new|dashboard/billing|No plan"
   "new|dashboard/billing|No invoices yet." "new|dashboard/api|No keys yet."
+  "new|dashboard/cloud|Cloud convert is included with Pro"
   "trial|dashboard|Pro trial" "trial|dashboard|Trial ends" "trial|dashboard/licenses|Pro, free trial"
   "trial|dashboard/billing|TRIAL" "trial|dashboard/billing|Free until"
+  "trial|dashboard/cloud|Convert a file in the browser"
   "desktop|dashboard|Desktop" "desktop|dashboard|Active on 1 Mac" "desktop|dashboard|Dana's MacBook Air"
   "desktop|dashboard/licenses|Desktop License, bought" "desktop|dashboard/billing|No plan"
   "desktop|dashboard/billing|Desktop License, 12 months of updates"
+  "desktop|dashboard/cloud|Cloud convert is included with Pro"
   "pro|dashboard|Renews" "pro|dashboard|Updates included" "pro|dashboard|API this month"
   "pro|dashboard/licenses|Pro, yearly" "pro|dashboard/licenses|Desktop License, bought"
   "pro|dashboard/billing|ACTIVE" "pro|dashboard/billing|API, pay per conversion" "pro|dashboard/billing|\$96.00"
   "pro|dashboard/api|9,412" "pro|dashboard/api|Production" "pro|dashboard/api|cvt_live_"
+  "pro|dashboard/cloud|Convert a file in the browser"
   "pro|account|ID 100200300" "pro|account|Leo's MacBook Pro"
   "lapsed|dashboard|Ended" "lapsed|dashboard|Builds up to" "lapsed|dashboard/billing|CANCELED"
   "lapsed|dashboard/billing|Pro, monthly (payment failed)"
+  "lapsed|dashboard/cloud|Cloud convert is included with Pro"
   "api|dashboard|API this month" "api|dashboard|No plan" "api|dashboard/api|Backend" "api|dashboard/billing|Spend cap"
+  "api|dashboard/cloud|Cloud convert is included with Pro"
 )
 expected_for() { for e in "${expectations[@]}"; do IFS='|' read -r f p t <<<"$e"; [[ $f == "$1" && $p == "$2" ]] && echo "$t"; done; }
 
@@ -39,6 +45,12 @@ for fixture in new trial desktop pro lapsed api; do
       check "$fixture /$page shows \"$want\"" grep -qF "$want" <<<"$text"
     done < <(expected_for "$fixture" "$page")
     check "$fixture /$page has no sample-data badge or preview note" bash -c '! grep -qE "Sample data|Preview only" <<<"$1"' _ "$text"
+    if [[ $page == dashboard/cloud ]]; then
+      check "$fixture /$page has no 50 GB meter or paid-only gate" bash -c '! grep -qE "50 GB|needs paid Pro" <<<"$1"' _ "$text"
+    fi
+    if [[ $page == dashboard/api ]]; then
+      check "$fixture /$page does not nest the cloud converter" bash -c '! grep -qE "Convert in your browser|Cloud conversions are coming soon" <<<"$1"' _ "$text"
+    fi
     for w in desktop phone; do
       width "$w"
       for th in light dark; do

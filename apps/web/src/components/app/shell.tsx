@@ -9,6 +9,7 @@ const tabs = [
   { to: "/dashboard", label: "Overview", exact: true },
   { to: "/dashboard/licenses", label: "Licenses", exact: false },
   { to: "/dashboard/billing", label: "Billing", exact: false },
+  { to: "/dashboard/cloud", label: "Cloud", exact: false },
   { to: "/dashboard/api", label: "API", exact: false },
   { to: "/account", label: "Settings", exact: false },
 ] as const;

@@ -34,6 +34,14 @@ export async function revokeApiKey(db: Db, userId: string, id: string): Promise<
     .returning({ id: apiKeys.id });
   return rows.length === 1;
 }
+/** Soft compute-cost budget for Pro/trial cloud convert. Hidden from the UI.
+ *  Pro jobs record `amount_cents = 0` today; CNV-30 enforces this and alerts. */
+export const PRO_CLOUD_SOFT_BUDGET_CENTS = 800;
+
+export function proCloudSoftBudgetExceeded(amountCents: number): boolean {
+  return amountCents >= PRO_CLOUD_SOFT_BUDGET_CENTS;
+}
+
 export async function cloudAllowance(db: Db, userId: string, kind: "api" | "pro") {
   const sub = await db.execute<{
     id: string;
@@ -42,7 +50,7 @@ export async function cloudAllowance(db: Db, userId: string, kind: "api" | "pro"
     cap: number;
     period: string;
   }>(
-    sql`select id,status,coalesce((status='active' and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null)),false) as usable,coalesce(spend_cap_cents,0) as cap,case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as period from subscriptions where user_id=${userId} and kind=${kind} order by created_at desc limit 1`,
+    sql`select id,status,coalesce(((status='active' or (kind='pro' and status='trialing')) and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null)),false) as usable,coalesce(spend_cap_cents,0) as cap,case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as period from subscriptions where user_id=${userId} and kind=${kind} order by created_at desc limit 1`,
   );
   const row = sub.rows[0];
   if (!row)
