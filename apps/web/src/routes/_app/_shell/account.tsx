@@ -86,7 +86,7 @@ function CardHeader({
 function SettingsPage() {
   const settings = Route.useLoaderData();
   const { error: linkError } = Route.useSearch();
-  // Apple sign-in is not available yet; it says so.
+  // Apple is hidden until it is configured (CNV-20); its branch below waits for that.
   const placeholder = usePlaceholderAction();
   const notice = useNotice();
   const router = useRouter();
@@ -241,7 +241,7 @@ function SettingsPage() {
         <CardHeader
           id="sessions-title"
           title="Where you're signed in"
-          body="Browsers and Macs using this account. Signing out a Mac frees its license seat."
+          body="Browsers and computers using this account. Signing out a computer frees its license seat."
         >
           <SecondaryButton
             onClick={async () => {
@@ -385,9 +385,9 @@ function DeleteAccount({
           Deleting your account
         </h2>
         <p className="text-[13px]/5 text-ink-2">
-          We're ending your subscriptions, then removing the account. Every other browser and Mac is
-          already signed out. If this takes more than a few minutes, it continues in the background
-          and finishes on its own.
+          We're ending your subscriptions, then removing the account. Every other browser and
+          computer is already signed out. If this takes more than a few minutes, it continues in the
+          background and finishes on its own.
         </p>
       </section>
     );
@@ -404,8 +404,8 @@ function DeleteAccount({
             Delete account
           </h2>
           <p className="text-[13px]/4 text-ink-2">
-            Cancels Pro, revokes API keys and signs out every Mac. Receipts stay with our payment
-            provider.
+            Cancels Pro, revokes API keys and signs out every computer. Receipts stay with our
+            payment provider.
           </p>
         </div>
         {open ? null : (

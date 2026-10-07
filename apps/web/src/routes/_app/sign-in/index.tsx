@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { AuthLayout } from "#/components/app/auth-layout";
 import { FormError } from "#/components/app/form-error";
 import { usePlaceholderAction } from "#/components/app/notice";
+import { SocialSignIn } from "#/components/app/social-sign-in";
 import { cx, focusRing } from "#/components/app/ui";
 import { authErrorMessage, sendSignInCode, startSocialSignIn } from "#/lib/auth-client";
 import { safeRedirect } from "#/lib/safe-redirect";
@@ -25,14 +26,6 @@ export const Route = createFileRoute("/_app/sign-in/")({
   head: () => ({ meta: [{ title: "Sign in · convt" }] }),
   component: SignInPage,
 });
-
-// Sign-in providers. Buttons are text-only by Leo's decision. Apple waits for the
-// Apple Developer account (plan P4).
-const providers = [
-  { id: "github", label: "GitHub" },
-  { id: "google", label: "Google" },
-  { id: "apple", label: "Apple" },
-] as const;
 
 function SignInPage() {
   const { email: initialEmail, redirect: redirectTo, error: callbackError } = Route.useSearch();
@@ -107,38 +100,16 @@ function SignInPage() {
         </button>
       </form>
 
-      <div className="flex flex-col gap-2.5">
-        <div className="flex items-center gap-3">
-          <span className="h-px flex-1 bg-line" />
-          <span className="text-xs/4 text-ink-3">or continue with</span>
-          <span className="h-px flex-1 bg-line" />
-        </div>
-        <div className="flex gap-2">
-          {providers
-            .filter((provider) => provider.id === "apple" || available[provider.id])
-            .map((provider) => (
-              <button
-                key={provider.id}
-                type="button"
-                onClick={async () => {
-                  if (provider.id === "apple") return placeholder("Signing in with Apple");
-                  setError(null);
-                  const result = await startSocialSignIn(
-                    provider.id,
-                    safeRedirect(redirectTo, siteOrigin()),
-                  );
-                  if (!result.ok) setError(result.message);
-                }}
-                className={cx(
-                  "h-10 flex-1 cursor-pointer rounded-lg bg-raised text-[13px]/4 font-medium shadow-button hover:bg-hover dark:bg-sunken",
-                  focusRing,
-                )}
-              >
-                {provider.label}
-              </button>
-            ))}
-        </div>
-      </div>
+      <SocialSignIn
+        available={available}
+        onSelect={async (provider) => {
+          // Apple only renders once configured (CNV-20), which replaces this placeholder.
+          if (provider === "apple") return placeholder("Signing in with Apple");
+          setError(null);
+          const result = await startSocialSignIn(provider, safeRedirect(redirectTo, siteOrigin()));
+          if (!result.ok) setError(result.message);
+        }}
+      />
 
       <p id={hintId} className="text-xs/[18px] text-ink-3">
         Bought a license without an account? Use the email from your receipt and it will be waiting
