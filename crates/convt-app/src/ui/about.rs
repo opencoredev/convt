@@ -10,7 +10,7 @@ use crate::account::VERSION;
 use crate::model::AppState;
 
 /// The About window's size.
-pub(super) const ABOUT_SIZE: (f32, f32) = (340., 340.);
+pub(super) const ABOUT_SIZE: (f32, f32) = (340., 320.);
 
 pub struct AboutView {
     app: Entity<AppState>,
@@ -75,7 +75,7 @@ impl Render for AboutView {
                     .child(
                         styled(size::SMALL, p.secondary)
                             .text_center()
-                            .child("Convert files on your own computer. Nothing is uploaded."),
+                            .child("Convert files without uploading them."),
                     )
                     .child(
                         div()
