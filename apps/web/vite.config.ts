@@ -9,8 +9,17 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 
 const landingOnly = process.env.CONVT_LANDING_ONLY === "1";
 
-const config = defineConfig({
+const config = defineConfig(({ mode }) => ({
   resolve: { tsconfigPaths: true },
+  // Public PostHog token. Override with VITE_PUBLIC_POSTHOG_KEY; an empty value
+  // disables the client SDK. Production builds bake the convt.app project token
+  // so tip redeploy does not depend on a CI secret.
+  define: {
+    "import.meta.env.VITE_PUBLIC_POSTHOG_KEY": JSON.stringify(
+      process.env.VITE_PUBLIC_POSTHOG_KEY?.trim() ??
+        (mode === "production" ? "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw" : ""),
+    ),
+  },
   plugins: [
     devtools(),
     // convt-billing runs beside the site as an auxiliary Worker, reached through the
@@ -34,6 +43,6 @@ const config = defineConfig({
     }),
     viteReact(),
   ],
-});
+}));
 
 export default config;

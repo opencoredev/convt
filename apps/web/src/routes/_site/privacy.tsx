@@ -132,12 +132,18 @@ const sections: LegalSection[] = [
               <span className={strong}>Purchases:</span> your orders, subscriptions, invoices and
               license keys. Card details go to our payment provider and never reach us.
             </>,
+            <>
+              <span className={strong}>Site analytics:</span> convt.app uses PostHog (US) to record
+              page views and clicks on this website so we can see which pages are used. That is
+              only on convt.app. The desktop app and the command line tool still send nothing.
+            </>,
           ]}
         />
         <p>
-          The site sets only the cookies it needs to work: the sign-in session and, during a
-          purchase, a short-lived cookie that lets this browser show your new license key. There are
-          no analytics, advertising or third-party tracking cookies.
+          The site sets the cookies it needs to work: the sign-in session and, during a purchase, a
+          short-lived cookie that lets this browser show your new license key. PostHog may also
+          store a first-party identifier in this browser for those page views. There is no
+          advertising or other third-party tracking.
         </p>
       </>
     ),
@@ -161,6 +167,10 @@ const sections: LegalSection[] = [
             <>
               <span className={strong}>Cloudflare</span> hosts convt.app and stores cloud conversion
               files.
+            </>,
+            <>
+              <span className={strong}>PostHog</span> records page views and clicks on convt.app
+              under its own privacy policy.
             </>,
             <>
               <span className={strong}>Railway</span> hosts our Postgres database and the conversion

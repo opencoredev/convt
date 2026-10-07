@@ -13,6 +13,9 @@
     "BETTER_AUTH_URL": "https://convt.app",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
+    // Public PostHog project token (US 650236). Safe in the browser. The client
+    // also reads VITE_PUBLIC_POSTHOG_KEY from the Vite bundle.
+    "VITE_PUBLIC_POSTHOG_KEY": "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw",
   },
   // Hyperdrive "convt-web-production": Railway Postgres as convt_web, caching disabled,
   // Railway's certificate verified. Locally, Wrangler and the Vite plugin read
@@ -38,6 +41,7 @@
         "BETTER_AUTH_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
+        "VITE_PUBLIC_POSTHOG_KEY": "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw",
       },
       // Hyperdrive "convt-web-staging", caching disabled.
       "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "0ba8c3fa16c14bfaa15cc18f78c54995" }],

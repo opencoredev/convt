@@ -11,3 +11,11 @@ OAUTH_MOCK_URL=http://127.0.0.1:4100
 
 # Production and staging use MAIL_TRANSPORT=sequenzy and the SEQUENZY_API_KEY
 # Worker secret. MAIL_FROM is convt <hello@convt.app>. Local mail stays in Mailpit.
+
+# Public PostHog project token (US project 650236, host https://us.i.posthog.com).
+# Safe for the browser. Production and staging set this as a Worker var in
+# wrangler.jsonc; tip-redeploy apps/web after merge so convt.app picks it up.
+# The client reads VITE_PUBLIC_POSTHOG_KEY from the Vite bundle (or, in a
+# production build, falls back to this same token). scripts/dev-web.sh does not
+# write this, so local pageviews stay off unless you export it or add a .env.
+VITE_PUBLIC_POSTHOG_KEY=phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw

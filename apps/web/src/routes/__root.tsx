@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { HeadContent, Scripts, createRootRoute, useMatches } from "@tanstack/react-router";
 
+import { Analytics } from "#/components/site/analytics";
 import appCss from "../styles.css?url";
 
 declare module "@tanstack/react-router" {
@@ -63,7 +64,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <Analytics>{children}</Analytics>
         {Devtools && (
           <Suspense fallback={null}>
             <Devtools />
