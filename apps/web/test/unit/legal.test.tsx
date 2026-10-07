@@ -16,9 +16,10 @@ for (const [name, route] of [
 ] as const) {
   test(`/${name} shows no draft notice or bracket placeholder`, () => {
     const html = render(route);
-    expect(html).not.toContain("Draft");
+    const text = html.replace(/<[^>]*>/g, "");
+    expect(text).not.toMatch(/draft|placeholder|todo/i);
     expect(html).not.toContain("<mark");
-    expect(html).not.toMatch(/\[[A-Z][^\]]*\]/);
+    expect(text).not.toMatch(/\[[^\]]*\]/);
     expect(html).toContain("Effective ");
   });
 }

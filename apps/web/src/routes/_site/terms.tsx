@@ -33,8 +33,8 @@ const strong = "font-medium text-ink";
 
 /** The refund promise for each policy `legal.refunds` can pick. */
 const refundText: Record<RefundPolicy, string> = {
-  "14-days": `If convt is not right for you, email ${SUPPORT_EMAIL} within 14 days of a payment, including a Pro renewal, and we will refund it in full. You do not need to give a reason.`,
-  "30-days": `If convt is not right for you, email ${SUPPORT_EMAIL} within 30 days of a payment, including a Pro renewal, and we will refund it in full. You do not need to give a reason.`,
+  "14-days": `If convt is not right for you, email ${SUPPORT_EMAIL} within 14 days of paying for a Desktop license or Pro, including a Pro renewal, and we will refund it in full. You do not need to give a reason.`,
+  "30-days": `If convt is not right for you, email ${SUPPORT_EMAIL} within 30 days of paying for a Desktop license or Pro, including a Pro renewal, and we will refund it in full. You do not need to give a reason.`,
   "case-by-case": `Payments are not refundable as a rule. We refund a payment we took by mistake or twice, and whenever the law where you live gives you the right to one; email ${SUPPORT_EMAIL} and we will sort it out.`,
 };
 
@@ -104,11 +104,12 @@ const sections: LegalSection[] = [
         <p>{refundText[legal.refunds]}</p>
         <p>
           Polar sends every refund to the payment method you used. A refund in full revokes the
-          license key that payment bought: the dashboard marks it as refunded, and you agree to stop
-          using it. A refund of a Pro payment does not cancel the subscription, so cancel it on the
-          dashboard as well. API usage pays for conversions that already ran, so we refund it only
-          when we billed it wrongly. None of this limits the rights consumer law gives you where you
-          live.
+          license key that payment bought, and the dashboard marks it as refunded. Keys are checked
+          offline, so revoking one cannot switch off a copy that already uses it; by taking the
+          refund you agree to stop using that key. A refund of a Pro payment does not cancel the
+          subscription, so cancel it on the dashboard as well. API usage pays for conversions that
+          already ran, so we refund it only when we billed it wrongly. None of this limits the
+          rights consumer law gives you where you live.
         </p>
       </>
     ),
@@ -181,8 +182,9 @@ const sections: LegalSection[] = [
       <>
         <p>
           You can stop using convt at any time, and delete your account from Settings on the
-          dashboard. Deleting it ends any subscription straight away. Desktop and Pro keys you paid
-          for keep working offline for every version they cover.
+          dashboard. Deleting it first ends any subscription, without a refund for the rest of the
+          period, then removes the account; this usually takes minutes and can take up to a day.
+          Desktop and Pro keys you paid for keep working offline for every version they cover.
         </p>
         <p>
           We may suspend or close an account, or revoke API keys and cloud access, if you seriously
