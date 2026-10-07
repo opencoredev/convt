@@ -139,9 +139,10 @@ impl LibheifEngine {
     }
 
     /// Writes an Exif orientation tag onto an existing HEIC/AVIF, without
-    /// adding `irot`/`imir`. Tests use this to prove EXIF-only files rotate
-    /// once, and that a matching EXIF next to `irot` does not rotate twice.
+    /// adding `irot`/`imir`. Kept for libheif-backed fixtures; orientation
+    /// tests inject the Exif item without loading the library.
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn write_exif_orientation(&self, path: &Path, orientation: u8) -> Result<()> {
         let lib = self
             .lib

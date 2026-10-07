@@ -80,6 +80,9 @@ jobs:
       - name: Test (core)
         if: matrix.suite == 'core'
         run: cargo test --workspace --exclude convt-app
+      - name: HEIC orientation (macOS sips, must not skip)
+        if: runner.os == 'macOS' && matrix.suite == 'core'
+        run: cargo test -p convt-engines --lib heic_orientation -- --nocapture --test-threads=1
       - name: Clippy (desktop)
         if: matrix.suite == 'desktop'
         run: cargo clippy -p convt-app --all-targets -- -D warnings

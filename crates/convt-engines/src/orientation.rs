@@ -526,6 +526,430 @@ pub(crate) fn inject_heif_transforms(
     Ok(out)
 }
 
+/// HEIF Exif item: 4-byte TIFF offset (0) then a TIFF with Orientation.
+#[cfg(test)]
+fn exif_item_payload(orientation: u8) -> Vec<u8> {
+    let mut payload = 0u32.to_be_bytes().to_vec();
+    payload.extend_from_slice(&tiff_orientation(orientation));
+    payload
+}
+
+/// Byte range of the first `Exif` item in `data`, if any.
+#[cfg(test)]
+fn heif_exif_item_extent(data: &[u8]) -> Option<(usize, usize)> {
+    let mut found = None;
+    for_each_box(data, |typ, payload| {
+        if found.is_some() {
+            return;
+        }
+        if typ == *b"meta" && payload.len() > 4 {
+            found = heif_exif_extent_in_meta(&payload[4..], data);
+        }
+    });
+    found
+}
+
+#[cfg(test)]
+fn heif_exif_extent_in_meta(meta: &[u8], file: &[u8]) -> Option<(usize, usize)> {
+    let mut exif_id = None;
+    let mut locations: Vec<(u32, u64, u64)> = Vec::new();
+    for_each_box(meta, |typ, payload| {
+        if typ == *b"iinf" && payload.len() > 4 {
+            exif_id = exif_id.or_else(|| exif_item_id(&payload[4..]));
+        }
+        if typ == *b"iloc" {
+            locations = parse_iloc(payload);
+        }
+    });
+    let id = exif_id?;
+    let (_, offset, length) = locations.into_iter().find(|(item, _, _)| *item == id)?;
+    let start = offset as usize;
+    let end = start.saturating_add(length as usize);
+    if end > file.len() || start >= file.len() {
+        return None;
+    }
+    Some((start, end - start))
+}
+
+/// Writes an Exif Orientation tag as a HEIF `Exif` item, without adding
+/// `irot`/`imir`. Replaces an existing Exif item in place when one is present.
+#[cfg(test)]
+pub(crate) fn inject_heif_exif(data: &[u8], orientation: u8) -> Result<Vec<u8>> {
+    let payload = exif_item_payload(orientation);
+    if let Some((offset, length)) = heif_exif_item_extent(data) {
+        if length < payload.len() {
+            return Err(failed("existing Exif item is too small to replace"));
+        }
+        let mut out = data.to_vec();
+        out[offset..offset + payload.len()].copy_from_slice(&payload);
+        return Ok(out);
+    }
+    append_heif_exif_item(data, &payload)
+}
+
+#[cfg(test)]
+fn append_heif_exif_item(data: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
+    let item_id = next_heif_item_id(data)?;
+    let primary = pitm_id(data).unwrap_or(1);
+    let mut out = data.to_vec();
+
+    let iinf = find_located(&out, b"iinf").ok_or_else(|| failed("HEIF file has no iinf box"))?;
+    let infe = make_infe(item_id, first_infe_version(&out[iinf.payload..iinf.end]))?;
+    let insert_at = iinf.end;
+    out.splice(insert_at..insert_at, infe.iter().copied());
+    bump_iinf_count(&mut out, iinf.payload)?;
+    add_to_size(&mut out, iinf.offset, infe.len() as i64)?;
+    let meta = find_located(&out, b"meta").ok_or_else(|| failed("HEIF file has no meta box"))?;
+    add_to_size(&mut out, meta.offset, infe.len() as i64)?;
+    bump_iloc_offsets(&mut out, insert_at, infe.len() as i64)?;
+
+    add_iref_cdsc(&mut out, item_id, primary)?;
+
+    let iloc = find_located(&out, b"iloc").ok_or_else(|| failed("HEIF file has no iloc box"))?;
+    let entry = make_iloc_entry(
+        &out[iloc.payload..iloc.end],
+        item_id,
+        0,
+        payload.len() as u64,
+    )?;
+    let insert_at = iloc.end;
+    out.splice(insert_at..insert_at, entry.iter().copied());
+    bump_iloc_item_count(&mut out, iloc.payload)?;
+    add_to_size(&mut out, iloc.offset, entry.len() as i64)?;
+    let meta = find_located(&out, b"meta").ok_or_else(|| failed("HEIF file has no meta box"))?;
+    add_to_size(&mut out, meta.offset, entry.len() as i64)?;
+    bump_iloc_offsets(&mut out, insert_at, entry.len() as i64)?;
+
+    let extent = out.len() + 8;
+    out.extend_from_slice(&heif_box(b"mdat", payload));
+    patch_iloc_item_offset(&mut out, item_id, extent as u64)?;
+    Ok(out)
+}
+
+#[cfg(test)]
+fn pitm_id(data: &[u8]) -> Option<u32> {
+    let loc = find_located(data, b"pitm")?;
+    let payload = &data[loc.payload..loc.end];
+    if payload.len() < 6 {
+        return None;
+    }
+    if payload[0] == 0 {
+        Some(u16::from_be_bytes(payload[4..6].try_into().ok()?) as u32)
+    } else if payload.len() >= 8 {
+        Some(u32::from_be_bytes(payload[4..8].try_into().ok()?))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+fn iinf_entries(payload: &[u8]) -> &[u8] {
+    if payload.len() < 6 {
+        return &[];
+    }
+    if payload[0] == 0 {
+        &payload[6..]
+    } else if payload.len() >= 8 {
+        &payload[8..]
+    } else {
+        &[]
+    }
+}
+
+#[cfg(test)]
+fn next_heif_item_id(data: &[u8]) -> Result<u32> {
+    let mut max = pitm_id(data).unwrap_or(0);
+    if let Some(iinf) = find_located(data, b"iinf") {
+        let mut rest = iinf_entries(&data[iinf.payload..iinf.end]);
+        while rest.len() >= 8 {
+            let size = u32::from_be_bytes(rest[..4].try_into().unwrap()) as usize;
+            if size < 8 || size > rest.len() {
+                break;
+            }
+            if &rest[4..8] == b"infe" {
+                let body = &rest[8..size];
+                if !body.is_empty() {
+                    let version = body[0];
+                    let id = if version >= 3 && body.len() >= 8 {
+                        Some(u32::from_be_bytes(body[4..8].try_into().unwrap()))
+                    } else if version >= 2 && body.len() >= 6 {
+                        Some(u16::from_be_bytes(body[4..6].try_into().unwrap()) as u32)
+                    } else {
+                        None
+                    };
+                    if let Some(id) = id {
+                        max = max.max(id);
+                    }
+                }
+            }
+            rest = &rest[size..];
+        }
+    }
+    if max == 0 {
+        return Err(failed("HEIF file has no items"));
+    }
+    max.checked_add(1)
+        .ok_or_else(|| failed("HEIF item id overflow"))
+}
+
+#[cfg(test)]
+fn first_infe_version(iinf_payload: &[u8]) -> u8 {
+    let entries = iinf_entries(iinf_payload);
+    if entries.len() >= 9 && &entries[4..8] == b"infe" {
+        entries[8]
+    } else {
+        2
+    }
+}
+
+#[cfg(test)]
+fn make_infe(item_id: u32, version: u8) -> Result<Vec<u8>> {
+    let version = if item_id > u32::from(u16::MAX) {
+        3
+    } else {
+        version.max(2)
+    };
+    let mut body = vec![version, 0, 0, 0];
+    if version >= 3 {
+        body.extend_from_slice(&item_id.to_be_bytes());
+    } else {
+        body.extend_from_slice(&(item_id as u16).to_be_bytes());
+    }
+    body.extend_from_slice(&[0, 0]);
+    body.extend_from_slice(b"Exif");
+    body.push(0);
+    Ok(heif_box(b"infe", &body))
+}
+
+#[cfg(test)]
+fn bump_iinf_count(file: &mut [u8], payload: usize) -> Result<()> {
+    if payload + 6 > file.len() {
+        return Err(failed("short iinf"));
+    }
+    if file[payload] == 0 {
+        let n = u16::from_be_bytes(file[payload + 4..payload + 6].try_into().unwrap());
+        file[payload + 4..payload + 6].copy_from_slice(
+            &n.checked_add(1)
+                .ok_or_else(|| failed("iinf entry overflow"))?
+                .to_be_bytes(),
+        );
+    } else {
+        if payload + 8 > file.len() {
+            return Err(failed("short iinf"));
+        }
+        let n = u32::from_be_bytes(file[payload + 4..payload + 8].try_into().unwrap());
+        file[payload + 4..payload + 8].copy_from_slice(
+            &n.checked_add(1)
+                .ok_or_else(|| failed("iinf entry overflow"))?
+                .to_be_bytes(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn make_iloc_entry(iloc_payload: &[u8], item_id: u32, offset: u64, length: u64) -> Result<Vec<u8>> {
+    if iloc_payload.len() < 8 {
+        return Err(failed("short iloc"));
+    }
+    let version = iloc_payload[0];
+    let sizes = iloc_payload[4];
+    let offset_size = (sizes >> 4) as usize;
+    let length_size = (sizes & 0xf) as usize;
+    let base_offset_size = (iloc_payload[5] >> 4) as usize;
+    if length_size == 0 {
+        return Err(failed("iloc has no length field"));
+    }
+    if offset_size == 0 && base_offset_size == 0 {
+        return Err(failed("iloc has no offset field"));
+    }
+    let mut entry = Vec::new();
+    if version < 2 {
+        if item_id > u32::from(u16::MAX) {
+            return Err(failed("item id does not fit iloc version"));
+        }
+        entry.extend_from_slice(&(item_id as u16).to_be_bytes());
+    } else {
+        entry.extend_from_slice(&item_id.to_be_bytes());
+    }
+    if version == 1 || version == 2 {
+        entry.extend_from_slice(&[0, 0]);
+    }
+    entry.extend_from_slice(&[0, 0]);
+    if offset_size == 0 {
+        write_iloc_field(&mut entry, base_offset_size, offset)?;
+        entry.extend_from_slice(&1u16.to_be_bytes());
+        write_iloc_field(&mut entry, length_size, length)?;
+    } else {
+        write_iloc_field(&mut entry, base_offset_size, 0)?;
+        entry.extend_from_slice(&1u16.to_be_bytes());
+        write_iloc_field(&mut entry, offset_size, offset)?;
+        write_iloc_field(&mut entry, length_size, length)?;
+    }
+    Ok(entry)
+}
+
+#[cfg(test)]
+fn write_iloc_field(out: &mut Vec<u8>, size: usize, value: u64) -> Result<()> {
+    match size {
+        0 => Ok(()),
+        4 if value <= u64::from(u32::MAX) => {
+            out.extend_from_slice(&(value as u32).to_be_bytes());
+            Ok(())
+        }
+        8 => {
+            out.extend_from_slice(&value.to_be_bytes());
+            Ok(())
+        }
+        _ => Err(failed("unsupported iloc field size")),
+    }
+}
+
+#[cfg(test)]
+fn bump_iloc_item_count(file: &mut [u8], payload: usize) -> Result<()> {
+    if payload + 8 > file.len() {
+        return Err(failed("short iloc"));
+    }
+    if file[payload] < 2 {
+        let n = u16::from_be_bytes(file[payload + 6..payload + 8].try_into().unwrap());
+        file[payload + 6..payload + 8].copy_from_slice(
+            &n.checked_add(1)
+                .ok_or_else(|| failed("iloc item overflow"))?
+                .to_be_bytes(),
+        );
+    } else {
+        if payload + 10 > file.len() {
+            return Err(failed("short iloc"));
+        }
+        let n = u32::from_be_bytes(file[payload + 6..payload + 10].try_into().unwrap());
+        file[payload + 6..payload + 10].copy_from_slice(
+            &n.checked_add(1)
+                .ok_or_else(|| failed("iloc item overflow"))?
+                .to_be_bytes(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn patch_iloc_item_offset(file: &mut [u8], item_id: u32, offset: u64) -> Result<()> {
+    let loc = find_located(file, b"iloc").ok_or_else(|| failed("HEIF file has no iloc box"))?;
+    let payload = loc.payload;
+    if payload + 8 > file.len() {
+        return Err(failed("short iloc"));
+    }
+    let version = file[payload];
+    let sizes = file[payload + 4];
+    let offset_size = (sizes >> 4) as usize;
+    let length_size = (sizes & 0xf) as usize;
+    let base_offset_size = (file[payload + 5] >> 4) as usize;
+    let index_size = if version == 1 || version == 2 {
+        (file[payload + 5] & 0xf) as usize
+    } else {
+        0
+    };
+    let (mut i, item_count) = if version < 2 {
+        (
+            payload + 8,
+            u16::from_be_bytes(file[payload + 6..payload + 8].try_into().unwrap()) as u32,
+        )
+    } else {
+        (
+            payload + 10,
+            u32::from_be_bytes(file[payload + 6..payload + 10].try_into().unwrap()),
+        )
+    };
+    let id_size = if version < 2 { 2 } else { 4 };
+    for _ in 0..item_count {
+        let id = if id_size == 2 {
+            u16::from_be_bytes(file[i..i + 2].try_into().unwrap()) as u32
+        } else {
+            u32::from_be_bytes(file[i..i + 4].try_into().unwrap())
+        };
+        i += id_size;
+        if version == 1 || version == 2 {
+            i += 2;
+        }
+        i += 2;
+        let base_at = i;
+        i += base_offset_size;
+        if i + 2 > file.len() {
+            break;
+        }
+        let extents = u16::from_be_bytes(file[i..i + 2].try_into().unwrap());
+        i += 2;
+        for _ in 0..extents {
+            i += index_size;
+            if id == item_id {
+                if offset_size == 0 {
+                    write_iloc_field_at(&mut file[base_at..], base_offset_size, offset)?;
+                } else {
+                    write_iloc_field_at(&mut file[i..], offset_size, offset)?;
+                }
+                return Ok(());
+            }
+            i += offset_size + length_size;
+        }
+    }
+    Err(failed("iloc is missing the new Exif item"))
+}
+
+#[cfg(test)]
+fn write_iloc_field_at(slot: &mut [u8], size: usize, value: u64) -> Result<()> {
+    match size {
+        4 if value <= u64::from(u32::MAX) && slot.len() >= 4 => {
+            slot[..4].copy_from_slice(&(value as u32).to_be_bytes());
+            Ok(())
+        }
+        8 if slot.len() >= 8 => {
+            slot[..8].copy_from_slice(&value.to_be_bytes());
+            Ok(())
+        }
+        _ => Err(failed("cannot patch iloc offset")),
+    }
+}
+
+#[cfg(test)]
+fn add_iref_cdsc(out: &mut Vec<u8>, from_id: u32, to_id: u32) -> Result<()> {
+    if let Some(iref) = find_located(out, b"iref") {
+        let version = out[iref.payload];
+        let cdsc = make_cdsc(version, from_id, to_id)?;
+        let insert_at = iref.end;
+        out.splice(insert_at..insert_at, cdsc.iter().copied());
+        add_to_size(out, iref.offset, cdsc.len() as i64)?;
+        let meta = find_located(out, b"meta").ok_or_else(|| failed("HEIF file has no meta box"))?;
+        add_to_size(out, meta.offset, cdsc.len() as i64)?;
+        bump_iloc_offsets(out, insert_at, cdsc.len() as i64)?;
+    } else {
+        let version = u8::from(from_id > u32::from(u16::MAX) || to_id > u32::from(u16::MAX));
+        let cdsc = make_cdsc(version, from_id, to_id)?;
+        let mut payload = vec![version, 0, 0, 0];
+        payload.extend_from_slice(&cdsc);
+        let iref = heif_box(b"iref", &payload);
+        let meta = find_located(out, b"meta").ok_or_else(|| failed("HEIF file has no meta box"))?;
+        let insert_at = meta.end;
+        out.splice(insert_at..insert_at, iref.iter().copied());
+        add_to_size(out, meta.offset, iref.len() as i64)?;
+        bump_iloc_offsets(out, insert_at, iref.len() as i64)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn make_cdsc(version: u8, from_id: u32, to_id: u32) -> Result<Vec<u8>> {
+    let mut payload = Vec::new();
+    if version == 0 {
+        payload.extend_from_slice(&(from_id as u16).to_be_bytes());
+        payload.extend_from_slice(&1u16.to_be_bytes());
+        payload.extend_from_slice(&(to_id as u16).to_be_bytes());
+    } else {
+        payload.extend_from_slice(&from_id.to_be_bytes());
+        payload.extend_from_slice(&1u16.to_be_bytes());
+        payload.extend_from_slice(&to_id.to_be_bytes());
+    }
+    Ok(heif_box(b"cdsc", &payload))
+}
+
 #[cfg(test)]
 fn heif_box(typ: &[u8; 4], payload: &[u8]) -> Vec<u8> {
     let mut out = ((8 + payload.len()) as u32).to_be_bytes().to_vec();
@@ -818,14 +1242,88 @@ mod tests {
         }
     }
 
+    fn box_of(typ: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+        let mut out = ((8 + payload.len()) as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(typ);
+        out.extend_from_slice(payload);
+        out
+    }
+
+    fn full(typ: &[u8; 4], version: u8, rest: &[u8]) -> Vec<u8> {
+        let mut payload = vec![version, 0, 0, 0];
+        payload.extend_from_slice(rest);
+        box_of(typ, &payload)
+    }
+
+    /// A decode-invalid but structurally valid still HEIF for box-level tests.
+    fn minimal_still_heif() -> Vec<u8> {
+        let media = vec![0u8; 16];
+        let mut ftyp_payload = Vec::from(*b"heic");
+        ftyp_payload.extend_from_slice(&0u32.to_be_bytes());
+        ftyp_payload.extend_from_slice(b"mif1heic");
+        let ftyp = box_of(b"ftyp", &ftyp_payload);
+
+        let mut hdlr_rest = vec![0u8; 4];
+        hdlr_rest.extend_from_slice(b"pict");
+        hdlr_rest.extend_from_slice(&[0u8; 12]);
+        hdlr_rest.push(0);
+        let hdlr = full(b"hdlr", 0, &hdlr_rest);
+        let pitm = full(b"pitm", 0, &1u16.to_be_bytes());
+
+        let mut infe_body = vec![2, 0, 0, 0];
+        infe_body.extend_from_slice(&1u16.to_be_bytes());
+        infe_body.extend_from_slice(&0u16.to_be_bytes());
+        infe_body.extend_from_slice(b"hvc1");
+        infe_body.push(0);
+        let infe = box_of(b"infe", &infe_body);
+        let mut iinf_rest = 1u16.to_be_bytes().to_vec();
+        iinf_rest.extend_from_slice(&infe);
+        let iinf = full(b"iinf", 0, &iinf_rest);
+
+        let mut ispe_rest = Vec::new();
+        ispe_rest.extend_from_slice(&64u32.to_be_bytes());
+        ispe_rest.extend_from_slice(&48u32.to_be_bytes());
+        let ispe = full(b"ispe", 0, &ispe_rest);
+        let ipco = box_of(b"ipco", &ispe);
+        let mut ipma_rest = 1u32.to_be_bytes().to_vec();
+        ipma_rest.extend_from_slice(&1u16.to_be_bytes());
+        ipma_rest.push(1);
+        ipma_rest.push(0x81);
+        let ipma = full(b"ipma", 0, &ipma_rest);
+        let iprp = box_of(b"iprp", &[ipco, ipma].concat());
+
+        let iloc_box_size = 8 + 4 + 2 + 2 + 14;
+        let children_len = hdlr.len() + pitm.len() + iloc_box_size + iinf.len() + iprp.len();
+        let meta_len = 8 + 4 + children_len;
+        let mdat_offset = ftyp.len() + meta_len + 8;
+
+        let mut iloc_rest = vec![0x44, 0x00];
+        iloc_rest.extend_from_slice(&1u16.to_be_bytes());
+        iloc_rest.extend_from_slice(&1u16.to_be_bytes());
+        iloc_rest.extend_from_slice(&0u16.to_be_bytes());
+        iloc_rest.extend_from_slice(&1u16.to_be_bytes());
+        iloc_rest.extend_from_slice(&(mdat_offset as u32).to_be_bytes());
+        iloc_rest.extend_from_slice(&(media.len() as u32).to_be_bytes());
+        let iloc = full(b"iloc", 0, &iloc_rest);
+        assert_eq!(iloc.len(), iloc_box_size);
+
+        let mut meta_payload = vec![0, 0, 0, 0];
+        meta_payload.extend_from_slice(&hdlr);
+        meta_payload.extend_from_slice(&pitm);
+        meta_payload.extend_from_slice(&iloc);
+        meta_payload.extend_from_slice(&iinf);
+        meta_payload.extend_from_slice(&iprp);
+        let meta = box_of(b"meta", &meta_payload);
+        let mdat = box_of(b"mdat", &media);
+
+        let mut file = ftyp;
+        file.extend_from_slice(&meta);
+        file.extend_from_slice(&mdat);
+        file
+    }
+
     #[test]
     fn ipco_irot_is_found() {
-        fn box_of(typ: &[u8; 4], payload: &[u8]) -> Vec<u8> {
-            let mut out = ((8 + payload.len()) as u32).to_be_bytes().to_vec();
-            out.extend_from_slice(typ);
-            out.extend_from_slice(payload);
-            out
-        }
         let irot = box_of(b"irot", &[3]);
         let imir = box_of(b"imir", &[1]);
         let ipco = box_of(b"ipco", &[irot, imir].concat());
@@ -836,6 +1334,40 @@ mod tests {
         assert_eq!(
             heif_display_orientation(&meta),
             Some(Orientation::Rotate90FlipH)
+        );
+    }
+
+    #[test]
+    fn inject_heif_exif_round_trips() {
+        let base = minimal_still_heif();
+        assert!(heif_exif_orientation(&base).is_none());
+        let with_exif = inject_heif_exif(&base, 6).unwrap();
+        assert_eq!(
+            heif_exif_orientation(&with_exif),
+            Some(Orientation::Rotate90)
+        );
+        assert!(heif_display_orientation(&with_exif).is_none());
+
+        let replaced = inject_heif_exif(&with_exif, 3).unwrap();
+        assert_eq!(
+            heif_exif_orientation(&replaced),
+            Some(Orientation::Rotate180)
+        );
+
+        let with_irot = inject_heif_transforms(&base, Some(3), None).unwrap();
+        assert_eq!(
+            heif_display_orientation(&with_irot),
+            Some(Orientation::Rotate90)
+        );
+        let iphone = inject_heif_exif(&with_irot, 6).unwrap();
+        assert_eq!(
+            heif_display_orientation(&iphone),
+            Some(Orientation::Rotate90),
+            "adding EXIF must keep irot"
+        );
+        assert_eq!(
+            heif_exif_orientation(&iphone).map(Orientation::to_exif),
+            Some(6)
         );
     }
 }
