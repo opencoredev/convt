@@ -114,6 +114,43 @@ export function Badge({
   );
 }
 
+/**
+ * Horizontal usage bar: `used` in solid green, `reserved` after it in a lighter green.
+ * Values are fractions of `limit`; the bar clamps at full.
+ */
+export function Meter({
+  used,
+  reserved = 0,
+  limit,
+  label,
+}: {
+  used: number;
+  reserved?: number;
+  limit: number;
+  label: string;
+}) {
+  const part = (n: number) => (limit > 0 ? Math.min(100, Math.max(0, (n / limit) * 100)) : 0);
+  const usedPct = part(used);
+  const reservedPct = Math.min(100 - usedPct, part(reserved));
+  const full = limit > 0 && used + reserved >= limit;
+  return (
+    <div
+      role="meter"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={limit}
+      aria-valuenow={Math.min(limit, used + reserved)}
+      className="flex h-1.5 w-full overflow-hidden rounded-full bg-hover"
+    >
+      <span
+        className={cx("h-full", full ? "bg-error" : "bg-green")}
+        style={{ width: `${usedPct}%` }}
+      />
+      <span className="h-full bg-green/40" style={{ width: `${reservedPct}%` }} />
+    </div>
+  );
+}
+
 /** Classes for the bordered tables (invoices, keys, sign-in methods, sessions). */
 export const table = {
   /** Scroll wrapper so wide tables stay usable on a phone. */
