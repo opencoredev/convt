@@ -47,7 +47,7 @@ function Native($Name, $Subdir, $Options) {
         (Get-Content $Lists) | Where-Object { $_ -notmatch '^\s*cmake_policy\(SET CMP00(25|54) OLD\)' } | Set-Content $Lists
     }
     $Build = Join-Path $Source 'build-convt'
-    & $CMake -S (Join-Path $Source $Subdir) -B $Build -G $Generator -A x64 "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_POLICY_VERSION_MINIMUM=3.5 @Options
+    & $CMake -S (Join-Path $Source $Subdir) -B $Build -G $Generator -A x64 "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" -DCMAKE_INSTALL_LIBDIR=lib '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' @Options
     if ($LASTEXITCODE -ne 0) { throw "Configure $Name" }
     & $CMake --build $Build --config Release --parallel 4
     if ($LASTEXITCODE -ne 0) { throw "Build $Name" }
