@@ -20,6 +20,25 @@ class Sources(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    tree=Path(d)
    with self.assertRaises(ValueError):audit.retain(tree,tree,tree/'sources',{'name':'../outside','sha256':'0'*64})
+ def test_missing_url_backed_source_is_fetched_and_hashed(self):
+  with tempfile.TemporaryDirectory() as d:
+   tree=Path(d);cache=tree/'cache';cache.mkdir()
+   remote=cache/'remote';remote.mkdir();payload=b'fetched corresponding source'
+   (remote/'source.tar').write_bytes(payload)
+   item={'name':'source.tar','url':(remote/'source.tar').resolve().as_uri(),
+         'sha256':hashlib.sha256(payload).hexdigest()}
+   record=audit.retain(tree,cache,tree/'sources',item)
+   self.assertEqual((cache/'source.tar').read_bytes(),payload)
+   self.assertEqual((tree/record['path']).read_bytes(),payload)
+ def test_fetched_source_hash_mismatch_is_refused(self):
+  with tempfile.TemporaryDirectory() as d:
+   tree=Path(d);cache=tree/'cache';cache.mkdir()
+   remote=cache/'remote';remote.mkdir();(remote/'source.tar').write_bytes(b'tampered')
+   item={'name':'source.tar','url':(remote/'source.tar').resolve().as_uri(),
+         'sha256':hashlib.sha256(b'expected').hexdigest()}
+   with self.assertRaisesRegex(ValueError,'Downloaded source hash mismatch'):
+    audit.retain(tree,cache,tree/'sources',item)
+   self.assertFalse((cache/'source.tar').exists())
 
 class MacStatus(unittest.TestCase):
  def status(self,tree,value):
@@ -36,7 +55,13 @@ class MacStatus(unittest.TestCase):
    self.status(tree,{'distribution_ready':True,'gaps':['x']})
    with self.assertRaises(ValueError):audit.mac_gaps(tree)
    self.status(tree,{'distribution_ready':True,'gaps':[]});self.assertEqual(audit.mac_gaps(tree),[])
- def test_repository_status_is_not_ready(self):
-  self.assertTrue(audit.mac_gaps(Path(__file__).resolve().parents[2]))
+ def test_repository_status_matches_file(self):
+  tree=Path(__file__).resolve().parents[2]
+  status=__import__('json').loads((tree/'packaging/macos/release-status.json').read_text())
+  gaps=audit.mac_gaps(tree)
+  if status.get('distribution_ready') is True:
+   self.assertEqual(gaps, [])
+  else:
+   self.assertTrue(gaps)
 
 if __name__=='__main__':unittest.main()

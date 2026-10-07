@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 
 
 def sha(path):
@@ -17,10 +18,29 @@ def sha(path):
         return hashlib.file_digest(stream,'sha256').hexdigest()
 
 
-def retain(tree, cache, destination, item, cache_field='name'):
+def ensure_url(cache, item, cache_field='name'):
+    """Fetch a missing URL-backed lock entry into cache; hash is mandatory."""
     relative=Path(item[cache_field])
     if relative.is_absolute() or '..' in relative.parts:raise ValueError('Unsafe source cache path')
     source=cache/relative
+    if source.exists():
+        return source
+    if not item.get('url') or not item.get('sha256'):
+        raise ValueError('Missing corresponding source with no fetch URL: '+str(relative))
+    source.parent.mkdir(parents=True, exist_ok=True)
+    temporary=source.with_suffix(source.suffix+'.download')
+    with urllib.request.urlopen(item['url'], timeout=120) as response, temporary.open('wb') as out:
+        shutil.copyfileobj(response, out)
+    if sha(temporary)!=item['sha256']:
+        temporary.unlink()
+        raise ValueError('Downloaded source hash mismatch: '+str(relative))
+    temporary.replace(source)
+    return source
+
+
+def retain(tree, cache, destination, item, cache_field='name'):
+    relative=Path(item[cache_field])
+    source=ensure_url(cache, item, cache_field)
     if sha(source)!=item['sha256']:raise ValueError('Missing or corrupt corresponding source: '+str(relative))
     target=destination/relative;target.parent.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(source,target)
@@ -90,7 +110,10 @@ def collect(tree, payload, cache, epoch):
         module.CACHE=cache
         data=json.loads(lock.read_text())
         for i in module.artifacts(data):
-            module.verify(i,module.cache_path(i))
+            path=module.cache_path(i)
+            if not path.exists():
+                module.fetch(i, path)
+            module.verify(i,path)
         # General-purpose compiler/SDK/CIPD binaries stay declared prerequisites.
         # Archive the exact linked source checkout and its executed builder scripts.
         for i in module.artifacts({'sources':data['sources'],'build_recipe':data['build_recipe'],'attestation':data.get('attestation',{})}):
@@ -99,6 +122,7 @@ def collect(tree, payload, cache, epoch):
         binary=next(b for b in data['binary_associations'] if 'pdfium-linux-x64.tgz' in b['url'])
         pinned=next(i for i in json.loads((tree/'packaging/linux/inputs.lock.json').read_text()) if i['name']=='pdfium.tgz')
         if binary['sha256']!=pinned['sha256']:raise ValueError('PDFium source association differs from binary pin')
+        ensure_url(cache, pinned)
         import tarfile
         native_spec=importlib.util.spec_from_file_location('native_source_verifier',tree/'packaging/release/native-source-tools.py')
         native=importlib.util.module_from_spec(native_spec);native_spec.loader.exec_module(native)

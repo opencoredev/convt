@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -13,6 +14,10 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location(
+    "native_source_tools", Path(__file__).with_name("native-source-tools.py"))
+tools = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tools)
 
 
 def main():
@@ -65,12 +70,8 @@ def main():
     expected = lock["build"].get("runtime_sha256")
     if expected and actual != expected:
         raise ValueError(f"Rebuilt runtime differs: {actual} != {expected}")
-    # The closure lock retains this build's logs as evidence beside the sources.
-    provenance = cache / f"appimage-source/provenance-{actual[:12]}"
-    provenance.mkdir(parents=True, exist_ok=True)
-    for entry in lock.get("build_evidence", []):
-        name = Path(entry["cache"]).name
-        shutil.copyfile(output / name, provenance / name)
+    # collect --source-only reads provenance-<runtime-hash>/, not rebuilt/.
+    tools.promote_build_evidence(lock, cache, output)
     print(json.dumps({"runtime": str(runtime), "sha256": actual}, indent=2))
 
 

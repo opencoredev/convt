@@ -9,6 +9,7 @@ name="convt-source-proof-$$"
 image="convt-source-proof-builder-$$"
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker image rm "$image" >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
+python3 "$source_tree/packaging/linux/fetch.py" "$cache" "$source_tree/packaging/linux/build-rpms.lock.json"
 python3 - "$cache" "$work" "$source_tree" <<'PY'
 import hashlib,json,pathlib,shutil,sys
 cache,work,tree=map(pathlib.Path,sys.argv[1:])

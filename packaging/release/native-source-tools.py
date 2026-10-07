@@ -23,6 +23,109 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def cache_file(cache, relative):
+    path = cache / relative
+    if not path.resolve().is_relative_to(cache):
+        raise ValueError(f"Path escapes cache: {relative}")
+    return path
+
+
+def fetch_verified(path, url, expected, label):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".download")
+    with urllib.request.urlopen(url, timeout=60) as response, temporary.open("wb") as out:
+        shutil.copyfileobj(response, out)
+    if digest(temporary.read_bytes()) != expected:
+        temporary.unlink()
+        raise ValueError(f"Downloaded source hash mismatch: {label}")
+    temporary.replace(path)
+
+
+def rebuilt_runtime(lock, cache):
+    relative = lock.get("build", {}).get("runtime_cache")
+    return cache_file(cache, relative) if relative else None
+
+
+def copy_from_rebuild(path, lock, cache, expected=None):
+    """Copy a matching rebuild output (e.g. installed-apks.txt) to its lock path."""
+    produced = rebuilt_runtime(lock, cache)
+    rebuilt = produced.parent if produced is not None else None
+    if rebuilt is None:
+        return False
+    candidate = rebuilt / path.name
+    if not candidate.is_file():
+        return False
+    if not candidate.resolve().is_relative_to(cache):
+        raise ValueError(f"Rebuild product escapes cache: {candidate}")
+    if expected and digest(candidate.read_bytes()) != expected:
+        raise ValueError(f"Rebuild product hash mismatch: {candidate}")
+    if path.resolve() != candidate.resolve():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(candidate, path)
+    return True
+
+
+def ensure_wrapper_runtime(path, lock, cache):
+    """appimage.sh copies rebuilt/runtime-x86_64 to runtime-source-built-x86_64."""
+    expected = lock.get("build", {}).get("runtime_sha256")
+    if not path.exists():
+        produced = rebuilt_runtime(lock, cache)
+        if produced is not None and produced.is_file():
+            if expected and digest(produced.read_bytes()) != expected:
+                raise ValueError(f"Rebuild product hash mismatch: {produced}")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(produced, path)
+    if not expected or not path.is_file() or digest(path.read_bytes()) != expected:
+        raise ValueError(f"Wrapper runtime hash mismatch: {path}")
+
+
+SEMANTIC_EVIDENCE = {
+    "link-inputs.txt",
+    "squashfuse-config.log",
+    "runtime-version.txt",
+}
+
+
+def verify_evidence_contents(entry, data, lock):
+    """Pinned files stay SHA-256 locked. Unpinned logs still have to match the closure."""
+    name = pathlib.Path(entry["cache"]).name
+    text = data.decode("utf-8", "replace")
+    if name == "link-inputs.txt":
+        required = list(lock.get("linked_archives", [])) + list(lock.get("startup_objects", []))
+        missing = [item for item in required if item not in text]
+        if missing:
+            raise ValueError(f"Linker trace missing locked inputs: {missing}")
+    elif name == "squashfuse-config.log":
+        if "sq_decompressors=ZLIB ZSTD" not in text:
+            raise ValueError("Configure log missing locked decompressor list ZLIB ZSTD")
+    elif name == "runtime-version.txt":
+        # The tool writes the version on stderr; this file is stdout-only.
+        # binary_checks runs the pinned runtime and compares stdout+stderr.
+        return
+    elif name not in SEMANTIC_EVIDENCE and "sha256" not in entry:
+        raise ValueError(f"Unpinned build evidence has no semantic check: {name}")
+
+
+def promote_build_evidence(lock, cache, output):
+    """After a rebuild, write every locked provenance file to its cache path."""
+    for entry in lock.get("build_evidence", []):
+        dest = cache_file(cache, entry["cache"])
+        produced = output / dest.name
+        if not produced.is_file():
+            raise ValueError(f"Rebuild did not write {produced.name}")
+        if not produced.resolve().is_relative_to(output.resolve()):
+            raise ValueError(f"Rebuild product escapes output: {produced}")
+        data = produced.read_bytes()
+        if "sha256" in entry and digest(data) != entry["sha256"]:
+            raise ValueError(f"Rebuild product hash mismatch: {produced}")
+        verify_evidence_contents(entry, data, lock)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.resolve() != produced.resolve():
+            shutil.copyfile(produced, dest)
+        if "sha256" in entry and digest(dest.read_bytes()) != entry["sha256"]:
+            raise ValueError(f"Build evidence hash mismatch: {dest}")
+
+
 def archive_member(data, member):
     stream = io.BytesIO(data)
     if data.startswith(b"PK"):
@@ -149,26 +252,19 @@ def main(default_lock):
         parser.error("collect requires --output")
     cache = args.cache.resolve()
     lock = json.loads(args.lock.read_text())
+    populate = args.command in ("fetch", "collect")
+    generate = args.command in ("verify", "collect")
     if args.runtime_file:
-        expected = lock.get("build", {}).get("runtime_sha256")
-        if not expected or digest(args.runtime_file.read_bytes()) != expected:
-            raise ValueError(f"Wrapper runtime hash mismatch: {args.runtime_file}")
+        ensure_wrapper_runtime(args.runtime_file, lock, cache)
     sources = {s["name"]: s for s in lock["sources"]}
     if len(sources) != len(lock["sources"]):
         raise ValueError("Duplicate source name")
     for source in sources.values():
-        path = cache / source["cache"]
-        if not path.resolve().is_relative_to(cache):
-            raise ValueError("Source escapes cache")
-        if args.command in ("fetch", "collect") and not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_suffix(path.suffix + ".download")
-            with urllib.request.urlopen(source["url"], timeout=60) as response, temporary.open("wb") as out:
-                shutil.copyfileobj(response, out)
-            if digest(temporary.read_bytes()) != source["sha256"]:
-                temporary.unlink()
-                raise ValueError(f"Downloaded source hash mismatch: {source['name']}")
-            temporary.replace(path)
+        path = cache_file(cache, source["cache"])
+        if populate and not path.exists() and source.get("url") and source.get("sha256"):
+            fetch_verified(path, source["url"], source["sha256"], source["name"])
+        if not path.is_file():
+            raise ValueError(f"Missing locked cache input: {path}")
         data = path.read_bytes()
         if digest(data) != source["sha256"]:
             raise ValueError(f"Source hash mismatch: {source['name']}")
@@ -183,10 +279,15 @@ def main(default_lock):
         rpm_extract(cache, lock["sources"], args.rpm_image)
     check_rpm_headers(lock, sources, cache, args.rpm_image)
     for check in lock.get("binary_checks", []):
-        path = cache / (check["cache"] if "cache" in check else sources[check["source"]]["cache"])
+        relative = check["cache"] if "cache" in check else sources[check["source"]]["cache"]
+        path = cache_file(cache, relative)
+        if generate and not path.exists():
+            copy_from_rebuild(path, lock, cache, check.get("sha256"))
         # fetch populates locked inputs; the rebuilt runtime does not exist yet.
         if args.command == "fetch" and not path.exists():
             continue
+        if not path.is_file():
+            raise ValueError(f"Missing locked cache input: {path}")
         if check.get("sha256") and digest(path.read_bytes()) != check["sha256"]:
             raise ValueError("Built runtime hash mismatch")
         if check.get("static_elf"):
@@ -245,6 +346,7 @@ def main(default_lock):
                                          "original_sha256": binary["original"]["sha256"],
                                          "normalization": "unmodified" if actual == binary["original"]["sha256"] else "builder strip --strip-unneeded"})
     if args.command == "collect" and args.output:
+        args.output.mkdir(parents=True, exist_ok=True)
         for source in sources.values():
             target = args.output / "sources" / source["name"]
             binary_only = (source.get("role") in {"build-apk", "binary", "tool", "build-tool", "binary-only", "tool-only"}
@@ -259,15 +361,20 @@ def main(default_lock):
             shutil.copyfile(cache / source["cache"], target)
         shutil.copyfile(args.lock, args.output / args.lock.name)
     for entry in lock.get("build_evidence", []):
-        path = cache / entry["cache"]
-        # Provenance is written by the network-none rebuild after fetch.
+        path = cache_file(cache, entry["cache"])
+        if populate and not path.exists() and entry.get("url") and entry.get("sha256"):
+            fetch_verified(path, entry["url"], entry["sha256"], entry["cache"])
+        if generate and not path.exists():
+            copy_from_rebuild(path, lock, cache, entry.get("sha256"))
+        # fetch may run before the network-none rebuild writes provenance.
         if args.command == "fetch" and not path.exists():
             continue
-        # Logs that differ between identical builds are retained, not pinned.
-        if "sha256" in entry and digest(path.read_bytes()) != entry["sha256"]:
-            raise ValueError(f"Build evidence hash mismatch: {path}")
         if not path.is_file():
-            raise ValueError(f"Missing build evidence: {path}")
+            raise ValueError(f"Missing locked cache input: {path}")
+        data = path.read_bytes()
+        if "sha256" in entry and digest(data) != entry["sha256"]:
+            raise ValueError(f"Build evidence hash mismatch: {path}")
+        verify_evidence_contents(entry, data, lock)
         if args.command == "collect" and args.output:
             target = args.output / "build-evidence" / path.name
             target.parent.mkdir(parents=True, exist_ok=True)
