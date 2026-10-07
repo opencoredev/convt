@@ -147,7 +147,13 @@ const production = withIds(
       priceId: "4c5fdab8-63de-400e-a353-efba78c85820",
     },
   },
-  { "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt },
+  {
+    // Recorded when the catalog was filled. Polar also issues
+    // 8d401db5-… for the same PRODUCTHUNT code; both must be accepted or
+    // launch checkouts hang on /checkout/success and never grant Pro.
+    "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt,
+    "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHunt,
+  },
 );
 
 const catalogs: Record<CatalogEnv, Catalog> = {

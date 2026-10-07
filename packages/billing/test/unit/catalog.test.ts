@@ -53,6 +53,15 @@ describe("catalog", () => {
     );
   });
 
+  test("production lists both Polar ids for the PRODUCTHUNT launch code", () => {
+    const c = loadCatalog("production");
+    const a = c.discounts["64641dd4-73ae-4704-8fbf-450bed2b2aa4"];
+    const b = c.discounts["8d401db5-99d3-44c2-82e9-6483dec9ced7"];
+    expect(a).toEqual(b);
+    expect(a?.code).toBe("PRODUCTHUNT");
+    expect(a?.products).toEqual(["desktop", "pro_month"]);
+  });
+
   test("updates_until is the same day a year later; 29 February becomes 28 February", () => {
     expect(addYears("2026-10-05", 1)).toBe("2027-10-05");
     expect(addYears("2028-02-29", 1)).toBe("2029-02-28");

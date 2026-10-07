@@ -258,11 +258,15 @@ export async function checkoutResult(
 
   let s = await stateOf(ctx, row);
   if (s.state === "pending" && input.sync && !row.synced_at) {
-    // Once per checkout: pull it from the provider through ingest.
-    await ctx.db.execute(
-      sql`update checkouts set synced_at = ${now}, updated_at = ${now} where id = ${row.id} and synced_at is null`,
-    );
-    await syncCheckout(ctx, row.provider_checkout_id);
+    // Pull once the facts are acceptable. A rejected sync (unknown discount,
+    // foreign checkout, …) must not burn synced_at: the next poll retries after
+    // a catalog fix, and the page would otherwise hang until the 60s give-up.
+    const synced = await syncCheckout(ctx, row.provider_checkout_id);
+    if (synced) {
+      await ctx.db.execute(
+        sql`update checkouts set synced_at = ${now}, updated_at = ${now} where id = ${row.id} and synced_at is null`,
+      );
+    }
     s = await stateOf(ctx, row);
   }
   if (s.state !== "ready")
@@ -296,8 +300,15 @@ export async function checkoutResult(
   };
 }
 
-/** Pulls one checkout's orders and subscription from the provider through ingest. */
-export async function syncCheckout(ctx: BillingContext, providerCheckoutId: string) {
+/**
+ * Pulls one checkout's orders and subscription from the provider through ingest.
+ * Returns false when Polar errored or ingest rejected the facts, so the caller
+ * can leave synced_at unset and try again.
+ */
+export async function syncCheckout(
+  ctx: BillingContext,
+  providerCheckoutId: string,
+): Promise<boolean> {
   try {
     const co = await ctx.provider.getCheckout(providerCheckoutId);
     const facts = emptyFacts();
@@ -305,8 +316,10 @@ export async function syncCheckout(ctx: BillingContext, providerCheckoutId: stri
     if (co.providerSubscriptionId)
       facts.subscriptions.push(await ctx.provider.getSubscription(co.providerSubscriptionId));
     facts.orders.push(...(await ctx.provider.checkoutOrders(providerCheckoutId)));
-    await ingestFacts(ctx, facts, "sync");
+    const outcome = await ingestFacts(ctx, facts, "sync");
+    return outcome.rejected === null;
   } catch (e) {
     ctx.log(`[billing] sync ${providerCheckoutId}: ${(e as Error).message}`);
+    return false;
   }
 }
