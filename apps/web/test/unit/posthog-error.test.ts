@@ -3,7 +3,9 @@ import { expect, test } from "bun:test";
 import { requestAllowsServerExceptions, scrub } from "../../src/server/posthog-scrub";
 
 test("scrubs paths, emails, license keys, and credentials", () => {
-  const value = scrub("/Users/alice/input.pdf user@gmail.com license_key=cvt_PROD_12345678 token=secret");
+  const value = scrub(
+    "/Users/alice/input.pdf user@gmail.com license_key=cvt_PROD_12345678 token=secret",
+  );
   expect(value).toBe("<path> <email> <credential>=<redacted> <credential>=<redacted>");
   expect(value).not.toContain("alice");
   expect(value).not.toContain("gmail.com");
@@ -12,8 +14,18 @@ test("scrubs paths, emails, license keys, and credentials", () => {
 });
 
 test("honors request privacy signals", () => {
-  expect(requestAllowsServerExceptions(new Request("https://convt.app", { headers: { "Sec-GPC": "1" } }))).toBe(false);
-  expect(requestAllowsServerExceptions(new Request("https://convt.app", { headers: { DNT: "1" } }))).toBe(false);
-  expect(requestAllowsServerExceptions(new Request("https://convt.app", { headers: { Cookie: "convt:analytics-opt-out=1" } }))).toBe(false);
+  expect(
+    requestAllowsServerExceptions(
+      new Request("https://convt.app", { headers: { "Sec-GPC": "1" } }),
+    ),
+  ).toBe(false);
+  expect(
+    requestAllowsServerExceptions(new Request("https://convt.app", { headers: { DNT: "1" } })),
+  ).toBe(false);
+  expect(
+    requestAllowsServerExceptions(
+      new Request("https://convt.app", { headers: { Cookie: "convt:analytics-opt-out=1" } }),
+    ),
+  ).toBe(false);
   expect(requestAllowsServerExceptions(new Request("https://convt.app"))).toBe(true);
 });

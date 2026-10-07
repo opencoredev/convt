@@ -59,7 +59,11 @@ export const requestMiddleware = createMiddleware({ type: "request" }).server(
       else await close();
       return result;
     } catch (e) {
-      captureServerException(e, `${request.method} ${url.pathname}`, requestAllowsServerExceptions(request));
+      captureServerException(
+        e,
+        `${request.method} ${url.pathname}`,
+        requestAllowsServerExceptions(request),
+      );
       waitUntil(close());
       throw e;
     }

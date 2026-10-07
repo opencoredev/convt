@@ -55,8 +55,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           Conversions run on your computer. The app and the <code>convt</code> command never upload
-          a file, and contain no analytics or advertising code. The trial and your
-          license key are stored on your computer and checked offline.
+          a file, and contain no analytics or advertising code. The trial and your license key are
+          stored on your computer and checked offline.
         </p>
         <p>The app connects to the internet only in these cases:</p>
         <List
@@ -155,7 +155,10 @@ const sections: LegalSection[] = [
           only on the website, never in the app or the command line tool. PostHog processes the data
           for us in the United States.
         </p>
-        <p>We also collect scrubbed crash and error reports from the website and desktop app, with the same opt-out as analytics.</p>
+        <p>
+          We also collect scrubbed crash and error reports from the website and desktop app, with
+          the same opt-out as analytics.
+        </p>
         <p>When analytics are on, each page you open sends PostHog:</p>
         <List
           items={[
