@@ -23,12 +23,16 @@ fn capture_allowed() -> bool {
 }
 
 pub fn request_has_privacy_signal(headers: &axum::http::HeaderMap) -> bool {
-    matches!(headers.get("sec-gpc").and_then(|value| value.to_str().ok()), Some("1"))
-        || matches!(headers.get("dnt").and_then(|value| value.to_str().ok()), Some("1"))
-        || headers
-            .get("cookie")
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(cookie_has_opt_out)
+    matches!(
+        headers.get("sec-gpc").and_then(|value| value.to_str().ok()),
+        Some("1")
+    ) || matches!(
+        headers.get("dnt").and_then(|value| value.to_str().ok()),
+        Some("1")
+    ) || headers
+        .get("cookie")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(cookie_has_opt_out)
 }
 
 fn cookie_has_opt_out(cookie: &str) -> bool {
@@ -135,7 +139,11 @@ mod tests {
 
     #[test]
     fn request_privacy_signals_block_exception_capture() {
-        for (name, value) in [("sec-gpc", "1"), ("dnt", "1"), ("cookie", "convt:analytics-opt-out=1")] {
+        for (name, value) in [
+            ("sec-gpc", "1"),
+            ("dnt", "1"),
+            ("cookie", "convt:analytics-opt-out=1"),
+        ] {
             let mut headers = HeaderMap::new();
             headers.insert(name, HeaderValue::from_static(value));
             assert!(request_has_privacy_signal(&headers));
