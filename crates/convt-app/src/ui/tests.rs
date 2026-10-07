@@ -3591,7 +3591,8 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
         cx.opened_url().as_deref(),
         Some(convt_license::client::DOWNLOAD_URL)
     );
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
     let status = label(cx, settings, "update-status").unwrap();
     assert!(
         status.starts_with("convt 9.2.0 is available Built Oct 3, 2026.")
@@ -3705,7 +3706,8 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
 #[gpui_kit::test]
 fn check_now_shows_that_it_is_checking(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
     let built = cx.read(|cx| f.app.read(cx).licensing.build_date().to_string());
     assert_eq!(
         label(cx, settings, "update-last-checked"),
