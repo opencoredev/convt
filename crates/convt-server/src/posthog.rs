@@ -1,6 +1,45 @@
 //! Best-effort server exception capture. It never participates in a response.
 use serde_json::json;
 
+tokio::task_local! {
+    static REQUEST_PRIVACY_BLOCKED: bool;
+}
+
+pub async fn with_request_privacy<F>(blocked: bool, future: F) -> F::Output
+where
+    F: std::future::Future,
+{
+    REQUEST_PRIVACY_BLOCKED.scope(blocked, future).await
+}
+
+pub fn request_privacy_blocked() -> bool {
+    REQUEST_PRIVACY_BLOCKED
+        .try_with(|blocked| *blocked)
+        .unwrap_or(false)
+}
+
+fn capture_allowed() -> bool {
+    !request_privacy_blocked() && std::env::var("POSTHOG_ERRORS").ok().as_deref() != Some("0")
+}
+
+pub fn request_has_privacy_signal(headers: &axum::http::HeaderMap) -> bool {
+    matches!(headers.get("sec-gpc").and_then(|value| value.to_str().ok()), Some("1"))
+        || matches!(headers.get("dnt").and_then(|value| value.to_str().ok()), Some("1"))
+        || headers
+            .get("cookie")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(cookie_has_opt_out)
+}
+
+fn cookie_has_opt_out(cookie: &str) -> bool {
+    cookie.split(';').any(|part| {
+        let Some((name, value)) = part.trim().split_once('=') else {
+            return false;
+        };
+        matches!(name, "convt:analytics-opt-out" | "analytics-opt-out") && value == "1"
+    })
+}
+
 fn scrub(input: &str) -> String {
     let mut redact_next = false;
     input
@@ -56,7 +95,7 @@ fn scrub(input: &str) -> String {
 }
 
 pub fn capture(error: &str, context: &str) {
-    if std::env::var("POSTHOG_ERRORS").ok().as_deref() == Some("0") {
+    if !capture_allowed() {
         return;
     }
     let Ok(key) = std::env::var("POSTHOG_KEY") else {
@@ -74,7 +113,8 @@ pub fn capture(error: &str, context: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::scrub;
+    use super::{capture_allowed, request_has_privacy_signal, scrub, with_request_privacy};
+    use axum::http::{HeaderMap, HeaderValue};
 
     #[test]
     fn scrubs_tokens_and_complete_emails() {
@@ -91,5 +131,23 @@ mod tests {
                 && !value.contains("secret-token")
                 && !value.contains("gmail.com")
         );
+    }
+
+    #[test]
+    fn request_privacy_signals_block_exception_capture() {
+        for (name, value) in [("sec-gpc", "1"), ("dnt", "1"), ("cookie", "convt:analytics-opt-out=1")] {
+            let mut headers = HeaderMap::new();
+            headers.insert(name, HeaderValue::from_static(value));
+            assert!(request_has_privacy_signal(&headers));
+        }
+        let mut headers = HeaderMap::new();
+        headers.insert("cookie", HeaderValue::from_static("session=1"));
+        assert!(!request_has_privacy_signal(&headers));
+    }
+
+    #[tokio::test]
+    async fn request_privacy_scope_suppresses_capture() {
+        assert!(with_request_privacy(true, async { !capture_allowed() }).await);
+        assert!(with_request_privacy(false, async { capture_allowed() }).await);
     }
 }

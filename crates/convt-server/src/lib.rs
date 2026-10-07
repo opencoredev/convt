@@ -21,6 +21,9 @@ mod db_tests;
 #[cfg(test)]
 mod testing;
 
+use axum::extract::Request;
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
@@ -82,7 +85,13 @@ pub fn app() -> Router {
                     .unwrap()
             },
         ))
+        .layer(middleware::from_fn(request_privacy_scope))
         .layer(TraceLayer::new_for_http())
+}
+
+async fn request_privacy_scope(request: Request, next: Next) -> Response {
+    let blocked = crate::posthog::request_has_privacy_signal(request.headers());
+    crate::posthog::with_request_privacy(blocked, next.run(request)).await
 }
 
 #[cfg(test)]
