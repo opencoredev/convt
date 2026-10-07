@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CaptureResult } from "posthog-js";
 
+import { posthogOptions } from "../../src/components/posthog-provider";
 import { sanitizeEvent, stripQuery } from "../../src/lib/analytics-sanitize";
 
 // Shaped like the events posthog-js builds for a visitor who lands on the checkout
@@ -44,8 +45,20 @@ const autocapture: CaptureResult = {
   },
 };
 
+// Heatmaps key their points by the page URL.
+const heatmap: CaptureResult = {
+  uuid: "0192a8c0-0000-7000-8000-000000000003",
+  event: "$$heatmap",
+  properties: {
+    $current_url: "https://convt.app/device?state=state-abc&challenge=challenge-xyz",
+    $heatmap_data: {
+      "https://convt.app/device?state=state-abc&challenge=challenge-xyz": [{ x: 1, y: 2 }],
+    },
+  },
+};
+
 test("no captured URL keeps a query string, fragment or sensitive value", () => {
-  for (const event of [pageview, autocapture]) {
+  for (const event of [pageview, autocapture, heatmap]) {
     const json = JSON.stringify(sanitizeEvent(event));
     for (const secret of SECRETS) expect(json).not.toContain(secret);
     expect(json).not.toMatch(/https?:\/\/[^"]*[?#]/);
@@ -81,4 +94,19 @@ test("stripQuery handles paths, bare URLs and dropped events", () => {
   expect(stripQuery("/device?state=x")).toBe("/device");
   expect(stripQuery("$direct")).toBe("$direct");
   expect(sanitizeEvent(null)).toBeNull();
+});
+
+test("heatmap data is keyed by the page without its query string", () => {
+  expect(sanitizeEvent(heatmap)!.properties.$heatmap_data).toEqual({
+    "https://convt.app/device": [{ x: 1, y: 2 }],
+  });
+});
+
+test("PostHog runs without the channels that bypass before_send", () => {
+  const options = posthogOptions("https://us.i.posthog.com");
+  // The /flags request sends the raw first-visit URL outside before_send.
+  expect(options.advanced_disable_flags).toBe(true);
+  expect(options.disable_session_recording).toBe(true);
+  expect(options.capture_heatmaps).toBe(false);
+  expect(options.api_host).toBe("https://us.i.posthog.com");
 });

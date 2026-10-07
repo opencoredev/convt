@@ -1,7 +1,7 @@
 // PostHog fills URL properties from window.location and document.referrer, and
 // autocapture records link hrefs. Query strings and fragments can carry checkout ids,
 // the desktop sign-in state and challenge, or tokens, so every event keeps only
-// origin + pathname. The privacy policy (routes/_site/privacy.tsx) relies on this.
+// origin + pathname, in values and in URL-shaped keys. The privacy policy (routes/_site/privacy.tsx) relies on this.
 
 import type { CaptureResult, Properties } from "posthog-js";
 
@@ -38,7 +38,11 @@ function sanitizeValue(key: string, value: unknown): unknown {
 
 export function sanitizeProperties(properties: Properties): Properties {
   const out: Properties = {};
-  for (const [key, value] of Object.entries(properties)) out[key] = sanitizeValue(key, value);
+  for (const [key, value] of Object.entries(properties)) {
+    // Heatmaps key their data by the page URL.
+    const safeKey = /^https?:\/\//i.test(key) ? stripQuery(key) : key;
+    out[safeKey] = sanitizeValue(key, value);
+  }
   return out;
 }
 
