@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseMarkdown } from "#/components/site/markdown";
-import { osFromUserAgent, releaseFromManifest } from "#/lib/platform";
+import { downloadCtaLabel, osFromUserAgent, releaseFromManifest } from "#/lib/platform";
 import { parseReleaseManifest } from "#/lib/release-manifest";
 
 const sha = "a".repeat(64);
@@ -73,6 +73,13 @@ test("OS detection", () => {
   expect(osFromUserAgent("Mozilla/5.0 (X11; Linux x86_64)")).toBe("linux");
   expect(osFromUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)")).toBeNull();
   expect(osFromUserAgent("Mozilla/5.0 (Linux; Android 15; Pixel 9)")).toBeNull();
+});
+
+test("download CTA labels the detected OS and falls back when unknown", () => {
+  expect(downloadCtaLabel("macos")).toBe("Download for macOS");
+  expect(downloadCtaLabel("windows")).toBe("Download for Windows");
+  expect(downloadCtaLabel("linux")).toBe("Download for Linux");
+  expect(downloadCtaLabel(null)).toBe("Download");
 });
 
 test("markdown reader", () => {

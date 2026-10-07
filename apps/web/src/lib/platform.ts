@@ -93,6 +93,11 @@ export function osFromUserAgent(ua: string): Os | null {
   return null;
 }
 
+/** Primary download button copy: OS-specific when known, otherwise just "Download". */
+export function downloadCtaLabel(os: Os | null): string {
+  return os ? `Download for ${osNames[os]}` : "Download";
+}
+
 export function isOs(value: unknown): value is Os {
   return value === "macos" || value === "windows" || value === "linux";
 }
