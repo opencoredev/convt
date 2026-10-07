@@ -74,12 +74,13 @@ pub(crate) fn finish_heif_output(
     to: &str,
     options: &Options,
 ) -> Result<()> {
+    let dest_had_pending = decoder_orientation(dest)? != Orientation::NoTransforms;
     bake_pending_orientation(dest, to, options)?;
     let Some(file) = std::fs::read(source).ok() else {
         return Ok(());
     };
     let Some(heif) = heif_display_orientation(&file) else {
-        if decoder_orientation(dest)? == Orientation::NoTransforms
+        if should_apply_source_exif(dest_had_pending, decoder_orientation(dest)?)
             && let Some(exif) = heif_exif_orientation(&file)
         {
             apply_if_still_stored(dest, to, options, exif, heif_ispe(&file))?;
@@ -96,6 +97,14 @@ pub(crate) fn finish_heif_output(
         return Ok(());
     }
     apply_if_still_stored(dest, to, options, heif, heif_ispe(&file))
+}
+
+/// After leftover dest EXIF is baked, apply source EXIF only when dest
+/// never carried a tag. If ImageIO copied the tag, baking already
+/// oriented the pixels; applying source EXIF again rotates twice.
+#[cfg(any(test, target_os = "macos"))]
+fn should_apply_source_exif(dest_had_pending: bool, dest_now: Orientation) -> bool {
+    !dest_had_pending && dest_now == Orientation::NoTransforms
 }
 
 #[cfg(target_os = "macos")]
@@ -591,9 +600,29 @@ fn for_each_box(data: &[u8], mut visit: impl FnMut([u8; 4], &[u8])) {
     walk_nested(data, false, &mut |typ, payload| visit(typ, payload));
 }
 
+const MAX_BOX_DEPTH: u32 = 8;
+const MAX_BOX_VISITS: usize = 1024;
+
 fn walk_nested<'a>(data: &'a [u8], recurse: bool, visit: &mut dyn FnMut([u8; 4], &'a [u8])) {
+    walk_nested_limited(data, recurse, 0, &mut 0, visit);
+}
+
+fn walk_nested_limited<'a>(
+    data: &'a [u8],
+    recurse: bool,
+    depth: u32,
+    visits: &mut usize,
+    visit: &mut dyn FnMut([u8; 4], &'a [u8]),
+) {
+    if depth > MAX_BOX_DEPTH {
+        return;
+    }
     let mut i = 0;
     while i + 8 <= data.len() {
+        if *visits >= MAX_BOX_VISITS {
+            return;
+        }
+        *visits += 1;
         let size = u32::from_be_bytes(data[i..i + 4].try_into().unwrap()) as usize;
         let typ: [u8; 4] = data[i + 4..i + 8].try_into().unwrap();
         let (header, end) = if size == 1 {
@@ -618,7 +647,7 @@ fn walk_nested<'a>(data: &'a [u8], recurse: bool, visit: &mut dyn FnMut([u8; 4],
             } else {
                 payload
             };
-            walk_nested(inner, true, visit);
+            walk_nested_limited(inner, true, depth + 1, visits, visit);
         }
         if size == 0 {
             break;
@@ -781,11 +810,7 @@ pub(crate) fn strip_heif_transforms(data: &[u8]) -> Result<Vec<u8>> {
     let ipma_delta = new_ipma.len() as i64 - (ipma_end - ipma_payload) as i64;
     out.splice(ipma_payload..ipma_end, new_ipma);
     add_to_size(&mut out, ipma_offset, ipma_delta)?;
-    add_to_size(
-        &mut out,
-        (iprp.offset as i64 + ipco_delta) as usize,
-        ipma_delta,
-    )?;
+    add_to_size(&mut out, iprp.offset, ipma_delta)?;
     add_to_size(&mut out, meta.offset, ipma_delta)?;
     bump_iloc_offsets(&mut out, ipco.payload, ipco_delta + ipma_delta)?;
     Ok(out)
@@ -1708,6 +1733,58 @@ mod tests {
             heif_exif_orientation(&inject_heif_exif(&stripped, 6).unwrap())
                 .map(Orientation::to_exif),
             Some(6)
+        );
+    }
+
+    #[test]
+    fn source_exif_is_not_applied_after_dest_was_baked() {
+        assert!(
+            !should_apply_source_exif(true, Orientation::NoTransforms),
+            "ImageIO copied EXIF; baking already oriented the pixels"
+        );
+        assert!(
+            should_apply_source_exif(false, Orientation::NoTransforms),
+            "ImageIO dropped EXIF unapplied"
+        );
+        assert!(!should_apply_source_exif(false, Orientation::Rotate90));
+        assert!(!should_apply_source_exif(true, Orientation::Rotate180));
+    }
+
+    #[test]
+    fn deeply_nested_heif_boxes_do_not_overflow() {
+        let mut inner = full(b"pitm", 0, &1u16.to_be_bytes());
+        for _ in 0..10_000 {
+            let mut payload = vec![0, 0, 0, 0];
+            payload.extend_from_slice(&inner);
+            inner = box_of(b"meta", &payload);
+        }
+        assert!(heif_display_orientation(&inner).is_none());
+        assert!(heif_exif_orientation(&inner).is_none());
+        assert!(heif_ispe(&inner).is_none());
+    }
+
+    #[test]
+    fn strip_heif_transforms_updates_iprp_size_in_place() {
+        let with_irot = inject_heif_transforms(&minimal_still_heif(), Some(3), Some(1)).unwrap();
+        let iprp_before = find_located(&with_irot, b"iprp").unwrap();
+        let stripped = strip_heif_transforms(&with_irot).unwrap();
+        let iprp = find_located(&stripped, b"iprp").unwrap();
+        let declared =
+            u32::from_be_bytes(stripped[iprp.offset..iprp.offset + 4].try_into().unwrap()) as usize;
+        assert_eq!(
+            declared,
+            iprp.end - iprp.offset,
+            "iprp size field must match the box after shrinking ipco and ipma"
+        );
+        assert_eq!(
+            iprp.offset, iprp_before.offset,
+            "iprp header does not move when ipco shrinks"
+        );
+        assert!(heif_display_orientation(&stripped).is_none());
+        let again = inject_heif_transforms(&stripped, Some(3), None).unwrap();
+        assert_eq!(
+            heif_display_orientation(&again),
+            Some(Orientation::Rotate90)
         );
     }
 
