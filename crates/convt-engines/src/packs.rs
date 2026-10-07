@@ -1395,7 +1395,7 @@ mod tests {
         assert!(!orphan.exists());
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     #[test]
     fn unsupported_ownership_rejects_pack_operations_before_download() {
         let temp = test_tempdir();
