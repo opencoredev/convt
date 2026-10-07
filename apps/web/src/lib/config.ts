@@ -2,9 +2,14 @@
 // PLACEHOLDER do not exist yet; swap them when the real services are live.
 
 export const links = {
-  /** The API reference on this site (renders convt-server's OpenAPI spec). */
-  docs: "/docs/api",
+  /** The Blume docs site (apps/docs), served on convt.app/docs* by its own Worker. */
+  docs: "/docs",
+  /** Blume's reference, rendered from crates/convt-server/openapi.json. */
   apiReference: "/docs/api",
+  docsQuickStart: "/docs/quick-start",
+  docsErrors: "/docs/reference/errors",
+  docsLimits: "/docs/reference/limits",
+  docsFormats: "/docs/reference/formats",
   formats: "/formats",
   /** PLACEHOLDER: webhooks are not designed in the API yet. */
   webhooks: "https://docs.convt.app/webhooks",

@@ -1,8 +1,6 @@
-// Code samples for the API reference and the dashboard. Each quick start is a complete
-// program that runs the whole job flow: create, upload, start, poll, download. They use
-// plain HTTP because @convt/sdk is not published to npm yet.
-
-import type { Endpoint } from "./openapi";
+// Quick-start samples for the dashboard. Each is a complete program that runs the whole
+// job flow: create, upload, start, poll, download. They use plain HTTP because
+// @convt/sdk is not published to npm yet.
 
 export type Language = "curl" | "node" | "python" | "cli";
 export type Sample = { language: Language; label: string; code: string };
@@ -130,69 +128,5 @@ open("photo.webp", "wb").write(requests.get(url).content)`,
 # It needs no API key and uploads nothing.
 convt photo.png --to webp`,
     },
-  ];
-}
-
-function pathWithExamples(endpoint: Endpoint) {
-  return endpoint.path.replace(/\{(\w+)\}/g, (_, name: string) => {
-    const param = endpoint.params.find((p) => p.name === name);
-    const example = param?.schema && "example" in param.schema ? param.schema.example : undefined;
-    return typeof example === "string" ? example : `{${name}}`;
-  });
-}
-
-const pyLiteral = (value: unknown): string =>
-  JSON.stringify(value, null, 4)
-    .replace(/\bnull\b/g, "None")
-    .replace(/\btrue\b/g, "True")
-    .replace(/\bfalse\b/g, "False");
-
-/** cURL, Node.js and Python for one operation, with the spec's example values. */
-export function endpointSamples(endpoint: Endpoint, base: string): Sample[] {
-  const method = endpoint.method.toUpperCase();
-  const url = `${base}${pathWithExamples(endpoint)}`;
-  const body = endpoint.bodyExample;
-  const json = body === undefined ? null : JSON.stringify(body, null, 2);
-
-  const curl = [
-    `curl${method === "GET" ? "" : ` -X ${method}`} ${url}`,
-    endpoint.authenticated && `  -H "Authorization: Bearer $CONVT_API_KEY"`,
-    json && `  -H "Content-Type: application/json"`,
-    json && `  -d '${json.replace(/\n/g, "\n  ")}'`,
-  ]
-    .filter(Boolean)
-    .join(" \\\n");
-
-  const headers = [
-    endpoint.authenticated && "Authorization: `Bearer ${process.env.CONVT_API_KEY}`",
-    json && `"Content-Type": "application/json"`,
-  ].filter(Boolean);
-  const init = [
-    method !== "GET" && `method: "${method}"`,
-    headers.length && `headers: {\n    ${headers.join(",\n    ")},\n  }`,
-    json && `body: JSON.stringify(${json.replace(/\n/g, "\n  ")})`,
-  ].filter(Boolean);
-  const node = `const res = await fetch("${url}"${
-    init.length ? `, {\n  ${init.join(",\n  ")},\n}` : ""
-  });
-const body = await res.json();`;
-
-  const pyArgs = [
-    `"${method}"`,
-    `"${url}"`,
-    endpoint.authenticated && `headers={"Authorization": f"Bearer {os.environ['CONVT_API_KEY']}"}`,
-    body !== undefined && `json=${pyLiteral(body).replace(/\n/g, "\n    ")}`,
-  ].filter(Boolean);
-  const python = `${endpoint.authenticated ? "import os, requests" : "import requests"}
-
-res = requests.request(
-    ${pyArgs.join(",\n    ")},
-)
-body = res.json()`;
-
-  return [
-    { language: "curl", label: languageLabels.curl, code: curl },
-    { language: "node", label: languageLabels.node, code: node },
-    { language: "python", label: languageLabels.python, code: python },
   ];
 }

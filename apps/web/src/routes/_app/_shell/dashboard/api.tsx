@@ -32,22 +32,22 @@ export const Route = createFileRoute("/_app/_shell/dashboard/api")({
 
 const docLinks = [
   {
-    href: `${links.apiReference}#quick-start`,
+    href: links.docsQuickStart,
     title: "Quick start",
     body: "Your first conversion in four requests",
   },
   {
-    href: `${links.apiReference}#errors`,
+    href: links.docsErrors,
     title: "Errors",
     body: "Every error code and when to retry",
   },
   {
-    href: `${links.apiReference}#limits`,
+    href: links.docsLimits,
     title: "Limits and billing",
     body: "File size, rate limit, retention",
   },
   {
-    href: `${links.apiReference}#conversions`,
+    href: links.docsFormats,
     title: "Supported conversions",
     body: "Every pair the cloud converts",
   },
@@ -109,7 +109,7 @@ function ApiPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <SecondaryLink href={links.docs} className="gap-1.5 px-3.5 py-2">
+          <SecondaryLink href={links.apiReference} className="gap-1.5 px-3.5 py-2">
             API reference
             <span className="text-ink-2">
               <ExternalIcon />
@@ -365,7 +365,7 @@ function ApiPage() {
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <SectionTitle id="quick-start-title">Quick start</SectionTitle>
               <a
-                href={`${links.apiReference}#quick-start`}
+                href={links.docsQuickStart}
                 className={cx(
                   "rounded-sm text-[13px]/4 font-medium text-green hover:underline",
                   focusRing,
@@ -400,7 +400,7 @@ function ApiPage() {
 
           <Card className="flex flex-col overflow-clip">
             <a
-              href={links.docs}
+              href={links.apiReference}
               className={cx(
                 "flex items-center justify-between gap-3 border-b border-line px-5 py-4 hover:bg-hover",
                 focusRing,
