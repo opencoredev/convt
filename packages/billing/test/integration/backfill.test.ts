@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 
 import { backfillPolarOrders } from "../../src/backfill";
 import { createHarness, type Harness } from "../../src/testing";
+import { testMailbox } from "../mailbox";
 
 let h: Harness;
 beforeAll(async () => {
@@ -16,7 +17,7 @@ const run = (dryRun: boolean) => h.service.withCtx((c) => backfillPolarOrders(c,
 
 describe("Polar order backfill", () => {
   test("dry-run lists a dropped $0 Desktop order; apply creates it and is idempotent", async () => {
-    const email = "backfill-zero@convt.test";
+    const email = testMailbox("backfill-zero");
     const u = await h.user(email);
     const raw = h.mock.craftOrder({
       externalCustomerId: null,

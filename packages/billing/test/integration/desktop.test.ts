@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 
 import { drainOutbox } from "../../src/outbox";
 import { createHarness, type Harness } from "../../src/testing";
+import { testMailbox } from "../mailbox";
 
 let h: Harness;
 beforeAll(async () => {
@@ -69,78 +70,6 @@ describe("Desktop", () => {
     const mails = h.mock.resend.sent.filter((m) => m.to[0] === "guest1@convt.test");
     expect(mails.length).toBe(1);
     expect(mails[0].text).toContain(lics[0].token);
-  });
-
-  test("a $0 guest order before signup issues a license that claim_purchases attaches", async () => {
-    const email = "presignup@convt.test";
-    const b = await h.buy("desktop", null, { email });
-    const held = h.mock.takeHeld();
-    const paid = held.find((d) => d.type === "order.paid")!;
-    const env = JSON.parse(paid.body);
-    env.data.discount_id = "disc_giveaway_100";
-    env.data.discount_amount = 2900;
-    env.data.net_amount = 0;
-    env.data.total_amount = 0;
-    const r = await h.deliver({
-      id: "msg_presignup_zero",
-      type: "order.paid",
-      body: JSON.stringify(env),
-    });
-    expect(r.status).toBe(200);
-    const orderId = env.data.id;
-    const before = await licensesFor(orderId);
-    expect(before.length).toBe(1);
-    expect(before[0].email).toBe(email);
-    const [ord] = await h.q<{ user_id: string | null; amount_cents: number }>(
-      sql`select user_id, amount_cents from orders where provider_order_id = ${orderId}`,
-    );
-    expect(ord).toEqual({ user_id: null, amount_cents: 0 });
-    const u = await h.user(email);
-    const claimed = await claimPurchases(h.owner, u.id);
-    expect(claimed).toMatchObject({ orders: 1, licenses: 1, invoices: 1 });
-    const [after] = await h.q<{ user_id: string }>(
-      sql`select user_id from licenses where email = ${email}`,
-    );
-    expect(after.user_id).toBe(u.id);
-    expect(b.paid).toEqual({ ok: true });
-  });
-
-  test("a guest purchase after the account exists is claimed by email on ingest", async () => {
-    const email = "already@convt.test";
-    const u = await h.user(email);
-    await h.buy("desktop", null, { email });
-    await h.deliverAll();
-    const [lic] = await h.q<{ user_id: string }>(
-      sql`select user_id from licenses where email = ${email}`,
-    );
-    expect(lic.user_id).toBe(u.id);
-  });
-
-  test("order.created with status paid is enough; order.paid is not required", async () => {
-    const email = "created-only@convt.test";
-    await h.buy("desktop", null, { email });
-    const held = h.mock.takeHeld();
-    const created = held.find((d) => d.type === "order.created")!;
-    expect((await h.deliver(created)).status).toBe(200);
-    const orderId = JSON.parse(created.body).data.id;
-    expect((await licensesFor(orderId)).length).toBe(1);
-  });
-
-  test("a Polar-hosted Desktop order with no checkout we created still issues", async () => {
-    const email = "storefront@convt.test";
-    const raw = h.mock.craftOrder({
-      externalCustomerId: null,
-      email,
-      product: "desktop",
-      reason: "purchase",
-      checkoutId: null,
-      items: [{ amount: 2900, priceId: "price_local_desktop" }],
-      discountAmount: 2900,
-    });
-    const held = h.mock.takeHeld();
-    const paid = held.find((d) => d.type === "order.paid")!;
-    expect((await h.deliver(paid)).status).toBe(200);
-    expect((await licensesFor(raw.id)).length).toBe(1);
   });
 
   test("a signed-in purchase signs the account's verified email and belongs to the user", async () => {
@@ -301,3 +230,77 @@ describe("Desktop", () => {
 });
 
 void drainOutbox;
+
+describe("guest and complimentary Desktop", () => {
+  test("a $0 guest order before signup issues a license that claim_purchases attaches", async () => {
+    const email = testMailbox("presignup");
+    const b = await h.buy("desktop", null, { email });
+    const held = h.mock.takeHeld();
+    const paid = held.find((d) => d.type === "order.paid")!;
+    const env = JSON.parse(paid.body);
+    env.data.discount_id = "disc_giveaway_100";
+    env.data.discount_amount = 2900;
+    env.data.net_amount = 0;
+    env.data.total_amount = 0;
+    const r = await h.deliver({
+      id: "msg_presignup_zero",
+      type: "order.paid",
+      body: JSON.stringify(env),
+    });
+    expect(r.status).toBe(200);
+    const orderId = env.data.id;
+    const before = await licensesFor(orderId);
+    expect(before.length).toBe(1);
+    expect(before[0].email).toBe(email);
+    const [ord] = await h.q<{ user_id: string | null; amount_cents: number }>(
+      sql`select user_id, amount_cents from orders where provider_order_id = ${orderId}`,
+    );
+    expect(ord).toEqual({ user_id: null, amount_cents: 0 });
+    const u = await h.user(email);
+    const claimed = await claimPurchases(h.owner, u.id);
+    expect(claimed).toMatchObject({ orders: 1, licenses: 1, invoices: 1 });
+    const [after] = await h.q<{ user_id: string }>(
+      sql`select user_id from licenses where email = ${email}`,
+    );
+    expect(after.user_id).toBe(u.id);
+    expect(b.paid).toEqual({ ok: true });
+  });
+
+  test("a guest purchase after the account exists is claimed by email on ingest", async () => {
+    const email = testMailbox("already");
+    const u = await h.user(email);
+    await h.buy("desktop", null, { email });
+    await h.deliverAll();
+    const [lic] = await h.q<{ user_id: string }>(
+      sql`select user_id from licenses where email = ${email}`,
+    );
+    expect(lic.user_id).toBe(u.id);
+  });
+
+  test("order.created with status paid is enough; order.paid is not required", async () => {
+    const email = testMailbox("created-only");
+    await h.buy("desktop", null, { email });
+    const held = h.mock.takeHeld();
+    const created = held.find((d) => d.type === "order.created")!;
+    expect((await h.deliver(created)).status).toBe(200);
+    const orderId = JSON.parse(created.body).data.id;
+    expect((await licensesFor(orderId)).length).toBe(1);
+  });
+
+  test("a Polar-hosted Desktop order with no checkout we created still issues", async () => {
+    const email = testMailbox("storefront");
+    const raw = h.mock.craftOrder({
+      externalCustomerId: null,
+      email,
+      product: "desktop",
+      reason: "purchase",
+      checkoutId: null,
+      items: [{ amount: 2900, priceId: "price_local_desktop" }],
+      discountAmount: 2900,
+    });
+    const held = h.mock.takeHeld();
+    const paid = held.find((d) => d.type === "order.paid")!;
+    expect((await h.deliver(paid)).status).toBe(200);
+    expect((await licensesFor(raw.id)).length).toBe(1);
+  });
+});

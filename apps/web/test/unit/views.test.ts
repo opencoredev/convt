@@ -301,60 +301,16 @@ describe("billing per state", () => {
       now,
     });
 
-  test("no purchase", () => {
+  test("no plan", () => {
     const b = bv([]);
     expect(b).toMatchObject({
       plan: null,
       hadPro: false,
-      ownsDesktop: false,
       api: { state: "none", spendCapCents: null, endsOn: null },
       card: null,
       receiptEmail: "dana@convt.test",
       invoices: [],
     });
-    expect(billingHasNoPlan(b)).toBe(true);
-    expect(showGetDesktop(b)).toBe(true);
-    expect(billingCardCopy(b)).toBe("No card on file.");
-  });
-
-  test("Desktop paid", () => {
-    const b = bv([], [desktopInvoice(2900)], false, [desktop]);
-    expect(b.plan).toEqual({
-      kind: "desktop",
-      name: "Desktop (lifetime)",
-      status: "active",
-      interval: null,
-      cancelsOn: null,
-      summary:
-        "Paid once. Updates until Aug 20, 2027. Your license is on this account and works offline.",
-    });
-    expect(b.ownsDesktop).toBe(true);
-    expect(b.invoices).toEqual([
-      {
-        id: "inv_desk",
-        date: "2026-10-07",
-        description: "Desktop License, 12 months of updates",
-        amountCents: 2900,
-        statusLabel: null,
-      },
-    ]);
-    expect(billingHasNoPlan(b)).toBe(false);
-    expect(showGetDesktop(b)).toBe(false);
-    expect(billingCardCopy(b)).toBe("No card needed.");
-  });
-
-  test("Desktop $0 order", () => {
-    const b = bv([], [desktopInvoice(0)], false, [desktop]);
-    expect(b.plan).toMatchObject({
-      kind: "desktop",
-      name: "Desktop (lifetime)",
-      status: "active",
-    });
-    expect(b.ownsDesktop).toBe(true);
-    expect(b.invoices[0]?.amountCents).toBe(0);
-    expect(billingHasNoPlan(b)).toBe(false);
-    expect(showGetDesktop(b)).toBe(false);
-    expect(billingCardCopy(b)).toBe("No card needed.");
   });
 
   test("active yearly keeps the design's summary", () => {
@@ -368,8 +324,6 @@ describe("billing per state", () => {
       summary:
         "$96 a year. Renews Oct 2, 2027. Includes the desktop app on your Macs, every update while you're subscribed, and API access.",
     });
-    expect(b.ownsDesktop).toBe(false);
-    expect(showGetDesktop(b)).toBe(true);
     expect(b.invoices).toEqual([
       {
         id: "inv_1",
@@ -379,21 +333,6 @@ describe("billing per state", () => {
         statusLabel: null,
       },
     ]);
-  });
-
-  test("Pro trialing", () => {
-    const b = bv([sub({ interval: "month", status: "trialing", trialEndsAt: days(3) })]);
-    expect(b.plan).toMatchObject({
-      kind: "pro",
-      name: "Pro, monthly",
-      status: "trialing",
-      interval: "month",
-    });
-    expect(b.plan?.summary).toStartWith("Free until Oct 7, 2026, then $12 a month.");
-    expect(b.ownsDesktop).toBe(false);
-    expect(billingHasNoPlan(b)).toBe(false);
-    expect(showGetDesktop(b)).toBe(true);
-    expect(billingCardCopy(b)).toBe("No card on file.");
   });
 
   test("trialing, past due, cancelling and lapsed", () => {
@@ -520,6 +459,68 @@ describe("billing per state", () => {
     expect(billingHasNoPlan(bv([], [desktopInvoice(0)], false, [desktop]))).toBe(false);
   });
 
+  test("Desktop paid", () => {
+    const b = bv([], [desktopInvoice(2900)], false, [desktop]);
+    expect(b.plan).toEqual({
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+      interval: null,
+      cancelsOn: null,
+      summary:
+        "Paid once. Updates until Aug 20, 2027. Your license is on this account and works offline.",
+    });
+    expect(b.ownsDesktop).toBe(true);
+    expect(b.invoices).toEqual([
+      {
+        id: "inv_desk",
+        date: "2026-10-07",
+        description: "Desktop License, 12 months of updates",
+        amountCents: 2900,
+        statusLabel: null,
+      },
+    ]);
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(showGetDesktop(b)).toBe(false);
+    expect(billingCardCopy(b)).toBe("No card needed.");
+  });
+
+  test("Desktop $0 order", () => {
+    const b = bv([], [desktopInvoice(0)], false, [desktop]);
+    expect(b.plan).toMatchObject({
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+    });
+    expect(b.ownsDesktop).toBe(true);
+    expect(b.invoices[0]?.amountCents).toBe(0);
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(showGetDesktop(b)).toBe(false);
+    expect(billingCardCopy(b)).toBe("No card needed.");
+  });
+
+  test("Pro trialing", () => {
+    const b = bv([sub({ interval: "month", status: "trialing", trialEndsAt: days(3) })]);
+    expect(b.plan).toMatchObject({
+      kind: "pro",
+      name: "Pro, monthly",
+      status: "trialing",
+      interval: "month",
+    });
+    expect(b.plan?.summary).toStartWith("Free until Oct 7, 2026, then $12 a month.");
+    expect(b.ownsDesktop).toBe(false);
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(showGetDesktop(b)).toBe(true);
+    expect(billingCardCopy(b)).toBe("No card on file.");
+  });
+
+  test("active yearly extras", () => {
+    const b = bv([sub({})], invoices);
+    expect(b.plan?.kind).toBe("pro");
+    expect(b.ownsDesktop).toBe(false);
+    expect(showGetDesktop(b)).toBe(true);
+  });
+
   test("Pro wins over Desktop when both exist", () => {
     const b = bv(
       [sub({ interval: "month", status: "trialing", trialEndsAt: days(3) })],
@@ -530,6 +531,15 @@ describe("billing per state", () => {
     expect(b.plan).toMatchObject({ kind: "pro", status: "trialing" });
     expect(b.ownsDesktop).toBe(true);
     expect(showGetDesktop(b)).toBe(false);
+  });
+
+  test("no purchase extras", () => {
+    const b = bv([]);
+    expect(b.ownsDesktop).toBe(false);
+    expect(b.receiptEmail).toBe(user.email);
+    expect(billingHasNoPlan(b)).toBe(true);
+    expect(showGetDesktop(b)).toBe(true);
+    expect(billingCardCopy(b)).toBe("No card on file.");
   });
 });
 

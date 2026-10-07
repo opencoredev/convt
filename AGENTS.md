@@ -37,8 +37,8 @@ bun run db:seed               # fixture accounts (*@convt.test) in this checkout
 bun run db:migrate            # also db:up, db:down, db:rollback, db:reset
 bun run db:ci                 # schema drift, down files, DB integration tests, convt-server sqlx check
 bun run billing:outbox list   # ambiguous or dead emails; `resolve <id> sent|resend`
-bun run billing:backfill      # dry-run Polar orders; `--apply` writes; prod also needs `--confirm-production`
 bun run license:keygen PATH   # a production signing key, written outside the repo
+bun run billing:backfill      # dry-run Polar orders; `--apply` writes; prod also needs `--confirm-production`
 bun run build && bun run check-types && bun run check
 bun run --cwd apps/docs dev     # docs on :4321; `validate` checks links, `deploy` ships convt.app/docs
 ```

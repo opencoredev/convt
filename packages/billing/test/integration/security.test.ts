@@ -220,31 +220,6 @@ describe("business checks", () => {
     }
   });
 
-  test("a 100% or $0 Desktop order issues a license, including an unknown Polar code", async () => {
-    const fullOff = await deliverOrder((d) => {
-      d.discount_id = "disc_giveaway_100";
-      d.discount_amount = 2900;
-      d.net_amount = 0;
-      d.total_amount = 0;
-    });
-    expect({ event: fullOff.event.status, licenses: fullOff.licenses }).toEqual({
-      event: "processed",
-      licenses: 1,
-    });
-    const zeroed = await deliverOrder((d) => {
-      (d.items as Array<Record<string, unknown>>)[0].amount = 0;
-      d.subtotal_amount = 0;
-      d.discount_id = "disc_comp";
-      d.discount_amount = 0;
-      d.net_amount = 0;
-      d.total_amount = 0;
-    });
-    expect({ event: zeroed.event.status, licenses: zeroed.licenses }).toEqual({
-      event: "processed",
-      licenses: 1,
-    });
-  });
-
   test("another user's checkout and a changed customer id are rejected", async () => {
     const alice = await h.user("alice@convt.test");
     const mallory = await h.user("mallory@convt.test");
@@ -514,5 +489,32 @@ describe("failed events", () => {
     expect(ev.status).toBe("failed");
     void before;
     void localProducts;
+  });
+});
+
+describe("complimentary Desktop", () => {
+  test("a 100% or $0 Desktop order issues a license, including an unknown Polar code", async () => {
+    const fullOff = await deliverOrder((d) => {
+      d.discount_id = "disc_giveaway_100";
+      d.discount_amount = 2900;
+      d.net_amount = 0;
+      d.total_amount = 0;
+    });
+    expect({ event: fullOff.event.status, licenses: fullOff.licenses }).toEqual({
+      event: "processed",
+      licenses: 1,
+    });
+    const zeroed = await deliverOrder((d) => {
+      (d.items as Array<Record<string, unknown>>)[0].amount = 0;
+      d.subtotal_amount = 0;
+      d.discount_id = "disc_comp";
+      d.discount_amount = 0;
+      d.net_amount = 0;
+      d.total_amount = 0;
+    });
+    expect({ event: zeroed.event.status, licenses: zeroed.licenses }).toEqual({
+      event: "processed",
+      licenses: 1,
+    });
   });
 });
