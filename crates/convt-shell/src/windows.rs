@@ -157,17 +157,19 @@ fn handoff(paths: &[PathBuf], target: &str) -> Result<()> {
 fn app_running() -> bool {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{MUTEX_QUERY_STATE, OpenMutexW};
+    use windows::Win32::System::Threading::{OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
     let name: Vec<u16> = std::ffi::OsStr::new("Local\\convt-instance")
         .encode_wide()
         .chain(Some(0))
         .collect();
     // SAFETY: valid NUL-terminated mutex name; the handle is closed below.
-    let Ok(handle) = (unsafe { OpenMutexW(MUTEX_QUERY_STATE, false, PCWSTR(name.as_ptr())) })
+    let Ok(handle) =
+        (unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, PCWSTR(name.as_ptr())) })
     else {
         return false;
     };
-    unsafe { CloseHandle(handle) };
+    // SAFETY: the handle came from OpenMutexW above and is closed once.
+    let _ = unsafe { CloseHandle(handle) };
     true
 }
 fn probe(path: &Path) -> Option<Vec<String>> {

@@ -180,12 +180,16 @@ mod unix {
 
 #[cfg(windows)]
 pub struct Primary {
+    /// Held, never read: owning the named mutex is what makes this the primary.
+    #[allow(dead_code)]
     mutex: windows_sys::Win32::Foundation::HANDLE,
 }
 
 #[cfg(windows)]
 impl Primary {
     pub fn listen(self, on_request: impl Fn(Request) + Send + 'static) {
+        // Keep the mutex for the life of the process so later launches forward.
+        std::mem::forget(self);
         std::thread::Builder::new()
             .name("convt-instance".into())
             .spawn(move || loop {
@@ -221,8 +225,8 @@ impl Primary {
 #[cfg(windows)]
 pub fn claim(dir: &std::path::Path, req: &Request) -> std::io::Result<Role> {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE};
-    use windows_sys::Win32::System::Threading::{CloseHandle, CreateMutexW};
+    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GetLastError};
+    use windows_sys::Win32::System::Threading::CreateMutexW;
 
     std::fs::create_dir_all(dir)?;
     // The Local namespace is scoped to the interactive user's session. A
@@ -235,7 +239,7 @@ pub fn claim(dir: &std::path::Path, req: &Request) -> std::io::Result<Role> {
     // SAFETY: the name is a valid NUL-terminated string and no initial owner
     // is requested; the handle is retained until the primary exits.
     let mutex = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
-    if mutex == 0 {
+    if mutex.is_null() {
         return Err(std::io::Error::last_os_error());
     }
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
