@@ -183,8 +183,9 @@ const sections: LegalSection[] = [
         <p>
           You can stop using convt at any time, and delete your account from Settings on the
           dashboard. Deleting it first ends any subscription, without a refund for the rest of the
-          period, then removes the account; this usually takes minutes and can take up to a day.
-          Desktop and Pro keys you paid for keep working offline for every version they cover.
+          period, then removes the account; this usually takes minutes, but takes longer if a
+          billing step has to be retried. Desktop and Pro keys you paid for keep working offline for
+          every version they cover.
         </p>
         <p>
           We may suspend or close an account, or revoke API keys and cloud access, if you seriously
