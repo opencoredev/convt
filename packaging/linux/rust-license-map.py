@@ -28,10 +28,8 @@ def digest(data):
 
 def metadata(cargo, target=None):
     scope_receipt = Path('third-party/linux-source-scope/receipt.json')
-    if scope_receipt.is_file():
+    if scope_receipt.is_file() and target is None:
         linux_target = json.loads(scope_receipt.read_text())['target']
-        if target and target != linux_target:
-            raise ValueError('Linux source derivation cannot inventory a macOS source closure')
         target = linux_target
     command = [cargo, 'metadata', '--offline', '--locked', '--format-version', '1']
     if target:

@@ -77,6 +77,7 @@ def archive(tree, output, version, epoch, verification):
            'covered_platforms':['linux-x86_64'],'platform_gaps':closure.get('platform_gaps',{}),
            'native_sources':closure['sources'],'build_recipes':['packaging/linux/container-build.sh','packaging/linux/build-ffmpeg.sh','packaging/linux/libheif-explicit-init.patch'],
            'rust_sources':'third-party/rust','rust_inventory':closure['rust_inventory'],
+           'rust_inventories':closure.get('rust_inventories', []),
            'validated_closures':closure['checks'],'components':components,'gaps':gaps}
     (tree/'corresponding-source.json').write_text(json.dumps(audit,indent=2)+'\n')
     (output/'source-audit.json').write_text(json.dumps(audit,indent=2)+'\n')

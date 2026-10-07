@@ -118,4 +118,36 @@ def collect(tree, payload, cache, epoch):
     rust=json.loads(inventory.read_text())
     if any(not c['notices'] for c in rust['source_inventory']):raise ValueError('Vendored Rust sources lack complete notices')
     checks.append('Complete vendored Linux Rust source licence inventory, including build dependencies')
-    return {'sources':sources,'checks':checks,'gaps':gaps,'rust_inventory':'third-party/rust-license-inventory.json','platform_gaps':platform_gaps}
+    # macOS has a different Cargo feature graph. Keep one target-specific
+    # inventory for each slice beside the archive and verify that the known
+    # SDK-derived objc2 sources are present with their recorded provenance.
+    mac_inventory = []
+    blocker_rows = json.loads((tree/'packaging/release/rust-notice-blockers.json').read_text())['blockers']
+    for target in ('aarch64-apple-darwin', 'x86_64-apple-darwin'):
+        output = tree / f'third-party/rust-license-inventory-{target}.json'
+        subprocess.run([sys.executable, str(tree/'packaging/linux/rust-license-map.py'), str(output),
+                        '--vendor-dir', str(tree/'third-party/rust'), '--target', target], cwd=tree, check=True)
+        data = json.loads(output.read_text())
+        if data.get('targets') != [target]:
+            raise ValueError(f'macOS Rust inventory target mismatch: {target}')
+        inventory = {(p['name'], p['version'], p['manifest_sha256']): p
+                     for p in data.get('source_inventory', [])}
+        missing = []
+        for blocker in blocker_rows:
+            identity = (blocker['name'], blocker['version'], blocker['manifest_sha256'])
+            record = inventory.get(identity)
+            if record is None:
+                missing.append(f"{blocker['name']} {blocker['version']}")
+                continue
+            expected_targets = set(blocker.get('targets', []))
+            if target in expected_targets and target not in record.get('targets', []):
+                missing.append(f"{blocker['name']} {blocker['version']} (target graph)")
+        if missing:
+            raise ValueError(f'macOS Rust inventory omits SDK-derived crates for {target}: {", ".join(sorted(missing))}')
+        mac_inventory.append(str(output.relative_to(tree)))
+    checks.append('Target-specific macOS Rust inventories retain both Apple targets and SDK-derived objc2 sources')
+    return {'sources':sources,'checks':checks,'gaps':gaps,
+            'rust_inventory':'third-party/rust-license-inventory.json',
+            'rust_inventories': ['third-party/rust-license-inventory-aarch64-apple-darwin.json',
+                                 'third-party/rust-license-inventory-x86_64-apple-darwin.json'],
+            'platform_gaps':platform_gaps}

@@ -65,10 +65,10 @@ The build also passes `--disable-asm` everywhere, so encoding is slower than an 
 
 `release-status.json` lists them, and the release audit copies them into `platform_gaps["macos-universal"]`, so the website never offers a Mac download while one is open:
 
-- x86_64 FFmpeg has no source build, so the universal app can't ship.
+- x86_64 FFmpeg has a retained cross-build, but its receipt is unqualified without an x86_64-capable execution host, so the universal app can't ship.
 - No Developer ID signature.
 - Not notarized or stapled.
-- No macOS Rust source and licence inventory, including the SDK-derived objc2 crates.
+- Mac Rust inventories are generated for both Apple targets, including the SDK-derived objc2 crates; the 22 crates with incomplete upstream terms remain a release gate.
 
 Codec patents (H.264, HEVC and AAC through FFmpeg; VideoToolbox and ImageIO cover some of these) are a separate P12 decision.
 

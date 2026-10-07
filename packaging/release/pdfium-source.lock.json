@@ -427,9 +427,9 @@
   ],
   "sources": [
     {
-      "url": "https://pdfium.googlesource.com/pdfium/+archive/8ca5b735df4263f43c830479b78213854a392c22.tar.gz",
-      "sha256": "ef0a6153bf4a62c82c866153b6c8f6c2f672fdedf71cd967831c6faa6678a67d",
-      "size_bytes": 13045391,
+      "url": "https://pdfium.googlesource.com/pdfium.git",
+      "sha256": "78524647f4fd1b0dc647b9d9eca696a539481000065cf2ccc3330914c273da2b",
+      "size_bytes": 12839079,
       "cache_filename": "pdfium-source/pdfium-8ca5b735df4263f43c830479b78213854a392c22.tar.gz",
       "checkout_path": ".",
       "revision": "8ca5b735df4263f43c830479b78213854a392c22",
@@ -484,7 +484,10 @@
           "member": "third_party/libtiff/LICENSE.md",
           "sha256": "0780558a8bfba0af1160ec1ff11ade4f41c0d7deafd6ecfc796b492a788e380d"
         }
-      ]
+      ],
+      "retrieval": {
+        "type": "git-archive"
+      }
     },
     {
       "checkout_path": "base/allocator/partition_allocator",
@@ -493,8 +496,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/base/allocator/partition_allocator/+archive/89615a645f0220fb03875111c2d9ae4dea9887d8.tar.gz",
       "cache_filename": "pdfium-source/base--allocator--partition_allocator-89615a645f0220fb03875111c2d9ae4dea9887d8.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "183f531317ef7b336fb7bd6aea46bf1aaf973bb20cb82277d8a5853d21210ce9",
-      "size_bytes": 895830,
+      "sha256": "5e89a26fb28c0991ec15a2e558fba0d891f5ce50e90d27240ffa2e29eb636453",
+      "size_bytes": 867633,
       "member_count": 455,
       "notice_members": [
         {
@@ -502,7 +505,10 @@
           "sha256": "b23e682fda7310afe43505ed6041919ccff8f9e0c6799ebd7542cbcef11102e3"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "build",
@@ -511,8 +517,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/build/+archive/2cd94c0abeada712aeea6906d99021913c9fc28d.tar.gz",
       "cache_filename": "pdfium-source/build-2cd94c0abeada712aeea6906d99021913c9fc28d.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "ff4bc4179cc6847fa8dd232905bf3f611bc90385b519bb426f5c33e1e3d1b4ff",
-      "size_bytes": 1968408,
+      "sha256": "f5676d4a0a735da45f68fc798ba23f695734c7542b332ef6824ecf9ad08f1228",
+      "size_bytes": 1877415,
       "member_count": 1806,
       "notice_members": [
         {
@@ -520,7 +526,10 @@
           "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "buildtools",
@@ -529,8 +538,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/buildtools/+archive/6f6a5dbf04b734214f3b1f386567d101ec9d607e.tar.gz",
       "cache_filename": "pdfium-source/buildtools-6f6a5dbf04b734214f3b1f386567d101ec9d607e.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "0be1eead04a43cd476f16179da544b97464b888e56e17f8dab261e867c4917ff",
-      "size_bytes": 60910,
+      "sha256": "839be47d0ca41fd6137f910799f0a8e803d95866d853e63e998fb3ed34acdc31",
+      "size_bytes": 56222,
       "member_count": 123,
       "notice_members": [
         {
@@ -542,7 +551,10 @@
           "sha256": "c98a2858469bd3b231c8865c5b65f80f6ffbf25e850d5d575967e3d9ee080755"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/abseil-cpp",
@@ -551,8 +563,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp/+archive/435e7d977fb36fb47854a4c552c0706dad0bd7cf.tar.gz",
       "cache_filename": "pdfium-source/third_party--abseil-cpp-435e7d977fb36fb47854a4c552c0706dad0bd7cf.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "73fe9d98106756d46ff3b2a3d7f29a3634c750da3cb96174c1a9d1785f2d2251",
-      "size_bytes": 3235987,
+      "sha256": "6d58a458d490025f29cead7a79f4556a65a6410391d58fb8c5b2bec4b6c739e7",
+      "size_bytes": 3123985,
       "member_count": 1729,
       "notice_members": [
         {
@@ -560,7 +572,10 @@
           "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/brotli",
@@ -569,8 +584,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/brotli/+archive/803ac71664ad62af1de39ff55e63ebbe07006fc8.tar.gz",
       "cache_filename": "pdfium-source/third_party--brotli-803ac71664ad62af1de39ff55e63ebbe07006fc8.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "a3292744e97b1eaa568bbb3c7b11da28cb6e8988d2268ed521546e3b1ecc771c",
-      "size_bytes": 494092,
+      "sha256": "ec5c35d2cad63e5adbf4c333f84ba1fbc9d2f9f24ec67b9f096075c43f72e8a3",
+      "size_bytes": 473178,
       "member_count": 126,
       "notice_members": [
         {
@@ -578,7 +593,10 @@
           "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/clang-format/script",
@@ -587,11 +605,14 @@
       "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/clang/tools/clang-format/+archive/70510081984cfcdb14a15b3e08dfe9776dc7ed37.tar.gz",
       "cache_filename": "pdfium-source/third_party--clang-format--script-70510081984cfcdb14a15b3e08dfe9776dc7ed37.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "503c1f035f2fb4dd6f0868dbdfe2d5e4ac18c5c778724b9ac49bd5a7a9fff4fb",
-      "size_bytes": 29687,
+      "sha256": "cab2046552bc8e0a62a2ef775c10eb9e22f2f469b8ac611149c670edff63dbe3",
+      "size_bytes": 28737,
       "member_count": 14,
       "notice_members": [],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/depot_tools",
@@ -600,8 +621,8 @@
       "url": "https://chromium.googlesource.com/chromium/tools/depot_tools/+archive/36a8df4ad006eaa0572fb446edb8145fe5403592.tar.gz",
       "cache_filename": "pdfium-source/third_party--depot_tools-36a8df4ad006eaa0572fb446edb8145fe5403592.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "be5f88db13eb6409daf973ddee0f67c6eb9c43de9cbae73a30337b045821cdc1",
-      "size_bytes": 1679096,
+      "sha256": "d2c2931e01e072400d5619c601715ded4583155ae49c48dae8c39ff1cdb95635",
+      "size_bytes": 1620023,
       "member_count": 1010,
       "notice_members": [
         {
@@ -677,7 +698,10 @@
           "sha256": "f4360ca8f779e6a673cd2882f73419bc2c5f74184fd9db91d2e86a368cc04e0b"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/dragonbox/src",
@@ -686,8 +710,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/jk-jeon/dragonbox/+archive/beeeef91cf6fef89a4d4ba5e95d47ca64ccb3a44.tar.gz",
       "cache_filename": "pdfium-source/third_party--dragonbox--src-beeeef91cf6fef89a4d4ba5e95d47ca64ccb3a44.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "ca7d0e8bf51dbaa83a252c1a2c08b9a96e8e90f6bb9c5d0b6277d2cc128c7204",
-      "size_bytes": 4235094,
+      "sha256": "88801d138370e9cd1f6e0799f39114f982279f0bfc979c9ce21a86b1da1d84ff",
+      "size_bytes": 4226939,
       "member_count": 122,
       "notice_members": [
         {
@@ -703,7 +727,10 @@
           "sha256": "4940bc5686a12692b9f95bb3af225592994fd1bc910e212f975cc73ab3799d2c"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/fast_float/src",
@@ -712,8 +739,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/fastfloat/fast_float/+archive/34164f547b7df3f5d794ff67e9f885c36819ebfc.tar.gz",
       "cache_filename": "pdfium-source/third_party--fast_float--src-34164f547b7df3f5d794ff67e9f885c36819ebfc.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "260e5932a22f342cb6e4a1b94f619fdfb0363f686071adeb2493d26708a4d073",
-      "size_bytes": 143753,
+      "sha256": "ae7aa8ae6ef44d871ba841fa0d6fd8c6916c51732fd51a27ff0509c8feb538ab",
+      "size_bytes": 138088,
       "member_count": 137,
       "notice_members": [
         {
@@ -729,7 +756,10 @@
           "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/freetype/src",
@@ -738,8 +768,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/freetype2/+archive/4800589f76dc62fbe523a74a59e0d4850a5dd7df.tar.gz",
       "cache_filename": "pdfium-source/third_party--freetype--src-4800589f76dc62fbe523a74a59e0d4850a5dd7df.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "d770e08bccd8c8ff8863ede3cf3d7a805e3c5493dd76c3726bf537edd22eb980",
-      "size_bytes": 2599522,
+      "sha256": "e8cb89745a915635305e688dc8e7eb945b84e3cd778bcce49baf5de44f7237b1",
+      "size_bytes": 2525847,
       "member_count": 835,
       "notice_members": [
         {
@@ -757,7 +787,10 @@
       ],
       "gitmodules_members": [
         ".gitmodules"
-      ]
+      ],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/googletest/src",
@@ -766,8 +799,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/google/googletest/+archive/4fe3307fb2d9f86d19777c7eb0e4809e9694dde7.tar.gz",
       "cache_filename": "pdfium-source/third_party--googletest--src-4fe3307fb2d9f86d19777c7eb0e4809e9694dde7.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "d9073df86ba091c31170abda45deb79818e8b9186a18def9c6209839bdde95c3",
-      "size_bytes": 901393,
+      "sha256": "c25d4635bc4e076a02039a5ffac0b5f857c3407d7ebca8ae36af3fb1335db1a7",
+      "size_bytes": 881712,
       "member_count": 280,
       "notice_members": [
         {
@@ -775,7 +808,10 @@
           "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/harfbuzz/src",
@@ -784,8 +820,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz/+archive/886fc1e645388080b72f6d9b06347533a0018045.tar.gz",
       "cache_filename": "pdfium-source/third_party--harfbuzz--src-886fc1e645388080b72f6d9b06347533a0018045.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "b46468d51d7b635874b84f1ccf152969816a492044d77362c65f74027d53ad3d",
-      "size_bytes": 38075848,
+      "sha256": "561629eab6962213de52e1842d155f0f526f252572c62e63ebf9f1c6299ed66f",
+      "size_bytes": 37782570,
       "member_count": 3965,
       "notice_members": [
         {
@@ -809,7 +845,10 @@
           "sha256": "d24039e4d22c9bc72096f6174374539d92a3d6e1163938546ec59179fe095e6f"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/icu",
@@ -818,8 +857,8 @@
       "url": "https://chromium.googlesource.com/chromium/deps/icu/+archive/8cc91d9b6ab9991802fd208ee03a69714fd0251c.tar.gz",
       "cache_filename": "pdfium-source/third_party--icu-8cc91d9b6ab9991802fd208ee03a69714fd0251c.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "8cdefbc42780115891c8319d0a29797c4805fec8ded0e85267c383cc77a7af2c",
-      "size_bytes": 55720195,
+      "sha256": "aee905b234305378c7ed8cce7abc4df9fb19ab2e4f49c16fc88ac7f2c557aca7",
+      "size_bytes": 54856372,
       "member_count": 7263,
       "notice_members": [
         {
@@ -835,7 +874,10 @@
           "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/instrumented_libs",
@@ -844,11 +886,14 @@
       "url": "https://chromium.googlesource.com/chromium/third_party/instrumented_libraries/+archive/423262e4438b032c0ba5ea61f78a85ac3690298c.tar.gz",
       "cache_filename": "pdfium-source/third_party--instrumented_libs-423262e4438b032c0ba5ea61f78a85ac3690298c.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "520076c0c0f5d5524ad7ce13c5fcd5e5b8cac5c6bed837d0c3b1ab2dc505fd96",
-      "size_bytes": 34396,
+      "sha256": "f80b45bcc424f1205f652918d9598fcd8207f69a4e8c91c960d68130ba03431e",
+      "size_bytes": 31823,
       "member_count": 69,
       "notice_members": [],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/libc++/src",
@@ -857,8 +902,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx/+archive/97b436da4c33663581d394f4ee0a5977fc38c2f4.tar.gz",
       "cache_filename": "pdfium-source/third_party--libc++--src-97b436da4c33663581d394f4ee0a5977fc38c2f4.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "46f32ee443dcaddf4ad6fef39e746f661005c4a011d8c493faaa24fbc0630bf7",
-      "size_bytes": 9029529,
+      "sha256": "34e33562eab27c245d97fc595af8d59ea3f2ce52a7c08480a35f6264297d8bff",
+      "size_bytes": 8422371,
       "member_count": 14873,
       "notice_members": [
         {
@@ -882,7 +927,10 @@
           "sha256": "d951cf2be0d210595c103c7ee6dee0c8e4441ed046456504ed25271ec7b42328"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/libc++abi/src",
@@ -891,8 +939,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi/+archive/fc1897a2c12aa27e703c3ed48b62eba8abf4ce19.tar.gz",
       "cache_filename": "pdfium-source/third_party--libc++abi--src-fc1897a2c12aa27e703c3ed48b62eba8abf4ce19.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "42dcc35f705e3f8155064f1faf2b4cacf398ad6d4a888ee5590352fa18761ac7",
-      "size_bytes": 808191,
+      "sha256": "b6a443f70501d93c8e3a1633d8ca4651fe15e8a809f173ec2eff480ae5dc323d",
+      "size_bytes": 789392,
       "member_count": 183,
       "notice_members": [
         {
@@ -900,7 +948,10 @@
           "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/libjpeg_turbo",
@@ -909,8 +960,8 @@
       "url": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo/+archive/640f254ad0fa03f6b1f29f89b7dd9366f2f6e533.tar.gz",
       "cache_filename": "pdfium-source/third_party--libjpeg_turbo-640f254ad0fa03f6b1f29f89b7dd9366f2f6e533.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "4b4710bd51bb4093017b44f4aa2c92e4d013f5e19aecc2d4e4ffbefc757b7375",
-      "size_bytes": 2624940,
+      "sha256": "0bb9d85ed79e9e4e574cb83b55b45319911212599342542375cea8c72e433ad5",
+      "size_bytes": 2591056,
       "member_count": 319,
       "notice_members": [
         {
@@ -926,7 +977,10 @@
           "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/libpng",
@@ -935,8 +989,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/libpng/+archive/0179a807421cf96731cdfa10008bba04fda243c1.tar.gz",
       "cache_filename": "pdfium-source/third_party--libpng-0179a807421cf96731cdfa10008bba04fda243c1.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "c784a4aff83c2af2a156d0d6555a1d87a4873ea798a4f195ee22fa5f33f208c2",
-      "size_bytes": 350596,
+      "sha256": "ef5486f27cf3ddb50466c40071005ad3ee1c2bdb2546640d1cc37d176f932fa0",
+      "size_bytes": 344312,
       "member_count": 54,
       "notice_members": [
         {
@@ -944,7 +998,10 @@
           "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/llvm-libc/src",
@@ -953,8 +1010,8 @@
       "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libc/+archive/320824188c37e5c28738b9652a0ca8087c934bc9.tar.gz",
       "cache_filename": "pdfium-source/third_party--llvm-libc--src-320824188c37e5c28738b9652a0ca8087c934bc9.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "f574f5cb48625d52744f38aad5d1b980b18908b821bec405f016e4174227a2c1",
-      "size_bytes": 8047142,
+      "sha256": "728c4a680771d7c5e8256eb7a6f72af24ebd7466ff31a6193013c4b381ee9880",
+      "size_bytes": 7704568,
       "member_count": 8791,
       "notice_members": [
         {
@@ -962,7 +1019,10 @@
           "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/nasm",
@@ -971,8 +1031,8 @@
       "url": "https://chromium.googlesource.com/chromium/deps/nasm/+archive/525a09a813be0f75b646ee93fc2a31c27b87d722.tar.gz",
       "cache_filename": "pdfium-source/third_party--nasm-525a09a813be0f75b646ee93fc2a31c27b87d722.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "f1bfe7d6b6a8f69eb37ba8b95dfecd17e540ec021ef270f796d400798ca368d3",
-      "size_bytes": 2433425,
+      "sha256": "4b59895e33ea14bd1bcba333586fe3ba110b65a748d9b323fef071481a6a17fe",
+      "size_bytes": 2326856,
       "member_count": 1387,
       "notice_members": [
         {
@@ -984,7 +1044,10 @@
           "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/simdutf",
@@ -993,8 +1056,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/simdutf/+archive/f7356eed293f8208c40b3c1b344a50bd70971983.tar.gz",
       "cache_filename": "pdfium-source/third_party--simdutf-f7356eed293f8208c40b3c1b344a50bd70971983.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "575b04864a33da069638620471eb38803c55832695c1be472b4d94ea3602bd8a",
-      "size_bytes": 425715,
+      "sha256": "906029f509004471fadac8e612f79607d27868de87efacd3f669dd42c36a9253",
+      "size_bytes": 419719,
       "member_count": 6,
       "notice_members": [
         {
@@ -1002,7 +1065,10 @@
           "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/test_fonts",
@@ -1011,8 +1077,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/test_fonts/+archive/7f51783942943e965cd56facf786544ccfc07713.tar.gz",
       "cache_filename": "pdfium-source/third_party--test_fonts-7f51783942943e965cd56facf786544ccfc07713.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "edfaa1dc9b98a204493b344211d7374922db8b04347dbe36d879bd97d43d1053",
-      "size_bytes": 20868,
+      "sha256": "d787c19a457a1b3e678ea4613f6687333ac01ef9f07e2bea47c9c997198a9e22",
+      "size_bytes": 20235,
       "member_count": 14,
       "notice_members": [
         {
@@ -1020,7 +1086,10 @@
           "sha256": "81e32dadf795edf077c0e567963e598b64f3c6b1ffa8ebac907bf01d3e7b2c1a"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/zlib",
@@ -1029,8 +1098,8 @@
       "url": "https://chromium.googlesource.com/chromium/src/third_party/zlib/+archive/285e94b8fa95ad3b7d16b80798ec8dce6febb8c8.tar.gz",
       "cache_filename": "pdfium-source/third_party--zlib-285e94b8fa95ad3b7d16b80798ec8dce6febb8c8.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "11dc500b7afa0c5049e1cabd79e7b064a82799a4c9155173965a74a5dabee297",
-      "size_bytes": 1393282,
+      "sha256": "324bdcd41529c9c6c9295a2e7a1b9f93990d17e6f5fb2ee9e997c2a039cf47d6",
+      "size_bytes": 1377871,
       "member_count": 214,
       "notice_members": [
         {
@@ -1038,7 +1107,10 @@
           "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
         }
       ],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "tools/clang",
@@ -1047,11 +1119,14 @@
       "url": "https://chromium.googlesource.com/chromium/src/tools/clang/+archive/450d823868eaee61e2b2cb986e19aec287f16d58.tar.gz",
       "cache_filename": "pdfium-source/tools--clang-450d823868eaee61e2b2cb986e19aec287f16d58.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "c41e8f146bf51e599ccdaafb8e29b0d3f85c86e988c76bdeb3ded82842f76675",
-      "size_bytes": 692206,
+      "sha256": "a5a71df926927b077da4ef77be40f49020c85a060c5926a6df1a252b10bed52a",
+      "size_bytes": 645381,
       "member_count": 1251,
       "notice_members": [],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "tools/code_coverage",
@@ -1060,11 +1135,14 @@
       "url": "https://chromium.googlesource.com/chromium/src/tools/code_coverage/+archive/e1878fbb1ff79de75d54b6b57caa19a92b90079b.tar.gz",
       "cache_filename": "pdfium-source/tools--code_coverage-e1878fbb1ff79de75d54b6b57caa19a92b90079b.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "684d9d68f3d3c97952f5044aa835601e7da1f014610f616337f67e5f0822be26",
-      "size_bytes": 112307,
+      "sha256": "c563c962e2f52457def2d2e02bcdf8d64a4aad7c6a0292db812c80b7f0401538",
+      "size_bytes": 108368,
       "member_count": 67,
       "notice_members": [],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "tools/memory",
@@ -1073,11 +1151,14 @@
       "url": "https://chromium.googlesource.com/chromium/src/tools/memory/+archive/0732f7097d066a81e673f90862994f76886fc638.tar.gz",
       "cache_filename": "pdfium-source/tools--memory-0732f7097d066a81e673f90862994f76886fc638.tar.gz",
       "deps_parent": "DEPS",
-      "sha256": "349e92705b95b5403e9014f7c8a6fd4f14cf8a13f1d5b024117a23991d63eef6",
-      "size_bytes": 66074,
+      "sha256": "38e876d3b9c8ba68add66cd7f433b431b8486d8e86b20af3ea8834a8740397c5",
+      "size_bytes": 63141,
       "member_count": 63,
       "notice_members": [],
-      "gitmodules_members": []
+      "gitmodules_members": [],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "checkout_path": "third_party/freetype/src/subprojects/dlg",
@@ -1099,8 +1180,8 @@
     },
     {
       "url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/+archive/20e97c4b113b79586c29ac57738548939a34d22e/compiler-rt.tar.gz",
-      "sha256": "d87e498344676e20d0dbabaf3250094145231dad212d81133ef7fb699c8d7435",
-      "size_bytes": 4900620,
+      "sha256": "bbedfcdd858582ca82ef618b2705f756e4f2548c31e96b5e12d05cdcf6aa5f49",
+      "size_bytes": 4499596,
       "cache_filename": "pdfium-source/compiler-rt-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
       "checkout_path": null,
       "source_subtree": "compiler-rt",
@@ -1112,12 +1193,15 @@
           "member": "LICENSE.TXT",
           "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
         }
-      ]
+      ],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     },
     {
       "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/20e97c4b113b79586c29ac57738548939a34d22e",
-      "sha256": "ab755ce2db522faafb5372a95f6ecb62cf06368f959ee995302802b81006cbfe",
-      "size_bytes": 280189982,
+      "sha256": "19ce83a9ea64fe800b69c76a37633ca24dcbb9d7d3115957700bd1d37ed46fce",
+      "size_bytes": 276068528,
       "cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
       "checkout_path": null,
       "revision": "20e97c4b113b79586c29ac57738548939a34d22e",
@@ -1149,7 +1233,10 @@
           "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/third-party/benchmark/LICENSE",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
-      ]
+      ],
+      "retrieval": {
+        "type": "canonical-gitiles-archive"
+      }
     }
   ],
   "build_recipe": {
