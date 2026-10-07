@@ -161,7 +161,8 @@ const sections: LegalSection[] = [
             <>
               <span className={strong}>Page views and clicks:</span> the address of the page,
               without anything after a <code>?</code> or <code>#</code>, the page you came from, cut
-              the same way, and the links, buttons and form fields you use, but not what you type.
+              the same way, and which links and buttons you click, without the text on them or
+              anything you type.
             </>,
             <>
               <span className={strong}>Device and browser:</span> browser, operating system, device

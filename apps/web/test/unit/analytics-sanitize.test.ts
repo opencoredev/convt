@@ -108,5 +108,8 @@ test("PostHog runs without the channels that bypass before_send", () => {
   expect(options.advanced_disable_flags).toBe(true);
   expect(options.disable_session_recording).toBe(true);
   expect(options.capture_heatmaps).toBe(false);
+  // Autocapture would otherwise record the account menu's name and avatar URL.
+  expect(options.mask_all_text).toBe(true);
+  expect(options.mask_all_element_attributes).toBe(true);
   expect(options.api_host).toBe("https://us.i.posthog.com");
 });

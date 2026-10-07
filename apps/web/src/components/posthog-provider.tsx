@@ -11,7 +11,8 @@ let initialized = false;
 
 /**
  * The privacy policy promises these: no session recordings or heatmaps, nothing sent
- * after an opt-out, and no query string or fragment in any URL PostHog receives.
+ * after an opt-out, no query string or fragment in any URL PostHog receives, and
+ * clicks recorded without element text or attributes (names, emails, avatar URLs).
  * Feature flags are off because their request carries the raw first-visit URL
  * outside `before_send`; the site uses none.
  */
@@ -24,6 +25,8 @@ export function posthogOptions(host: string): Partial<PostHogConfigOptions> {
     advanced_disable_flags: true,
     disable_session_recording: true,
     capture_heatmaps: false,
+    mask_all_text: true,
+    mask_all_element_attributes: true,
     before_send: (event) => (analyticsChoice() === "on" ? sanitizeEvent(event) : null),
   };
 }
