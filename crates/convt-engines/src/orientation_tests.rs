@@ -270,6 +270,27 @@ fn heic_orientation_exif_only_to_every_image_target() {
         );
         let src = dir.path().join(format!("exif-{tag}.heic"));
         std::fs::write(&src, patched).unwrap();
+        // ImageIO may apply a same-size EXIF (2/3/4) and drop the tag, or drop
+        // it unapplied. finish_heif_output will not guess those. 90° tags
+        // change size, so they are unambiguous on macOS.
+        if cfg!(target_os = "macos") && matches!(tag, 2 | 3 | 4) {
+            let out = convert(&src, "webp");
+            let stored = open_stored(&out).expect("webp pixels");
+            let ((x, y), _) = red_sample(tag);
+            let px = stored.to_rgba8().get_pixel(x, y).0;
+            if px[0].abs_diff(240) <= 45 && px[1].abs_diff(24) <= 45 {
+                println!("heic_orientation EXIF-only {tag}: passed (sips baked it)");
+            } else {
+                let ((sx, sy), _) = red_sample(1);
+                let sp = stored.to_rgba8().get_pixel(sx, sy).0;
+                assert!(
+                    sp[0].abs_diff(240) <= 45 && sp[1].abs_diff(24) <= 45,
+                    "EXIF-only {tag}: neither baked nor left stored: {px:?}"
+                );
+                println!("heic_orientation EXIF-only {tag}: ran (sips dropped same-size EXIF)");
+            }
+            continue;
+        }
         for to in &targets {
             let out = convert(&src, to);
             assert_oriented(&out, tag, to);
