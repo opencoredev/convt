@@ -116,7 +116,6 @@ fn enabled() -> bool {
                 (key.trim() == "telemetry").then(|| value.trim().parse::<bool>().ok())?
             })
         })
-        .flatten()
         .unwrap_or(true);
     let enforced = convt_license::ENFORCED
         || (cfg!(debug_assertions)
