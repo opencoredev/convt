@@ -65,12 +65,13 @@ def sdk_remove_probe(exit_code, stderr, tree, home, removed_packages=()):
         raise ValueError('SDK probe receipt leaked a rebuild path')
     if DURATION.search(text):
         raise ValueError('SDK probe receipt leaked a cargo duration')
+    # Even sorted and normalized, the full compile's stderr differed between two
+    # identical rebuilds (run 37641703105), so the receipt keeps only the outcome.
     return {
         'command': PROBE_COMMAND,
         'empty_cargo_home': True,
         'exit_code': exit_code,
         'removed_packages': list(removed_packages),
-        'stderr': text,
     }
 
 

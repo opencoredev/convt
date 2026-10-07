@@ -103,13 +103,13 @@ class ProbeReceipt(unittest.TestCase):
     def test_receipt_schema_stays_explicit(self):
         receipt = scope.sdk_remove_probe(0, '', Path('/tree'), Path('/home'),
                                          [{'name': 'objc2', 'version': '0.6.2'}])
+        # stderr is not kept: it differed between identical rebuilds (run 37641703105).
         self.assertEqual(set(receipt), {
-            'command', 'empty_cargo_home', 'exit_code', 'removed_packages', 'stderr',
+            'command', 'empty_cargo_home', 'exit_code', 'removed_packages',
         })
         self.assertEqual(receipt['command'], scope.PROBE_COMMAND)
         self.assertTrue(receipt['empty_cargo_home'])
         self.assertEqual(receipt['removed_packages'], [{'name': 'objc2', 'version': '0.6.2'}])
-        self.assertEqual(receipt['stderr'], '')
 
     def test_dump_is_sorted_json(self):
         with tempfile.TemporaryDirectory(prefix='convt-probe-dump-') as tmp:
