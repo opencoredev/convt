@@ -29,7 +29,7 @@ permissions:
   contents: read
 jobs:
   windows:
-    runs-on: [self-hosted, windows, x64]
+    runs-on: windows-latest
     timeout-minutes: 90
     env:
       SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
@@ -45,8 +45,12 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          test "$GITHUB_REF" = refs/heads/main
+          if [ "$DRY_RUN" = false ]; then test "$GITHUB_REF" = refs/heads/main; fi
+          if [ "$DRY_RUN" = false ]; then
+            test "$CONVT_LICENSE_PUBKEY" = FifI4kZfp25-La18pwNa4CJ751s4hDP68D60bp9rQoY
+          fi
           test "$(python3 scripts/release/sync-version.py --check)" = "$RELEASE_VERSION"
       - uses: dtolnay/rust-toolchain@1.95.0
         with:

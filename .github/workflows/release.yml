@@ -3,10 +3,13 @@ on:
   push:
     branches: [main]
     paths:
+      - apps/desktop/**
+      - tools/cli/**
       - apps/desktop/package.json
       - tools/cli/package.json
       - apps/web/package.json
       - Cargo.toml
+      - Cargo.lock
   workflow_dispatch:
     inputs:
       include_windows:
@@ -97,7 +100,8 @@ jobs:
     secrets: inherit
   windows:
     needs: preflight
-    if: needs.preflight.outputs.publish == 'true' && github.event_name == 'workflow_dispatch' && inputs.include_windows
+    # Windows is an optional, non-blocking release artifact.
+    if: needs.preflight.outputs.publish == 'true'
     uses: ./.github/workflows/release-windows.yml
     with:
       version: ${{ needs.preflight.outputs.version }}
