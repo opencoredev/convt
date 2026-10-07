@@ -210,7 +210,7 @@ pub(crate) fn trusted(path: &Path, ancestor: bool) -> anyhow::Result<()> {
     };
     let privileged =
         |sid| same(sid, &sids.user) || same(sid, &sids.system) || same(sid, &sids.admins);
-    if !privileged(owner) && !(ancestor && same(owner, &sids.installer)) {
+    if !(privileged(owner) || (ancestor && same(owner, &sids.installer))) {
         bail!(
             "document-pack path has an untrusted owner: {}",
             path.display()
