@@ -907,8 +907,7 @@ export async function ingestFacts(
   const deadline = Date.now() + ctx.config.budgetMs * 4;
   const { cards } = await hydrate(ctx, facts, deadline);
   const outcome = await ctx.db.transaction(async (tx) => applyFacts(ctx, tx, facts, cards));
-  if (!outcome.rejected) await emitAnalytics(ctx.captureAnalytics, outcome.events);
-  if (outcome.rejected) {
+  if (outcome.rejected !== null) {
     const subject =
       facts.orders[0]?.providerOrderId ??
       facts.subscriptions[0]?.providerSubscriptionId ??
@@ -916,6 +915,8 @@ export async function ingestFacts(
       "facts";
     await alert(ctx.db, ctx.clock(), "rejected_fact", `${source}:${subject}`, outcome.rejected);
     ctx.log(`[billing] ${source}: rejected ${subject}: ${outcome.rejected}`);
+  } else {
+    await emitAnalytics(ctx.captureAnalytics, outcome.events);
   }
   return outcome;
 }
