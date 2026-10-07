@@ -6,7 +6,11 @@ use convt_license::client::{DOWNLOAD_URL, State};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::theme::{self, Clickable, Palette, mono, text, text_button};
+use gpui_kit::component::IconName;
+
+use super::theme::{
+    self, Button, Clickable, Palette, Tone, radius, size, space, styled, text_button,
+};
 use crate::model::AppState;
 use crate::update::Update;
 
@@ -16,7 +20,7 @@ fn line(id: &'static str, message: impl Into<SharedString>, color: Hsla) -> Clic
         .id(id)
         .test_support()
         .aria_label(message.clone())
-        .child(text(12., 17., color).child(message))
+        .child(styled(size::SMALL, color).child(message))
 }
 
 fn open(url: String) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
@@ -29,7 +33,9 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
         Update::Available { version, .. } => (
             "Update available",
             format!("convt {version}"),
-            text_button("update-download", "Download", p.green, 12.),
+            Button::primary("update-download", "Download")
+                .icon(IconName::ArrowDown)
+                .small(),
             DOWNLOAD_URL.to_string(),
         ),
         Update::NotCovered {
@@ -39,7 +45,7 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
         } => (
             "New version",
             format!("convt {version} needs a renewed license"),
-            text_button("update-renew", "Renew to update", p.green, 12.),
+            Button::secondary("update-renew", "Renew to update").small(),
             purchase_url.clone(),
         ),
         _ => return None,
@@ -51,36 +57,51 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
             .aria_label(SharedString::from(format!("{title}: {detail}")))
             .flex()
             .flex_col()
-            .gap(px(6.))
-            .mb(px(8.))
-            .p(px(12.))
-            .rounded(px(8.))
-            .bg(p.trial_card)
+            .gap(px(space::SM))
+            .p(px(space::MD))
+            .rounded(px(radius::CARD))
+            .bg(p.surface)
             .border_1()
-            .border_color(p.chrome_border)
-            .child(
-                text(12., 16., p.text)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(title),
-            )
-            .child(text(12., 16., p.secondary).child(detail))
+            .border_color(p.border)
             .child(
                 div()
                     .flex()
-                    .child(button.font_weight(FontWeight::MEDIUM).on_click(open(url))),
-            ),
+                    .items_center()
+                    .gap(px(space::SM))
+                    .child(theme::icon_tile(IconName::ArrowDown, Tone::Green, 22., p))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .min_w_0()
+                            .child(
+                                styled(size::SMALL, p.text)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(title),
+                            )
+                            .child(styled(size::CAPTION, p.secondary).child(detail)),
+                    ),
+            )
+            .child(button.build(p).w_full().on_click(open(url))),
     )
 }
 
-/// The Update checks row in Settings, General: the switch, what the last
-/// check found, and what to do about it.
-pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
+/// The Update checks rows in Settings, General: the switch, then what the
+/// last check found and what to do about it.
+pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyElement> {
     let state = app.read(cx);
     let on = state.settings.update_checks;
     let switch = theme::switch("update-checks", on, false, p).on_click({
         let app = app.clone();
         move |_, _, cx| app.update(cx, |s, cx| s.set_update_checks(!on, cx))
     });
+    let toggle = theme::row(
+        "Check for updates",
+        Some(theme::detail("Once a day and when you click Check now", p)),
+        switch,
+        p,
+    )
+    .into_any_element();
     let last = state
         .settings
         .update_checked
@@ -88,10 +109,14 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         .map_or("Not checked yet.".to_string(), |d| {
             format!("Last checked {d}.")
         });
-    let check_now = text_button("check-updates", "Check now", p.green, 12.).on_click({
-        let app = app.clone();
-        move |_, _, cx| app.update(cx, |s, cx| s.check_updates(cx))
-    });
+    let check_now = Button::secondary("check-updates", "Check now")
+        .icon(IconName::RefreshCw)
+        .small()
+        .build(p)
+        .on_click({
+            let app = app.clone();
+            move |_, _, cx| app.update(cx, |s, cx| s.check_updates(cx))
+        });
     let (status, action): (Clickable, Option<Clickable>) = if !on {
         (
             line(
@@ -119,9 +144,12 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                     message.push_str(&format!(" {newer} needs a renewed license."));
                 }
                 (
-                    line("update-status", message, p.green),
+                    line("update-status", message, p.green_text),
                     Some(
-                        text_button("update-download", "Download", p.green, 12.)
+                        Button::primary("update-download", "Download")
+                            .icon(IconName::ArrowDown)
+                            .small()
+                            .build(p)
                             .on_click(open(DOWNLOAD_URL.to_string())),
                     ),
                 )
@@ -149,7 +177,7 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                     p.text,
                 ),
                 Some(
-                    text_button("update-renew", "Renew", p.green, 12.)
+                    text_button("update-renew", "Renew", p.green_text, 12.)
                         .on_click(open(purchase_url.clone())),
                 ),
             ),
@@ -164,28 +192,25 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
             ),
         }
     };
-    div()
+    let status_row = div()
         .flex()
-        .flex_col()
-        .flex_1()
-        .min_w(px(0.))
-        .gap(px(6.))
+        .items_center()
+        .gap(px(space::LG))
+        .min_h(px(44.))
+        .px(px(space::LG))
+        .py(px(10.))
+        .child(div().flex_1().min_w_0().child(status))
         .child(
             div()
                 .flex()
+                .flex_shrink_0()
                 .items_center()
-                .gap(px(10.))
-                .child(switch)
-                .child(mono(11., 14., p.tertiary).child("ONCE A DAY")),
-        )
-        .child(status)
-        .child(
-            div()
-                .flex()
-                .gap(px(14.))
+                .gap(px(space::SM))
                 .children(action)
                 .when(on && state.update != Update::Checking, |d| {
                     d.child(check_now)
                 }),
         )
+        .into_any_element();
+    vec![toggle, status_row]
 }

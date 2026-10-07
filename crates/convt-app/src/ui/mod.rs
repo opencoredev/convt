@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use convt_core::Preset;
 use convt_license::client::{BUY_URL, DOWNLOAD_URL, State};
+use gpui_kit::component::IconName;
 use gpui_kit::*;
 
 pub use first_run::FirstRunView;
@@ -151,10 +152,13 @@ fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
     opened
 }
 
+/// The first-run window's size.
+pub(super) const FIRST_RUN_SIZE: (f32, f32) = (460., 520.);
+
 fn open_first_run(cx: &mut App) {
     let app = model::shared(cx);
     show(
-        size(px(420.), px(420.)),
+        size(px(FIRST_RUN_SIZE.0), px(FIRST_RUN_SIZE.1)),
         "Welcome to convt",
         cx,
         |window, cx| cx.new(|cx| FirstRunView::new(app, first_run::first_step(), window, cx)),
@@ -283,11 +287,20 @@ fn error_text(message: impl Into<SharedString>, p: &Palette) -> impl IntoElement
         .id("error")
         .test_support()
         .aria_label(message.clone())
-        .font_family(theme::SANS)
-        .text_size(px(12.))
-        .line_height(px(16.))
-        .text_color(p.error)
-        .child(message)
+        .flex()
+        .items_start()
+        .gap(px(6.))
+        .child(div().flex_shrink_0().pt(px(2.)).child(theme::icon(
+            IconName::CircleAlert,
+            13.,
+            p.error,
+        )))
+        .child(
+            theme::styled(theme::size::SMALL, p.error)
+                .flex_1()
+                .min_w_0()
+                .child(message),
+        )
 }
 
 /// Why conversions stopped, with what the user can do about it. Nothing
@@ -300,36 +313,44 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
         "Buy a license"
     };
     let download = matches!(state, State::NotCovered(_)).then(|| {
-        theme::text_button("download", "Download a covered build", p.green, 12.)
+        theme::text_button("download", "Download a covered build", p.green_text, 12.)
             .on_click(|_, _, cx| cx.open_url(DOWNLOAD_URL))
     });
-    Some(
+    Some(theme::callout(
+        IconName::TriangleAlert,
+        theme::Tone::Error,
         div()
             .flex()
             .flex_col()
-            .gap(px(6.))
+            .gap(px(8.))
             .child(
                 div()
                     .id("license-banner")
                     .test_support()
                     .aria_label(reason.clone())
-                    .child(theme::text(12., 16., p.error).child(reason)),
+                    .child(
+                        theme::styled(theme::size::BODY, p.text)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(reason),
+                    ),
             )
             .child(
                 div()
                     .flex()
-                    .gap(px(14.))
-                    .children(download)
+                    .items_center()
+                    .gap(px(16.))
                     .child(
-                        theme::text_button("buy", buy, p.green, 12.)
+                        theme::text_button("buy", buy, p.green_text, 12.)
                             .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                     )
+                    .children(download)
                     .child(
                         theme::text_button("enter-license", "Enter license", p.text, 12.)
                             .on_click(|_, _, cx| show_license(None, cx)),
                     ),
             ),
-    )
+        p,
+    ))
 }
 
 /// "1.9 MB", "214 KB".

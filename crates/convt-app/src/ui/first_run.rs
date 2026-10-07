@@ -9,12 +9,15 @@
 //! and a Desktop key never need it: starting the trial opens no browser.
 
 use convt_license::client::{BUY_URL, State};
+use gpui_kit::component::IconName;
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::LICENSE_PRICE;
-use super::theme::{self, Palette, mono, primary_button, text, text_button};
+use super::theme::{
+    self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text, text_button,
+};
 use crate::finder::EXTENSION_SETTINGS;
 use crate::model::AppState;
 
@@ -148,12 +151,16 @@ impl FirstRunView {
         cx.notify();
     }
 
+    /// A picture of the System Settings pane, so the user knows what to look
+    /// for. It is drawn, not a control: nothing in it reacts to the pointer.
     fn finder_art(&self, on: Option<bool>, p: &Palette) -> impl IntoElement {
-        let caption = if on == Some(true) {
+        let on = on == Some(true);
+        let caption = if on {
             "It's on. Come back here and continue."
         } else {
             "This picture isn't a switch."
         };
+        let dot = |color: u32| div().size(px(8.)).rounded(px(4.)).bg(rgb(color));
         div()
             .id("finder-preview")
             .test_support()
@@ -163,21 +170,29 @@ impl FirstRunView {
             .flex()
             .flex_col()
             .flex_1()
-            .gap(px(8.))
-            .p(px(14.))
-            .rounded(px(10.))
-            .bg(p.recessed)
+            .rounded(px(radius::CARD))
+            .overflow_hidden()
+            .bg(p.surface)
             .border_1()
-            .border_color(p.recessed_border)
-            .opacity(0.88)
+            .border_color(p.border)
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .justify_between()
+                    .gap(px(6.))
+                    .h(px(30.))
+                    .px(px(space::MD))
+                    .bg(p.recessed)
+                    .border_b_1()
+                    .border_color(p.hairline)
+                    .child(dot(0xFF5F57))
+                    .child(dot(0xFEBC2E))
+                    .child(dot(0x28C840))
                     .child(
-                        text(11., 14., p.tertiary)
-                            .font_weight(FontWeight::SEMIBOLD)
+                        styled(size::CAPTION, p.tertiary)
+                            .flex_1()
+                            .pl(px(6.))
+                            .font_weight(FontWeight::MEDIUM)
                             .child("System Settings"),
                     )
                     .child(
@@ -185,69 +200,92 @@ impl FirstRunView {
                             .id("finder-preview-badge")
                             .test_support()
                             .aria_label("Preview")
-                            .px(px(6.))
-                            .py(px(1.))
-                            .rounded(px(4.))
-                            .bg(p.chip)
-                            .border_1()
-                            .border_color(p.chip_border)
-                            .child(
-                                text(10., 13., p.tertiary)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Preview"),
-                            ),
+                            .child(theme::badge("PREVIEW", Tone::Neutral, p)),
                     ),
             )
-            .child(text(11., 14., p.secondary).child("General › Login Items & Extensions"))
-            .child(text(11., 14., p.tertiary).child("↓  Scroll to Extensions"))
             .child(
                 div()
                     .flex()
-                    .items_center()
-                    .justify_between()
-                    .px(px(12.))
-                    .py(px(10.))
-                    .rounded(px(8.))
-                    .bg(p.mock_item)
-                    .border_1()
-                    .border_color(if p.dark {
-                        p.chrome_border
-                    } else {
-                        p.recessed_border
-                    })
+                    .flex_col()
+                    .gap(px(10.))
+                    .p(px(14.))
                     .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .child(text(13., 16., p.text).child("convt"))
-                            .child(text(11., 14., p.secondary).child("Finder extension")),
-                    )
-                    .child(
-                        // Illustrated only: not theme::switch, no pointer, no click.
                         div()
                             .flex()
                             .items_center()
-                            .w(px(28.))
-                            .h(px(16.))
-                            .p(px(2.))
+                            .gap(px(6.))
+                            .child(styled(size::SMALL, p.secondary).child("General"))
+                            .child(icon(IconName::ChevronRight, 11., p.tertiary))
+                            .child(
+                                styled(size::SMALL, p.text)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child("Login Items & Extensions"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(icon(IconName::ArrowDown, 11., p.tertiary))
+                            .child(styled(size::CAPTION, p.tertiary).child("Scroll to Extensions")),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .px(px(space::MD))
+                            .py(px(10.))
                             .rounded(px(8.))
-                            .opacity(0.7)
-                            .when(on == Some(true), |d| d.justify_end())
-                            .bg(if on == Some(true) {
-                                p.control_on
-                            } else {
-                                p.toggle_off
-                            })
-                            .child(div().size(px(12.)).rounded(px(6.)).bg(rgb(0xFFFFFF))),
+                            .bg(p.recessed)
+                            .border_1()
+                            .border_color(if on { p.green_border } else { p.border })
+                            .child(theme::mark(22., p))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .flex_1()
+                                    .child(
+                                        styled(size::BODY, p.text)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child("convt"),
+                                    )
+                                    .child(
+                                        styled(size::CAPTION, p.secondary)
+                                            .child("Finder extension"),
+                                    ),
+                            )
+                            .child(
+                                // Illustrated only: not theme::switch, no pointer, no click.
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .w(px(28.))
+                                    .h(px(16.))
+                                    .p(px(2.))
+                                    .rounded(px(8.))
+                                    .opacity(0.75)
+                                    .when(on, |d| d.justify_end())
+                                    .bg(if on { p.green } else { p.toggle_off })
+                                    .child(div().size(px(12.)).rounded(px(6.)).bg(rgb(0xFFFFFF))),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("finder-preview-caption")
+                            .test_support()
+                            .aria_label(caption)
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .children(on.then(|| icon(IconName::CircleCheck, 12., p.green)))
+                            .child(
+                                styled(size::CAPTION, if on { p.green_text } else { p.tertiary })
+                                    .child(caption),
+                            ),
                     ),
-            )
-            .child(
-                div()
-                    .id("finder-preview-caption")
-                    .test_support()
-                    .aria_label(caption)
-                    .child(text(11., 14., p.tertiary).child(caption)),
             )
     }
 
@@ -257,41 +295,30 @@ impl FirstRunView {
             theme::clickable(id, title)
                 .aria_selected(on)
                 .flex()
-                .items_center()
-                .gap(px(12.))
+                .items_start()
+                .gap(px(space::MD))
                 .p(px(14.))
-                .rounded(px(10.))
+                .rounded(px(radius::CARD))
                 .map(|d| {
                     if on {
                         d.bg(p.green_tint)
                             .shadow(vec![theme::inset_ring(p.green, 1.5)])
                     } else {
-                        d.shadow(vec![theme::inset_ring(p.card_border, 1.)])
+                        d.bg(p.surface)
+                            .shadow(vec![theme::inset_ring(p.border, 1.)])
+                            .hover(|s| s.bg(p.recessed))
                     }
                 })
                 .on_click(cx.listener(move |this, _, _, cx| this.pick_plan(plan, cx)))
-                .child(if on {
-                    div()
-                        .size(px(16.))
-                        .flex_shrink_0()
-                        .rounded(px(8.))
-                        .bg(rgb(0xFFFFFF))
-                        .shadow(vec![theme::inset_ring(p.control_on, 5.)])
-                } else {
-                    div()
-                        .size(px(16.))
-                        .flex_shrink_0()
-                        .rounded(px(8.))
-                        .shadow(vec![theme::inset_ring(p.radio_off, 1.5)])
-                })
+                .child(div().pt(px(1.)).child(theme::radio(on, p)))
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .flex_1()
-                        .gap(px(2.))
+                        .gap(px(3.))
                         .child(
-                            text(13., 16., p.text)
+                            styled(size::BODY, p.text)
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child(title),
                         )
@@ -299,7 +326,11 @@ impl FirstRunView {
                 )
         };
         let extra = super::account::compact(&self.app, p, cx);
-        let about = |line: &'static str| text(12., 16., p.secondary).child(line).into_any_element();
+        let about = |line: &'static str| {
+            styled(size::SMALL, p.secondary)
+                .child(line)
+                .into_any_element()
+        };
         // The key field takes the place of the description, so the window
         // keeps its size.
         let key_about = if self.plan == Plan::Key {
@@ -314,7 +345,7 @@ impl FirstRunView {
             .flex()
             .flex_col()
             .flex_1()
-            .gap(px(10.))
+            .gap(px(space::SM))
             .child(card(
                 "plan-trial",
                 Plan::Trial,
@@ -322,27 +353,43 @@ impl FirstRunView {
                 about("Every feature, no card, no account."),
             ))
             .child(card("plan-key", Plan::Key, "I have a license", key_about))
-            .child(extra)
+            .child(div().px(px(2.)).pt(px(6.)).child(extra))
     }
 
+    /// A file's right-click menu with convt's submenu, as the file manager
+    /// draws it.
     fn done_art(&self, p: &Palette) -> Div {
         let item = |label: &'static str| {
             div()
                 .px(px(8.))
                 .py(px(3.))
-                .child(text(12., 16., p.tertiary).child(label))
+                .child(styled(size::SMALL, p.secondary).child(label))
         };
+        let menu = |w: f32| {
+            div()
+                .flex()
+                .flex_col()
+                .w(px(w))
+                .p(px(5.))
+                .rounded(px(8.))
+                .bg(p.overlay)
+                .shadow(vec![
+                    theme::inset_ring(p.border, 1.),
+                    theme::shadow(p.shadow_soft, 6., 16.),
+                ])
+        };
+        let separator = || div().h(px(1.)).my(px(4.)).mx(px(4.)).bg(p.hairline);
+        let highlight = rgb(0x2F6FE4);
         div()
             .flex()
             .flex_col()
             .flex_1()
-            .items_start()
-            .gap(px(8.))
-            .p(px(14.))
-            .rounded(px(10.))
+            .gap(px(10.))
+            .p(px(space::LG))
+            .rounded(px(radius::CARD))
             .bg(p.recessed)
             .border_1()
-            .border_color(p.recessed_border)
+            .border_color(p.border)
             .child(
                 div()
                     .flex()
@@ -350,13 +397,13 @@ impl FirstRunView {
                     .gap(px(8.))
                     .child(
                         div()
-                            .w(px(22.))
-                            .h(px(16.))
-                            .rounded(px(3.))
+                            .w(px(26.))
+                            .h(px(20.))
+                            .rounded(px(4.))
                             .bg(linear_gradient(
                                 135.,
-                                linear_color_stop(rgb(0xDDE6F2), 0.),
-                                linear_color_stop(rgb(0xB9C8DE), 1.),
+                                linear_color_stop(rgb(0xF4A261), 0.),
+                                linear_color_stop(rgb(0x3A7BD5), 1.),
                             ))
                             .shadow(vec![theme::inset_ring(p.thumb_border, 1.)]),
                     )
@@ -365,32 +412,50 @@ impl FirstRunView {
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .w(px(220.))
-                    .p(px(5.))
-                    .rounded(px(8.))
-                    .bg(p.mock_menu)
-                    .border_1()
-                    .border_color(p.mock_separator)
-                    .child(item("Open"))
-                    // Finder's wording on macOS, the file managers' elsewhere.
-                    .child(item(if cfg!(target_os = "macos") {
-                        "Get Info"
-                    } else {
-                        "Properties"
-                    }))
-                    .child(div().h(px(1.)).bg(p.mock_separator))
+                    .items_start()
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .px(px(8.))
-                            .py(px(3.))
-                            .rounded(px(4.))
-                            .bg(rgb(0x2F6FE4))
-                            .child(text(12., 16., rgb(0xFFFFFF).into()).child("Convert with convt"))
-                            .child(text(12., 16., rgb(0xFFFFFF).into()).child("›")),
+                        menu(196.)
+                            .child(item("Open"))
+                            // Finder's wording on macOS, the file managers' elsewhere.
+                            .child(item(if cfg!(target_os = "macos") {
+                                "Get Info"
+                            } else {
+                                "Properties"
+                            }))
+                            .child(separator())
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .px(px(8.))
+                                    .py(px(3.))
+                                    .rounded(px(4.))
+                                    .bg(highlight)
+                                    .child(
+                                        text(12., 17., rgb(0xFFFFFF).into())
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child("Convert with convt"),
+                                    )
+                                    .child(icon(IconName::ChevronRight, 11., rgb(0xFFFFFF).into())),
+                            ),
+                    )
+                    .child(
+                        menu(132.)
+                            .ml(px(-4.))
+                            .mt(px(38.))
+                            .child(item("JPEG"))
+                            .child(item("PNG"))
+                            .child(
+                                div()
+                                    .px(px(8.))
+                                    .py(px(3.))
+                                    .rounded(px(4.))
+                                    .bg(p.hover)
+                                    .child(styled(size::SMALL, p.text).child("WebP")),
+                            )
+                            .child(separator())
+                            .child(item("More options…")),
                     ),
             )
     }
@@ -403,13 +468,14 @@ impl Render for FirstRunView {
         let n = self.step.number();
         let steps = div()
             .flex()
-            .gap(px(4.))
+            .items_center()
+            .gap(px(5.))
             .children((1..=Step::count()).map(|i| {
-                div().w(px(20.)).h(px(4.)).rounded(px(2.)).bg(if i <= n {
-                    p.green
-                } else {
-                    p.step_off
-                })
+                div()
+                    .h(px(6.))
+                    .w(px(if i == n { 18. } else { 6. }))
+                    .rounded(px(3.))
+                    .bg(if i <= n { p.green } else { p.track })
             }));
         // A saved key whose updates ended before this build can't convert.
         let not_covered = match &self.app.read(cx).license {
@@ -469,6 +535,12 @@ impl Render for FirstRunView {
             Step::Done => self.done_art(&p).into_any_element(),
         };
         let step_label = format!("STEP {n} OF {}", Step::count());
+        let next_button = match self.step {
+            Step::Finder if !self.opened_settings && finder_on != Some(true) => {
+                Button::primary("first-run-next", next).icon(IconName::ExternalLink)
+            }
+            _ => Button::primary("first-run-next", next),
+        };
         div()
             .id("first-run")
             .flex()
@@ -480,28 +552,36 @@ impl Render for FirstRunView {
             .child(
                 div()
                     .flex()
+                    .flex_shrink_0()
                     .items_center()
-                    .justify_end()
-                    .px(px(16.))
-                    .pt(px(16.))
-                    .h(px(28.))
+                    .justify_between()
+                    .h(px(52.))
+                    // The traffic lights sit at the left of a transparent title bar.
+                    .pl(px(if theme::transparent_titlebar() {
+                        84.
+                    } else {
+                        28.
+                    }))
+                    .pr(px(28.))
+                    .child(theme::lockup(13., &p))
                     .child(steps),
             )
-            .child(div().flex().px(px(28.)).pt(px(24.)).child(art))
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .flex_1()
-                    .gap(px(8.))
+                    .gap(px(6.))
                     .px(px(28.))
-                    .pt(px(24.))
+                    .pt(px(14.))
                     .child(
                         div()
                             .id("step")
                             .test_support()
-                            .aria_label(SharedString::from(step_label.clone()))
-                            .child(mono(11., 14., p.tertiary).child(step_label)),
+                            .aria_label(SharedString::from(step_label))
+                            .child(
+                                mono(11., 14., p.tertiary)
+                                    .child(format!("Step {n} of {}", Step::count())),
+                            ),
                     )
                     .child(
                         div()
@@ -509,7 +589,7 @@ impl Render for FirstRunView {
                             .test_support()
                             .aria_label(SharedString::from(title))
                             .child(
-                                text(22., 28., p.text)
+                                styled(size::DISPLAY, p.text)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(title),
                             ),
@@ -526,11 +606,21 @@ impl Render for FirstRunView {
                             .into_any_element(),
                     })
                     .children(not_covered.is_some().then(|| {
-                        div().flex().child(
-                            text_button("first-run-renew", "Renew", p.green, 12.)
+                        div().flex().pt(px(2.)).child(
+                            text_button("first-run-renew", "Renew", p.green_text, 12.)
                                 .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                         )
                     })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .px(px(28.))
+                    .pt(px(space::XL))
+                    .pb(px(space::LG))
+                    .child(art),
             )
             .child(
                 div()
@@ -539,18 +629,20 @@ impl Render for FirstRunView {
                     .items_center()
                     .justify_between()
                     .px(px(28.))
-                    .py(px(16.))
+                    .py(px(14.))
                     .bg(p.recessed)
                     .border_t_1()
                     .border_color(p.hairline)
                     .child(match back {
-                        Some(label) => text_button("first-run-back", label, p.secondary, 12.)
+                        Some(label) => Button::ghost("first-run-back", label)
+                            .build(&p)
                             .on_click(cx.listener(|this, _, window, cx| this.back(window, cx)))
                             .into_any_element(),
                         None => div().into_any_element(),
                     })
                     .child(
-                        primary_button("first-run-next", next, 13., false)
+                        next_button
+                            .build(&p)
                             .on_click(cx.listener(|this, _, window, cx| this.next(window, cx))),
                     ),
             )

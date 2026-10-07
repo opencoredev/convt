@@ -5,7 +5,9 @@
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::theme::{Clickable, Palette, secondary_button, text, text_button};
+use gpui_kit::component::IconName;
+
+use super::theme::{self, Button, Clickable, Palette, size, space, styled, text_button};
 use convt_license::Plan;
 use convt_license::client;
 
@@ -24,7 +26,7 @@ fn line(id: &'static str, message: impl Into<SharedString>, color: Hsla) -> Clic
         .id(id)
         .test_support()
         .aria_label(message.clone())
-        .child(text(12., 16., color).child(message))
+        .child(styled(size::SMALL, color).child(message))
 }
 
 /// Calls `f` on the app state from a click.
@@ -41,7 +43,7 @@ fn on_app(
 pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
     let state = app.read(cx);
     let account = &state.account;
-    let row = div().flex().items_center().gap(px(12.));
+    let row = div().flex().items_center().gap(px(space::MD));
     let row = match (&account.sign_in, account.email()) {
         (SignIn::Waiting, _) => row
             .child(line(
@@ -50,7 +52,7 @@ pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 p.secondary,
             ))
             .child(
-                text_button("sign-in-reopen", "Open again", p.green, 12.)
+                text_button("sign-in-reopen", "Open again", p.green_text, 12.)
                     .on_click(on_app(app, AppState::reopen_sign_in)),
             )
             .child(
@@ -63,7 +65,7 @@ pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         (SignIn::Failed(e), _) => row
             .child(line("account-status", e.clone(), p.error).flex_1())
             .child(
-                text_button("sign-in", "Try again", p.green, 12.)
+                text_button("sign-in", "Try again", p.green_text, 12.)
                     .on_click(on_app(app, AppState::start_sign_in)),
             ),
         (SignIn::Idle, Some(email)) => {
@@ -81,10 +83,9 @@ pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
             ))
         }
         (SignIn::Idle, None) => row
-            .child(text(12., 16., p.secondary).child("Have Pro?"))
+            .child(styled(size::SMALL, p.secondary).child("Have Pro?"))
             .child(
-                text_button("sign-in", "Sign in with convt.app", p.green, 12.)
-                    .font_weight(FontWeight::MEDIUM)
+                text_button("sign-in", "Sign in with convt.app", p.green_text, 12.)
                     .on_click(on_app(app, AppState::start_sign_in)),
             ),
     };
@@ -105,9 +106,6 @@ pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
 pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
     let state = app.read(cx);
     let account = &state.account;
-    let heading = text(13., 16., p.text)
-        .font_weight(FontWeight::SEMIBOLD)
-        .child("Pro renewal");
     let body = div().flex().flex_col().gap(px(10.));
     let body = match (&account.sign_in, account.email()) {
         (SignIn::Waiting, _) => body
@@ -119,13 +117,18 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
             .child(
                 div()
                     .flex()
-                    .gap(px(14.))
+                    .gap(px(space::SM))
                     .child(
-                        text_button("sign-in-reopen", "Open the page again", p.green, 12.)
+                        Button::secondary("sign-in-reopen", "Open the page again")
+                            .icon(IconName::ExternalLink)
+                            .small()
+                            .build(p)
                             .on_click(on_app(app, AppState::reopen_sign_in)),
                     )
                     .child(
-                        text_button("sign-in-cancel", "Cancel", p.secondary, 12.)
+                        Button::ghost("sign-in-cancel", "Cancel")
+                            .small()
+                            .build(p)
                             .on_click(on_app(app, AppState::cancel_sign_in)),
                     ),
             ),
@@ -148,16 +151,21 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(14.))
+                    .gap(px(space::SM))
                     .child(
-                        secondary_button("refresh-license", "Refresh license", p)
-                            .when(running, |d| d.opacity(0.5).cursor_default())
+                        Button::secondary("refresh-license", "Refresh license")
+                            .icon(IconName::RefreshCw)
+                            .small()
+                            .disabled(running)
+                            .build(p)
                             .when(!running, |d| {
                                 d.on_click(on_app(app, AppState::refresh_license))
                             }),
                     )
                     .child(
-                        text_button("sign-out", "Sign out", p.secondary, 12.)
+                        Button::ghost("sign-out", "Sign out")
+                            .small()
+                            .build(p)
                             .on_click(on_app(app, AppState::sign_out)),
                     ),
             )
@@ -178,7 +186,7 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
             body.children(error)
                 .children(refresh)
                 .when(!matches!(failed, SignIn::Failed(_)), |d| {
-                    d.child(text(12., 17., p.secondary).child(
+                    d.child(styled(size::SMALL, p.secondary).child(
                         "Pro keys last one billing period. Sign in with your convt.app account \
                          and convt fetches each new key for you. A Desktop license never needs \
                          an account.",
@@ -186,15 +194,17 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 })
                 .child(
                     div().flex().child(
-                        secondary_button(
+                        Button::secondary(
                             "sign-in",
                             if matches!(failed, SignIn::Failed(_)) {
                                 "Try again"
                             } else {
                                 "Sign in with convt.app"
                             },
-                            p,
                         )
+                        .icon(IconName::CircleUser)
+                        .small()
+                        .build(p)
                         .on_click(on_app(app, AppState::start_sign_in)),
                     ),
                 )
@@ -207,20 +217,21 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
     div()
         .flex()
         .flex_col()
-        .gap(px(12.))
-        .px(px(40.))
-        .pt(px(22.))
-        .pb(px(28.))
-        .border_t_1()
-        .border_color(p.hairline)
-        .child(heading)
-        .child(body)
-        .children(notice)
+        .child(theme::section_label("Pro renewal", p))
+        .child(
+            theme::card(p)
+                .gap(px(space::MD))
+                .p(px(space::LG))
+                .child(body)
+                .children(notice),
+        )
         .child(
             div()
                 .id("refresh-note")
                 .test_support()
                 .aria_label(REFRESH_NOTE)
-                .child(text(12., 17., p.secondary).child(REFRESH_NOTE)),
+                .pt(px(space::SM))
+                .px(px(2.))
+                .child(styled(size::CAPTION, p.tertiary).child(REFRESH_NOTE)),
         )
 }

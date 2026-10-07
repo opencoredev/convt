@@ -1,6 +1,12 @@
-//! The convt look: the light and dark palettes from the design, the bundled
-//! Geist fonts, and the small controls every window shares. The theme follows
-//! the system appearance.
+//! The convt look: one visual system for every window. It holds the light and
+//! dark palettes, the bundled Geist fonts, the type and spacing scale, and the
+//! controls the windows share. The theme follows the system appearance.
+//!
+//! The system, in short: neutral surfaces with one accent (the brand green),
+//! Geist for words and Geist Mono for file facts (sizes, formats, paths).
+//! Sizes come from [`space`] and [`radius`]; text from [`text`] and [`mono`]
+//! at the sizes in [`size`]. Lists and settings sit in [`group`]s of
+//! [`row`]s; anything that needs the user's attention is a [`callout`].
 
 use std::borrow::Cow;
 
@@ -23,56 +29,82 @@ const FONTS: [&[u8]; 6] = [
     include_bytes!("../../assets/fonts/GeistMono-SemiBold.ttf"),
 ];
 
+/// The spacing scale, in pixels.
+pub mod space {
+    pub const XS: f32 = 4.;
+    pub const SM: f32 = 8.;
+    pub const MD: f32 = 12.;
+    pub const LG: f32 = 16.;
+    pub const XL: f32 = 24.;
+    pub const XXL: f32 = 32.;
+}
+
+/// Corner radii, in pixels.
+pub mod radius {
+    pub const SM: f32 = 5.;
+    pub const CONTROL: f32 = 7.;
+    pub const CARD: f32 = 10.;
+    pub const PANEL: f32 = 14.;
+}
+
+/// Type sizes and their line heights, in pixels.
+pub mod size {
+    /// Window and page titles.
+    pub const TITLE: (f32, f32) = (17., 22.);
+    /// First-run headlines.
+    pub const DISPLAY: (f32, f32) = (22., 28.);
+    /// Row titles and body copy.
+    pub const BODY: (f32, f32) = (13., 18.);
+    /// Descriptions, buttons and secondary copy.
+    pub const SMALL: (f32, f32) = (12., 17.);
+    /// Metadata, badges and section labels.
+    pub const CAPTION: (f32, f32) = (11., 14.);
+}
+
 /// Every color the windows use, for one appearance.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
     pub dark: bool,
+    /// The content area of every window.
     pub window: Hsla,
-    /// Sidebar, settings toolbar and the dark title bars.
+    /// The sidebar, the Settings toolbar and drawn title bars.
     pub chrome: Hsla,
     pub chrome_border: Hsla,
-    pub nav_selected: Hsla,
-    pub tab_selected: Hsla,
+    /// Footers, strips and wells set into a surface.
+    pub recessed: Hsla,
+    /// Cards, groups and controls.
+    pub surface: Hsla,
+    /// Card and group outlines.
+    pub border: Hsla,
+    /// Control outlines, a step stronger than `border`.
+    pub control_border: Hsla,
+    /// Section dividers.
+    pub hairline: Hsla,
+    /// Dividers between rows of a group or list.
+    pub row_divider: Hsla,
     pub text: Hsla,
     pub secondary: Hsla,
     pub tertiary: Hsla,
-    /// Section dividers.
-    pub hairline: Hsla,
-    /// Dividers between list rows.
-    pub row_divider: Hsla,
-    pub track: Hsla,
+    /// Hovered rows and ghost buttons.
+    pub hover: Hsla,
+    /// The selected nav item or tab.
+    pub selected: Hsla,
+    /// The accent as a fill: progress, switches, icons.
     pub green: Hsla,
+    /// The accent as text and links; at least 4.5:1 on `window`.
+    pub green_text: Hsla,
     pub green_tint: Hsla,
+    pub green_border: Hsla,
     pub error: Hsla,
-    /// The defaults bar, footers and other recessed areas.
-    pub recessed: Hsla,
-    pub recessed_border: Hsla,
-    pub chip: Hsla,
-    pub chip_border: Hsla,
-    pub card_border: Hsla,
-    pub control: Hsla,
-    pub control_border: Hsla,
-    pub segmented: Hsla,
-    pub segmented_selected: Hsla,
-    pub mark_off: Hsla,
-    pub radio_off: Hsla,
+    pub error_tint: Hsla,
+    pub error_border: Hsla,
+    pub track: Hsla,
     pub toggle_off: Hsla,
-    /// The checked fill of checkboxes, radios and switches. The design keeps
-    /// the light green in both appearances.
-    pub control_on: Hsla,
-    pub step_off: Hsla,
+    pub mark_off: Hsla,
     pub thumb: Hsla,
     pub thumb_border: Hsla,
-    pub trial_card: Hsla,
-    pub popover: Hsla,
-    pub drop_bar: Hsla,
-    pub drop_border: Hsla,
-    pub popover_footer: Hsla,
-    pub popover_hairline: Hsla,
-    pub popover_track: Hsla,
-    pub mock_item: Hsla,
-    pub mock_menu: Hsla,
-    pub mock_separator: Hsla,
+    /// Menus and the menu bar popover.
+    pub overlay: Hsla,
     pub shadow: Hsla,
     pub shadow_soft: Hsla,
 }
@@ -90,93 +122,67 @@ impl Palette {
         Self {
             dark: false,
             window: c(0xFFFFFF),
-            chrome: c(0xF3F4F3),
-            chrome_border: c(0xE3E5E4),
-            nav_selected: c(0xE3E6E4),
-            tab_selected: c(0xE1E4E2),
+            chrome: c(0xF6F6F5),
+            chrome_border: c(0xE6E6E4),
+            recessed: c(0xF9F9F8),
+            surface: c(0xFFFFFF),
+            border: c(0xE6E6E3),
+            control_border: c(0xD9D9D6),
+            hairline: c(0xEBEBE9),
+            row_divider: c(0xF0F0EE),
             text: c(0x0A0A0A),
-            secondary: c(0x6B6F6D),
-            tertiary: c(0x8A8F8C),
-            hairline: c(0xE6E8E7),
-            row_divider: c(0xEEF0EF),
-            track: c(0xE6E8E7),
+            secondary: c(0x5D615F),
+            tertiary: c(0x7A7F7C),
+            hover: ca(0x0A0A0A0A),
+            selected: ca(0x0A0A0A12),
             green: c(0x1A9A5B),
-            green_tint: c(0xEEF7F2),
-            error: c(0xB3261E),
-            recessed: c(0xF7F8F7),
-            recessed_border: c(0xE6E8E7),
-            chip: c(0xFFFFFF),
-            chip_border: c(0xE1E4E2),
-            card_border: c(0xE0E3E1),
-            control: c(0xFFFFFF),
-            control_border: c(0xDCDFDD),
-            segmented: c(0xF0F2F1),
-            segmented_selected: c(0xFFFFFF),
-            mark_off: c(0xBFC4C1),
-            radio_off: c(0xC9CDCB),
-            toggle_off: c(0xD5D9D7),
-            control_on: c(0x1A9A5B),
-            step_off: c(0xE4E7E5),
+            green_text: c(0x127A47),
+            green_tint: c(0xEDF7F1),
+            green_border: c(0xA9DABF),
+            error: c(0xC0362C),
+            error_tint: c(0xFDF2F1),
+            error_border: c(0xF1C7C2),
+            track: c(0xEBEBE9),
+            toggle_off: c(0xD4D4D1),
+            mark_off: c(0xC2C4C2),
             thumb: c(0xFFFFFF),
-            thumb_border: c(0xD9DCDA),
-            trial_card: c(0xFFFFFF),
-            popover: ca(0xFAFAFAFB),
-            drop_bar: c(0xFFFFFF),
-            drop_border: c(0xC9CDCB),
-            popover_footer: c(0xF4F5F4),
-            popover_hairline: c(0xE6E8E7),
-            popover_track: c(0xE4E7E5),
-            mock_item: c(0xFFFFFF),
-            mock_menu: c(0xFFFFFF),
-            mock_separator: c(0xE6E8E7),
-            shadow: ca(0x0A1E1447),
-            shadow_soft: ca(0x0000001F),
+            thumb_border: c(0xDEDEDB),
+            overlay: c(0xFFFFFF),
+            shadow: ca(0x0A1E1438),
+            shadow_soft: ca(0x0000001A),
         }
     }
 
     pub fn dark() -> Self {
         Self {
             dark: true,
-            window: c(0x1C1E1D),
-            chrome: c(0x232625),
-            chrome_border: c(0x2E3331),
-            nav_selected: c(0x2E3331),
-            tab_selected: c(0x2E3331),
+            window: c(0x171918),
+            chrome: c(0x1C1E1D),
+            chrome_border: c(0x272A29),
+            recessed: c(0x141615),
+            surface: c(0x1E2120),
+            border: c(0x2A2D2C),
+            control_border: c(0x363A38),
+            hairline: c(0x262928),
+            row_divider: c(0x222524),
             text: c(0xEDEFEE),
-            secondary: c(0xA1A6A3),
-            tertiary: c(0x868B88),
-            hairline: c(0x2E3331),
-            row_divider: c(0x232726),
-            track: c(0x2E3331),
+            secondary: c(0xA3A8A5),
+            tertiary: c(0x7F8481),
+            hover: ca(0xFFFFFF0A),
+            selected: ca(0xFFFFFF14),
             green: c(0x3FCB84),
-            green_tint: c(0x12261B),
+            green_text: c(0x4ED492),
+            green_tint: c(0x132A1E),
+            green_border: c(0x245E40),
             error: c(0xF2786D),
-            recessed: c(0x161918),
-            recessed_border: c(0x232726),
-            chip: c(0x1C201E),
-            chip_border: c(0x2E3331),
-            card_border: c(0x2E3331),
-            control: c(0x161918),
-            control_border: c(0x2E3331),
-            segmented: c(0x161918),
-            segmented_selected: c(0x2E3331),
-            mark_off: c(0x6F7572),
-            radio_off: c(0x6F7572),
-            toggle_off: c(0x4A4F4D),
-            control_on: c(0x1A9A5B),
-            step_off: c(0x2E3331),
-            thumb: c(0x2A2D2C),
-            thumb_border: ca(0xFFFFFF1A),
-            trial_card: c(0x1C1E1D),
-            popover: c(0x2A2D2C),
-            drop_bar: c(0x232625),
-            drop_border: ca(0xFFFFFF26),
-            popover_footer: c(0x232625),
-            popover_hairline: ca(0xFFFFFF1A),
-            popover_track: ca(0xFFFFFF1A),
-            mock_item: c(0x232625),
-            mock_menu: c(0x2A2D2C),
-            mock_separator: ca(0xFFFFFF1A),
+            error_tint: c(0x2A1817),
+            error_border: c(0x5C2C28),
+            track: c(0x2C302E),
+            toggle_off: c(0x404442),
+            mark_off: c(0x5F6562),
+            thumb: c(0x232625),
+            thumb_border: ca(0xFFFFFF14),
+            overlay: c(0x232625),
             shadow: ca(0x00000099),
             shadow_soft: ca(0x00000066),
         }
@@ -234,8 +240,8 @@ fn apply(cx: &mut App) {
         t.mono_font_family = MONO.into();
         t.font_size = px(13.);
         t.mono_font_size = px(12.);
-        t.radius = px(6.);
-        t.background = p.window;
+        t.radius = px(radius::CONTROL);
+        t.background = p.surface;
         t.foreground = p.text;
         t.muted_foreground = p.secondary;
         t.border = p.control_border;
@@ -273,10 +279,20 @@ pub fn mono(size: f32, line: f32, color: Hsla) -> Div {
     text(size, line, color).font_family(MONO)
 }
 
+/// Text at one of the [`size`] steps.
+pub fn styled(step: (f32, f32), color: Hsla) -> Div {
+    text(step.0, step.1, color)
+}
+
+/// An icon from the bundled set (see `ui::assets`).
+pub fn icon(name: IconName, size: f32, color: Hsla) -> Icon {
+    Icon::new(name).size(px(size)).text_color(color)
+}
+
 /// The height of a text field, matching [`select`].
-pub const FIELD_HEIGHT: f32 = 28.;
+pub const FIELD_HEIGHT: f32 = 30.;
 /// The height of a small text field, such as Quick convert's file name.
-pub const SMALL_FIELD_HEIGHT: f32 = 24.;
+pub const SMALL_FIELD_HEIGHT: f32 = 26.;
 
 /// A text field. The component sizes its height in rems but its padding in
 /// pixels, so at convt's 13px rem the default leaves less than a line of room
@@ -295,7 +311,7 @@ fn sized_field(input: Input, height: f32) -> Input {
     Styled::h(input, px(height)).py(px(0.))
 }
 
-/// A 1px ring drawn inside an element, like the design's inset box shadows.
+/// A ring drawn inside an element, like the design's inset box shadows.
 pub fn inset_ring(color: Hsla, width: f32) -> BoxShadow {
     BoxShadow {
         color,
@@ -306,7 +322,7 @@ pub fn inset_ring(color: Hsla, width: f32) -> BoxShadow {
     }
 }
 
-fn shadow(color: Hsla, y: f32, blur: f32) -> BoxShadow {
+pub fn shadow(color: Hsla, y: f32, blur: f32) -> BoxShadow {
     BoxShadow {
         color,
         offset: point(px(0.), px(y)),
@@ -314,6 +330,19 @@ fn shadow(color: Hsla, y: f32, blur: f32) -> BoxShadow {
         spread_radius: px(0.),
         inset: false,
     }
+}
+
+/// The resting shadow of raised controls and cards.
+fn raise(p: &Palette) -> Vec<BoxShadow> {
+    vec![shadow(
+        if p.dark {
+            ca(0x00000059)
+        } else {
+            ca(0x0A0A0A0D)
+        },
+        1.,
+        2.,
+    )]
 }
 
 /// An element registered for test queries: [`clickable`] and the controls
@@ -330,75 +359,171 @@ pub fn clickable(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Cl
         .aria_label(label)
 }
 
-/// The green call-to-action button.
-///
-/// The white label on this green has about 3:1 contrast, below the 4.5:1 AA
-/// target for text this size. Leo has not chosen the fix yet (a darker
-/// gradient or a dark label), so this matches the design for now.
+/// How a [`Button`] looks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Look {
+    /// The one main action of a window or card, in the brand green.
+    Primary,
+    /// A bordered button on the surface, such as Cancel.
+    Secondary,
+    /// Text that gains a background on hover, for row actions.
+    Ghost,
+}
+
+/// A button: a look, a label, an optional leading icon and two heights.
+pub struct Button {
+    id: ElementId,
+    label: SharedString,
+    look: Look,
+    icon: Option<IconName>,
+    small: bool,
+    disabled: bool,
+    color: Option<Hsla>,
+}
+
+impl Button {
+    pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>, look: Look) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            look,
+            icon: None,
+            small: false,
+            disabled: false,
+            color: None,
+        }
+    }
+
+    pub fn primary(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self::new(id, label, Look::Primary)
+    }
+
+    pub fn secondary(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self::new(id, label, Look::Secondary)
+    }
+
+    pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self::new(id, label, Look::Ghost)
+    }
+
+    pub fn icon(mut self, icon: IconName) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// 26px tall instead of 30.
+    pub fn small(mut self) -> Self {
+        self.small = true;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// The label color of a ghost or secondary button, such as red for Remove.
+    pub fn color(mut self, color: Hsla) -> Self {
+        self.color = Some(color);
+        self
+    }
+
+    pub fn build(self, p: &Palette) -> Clickable {
+        let (h, pad, size) = if self.small {
+            (26., 10., 12.)
+        } else {
+            (30., 14., 13.)
+        };
+        let fg = match self.look {
+            // White on #168A51 to #117444 is at least 4.5:1, the AA target.
+            Look::Primary => c(0xFFFFFF),
+            Look::Secondary => self.color.unwrap_or(p.text),
+            Look::Ghost => self.color.unwrap_or(p.secondary),
+        };
+        let (hover_fg, ghost) = (self.color.unwrap_or(p.text), self.look == Look::Ghost);
+        let base = clickable(self.id, self.label.clone())
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .justify_center()
+            .gap(px(6.))
+            .h(px(h))
+            .px(px(if ghost { pad - 2. } else { pad }))
+            .rounded(px(radius::CONTROL));
+        let base = match self.look {
+            Look::Primary => base
+                .bg(linear_gradient(
+                    180.,
+                    linear_color_stop(c(0x168A51), 0.),
+                    linear_color_stop(c(0x117444), 1.),
+                ))
+                .shadow(vec![
+                    BoxShadow {
+                        color: ca(0xFFFFFF33),
+                        offset: point(px(0.), px(1.)),
+                        blur_radius: px(0.),
+                        spread_radius: px(0.),
+                        inset: true,
+                    },
+                    inset_ring(ca(0x0B5C3466), 1.),
+                    shadow(ca(0x0A3C2333), 1., 2.),
+                ])
+                .when(!self.disabled, |d| d.hover(|s| s.opacity(0.92))),
+            Look::Secondary => base
+                .bg(p.surface)
+                .shadow({
+                    let mut s = raise(p);
+                    s.push(inset_ring(p.control_border, 1.));
+                    s
+                })
+                .when(!self.disabled, |d| d.hover(|s| s.bg(p.recessed))),
+            Look::Ghost => base.when(!self.disabled, |d| d.hover(|s| s.bg(p.hover))),
+        };
+        let icon_color = if self.look == Look::Secondary {
+            p.secondary
+        } else {
+            fg
+        };
+        base.when(self.disabled, |d| d.opacity(0.45).cursor_default())
+            .children(
+                self.icon
+                    .map(|i| icon(i, if self.small { 13. } else { 14. }, icon_color)),
+            )
+            .child(
+                text(size, 16., fg)
+                    .font_weight(if self.look == Look::Primary {
+                        FontWeight::SEMIBOLD
+                    } else {
+                        FontWeight::MEDIUM
+                    })
+                    .whitespace_nowrap()
+                    .when(ghost && !self.disabled, |d| {
+                        d.hover(|s| s.text_color(hover_fg))
+                    })
+                    .child(self.label),
+            )
+    }
+}
+
+/// The green call-to-action button, 30px tall.
 pub fn primary_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
-    size: f32,
-    disabled: bool,
+    p: &Palette,
 ) -> Clickable {
-    let label = label.into();
-    clickable(id, label.clone())
-        .px(px(14.))
-        .py(px(6.))
-        .rounded(px(8.))
-        .border_1()
-        .border_color(c(0x157F4A))
-        .bg(linear_gradient(
-            180.,
-            linear_color_stop(c(0x2AB673), 0.),
-            linear_color_stop(c(0x1A9A5B), 1.),
-        ))
-        .shadow(vec![
-            BoxShadow {
-                color: ca(0xFFFFFF47),
-                offset: point(px(0.), px(1.)),
-                blur_radius: px(0.),
-                spread_radius: px(0.),
-                inset: true,
-            },
-            shadow(ca(0x0A3C2340), 1., 2.),
-        ])
-        .when(disabled, |d| d.opacity(0.5).cursor_default())
-        .child(
-            text(size, 16., c(0xFFFFFF))
-                .font_weight(FontWeight::SEMIBOLD)
-                .whitespace_nowrap()
-                .child(label),
-        )
+    Button::primary(id, label).build(p)
 }
 
-/// The white (or dark) bordered button, such as Cancel.
+/// The bordered button, such as Cancel.
 pub fn secondary_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     p: &Palette,
 ) -> Clickable {
-    let label = label.into();
-    clickable(id, label.clone())
-        .px(px(14.))
-        .py(px(6.))
-        .rounded(px(7.))
-        .bg(p.control)
-        .border_1()
-        .border_color(p.control_border)
-        .shadow(vec![shadow(
-            if p.dark {
-                ca(0x00000066)
-            } else {
-                ca(0x0000000D)
-            },
-            1.,
-            if p.dark { 2. } else { 1. },
-        )])
-        .child(text(13., 16., p.text).whitespace_nowrap().child(label))
+    Button::secondary(id, label).build(p)
 }
 
-/// A text-only button, such as "Clear finished", "Back" or "Change".
+/// A text-only link button, such as "Change" or "Renew".
 pub fn text_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -406,15 +531,21 @@ pub fn text_button(
     size: f32,
 ) -> Clickable {
     let label = label.into();
-    clickable(id, label.clone()).child(text(size, 16., color).whitespace_nowrap().child(label))
+    clickable(id, label.clone()).child(
+        text(size, 16., color)
+            .font_weight(FontWeight::MEDIUM)
+            .whitespace_nowrap()
+            .hover(|s| s.opacity(0.75))
+            .child(label),
+    )
 }
 
-/// A small switch (`small`: 28x16 as in lists, otherwise 30x18).
+/// A switch (`small`: 28x16, as in lists, otherwise 32x18).
 pub fn switch(id: impl Into<ElementId>, on: bool, small: bool, p: &Palette) -> Clickable {
     let (w, h, knob) = if small {
         (28., 16., 12.)
     } else {
-        (30., 18., 14.)
+        (32., 18., 14.)
     };
     div()
         .id(id)
@@ -433,18 +564,18 @@ pub fn switch(id: impl Into<ElementId>, on: bool, small: bool, p: &Palette) -> C
         .h(px(h))
         .p(px(2.))
         .rounded(px(h / 2.))
-        .bg(if on { p.control_on } else { p.toggle_off })
+        .bg(if on { p.green } else { p.toggle_off })
         .when(on, |d| d.justify_end())
         .child(
             div()
                 .size(px(knob))
                 .rounded(px(knob / 2.))
                 .bg(c(0xFFFFFF))
-                .shadow(vec![shadow(ca(0x00000033), 1., 2.)]),
+                .shadow(vec![shadow(ca(0x00000040), 1., 2.)]),
         )
 }
 
-/// A 14px checkbox with its label.
+/// A 15px checkbox with its label.
 pub fn checkbox(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -457,19 +588,15 @@ pub fn checkbox(
             .flex()
             .items_center()
             .justify_center()
-            .size(px(14.))
+            .size(px(15.))
             .rounded(px(4.))
-            .bg(p.control_on)
-            .child(
-                Icon::new(IconName::Check)
-                    .size(px(10.))
-                    .text_color(c(0xFFFFFF)),
-            )
+            .bg(p.green)
+            .child(icon(IconName::Check, 11., c(0xFFFFFF)))
     } else {
         div()
-            .size(px(14.))
+            .size(px(15.))
             .rounded(px(4.))
-            .bg(p.control)
+            .bg(p.surface)
             .shadow(vec![inset_ring(p.mark_off, 1.)])
     };
     div()
@@ -489,6 +616,16 @@ pub fn checkbox(
         .child(text(13., 16., p.text).child(label))
 }
 
+/// A radio dot, for choices drawn as cards.
+pub fn radio(on: bool, p: &Palette) -> Div {
+    let dot = div().size(px(16.)).flex_shrink_0().rounded(px(8.));
+    if on {
+        dot.bg(c(0xFFFFFF)).shadow(vec![inset_ring(p.green, 5.)])
+    } else {
+        dot.bg(p.surface).shadow(vec![inset_ring(p.mark_off, 1.5)])
+    }
+}
+
 /// A 4px progress bar. `fraction` is 0 to 1.
 pub fn progress(fraction: f32, track: Hsla, fill: Hsla) -> Div {
     let fraction = fraction.clamp(0., 1.);
@@ -498,6 +635,7 @@ pub fn progress(fraction: f32, track: Hsla, fill: Hsla) -> Div {
         .h(px(4.))
         .rounded(px(2.))
         .bg(track)
+        .overflow_hidden()
         .child(
             div()
                 .h(px(4.))
@@ -542,18 +680,27 @@ pub fn select(
     } else {
         text(12., 16., p.text)
     };
+    let current = value.clone();
     let button = clickable(SharedString::from(id.to_string()), value.clone())
         .flex()
         .flex_shrink_0()
         .items_center()
         .justify_between()
+        .gap(px(8.))
         .w(px(width))
         .h(px(FIELD_HEIGHT))
         .px(px(10.))
-        .rounded(px(6.))
-        .bg(p.control)
-        .border_1()
-        .border_color(p.control_border)
+        .rounded(px(radius::CONTROL))
+        .bg(p.surface)
+        .shadow({
+            let mut s = raise(p);
+            s.push(inset_ring(
+                if open { p.green } else { p.control_border },
+                1.,
+            ));
+            s
+        })
+        .hover(|s| s.bg(p.recessed))
         .on_click(move |_, window, cx| on_toggle(window, cx))
         // A folder keeps its last, most telling part.
         .child(
@@ -563,29 +710,31 @@ pub fn select(
                 .text_ellipsis_start()
                 .child(value),
         )
-        .child(
-            Icon::new(IconName::ChevronDown)
-                .size(px(10.))
-                .text_color(p.secondary),
-        );
+        .child(icon(IconName::ChevronsUpDown, 12., p.tertiary).flex_shrink_0());
     let menu = open.then(|| {
         let items = choices.into_iter().map(|choice| {
             let on_pick = on_pick.clone();
             let pick = choice.id.clone();
+            let on = choice.label == current;
             clickable(
                 SharedString::from(format!("{id}-{}", choice.id)),
                 choice.label.clone(),
             )
-            .px(px(10.))
-            .py(px(4.))
-            .rounded(px(4.))
-            .hover(|s| s.bg(gpui_kit::transparent_black().opacity(0.06)))
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap(px(8.))
+            .px(px(8.))
+            .h(px(28.))
+            .rounded(px(radius::SM))
+            .hover(|s| s.bg(p.hover))
             .on_click(move |_, window, cx| on_pick(&pick, window, cx))
             .child(if mono_value {
                 mono(12., 16., p.text).child(choice.label)
             } else {
                 text(12., 16., p.text).child(choice.label)
             })
+            .children(on.then(|| icon(IconName::Check, 12., p.green_text)))
         });
         // An anchored element sits at the top of its container, over the
         // box, unless it is moved down by the box's height.
@@ -600,11 +749,12 @@ pub fn select(
                         .mt(px(4.))
                         .w(px(width))
                         .p(px(4.))
-                        .rounded(px(8.))
-                        .bg(p.control)
-                        .border_1()
-                        .border_color(p.control_border)
-                        .shadow(vec![shadow(p.shadow_soft, 8., 24.)])
+                        .rounded(px(radius::CARD))
+                        .bg(p.overlay)
+                        .shadow(vec![
+                            inset_ring(p.border, 1.),
+                            shadow(p.shadow_soft, 8., 24.),
+                        ])
                         .children(items),
                 ),
         )
@@ -623,34 +773,270 @@ pub fn segmented(
 ) -> Div {
     div()
         .flex()
+        .flex_shrink_0()
         .p(px(2.))
-        .rounded(px(7.))
-        .bg(p.segmented)
-        .when(p.dark, |d| {
-            d.shadow(vec![inset_ring(p.recessed_border, 1.)])
-        })
+        .gap(px(2.))
+        .rounded(px(radius::CONTROL + 1.))
+        .bg(if p.dark { p.recessed } else { p.track })
+        .when(p.dark, |d| d.shadow(vec![inset_ring(p.border, 1.)]))
         .children(choices.iter().map(|(key, label)| {
             let (key, label) = (*key, label.clone());
             let on = key == selected;
             let on_pick = on_pick.clone();
             clickable(SharedString::from(format!("{id}-{key}")), label.clone())
                 .aria_selected(on)
-                .px(px(14.))
-                .py(px(5.))
-                .rounded(px(5.))
+                .flex()
+                .items_center()
+                .h(px(24.))
+                .px(px(12.))
+                .rounded(px(radius::SM + 1.))
                 .when(on, |d| {
-                    d.bg(p.segmented_selected).shadow(vec![
-                        shadow(p.shadow_soft, 0., 0.5),
-                        shadow(ca(0x00000014), 1., 2.),
-                    ])
+                    d.bg(if p.dark { p.selected } else { p.surface })
+                        .shadow(raise(p))
                 })
+                .when(!on, |d| d.hover(|s| s.bg(p.hover)))
                 .on_click(move |_, window, cx| on_pick(key, window, cx))
                 .child(
                     text(12., 16., if on { p.text } else { p.secondary })
-                        .when(on, |d| d.font_weight(FontWeight::MEDIUM))
+                        .font_weight(FontWeight::MEDIUM)
+                        .whitespace_nowrap()
                         .child(label),
                 )
         }))
+}
+
+/// The tone of a [`badge`], [`callout`] or [`icon_tile`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tone {
+    Neutral,
+    Green,
+    Error,
+}
+
+impl Tone {
+    fn colors(self, p: &Palette) -> (Hsla, Hsla, Hsla) {
+        match self {
+            Tone::Neutral => (p.recessed, p.border, p.secondary),
+            Tone::Green => (p.green_tint, p.green_border, p.green_text),
+            Tone::Error => (p.error_tint, p.error_border, p.error),
+        }
+    }
+}
+
+/// A small pill, such as a format ("WEBP") or a count.
+pub fn badge(label: impl Into<SharedString>, tone: Tone, p: &Palette) -> Div {
+    let (bg, border, fg) = tone.colors(p);
+    div()
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .h(px(18.))
+        .px(px(6.))
+        .rounded(px(radius::SM))
+        .bg(bg)
+        .shadow(vec![inset_ring(border, 1.)])
+        .child(
+            mono(10.5, 14., fg)
+                .font_weight(FontWeight::MEDIUM)
+                .whitespace_nowrap()
+                .child(label.into()),
+        )
+}
+
+/// An icon on a tinted square, the lead of a callout or card.
+pub fn icon_tile(name: IconName, tone: Tone, size: f32, p: &Palette) -> Div {
+    let (bg, border, fg) = tone.colors(p);
+    div()
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .size(px(size))
+        .rounded(px((size / 4.).round()))
+        .bg(bg)
+        .shadow(vec![inset_ring(border, 1.)])
+        .child(icon(name, (size * 0.5).round(), fg))
+}
+
+/// A card on the window: the surface color, a border and soft corners.
+pub fn card(p: &Palette) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .rounded(px(radius::CARD))
+        .bg(p.surface)
+        .border_1()
+        .border_color(p.border)
+        .when(!p.dark, |d| d.shadow(raise(p)))
+}
+
+/// Rows in one card, with dividers between them, like grouped settings.
+pub fn group(rows: impl IntoIterator<Item = AnyElement>, p: &Palette) -> Div {
+    let mut out: Vec<AnyElement> = Vec::new();
+    for (i, row) in rows.into_iter().enumerate() {
+        if i > 0 {
+            out.push(
+                div()
+                    .h(px(1.))
+                    .mx(px(space::LG))
+                    .bg(p.row_divider)
+                    .into_any_element(),
+            );
+        }
+        out.push(row);
+    }
+    card(p).overflow_hidden().children(out)
+}
+
+/// A row of a [`group`]: a title, an optional description under it, and the
+/// control on the right.
+pub fn row(
+    title: impl Into<SharedString>,
+    detail: Option<AnyElement>,
+    control: impl IntoElement,
+    p: &Palette,
+) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(space::LG))
+        .min_h(px(52.))
+        .px(px(space::LG))
+        .py(px(10.))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .gap(px(2.))
+                .child(
+                    styled(size::BODY, p.text)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(title.into()),
+                )
+                .children(detail),
+        )
+        .child(div().flex().flex_shrink_0().items_center().child(control))
+}
+
+/// A description under a row title.
+pub fn detail(line: impl Into<SharedString>, p: &Palette) -> AnyElement {
+    styled(size::SMALL, p.secondary)
+        .child(line.into())
+        .into_any_element()
+}
+
+/// The small label over a group or a list section.
+pub fn section_label(label: impl Into<SharedString>, p: &Palette) -> Div {
+    styled(size::SMALL, p.secondary)
+        .font_weight(FontWeight::MEDIUM)
+        .px(px(2.))
+        .pb(px(space::SM))
+        .child(label.into())
+}
+
+/// A message that needs attention: an icon tile, then `content` (the
+/// caller's title, words and actions).
+pub fn callout(name: IconName, tone: Tone, content: impl IntoElement, p: &Palette) -> Div {
+    let (bg, border) = match tone {
+        Tone::Neutral => (p.surface, p.border),
+        Tone::Green => (p.green_tint, p.green_border),
+        Tone::Error => (p.error_tint, p.error_border),
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(px(space::MD))
+        .p(px(14.))
+        .rounded(px(radius::CARD))
+        .bg(bg)
+        .border_1()
+        .border_color(border)
+        .child(icon_tile(
+            name,
+            if tone == Tone::Neutral {
+                Tone::Green
+            } else {
+                tone
+            },
+            28.,
+            p,
+        ))
+        .child(div().flex().flex_col().flex_1().min_w_0().child(content))
+}
+
+/// A callout's title and body, stacked.
+pub fn callout_words(
+    title: impl Into<SharedString>,
+    body: impl Into<SharedString>,
+    p: &Palette,
+) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(
+            styled(size::BODY, p.text)
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(title.into()),
+        )
+        .child(styled(size::SMALL, p.secondary).child(body.into()))
+}
+
+/// The convt mark: the file you have (ink) overlapping the file you get
+/// (green), with the overlap in a third shade. Drawn from the brand SVG's
+/// 32-unit grid so it stays crisp at any size.
+pub fn mark(size: f32, p: &Palette) -> Div {
+    let k = size / 32.;
+    let (ink, top, bottom, overlap) = if p.dark {
+        (c(0xEDEFEE), c(0x46D08B), c(0x1FA463), c(0xA6F0C8))
+    } else {
+        (c(0x0A0A0A), c(0x1FB36C), c(0x127A47), c(0x0B5C34))
+    };
+    let square = |x: f32| {
+        div()
+            .absolute()
+            .left(px(x * k))
+            .top(px(x * k))
+            .size(px(19. * k))
+            .rounded(px(5. * k))
+    };
+    div()
+        .relative()
+        .flex_shrink_0()
+        .size(px(size))
+        .child(square(2.).bg(ink))
+        .child(square(11.).bg(linear_gradient(
+            180.,
+            linear_color_stop(top, 0.),
+            linear_color_stop(bottom, 1.),
+        )))
+        .child(
+            div()
+                .absolute()
+                .left(px(11. * k))
+                .top(px(11. * k))
+                .size(px(10. * k))
+                .rounded_tl(px(5. * k))
+                .rounded_br(px(5. * k))
+                .bg(overlap),
+        )
+}
+
+/// The mark and the "convt" wordmark, as in the brand lockup: the mark about
+/// 1.2 times the text size, half the text size apart.
+pub fn lockup(text_size: f32, p: &Palette) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(text_size / 2.))
+        .child(mark((text_size * 1.25).round(), p))
+        .child(
+            text(text_size, text_size + 4., p.text)
+                .font_weight(FontWeight::SEMIBOLD)
+                .child("convt"),
+        )
 }
 
 /// A thumbnail for a file: the image itself for pictures, a frame for video
@@ -661,38 +1047,50 @@ pub fn thumbnail(path: &std::path::Path, w: f32, h: f32, p: &Palette) -> AnyElem
     use convt_core::Category;
     let format = convt_core::format_by_extension(path);
     let category = format.map(|f| f.category);
+    let corner = (w.min(h) / 5.).clamp(5., 10.);
+    let framed = |inner: AnyElement| {
+        div()
+            .flex_shrink_0()
+            .w(px(w))
+            .h(px(h))
+            .rounded(px(corner))
+            .overflow_hidden()
+            .bg(p.recessed)
+            .child(inner)
+            .child(
+                // The ring sits over the picture, so light images keep an edge.
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(px(corner))
+                    .shadow(vec![inset_ring(p.thumb_border, 1.)]),
+            )
+            .relative()
+            .into_any_element()
+    };
     match category {
         Some(Category::Image) if path.exists() => {
             let (path, p) = (path.to_path_buf(), *p);
-            img(path.clone())
-                .w(px(w))
-                .h(px(h))
-                .flex_shrink_0()
-                .rounded(px(5.))
-                .object_fit(ObjectFit::Cover)
-                .with_fallback(move || badge_tile(&path, category, w, h, &p))
-                .into_any_element()
+            framed(
+                img(path.clone())
+                    .w(px(w))
+                    .h(px(h))
+                    .object_fit(ObjectFit::Cover)
+                    .with_fallback(move || badge_tile(&path, category, w, h, &p))
+                    .into_any_element(),
+            )
         }
         Some(Category::Video) => match crate::thumbs::video_frame(path) {
             Some(frame) => {
                 let (path, p) = (path.to_path_buf(), *p);
-                div()
-                    .flex_shrink_0()
-                    .w(px(w))
-                    .h(px(h))
-                    .rounded(px(5.))
-                    .overflow_hidden()
-                    .bg(c(0x141414))
-                    .when(p.dark, |d| d.shadow(vec![inset_ring(ca(0xFFFFFF14), 1.)]))
-                    .child(
-                        img(frame)
-                            .w(px(w))
-                            .h(px(h))
-                            .rounded(px(5.))
-                            .object_fit(ObjectFit::Cover)
-                            .with_fallback(move || badge_tile(&path, category, w, h, &p)),
-                    )
-                    .into_any_element()
+                framed(
+                    img(frame)
+                        .w(px(w))
+                        .h(px(h))
+                        .object_fit(ObjectFit::Cover)
+                        .with_fallback(move || badge_tile(&path, category, w, h, &p))
+                        .into_any_element(),
+                )
             }
             None => badge_tile(path, category, w, h, p),
         },
@@ -720,6 +1118,7 @@ fn badge_tile(
         Some(Category::Presentation) => c(0xD0702C),
         _ => c(0x2B5BB8),
     };
+    let corner = (w.min(h) / 5.).clamp(5., 10.);
     div()
         .flex()
         .items_center()
@@ -727,12 +1126,12 @@ fn badge_tile(
         .w(px(w))
         .h(px(h))
         .flex_shrink_0()
-        .rounded(px(5.))
+        .rounded(px(corner))
         .bg(p.thumb)
         .shadow(vec![inset_ring(p.thumb_border, 1.)])
         .child(
-            div().px(px(3.)).py(px(1.)).rounded(px(2.)).bg(badge).child(
-                mono(8., 10., c(0xFFFFFF))
+            div().px(px(4.)).py(px(1.)).rounded(px(3.)).bg(badge).child(
+                mono(if w >= 48. { 9. } else { 8. }, 11., c(0xFFFFFF))
                     .font_weight(FontWeight::SEMIBOLD)
                     .child(ext.chars().take(4).collect::<String>()),
             ),
@@ -741,8 +1140,8 @@ fn badge_tile(
 }
 
 /// A title bar drawn in the window, for macOS, where windows use a
-/// transparent title bar to match the design. Other platforms keep their
-/// native title bar, so this draws nothing there.
+/// transparent title bar. Other platforms keep their native title bar, so
+/// this draws nothing there.
 pub fn title_bar(title: Option<&str>, height: f32, bg: Option<Hsla>, p: &Palette) -> Option<Div> {
     if !cfg!(target_os = "macos") {
         return None;
