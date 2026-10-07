@@ -146,7 +146,7 @@ fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
     });
     if let Some((handle, view)) = &opened {
         let _ = handle.update(cx, |_, window, _| window.activate_window());
-        let _ = view.update(cx, |view, cx| {
+        view.update(cx, |view, cx| {
             view.set_page(main_window::Page::Activity, cx)
         });
     }

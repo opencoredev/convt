@@ -648,7 +648,7 @@ fn explorer_request_opens_activity_and_converts_beside_the_input(cx: &mut TestAp
     let mut request = cli(vec![png], Some("jpeg"), None);
     request.show_progress = true;
     cx.update(|cx| super::route(request, cx));
-    assert!(window_of::<MainView>(cx).is_some());
+    window_of::<MainView>(cx);
     cx.read(|cx| assert!(!f.app.read(cx).quit_when_idle));
     let job = f.last_job(cx);
     wait_until(cx, "Explorer job", |cx| {

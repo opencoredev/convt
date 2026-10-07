@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+#[cfg(windows)]
 use crate::request::Request;
 
 /// Requests larger than this are dropped. A request is a list of paths.
