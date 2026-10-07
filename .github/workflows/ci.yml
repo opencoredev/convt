@@ -118,6 +118,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # apps/docs builds with Blume, which runs on Node 22.19 or newer.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run check-types

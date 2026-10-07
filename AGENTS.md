@@ -15,6 +15,7 @@ Users are people who want to convert files without uploading them. Conversions r
 - `crates/convt-server`, `crates/convt-worker`: cloud API and workers, deployed to Railway.
 - `integrations/`: Finder Sync (macOS), Explorer plan (Windows), Nautilus/Dolphin/Nemo/Thunar (Linux).
 - `apps/web`: convt.app on Cloudflare Workers: the landing page, sign-in (Better Auth: email code, GitHub, Google), the dashboard, and the checkout pages. It reaches Postgres through Hyperdrive and billing through the `BILLING` service binding; it holds no billing secret.
+- `apps/docs`: convt.app/docs, a static [Blume](https://useblume.dev) site deployed as the `convt-docs` Worker on the `convt.app/docs*` routes. The API reference renders `crates/convt-server/openapi.json` through the overlay in `apps/docs/openapi/public.yaml`; the formats page is generated from `crates/convt-server/cloud-formats.json`.
 - `apps/billing`: the `convt-billing` Worker: the Polar webhook route, the billing crons and the `BillingRpc` entrypoint. The only holder of the license signing key and the Polar and Resend secrets; connects as `convt_billing`.
 - `packages/billing`: the billing logic both Workers and the tests share: the catalog, the Polar adapter and webhook verifier, ingest, license issuance, the email outbox, the reconciler and account deletion.
 - `packages/mail`: the transactional email templates and transports (Resend, Mailpit, log).
@@ -38,6 +39,7 @@ bun run db:ci                 # schema drift, down files, DB integration tests, 
 bun run billing:outbox list   # ambiguous or dead emails; `resolve <id> sent|resend`
 bun run license:keygen PATH   # a production signing key, written outside the repo
 bun run build && bun run check-types && bun run check
+bun run --cwd apps/docs dev     # docs on :4321; `validate` checks links, `deploy` ships convt.app/docs
 ```
 
 ## Conventions

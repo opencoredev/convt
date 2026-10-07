@@ -1,0 +1,53 @@
+---
+title: Convert a folder
+description: Convert every file in a folder through the API while staying under the rate limit.
+---
+
+`batch.mjs` converts every file in a folder, a few at a time. It imports `convertFile` from the [Node helper](/examples/node-script).
+
+```js batch.mjs lineNumbers
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { convertFile } from "./convt.mjs";
+
+const [dir, to, concurrency = "4"] = process.argv.slice(2);
+const files = (await readdir(dir, { withFileTypes: true }))
+  .filter((entry) => entry.isFile())
+  .map((entry) => join(dir, entry.name));
+
+let next = 0;
+let failed = 0;
+async function worker() {
+  while (next < files.length) {
+    const file = files[next++];
+    try {
+      const saved = await convertFile(file, to);
+      console.log(`${file} -> ${saved.join(", ")}`);
+    } catch (error) {
+      failed++;
+      console.error(`${file}: ${error.message}`);
+    }
+  }
+}
+
+await Promise.all(Array.from({ length: Number(concurrency) }, worker));
+console.log(`${files.length - failed} converted, ${failed} failed`);
+process.exitCode = failed ? 1 : 0;
+```
+
+```console
+$ node batch.mjs ./photos webp 4
+photos/a.png -> a.webp
+photos/b.heic -> b.webp
+2 converted, 0 failed
+```
+
+## Stay under the rate limit
+
+Each running job polls once a second, and your key gets 120 requests a minute. Four jobs at a time leaves plenty of room. To run more at once, raise the `pollMs` default in `convert()` so all jobs together stay under 2 requests a second.
+
+For folders on your own machine, the [convt CLI](https://convt.app/download) does the same thing locally, with no key and no upload:
+
+```bash
+convt ./photos -r --to webp -j 4
+```

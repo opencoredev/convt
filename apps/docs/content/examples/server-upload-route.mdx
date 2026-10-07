@@ -1,0 +1,63 @@
+---
+title: Server upload route
+description: A route that takes a file from the browser, converts it with your key, and returns signed output URLs.
+---
+
+This route sits between your web app and convt so the API key stays on the server. It uses the standard `Request` and `Response` objects, so the same handler runs on Bun, Deno, Node 18+ frameworks, Cloudflare Workers and Next.js route handlers. It imports `convert` and `formatFor` from the [Node helper](/examples/node-script).
+
+```js server.mjs lineNumbers
+import { convert, formatFor } from "./convt.mjs";
+
+const MAX_BYTES = 50 * 1024 * 1024; // your limit, below convt's 2 GB
+const TARGETS = new Set(["webp", "png", "jpeg", "pdf"]);
+
+export async function handleConvert(request) {
+  // Authenticate your own user here before spending your convt budget.
+
+  const form = await request.formData();
+  const file = form.get("file");
+  const to = String(form.get("to") ?? "");
+  if (!(file instanceof File)) return new Response("file is required", { status: 400 });
+  if (!TARGETS.has(to)) return new Response("unsupported target", { status: 400 });
+  if (file.size === 0 || file.size > MAX_BYTES)
+    return new Response("file too large", { status: 413 });
+
+  try {
+    const outputs = await convert({
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      from: await formatFor(file.name),
+      to,
+    });
+    return Response.json({ outputs });
+  } catch (error) {
+    console.error(error);
+    return new Response(error.message, { status: 502 });
+  }
+}
+
+// Bun: bun server.mjs
+if (typeof Bun !== "undefined") {
+  Bun.serve({
+    port: 3000,
+    fetch: (request) =>
+      new URL(request.url).pathname === "/api/convert" && request.method === "POST"
+        ? handleConvert(request)
+        : new Response("not found", { status: 404 }),
+  });
+}
+```
+
+The browser side is the form from the [Quick start](/quick-start?client=browser):
+
+```js
+const body = new FormData();
+body.append("file", fileInput.files[0]);
+body.append("to", "webp");
+const res = await fetch("/api/convert", { method: "POST", body });
+const { outputs } = await res.json();
+link.href = outputs[0].url;
+```
+
+The signed URLs expire after 5 minutes. To let users download later, store the job id and call `GET /v1/jobs/{id}/download` for fresh URLs when they click, any time in the 24 hours before the job expires.
+
+[Browser apps](/guides/browser-apps) explains why the upload goes through your server.

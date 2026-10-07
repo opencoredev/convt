@@ -1,0 +1,174 @@
+---
+title: Quick start
+description: Convert a PNG to WebP with the convt API from Node, cURL or a browser app, or locally with the CLI.
+---
+
+This page converts `photo.png` to WebP. Pick the tab for your environment. Each one is complete: copy it, set your key, and run it.
+
+Before you start, create an API key on the [dashboard](https://convt.app/dashboard/api) and export it:
+
+```bash
+export CONVT_API_KEY=cvt_live_...
+```
+
+<Tabs syncKey="client" param="client">
+<Tab title="Node">
+
+Node 18 or newer has `fetch` built in, so this needs no packages. Save it as `convert.mjs` and run `node convert.mjs`.
+
+```js convert.mjs lineNumbers
+import { readFile, writeFile } from "node:fs/promises";
+
+const API = "{{api}}";
+const auth = { Authorization: `Bearer ${process.env.CONVT_API_KEY}` };
+
+async function call(path, init = {}) {
+  const headers = { ...auth, ...init.headers };
+  const res = await fetch(API + path, { ...init, headers });
+  const body = await res.json();
+  if (!res.ok) throw new Error(`${body.error.code}: ${body.error.message}`);
+  return body;
+}
+
+const file = await readFile("photo.png");
+
+// 1. Reserve a job for this exact file size.
+const { job, upload_url } = await call("/v1/jobs", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    input_format: "png",
+    target_format: "webp",
+    input_bytes: file.byteLength,
+  }),
+});
+
+// 2. Upload the bytes. The signed URL needs no Authorization header.
+const put = await fetch(upload_url, { method: "PUT", body: file });
+if (!put.ok) throw new Error(`upload failed with ${put.status}`);
+
+// 3. Start the job, then poll once a second until it finishes.
+let current = await call(`/v1/jobs/${job.id}/start`, { method: "POST" });
+while (!["succeeded", "failed", "cancelled"].includes(current.status)) {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  current = await call(`/v1/jobs/${job.id}`);
+}
+if (current.status !== "succeeded") {
+  throw new Error(`job ${current.status}: ${current.error_code}`);
+}
+
+// 4. Download every output.
+const { outputs } = await call(`/v1/jobs/${job.id}/download`);
+for (const output of outputs) {
+  const res = await fetch(output.url);
+  await writeFile(output.name, Buffer.from(await res.arrayBuffer()));
+  console.log(`saved ${output.name}`);
+}
+```
+
+</Tab>
+<Tab title="cURL">
+
+This script needs `curl` 7.76 or newer and `jq`. Save it as `convert.sh` and run `bash convert.sh`.
+
+```bash convert.sh lineNumbers
+set -euo pipefail
+API={{api}}
+FILE=photo.png
+AUTH="Authorization: Bearer $CONVT_API_KEY"
+BYTES=$(wc -c < "$FILE" | tr -d ' ')
+
+# 1. Reserve a job for this exact file size.
+RESERVED=$(curl -sS --fail-with-body "$API/v1/jobs" -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d "{\"input_format\":\"png\",\"target_format\":\"webp\",\"input_bytes\":$BYTES}")
+JOB=$(jq -r .job.id <<< "$RESERVED")
+UPLOAD_URL=$(jq -r .upload_url <<< "$RESERVED")
+
+# 2. Upload the bytes. The signed URL needs no Authorization header.
+curl -sS --fail-with-body -X PUT -T "$FILE" "$UPLOAD_URL"
+
+# 3. Start the job, then poll once a second until it finishes.
+curl -sS --fail-with-body -X POST "$API/v1/jobs/$JOB/start" -H "$AUTH" > /dev/null
+while true; do
+  STATUS=$(curl -sS --fail-with-body "$API/v1/jobs/$JOB" -H "$AUTH" | jq -r .status)
+  case $STATUS in succeeded|failed|cancelled) break ;; esac
+  sleep 1
+done
+[ "$STATUS" = succeeded ] || { echo "job $STATUS" >&2; exit 1; }
+
+# 4. Download every output.
+curl -sS --fail-with-body "$API/v1/jobs/$JOB/download" -H "$AUTH" |
+  jq -r '.outputs[] | "\(.name)\t\(.url)"' |
+  while IFS=$'\t' read -r NAME URL; do
+    curl -sS --fail-with-body -o "$NAME" "$URL" && echo "saved $NAME"
+  done
+```
+
+</Tab>
+<Tab title="Browser">
+
+Never put a `cvt_live_` key in browser code. The browser sends the file to your server, and your server talks to convt. convt's storage only accepts browser uploads from convt.app, so the upload has to come from your server anyway.
+
+```html upload.html lineNumbers
+<input type="file" id="file" accept="image/png" />
+<a id="result" hidden>Download WebP</a>
+
+<script type="module">
+  const input = document.querySelector("#file");
+  const link = document.querySelector("#result");
+
+  input.addEventListener("change", async () => {
+    const body = new FormData();
+    body.append("file", input.files[0]);
+    body.append("to", "webp");
+
+    // Your own route. It holds the API key and runs the job.
+    const res = await fetch("/api/convert", { method: "POST", body });
+    if (!res.ok) throw new Error(await res.text());
+    const { outputs } = await res.json();
+
+    // Signed output URLs are plain links. They work without CORS.
+    link.href = outputs[0].url;
+    link.hidden = false;
+  });
+</script>
+```
+
+The server route reserves the job, uploads the file, starts it, polls and returns the outputs. [Server upload route](/examples/server-upload-route) has a complete one, and [Browser apps](/guides/browser-apps) explains the design.
+
+</Tab>
+<Tab title="CLI">
+
+The convt CLI converts on your own machine. It needs no API key and uploads nothing, so it is the right tool for scripts that run where convt is installed. Get it from the [download page](https://convt.app/download).
+
+```bash
+convt photo.png --to webp
+```
+
+It also converts folders and runs jobs in parallel:
+
+```bash
+convt ./photos -r --to webp -j 4
+```
+
+Run `convt targets photo.png` to see every format a file can become, and `convt --help` for all options.
+
+</Tab>
+</Tabs>
+
+## What just happened
+
+1. `POST /v1/jobs` reserved a conversion and returned a signed upload URL that stays valid for 15 minutes.
+2. The `PUT` sent the file to storage. The signature binds the size you declared, so the file must be exactly `input_bytes` long.
+3. `POST /v1/jobs/{id}/start` checked the upload and queued the job.
+4. `GET /v1/jobs/{id}` reported progress: `queued`, then `running`, then `succeeded`.
+5. `GET /v1/jobs/{id}/download` returned a signed URL for each output, valid for up to 5 minutes.
+
+The job, its upload and its outputs are deleted 24 hours after you created it.
+
+## Next steps
+
+- [Job lifecycle](/guides/job-lifecycle) covers every status and what can go wrong between them.
+- [Errors and retries](/guides/errors-and-retries) shows which failures to retry.
+- [Formats](/reference/formats) lists every conversion the API supports.

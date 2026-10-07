@@ -1,0 +1,71 @@
+---
+title: Polling and downloading
+description: Poll a job until it finishes, then fetch its outputs through short-lived signed URLs.
+---
+
+## Poll the job
+
+The API has no webhooks. After you start a job, read it until `status` is `succeeded`, `failed` or `cancelled`:
+
+```js
+const finished = ["succeeded", "failed", "cancelled"];
+let job = await call(`/v1/jobs/${id}/start`, { method: "POST" });
+while (!finished.includes(job.status)) {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  job = await call(`/v1/jobs/${id}`);
+}
+```
+
+Poll about once a second. Every poll counts toward the 120 requests per minute your key gets, so a key that runs many jobs at once should poll each one less often. Two seconds per job keeps 60 concurrent jobs under the limit.
+
+Give up after a deadline you choose. A conversion attempt runs for at most 10 minutes, and a retry can follow, so 11 minutes covers almost every job. If you stop waiting, [cancel the job](/guides/cancelling) to release its reservation.
+
+## Download the outputs
+
+When the job has succeeded, ask for its download URLs:
+
+```bash
+curl {{api}}/v1/jobs/$JOB/download \
+  -H "Authorization: Bearer $CONVT_API_KEY"
+```
+
+```json
+{
+  "outputs": [{ "name": "photo.webp", "url": "https://…" }],
+  "expires_in": 300
+}
+```
+
+- `outputs` has one entry per file. Most conversions produce one. Some produce several, such as a PDF converted to PNG, which gives one image per page.
+- `name` is the output file name. Use it when you save the file.
+- `url` is a signed `GET` URL. It needs no `Authorization` header.
+- `expires_in` is how many seconds the URLs stay valid, at most 300. Call the route again for fresh URLs.
+
+You can call download as often as you like until the job expires 24 hours after creation. It never charges again.
+
+Calling download before the job succeeds returns `400 not_ready`.
+
+## Save the files
+
+<CodeGroup>
+
+```js Node
+import { writeFile } from "node:fs/promises";
+
+const { outputs } = await call(`/v1/jobs/${id}/download`);
+for (const output of outputs) {
+  const res = await fetch(output.url);
+  if (!res.ok) throw new Error(`download failed with ${res.status}`);
+  await writeFile(output.name, Buffer.from(await res.arrayBuffer()));
+}
+```
+
+```bash cURL
+curl -sS "$API/v1/jobs/$JOB/download" -H "$AUTH" |
+  jq -r '.outputs[] | "\(.name)\t\(.url)"' |
+  while IFS=$'\t' read -r NAME URL; do curl -sS -o "$NAME" "$URL"; done
+```
+
+</CodeGroup>
+
+To hand a file to a browser, return the signed `url` and link to it. A plain link or redirect works from any site. Fetching the URL with JavaScript from your own origin does not, because storage only allows cross-origin reads from convt.app.

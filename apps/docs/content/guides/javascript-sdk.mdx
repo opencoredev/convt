@@ -1,0 +1,46 @@
+---
+title: JavaScript SDK
+description: The status of @convt/sdk, and what to use until it is published.
+---
+
+:::note[Not on npm yet]
+`@convt/sdk` lives in the [convt repository](https://github.com/opencoredev/convt/tree/main/packages/sdk) but has not been published to npm, so `npm install @convt/sdk` does not work yet. Until it is, call the HTTP API directly as the [Quick start](/quick-start) does. The API is the stable contract, and the SDK is a thin layer over it.
+:::
+
+Once it is published, the SDK runs all five steps in one call. Pass `baseUrl` while `api.convt.app` is not live, because the SDK defaults to that host:
+
+```ts
+import { Convt } from "@convt/sdk";
+
+const convt = new Convt({
+  apiKey: process.env.CONVT_API_KEY,
+  baseUrl: "{{api}}",
+});
+
+const result = await convt.convert("report.docx", { to: "pdf" });
+await result.save("report.pdf");
+```
+
+`convert()` detects the input format from the file extension, reserves the job, uploads, starts, polls once a second and returns the outputs. If anything fails or you abort it, it cancels the job so the reservation is released.
+
+## Options
+
+| Option       | Type            | Description                                                             |
+| ------------ | --------------- | ----------------------------------------------------------------------- |
+| `to`         | `Format`        | Target format id. Required.                                             |
+| `from`       | `Format`        | Input format id. Needed when the file name has no recognized extension. |
+| `signal`     | `AbortSignal`   | Cancels the conversion and the job.                                     |
+| `onProgress` | `(job) => void` | Called with the job after each poll.                                    |
+| `timeoutMs`  | `number`        | Gives up and cancels after this long. Defaults to 660,000 (11 minutes). |
+
+## Results
+
+`convert()` returns a `Conversion` with `job`, `outputs`, and helpers to read them:
+
+- `blob(index = 0)` downloads one output as a `Blob`.
+- `save(path)` writes the only output to disk. Node only.
+- `saveAll(directory)` writes every output into a folder. Node only.
+
+Errors are `ConvtError` instances with the API's `code` and the HTTP `status`.
+
+The lower-level methods `create`, `start`, `status`, `cancel` and `download` map one to one onto the [API routes](/api).
