@@ -96,6 +96,30 @@ jobs:
       - name: Package unsigned per-user MSI
         shell: pwsh
         run: ./packaging/windows/installer.ps1
+      - name: Check the installed FFmpeg and real conversions
+        shell: pwsh
+        run: |
+          $Msi = (Get-ChildItem packaging/out/windows/*.msi).FullName
+          $Root = Join-Path $env:RUNNER_TEMP 'msi-check'
+          Start-Process msiexec -Wait -ArgumentList '/a', "`"$Msi`"", '/qn', "TARGETDIR=$Root"
+          $Dir = (Get-ChildItem $Root -Recurse -Filter convt.exe | Select-Object -First 1).DirectoryName
+          $Receipt = Get-Content packaging/cache/windows/ffmpeg-build/receipt.json -Raw | ConvertFrom-Json
+          foreach ($Tool in 'ffmpeg.exe','ffprobe.exe') {
+            $Hash = (Get-FileHash "$Dir/$Tool" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($Hash -ne $Receipt.binaries.$Tool) { throw "MSI $Tool differs from the source-built receipt" }
+            "$Tool $Hash matches the source-built receipt"
+          }
+          & "$Dir/ffmpeg.exe" -hide_banner -buildconf
+          if (!(Test-Path "$Dir/licenses/SOURCES.txt")) { throw 'SOURCES.txt missing' }
+          $Work = Join-Path $env:RUNNER_TEMP 'convert-check'
+          New-Item -ItemType Directory $Work | Out-Null
+          & "$Dir/ffmpeg.exe" -hide_banner -loglevel error -f lavfi -i testsrc=duration=1:size=320x240:rate=25 -f lavfi -i sine=duration=1 -c:v mpeg4 -c:a pcm_s16le -shortest "$Work/clip.avi"
+          & "$Dir/ffmpeg.exe" -hide_banner -loglevel error -f lavfi -i sine=duration=1 "$Work/tone.wav"
+          foreach ($Case in @(@('clip.avi','mp4'), @('clip.avi','webm'), @('tone.wav','mp3'), @('tone.wav','ogg'))) {
+            & "$Dir/convt.exe" "$Work/$($Case[0])" --to $Case[1] -o "$Work/out-$($Case[1])"
+            if ($LASTEXITCODE -ne 0) { throw "convt $($Case[0]) to $($Case[1]) failed" }
+          }
+          Get-ChildItem "$Work/out-*" -Recurse -File | ForEach-Object { "$($_.Name) $($_.Length) bytes"; & "$Dir/ffprobe.exe" -v error -show_entries stream=codec_name -of csv=p=0 $_.FullName }
       - name: Archive the Windows corresponding source
         shell: pwsh
         env:
