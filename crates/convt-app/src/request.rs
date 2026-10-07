@@ -356,13 +356,21 @@ mod tests {
         assert_eq!(help, Ok(Command::Help));
     }
 
+    /// What makes `/tmp` absolute here: Windows paths need a drive.
+    const ROOT: &str = if cfg!(windows) { "C:" } else { "" };
+
     #[test]
     fn links() {
-        let r =
-            parse_url("convt://convert?file=%2Ftmp%2Fa%20b.png&file=/c+d.jpg&to=webp&x=1").unwrap();
+        let r = parse_url(&format!(
+            "convt://convert?file={ROOT}%2Ftmp%2Fa%20b.png&file={ROOT}/c+d.jpg&to=webp&x=1"
+        ))
+        .unwrap();
         assert_eq!(
             r.files,
-            [PathBuf::from("/tmp/a b.png"), PathBuf::from("/c d.jpg")]
+            [
+                PathBuf::from(format!("{ROOT}/tmp/a b.png")),
+                PathBuf::from(format!("{ROOT}/c d.jpg"))
+            ]
         );
         assert_eq!(r.to.as_deref(), Some("webp"));
         // A link never starts a conversion by itself.
@@ -371,7 +379,8 @@ mod tests {
         assert!(parse_url("convt://delete?file=/a").is_err());
         assert!(parse_url("convt://convert?file=%zz").is_err());
         assert!(parse_url("convt://convert?to=nope").is_err());
-        let via_args = parse_args(vec!["convt://convert?file=/a.png".into()], Path::new("/"));
+        let link = format!("convt://convert?file={ROOT}/a.png");
+        let via_args = parse_args(vec![link.into()], Path::new("/"));
         assert!(matches!(via_args, Ok(Command::Run(r)) if r.source == Some(Source::Url)));
 
         let r = parse_url("convt://activate?key=abc.def-_&file=/a.png").unwrap();

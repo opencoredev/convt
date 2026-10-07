@@ -240,10 +240,7 @@ impl pack::Backend for TestPacks {
             configured: !self.unconfigured,
             download: Some(PACK_SIZE),
             installed: Some(410_000_000),
-            destination: Some(
-                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                    .join(".local/share/convt/packs/documents"),
-            ),
+            destination: Some(home().join(".local/share/convt/packs/documents")),
         }
     }
     fn status(&self) -> pack::Status {
@@ -2175,15 +2172,22 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
 fn output_folders_are_stored_as_absolute_paths(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let input = f.png("a.png");
-    let out = f.dir.path().join("out");
+    let cwd = std::env::current_dir().unwrap();
+    // On Windows a relative path can't leave the working directory's drive,
+    // and the temp folder may be on another one.
+    let near = cfg!(windows).then(|| tempfile::tempdir_in(&cwd).unwrap());
+    let out = near.as_ref().map_or(f.dir.path(), |d| d.path()).join("out");
     std::fs::create_dir(&out).unwrap();
     // The same folder, relative to the working directory.
-    let cwd = std::env::current_dir().unwrap();
+    fn named(path: &Path) -> impl Iterator<Item = std::path::Component<'_>> {
+        path.components()
+            .filter(|c| matches!(c, std::path::Component::Normal(_)))
+    }
     let mut relative = PathBuf::new();
-    for _ in cwd.components().skip(1) {
+    for _ in named(&cwd) {
         relative.push("..");
     }
-    relative.push(out.strip_prefix("/").unwrap());
+    relative.extend(named(&out));
     assert!(relative.is_relative());
     let webp = convt_core::format_by_id("webp").unwrap();
     let output = convt_core::Output::Dir(relative);
@@ -2596,15 +2600,14 @@ fn only_the_download_button_reaches_the_installer() {
     assert_eq!(uses("ureq"), Vec::<&str>::new());
     // The definition, and the one call in the button's click handler.
     assert_eq!(uses("download_pack("), ["model.rs", "ui/pack.rs"]);
-    let button = include_str!("pack.rs")
-        .split("fn download_button")
-        .nth(1)
-        .unwrap();
+    // A Windows checkout may have CRLF line endings.
+    let button = include_str!("pack.rs").replace("\r\n", "\n");
+    let button = button.split("fn download_button").nth(1).unwrap();
     let button = &button[..button.find("\n}\n").unwrap()];
     assert!(button.contains(".on_click(") && button.contains("download_pack(cx)"));
     // `backend.install(` runs inside download_pack's worker thread only.
     assert_eq!(uses("backend.install("), ["model.rs"]);
-    let model = include_str!("../model.rs");
+    let model = include_str!("../model.rs").replace("\r\n", "\n");
     let body = &model[model.find("pub fn download_pack").unwrap()..];
     let body = &body[..body.find("\n    }\n").unwrap()];
     assert!(body.contains("backend.install("));
@@ -2659,10 +2662,24 @@ fn the_destination_has_its_own_line_from_home(cx: &mut TestAppContext) {
     let f = Fixture::with_packs(cx, packs);
     let docx = f.docx("Report.docx");
     let (window, _) = f.quick(cli(vec![docx], None, None), cx);
+    let expected = if cfg!(windows) {
+        home()
+            .join(".local/share/convt/packs/documents")
+            .display()
+            .to_string()
+    } else {
+        "~/.local/share/convt/packs/documents".into()
+    };
     assert_eq!(
         label(cx, window, "pack-destination").as_deref(),
-        Some("~/.local/share/convt/packs/documents")
+        Some(expected.as_str())
     );
+}
+
+/// The home folder `TestPacks` installs into.
+fn home() -> PathBuf {
+    let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    PathBuf::from(std::env::var_os(var).unwrap_or_default())
 }
 
 #[gpui_kit::test]
