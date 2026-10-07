@@ -65,6 +65,12 @@ def main():
     expected = lock["build"].get("runtime_sha256")
     if expected and actual != expected:
         raise ValueError(f"Rebuilt runtime differs: {actual} != {expected}")
+    # The closure lock retains this build's logs as evidence beside the sources.
+    provenance = cache / f"appimage-source/provenance-{actual[:12]}"
+    provenance.mkdir(parents=True, exist_ok=True)
+    for entry in lock.get("build_evidence", []):
+        name = Path(entry["cache"]).name
+        shutil.copyfile(output / name, provenance / name)
     print(json.dumps({"runtime": str(runtime), "sha256": actual}, indent=2))
 
 
