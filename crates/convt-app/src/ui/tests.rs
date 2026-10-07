@@ -3383,18 +3383,18 @@ fn update_key() -> SigningKey {
     SigningKey::from_bytes(&[23; 32])
 }
 
-/// A signed manifest issued an hour ago, listing `builds` as (version, date).
-// Builds the update tests serve, relative to the running version so a version
-// bump never turns a "newer" fixture into an older one. A build of the running
-// version with a later date is an update; `next_minor()` is newer still.
 use crate::account::VERSION;
 
+/// The update tests serve builds relative to the running version, so a version
+/// bump never turns a "newer" fixture into an older one. A build of `VERSION`
+/// with a later date is an update; the next minor version is newer still.
 fn next_minor() -> String {
     let mut parts = VERSION.split('.').map(|p| p.parse::<u64>().unwrap());
     let (major, minor) = (parts.next().unwrap(), parts.next().unwrap());
     format!("{major}.{}.0", minor + 1)
 }
 
+/// A signed manifest issued an hour ago, listing `builds` as (version, date).
 fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8> {
     use base64::Engine as _;
     use ed25519_dalek::Signer as _;
