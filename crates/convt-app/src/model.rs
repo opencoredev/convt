@@ -46,6 +46,8 @@ pub struct Paths {
     /// The update check's key, transport and install target. Tests script
     /// their own transport.
     pub update: UpdateConfig,
+    /// Rotating app log and crash files. Tests point this at the fixture.
+    pub log_dir: Option<PathBuf>,
 }
 
 impl Paths {
@@ -59,6 +61,7 @@ impl Paths {
             account_url: account::account_url(),
             account_api: Arc::new(account::Http::new(&account::account_url())),
             update: UpdateConfig::from_env(),
+            log_dir: crate::crash_report::logs_dir(),
         }
     }
 }
@@ -260,6 +263,9 @@ pub struct AppState {
     /// What [`Self::apply`] would have revealed, in tests.
     #[cfg(test)]
     pub revealed: Vec<PathBuf>,
+    pub(crate) log_dir: Option<PathBuf>,
+    /// Shown under Copy logs after a click.
+    pub logs_notice: Option<String>,
     /// Quit once the queue drains if no window is open.
     pub quit_when_idle: bool,
     /// Whether the Finder extension is on. `None` when this platform has
@@ -341,6 +347,8 @@ impl AppState {
             silent: HashSet::new(),
             #[cfg(test)]
             revealed: Vec::new(),
+            log_dir: paths.log_dir,
+            logs_notice: None,
             quit_when_idle: false,
             finder_on: None,
             // Tests set `finder_on` themselves; a live poll would overwrite it.
@@ -777,10 +785,11 @@ impl AppState {
                     }
                     Outcome::Done(outputs)
                 }
-                Status::Failed(e) => {
+                Status::Failed(ref e) => {
                     batch.failed += 1;
-                    crash_report::report_error(e.kind, &e.message);
-                    Outcome::Failed(e.message)
+                    let from = format_by_extension(&entry.input).map(|f| f.id);
+                    crash_report::report_conversion(e.kind, &e.message, from, Some(entry.to.id));
+                    Outcome::Failed(e.message.clone())
                 }
                 _ => {
                     batch.cancelled += 1;
@@ -906,7 +915,26 @@ impl AppState {
         Ok(())
     }
 
-    /// Applies a settings change and saves it.
+    /// Version, OS, arch, license state and recent logs. Paths are scrubbed.
+    pub fn diagnostics_bundle(&self) -> String {
+        crate::logs::current_bundle(&crate::logs::license_label(&self.license))
+    }
+
+    pub fn reveal_logs(&mut self, cx: &mut Context<Self>) {
+        let Some(dir) = self.log_dir.clone() else {
+            self.logs_notice = Some("No log folder is configured.".into());
+            cx.notify();
+            return;
+        };
+        let _ = std::fs::create_dir_all(&dir);
+        #[cfg(not(test))]
+        cx.open_with_system(&dir);
+        #[cfg(test)]
+        self.revealed.push(dir);
+        self.logs_notice = Some("Opened the log folder.".into());
+        cx.notify();
+    }
+
     pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         change(&mut self.settings);
         self.runner.set_concurrency(self.settings.concurrency());
@@ -957,6 +985,10 @@ pub fn resolve(
 
 pub fn shared(cx: &App) -> Entity<AppState> {
     cx.global::<Shared>().0.clone()
+}
+
+pub fn try_shared(cx: &App) -> Option<Entity<AppState>> {
+    cx.try_global::<Shared>().map(|s| s.0.clone())
 }
 
 pub fn file_name(path: &Path) -> SharedString {

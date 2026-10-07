@@ -441,6 +441,22 @@ impl SettingsView {
                     ))
                     .child(field_top("Network", network(p), p)),
             )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(18.))
+                    .px(px(40.))
+                    .pt(px(22.))
+                    .pb(px(28.))
+                    .border_t_1()
+                    .border_color(p.hairline)
+                    .child(field_top(
+                        "Support",
+                        super::support::settings_section(&self.app, p, cx),
+                        p,
+                    )),
+            )
     }
 
     fn presets(&self, p: &Palette, cx: &mut Context<Self>) -> Div {

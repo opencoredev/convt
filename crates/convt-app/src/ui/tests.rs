@@ -405,6 +405,7 @@ impl Fixture {
                 fetch: releases.clone(),
                 target: ("linux-x86_64", "AppImage"),
             },
+            log_dir: Some(dir.path().join("logs")),
         };
         // Conversions run on real job threads that wake the UI.
         cx.executor().allow_parking();
@@ -1579,6 +1580,10 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
         ] {
             let (settings, _) = f.settings(tab, cx);
             assert!(shown(cx, settings, "tab-general"));
+            if tab == SettingsTab::General {
+                assert!(shown(cx, settings, "copy-logs"));
+                assert!(shown(cx, settings, "reveal-log-file"));
+            }
         }
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
@@ -3770,5 +3775,58 @@ fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppCo
     assert!(
         !status.contains("keeps working") && status.contains("renew to convert again"),
         "{status}"
+    );
+}
+
+fn clipboard_text(cx: &TestAppContext) -> Option<String> {
+    let item = cx.read_from_clipboard()?;
+    item.entries().iter().find_map(|entry| match entry {
+        ClipboardEntry::String(s) => Some(s.text().to_string()),
+        _ => None,
+    })
+}
+
+#[gpui_kit::test]
+fn copy_logs_puts_a_scrubbed_bundle_on_the_clipboard(cx: &mut TestAppContext) {
+    let addr = format!("{}@{}", "someone", "convt.test");
+    let f = Fixture::licensed(cx, None, Some(&license_key(&addr, "2027-10-01")));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(shown(cx, settings, "copy-logs"));
+    assert!(shown(cx, settings, "reveal-log-file"));
+    click(cx, settings, "copy-logs");
+    let text = clipboard_text(cx).expect("Copy logs wrote the clipboard");
+    assert!(text.starts_with("convt-app "), "{text}");
+    assert!(text.contains("os: "), "{text}");
+    assert!(text.contains("os_version: "), "{text}");
+    assert!(text.contains("arch: "), "{text}");
+    assert!(text.contains("license: licensed (desktop)\n"), "{text}");
+    assert!(text.contains("--- logs ---"), "{text}");
+    assert!(!text.contains(&addr), "{text}");
+    assert!(!text.contains('@'), "{text}");
+    assert_eq!(
+        label(cx, settings, "logs-notice").as_deref(),
+        Some("Copied. Paths are scrubbed; paste this wherever you want.")
+    );
+}
+
+#[gpui_kit::test]
+fn reveal_log_file_opens_the_fixture_log_folder(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "reveal-log-file");
+    let want = f.dir.path().join("logs");
+    cx.read(|cx| {
+        let state = f.app.read(cx);
+        assert!(
+            state.revealed.iter().any(|p| p == &want),
+            "revealed {:?}, want {want:?}",
+            state.revealed
+        );
+        assert_eq!(state.logs_notice.as_deref(), Some("Opened the log folder."));
+    });
+    assert!(want.is_dir(), "reveal creates the log folder");
+    assert_eq!(
+        label(cx, settings, "logs-notice").as_deref(),
+        Some("Opened the log folder.")
     );
 }

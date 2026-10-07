@@ -8,6 +8,7 @@ mod finder;
 mod history;
 mod instance;
 mod jobs;
+mod logs;
 #[cfg(target_os = "macos")]
 mod macos;
 mod model;
@@ -33,10 +34,7 @@ use crate::request::{Command, Request, USAGE};
 
 fn main() -> ExitCode {
     crash_report::install();
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
+    logs::init();
     let cwd = std::env::current_dir().unwrap_or_default();
     let request = match request::parse_args(std::env::args_os().skip(1).collect(), &cwd) {
         Ok(Command::Run(request)) => request,
@@ -96,6 +94,7 @@ fn run(primary: instance::Primary, first: Request) {
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);
         cx.set_global(Shared(state.clone()));
+        ui::support::register_actions(cx);
         cx.on_window_closed(last_window_closed).detach();
         // One of the two network calls the app makes by itself: while signed in, at
         // most once a day, ask convt.app for the current Pro key.
