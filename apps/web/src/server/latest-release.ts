@@ -27,6 +27,8 @@ export async function fetchLatestManifest(): Promise<ReleaseManifest | null> {
   try {
     const response = await fetch(LATEST_MANIFEST_URL, {
       redirect: "follow",
+      // A stalled GitHub must not hold up /download; the bundled copy covers it.
+      signal: AbortSignal.timeout(5000),
       cf: { cacheTtl: 300, cacheEverything: true },
     } as RequestInit);
     if (!response.ok) return null;
