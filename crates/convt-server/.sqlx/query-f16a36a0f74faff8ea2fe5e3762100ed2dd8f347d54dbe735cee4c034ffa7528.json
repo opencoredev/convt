@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as \"period!\", spend_cap_cents from subscriptions where user_id=$1 and kind=$2 and status='active' and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null) order by created_at desc limit 1 for update",
+  "query": "select id, case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as \"period!\", spend_cap_cents from subscriptions where user_id=$1 and kind=$2 and (status='active' or (kind='pro' and status='trialing')) and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null) order by created_at desc limit 1 for update",
   "describe": {
     "columns": [
       {
@@ -44,5 +44,5 @@
       true
     ]
   },
-  "hash": "d1445754f7a232c77d524d1468655ef514ad71a3ec430ba5e685705138c86fa4"
+  "hash": "f16a36a0f74faff8ea2fe5e3762100ed2dd8f347d54dbe735cee4c034ffa7528"
 }

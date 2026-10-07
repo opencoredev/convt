@@ -25,16 +25,20 @@ export const fetchApiSpend = createServerFn({ method: "GET" })
   .handler(async ({ context: { db, userId } }) => cloudAllowance(db, userId, "api"));
 export const fetchCloudAccess = createServerFn({ method: "GET" })
   .middleware([authed])
-  .handler(async ({ context: { db, userId } }) => ({
-    ...(await cloudAllowance(db, userId, "pro")),
-    configured:
-      typeof env.CONVT_API_URL === "string" && typeof env.CONVT_WEB_TOKEN_SECRET === "string",
-  }));
+  .handler(async ({ context: { db, userId } }) => {
+    const allowance = await cloudAllowance(db, userId, "pro");
+    return {
+      allowed: allowance.allowed,
+      state: allowance.state,
+      configured:
+        typeof env.CONVT_API_URL === "string" && typeof env.CONVT_WEB_TOKEN_SECRET === "string",
+    };
+  });
 export const fetchCloudCredential = createServerFn({ method: "POST" })
   .middleware([authed])
   .handler(async ({ context: { db, userId } }) => {
     if (!(await cloudAllowance(db, userId, "pro")).allowed)
-      throw new Error("Cloud conversion requires an active paid Pro subscription.");
+      throw new Error("Cloud conversion requires Pro or a Pro trial.");
     const secret = env.CONVT_WEB_TOKEN_SECRET;
     const baseUrl = env.CONVT_API_URL;
     if (typeof secret !== "string" || secret.length < 32 || typeof baseUrl !== "string")

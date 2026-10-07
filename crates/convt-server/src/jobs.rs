@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 
 pub const MAX_FILE_BYTES: i64 = 2_000_000_000;
+// User-facing Cloud is unlimited. This 50 GB input cap stays as a hidden safety
+// limit. Soft compute-cost budget (~$8 / period) is CNV-30; Pro jobs record
+// amount_cents = 0 today.
 pub const PRO_MONTH_BYTES: i64 = 50_000_000_000;
 pub const API_CENTS: i32 = 1;
 pub const MAX_STORED_INPUT_BYTES: i64 = 50_000_000_000;
@@ -112,7 +115,7 @@ pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<
     // P7 cap edits lock this same row. Pro allowance is a UTC calendar month,
     // including annual subscriptions. API billing follows its provider period.
     let kind = if who.key_id.is_some() { "api" } else { "pro" };
-    let sub = sqlx::query_as!(Subscription, r#"select id, case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as "period!", spend_cap_cents from subscriptions where user_id=$1 and kind=$2 and status='active' and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null) order by created_at desc limit 1 for update"#, &who.user_id, kind).fetch_optional(&mut *tx).await?.ok_or_else(|| ApiError::forbidden("not_enrolled", "An active paid subscription is required."))?;
+    let sub = sqlx::query_as!(Subscription, r#"select id, case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as "period!", spend_cap_cents from subscriptions where user_id=$1 and kind=$2 and (status='active' or (kind='pro' and status='trialing')) and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null) order by created_at desc limit 1 for update"#, &who.user_id, kind).fetch_optional(&mut *tx).await?.ok_or_else(|| ApiError::forbidden("not_enrolled", if kind == "pro" { "An active Pro subscription or trial is required." } else { "An active paid subscription is required." }))?;
     let settled: i64 = sqlx::query_scalar!(r#"select coalesce(sum(case when $3='api' then e.amount_cents else e.quantity end),0)::bigint as "value!" from usage_events e left join usage_events original on original.id=e.corrects where e.subscription_id=$1 and e.occurred_at >= $2 and (e.kind=case when $3='api' then 'api_conversion' else 'pro_bytes' end or (e.kind='correction' and original.kind=case when $3='api' then 'api_conversion' else 'pro_bytes' end))"#, &sub.id, sub.period, kind).fetch_one(&mut *tx).await?;
     // Open commitments survive cap edits and period rollover.
     let reserved: i64 = sqlx::query_scalar!(r#"select coalesce(sum(case when $2='api' then reserved_cents else reserved_bytes end),0)::bigint as "value!" from cloud_jobs where subscription_id=$1 and reservation='open'"#, &sub.id, kind).fetch_one(&mut *tx).await?;

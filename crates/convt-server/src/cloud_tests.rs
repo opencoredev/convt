@@ -235,7 +235,7 @@ async fn concurrent_api_reservations_stop_at_cap_and_lowering_preserves_commitme
     db.drop().await;
 }
 #[tokio::test]
-async fn annual_pro_has_monthly_bytes_and_rejects_trial_and_oversized_files() {
+async fn annual_pro_has_monthly_bytes_and_allows_trial_and_rejects_oversized_files() {
     let Some(db) = test_db().await else { return };
     setup(&db.owner, "usr_a", "pro", 0).await;
     assert!(
@@ -265,7 +265,7 @@ async fn annual_pro_has_monthly_bytes_and_rejects_trial_and_oversized_files() {
     assert!(
         jobs::create(&db.server, &who("usr_a", false), &data(1))
             .await
-            .is_err()
+            .is_ok()
     );
     db.drop().await;
 }

@@ -101,13 +101,6 @@ function ApiPage() {
         </div>
       </div>
 
-      {api.sales === "all" ? (
-        <SecondaryLink href="/dashboard/api/convert" className="self-start">
-          Convert in your browser
-        </SecondaryLink>
-      ) : (
-        <p className="text-sm text-ink-2">Cloud conversions are coming soon.</p>
-      )}
       {error && (
         <p role="alert" className="text-sm text-error">
           {error}

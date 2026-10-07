@@ -41,6 +41,7 @@ import { Route as ApiDeviceTokenRouteImport } from './routes/api/device/token'
 import { Route as AppShellDashboardIndexRouteImport } from './routes/_app/_shell/dashboard/index'
 import { Route as AppShellDashboardApiRouteImport } from './routes/_app/_shell/dashboard/api'
 import { Route as AppShellDashboardBillingRouteImport } from './routes/_app/_shell/dashboard/billing'
+import { Route as AppShellDashboardCloudRouteImport } from './routes/_app/_shell/dashboard/cloud'
 import { Route as AppShellDashboardLicensesRouteImport } from './routes/_app/_shell/dashboard/licenses'
 import { Route as AppShellDashboardApiConvertRouteImport } from './routes/_app/_shell/dashboard/api_.convert'
 
@@ -202,6 +203,11 @@ const AppShellDashboardBillingRoute =
     path: '/dashboard/billing',
     getParentRoute: () => AppShellRoute,
   } as any)
+const AppShellDashboardCloudRoute = AppShellDashboardCloudRouteImport.update({
+  id: '/dashboard/cloud',
+  path: '/dashboard/cloud',
+  getParentRoute: () => AppShellRoute,
+} as any)
 const AppShellDashboardLicensesRoute =
   AppShellDashboardLicensesRouteImport.update({
     id: '/dashboard/licenses',
@@ -244,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/sign-in/': typeof AppSignInIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
+  '/dashboard/cloud': typeof AppShellDashboardCloudRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
   '/dashboard/': typeof AppShellDashboardIndexRoute
   '/dashboard/api/convert': typeof AppShellDashboardApiConvertRoute
@@ -277,6 +284,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof AppSignInIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
+  '/dashboard/cloud': typeof AppShellDashboardCloudRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
   '/dashboard': typeof AppShellDashboardIndexRoute
   '/dashboard/api/convert': typeof AppShellDashboardApiConvertRoute
@@ -314,6 +322,7 @@ export interface FileRoutesById {
   '/_app/sign-in/': typeof AppSignInIndexRoute
   '/_app/_shell/dashboard/api': typeof AppShellDashboardApiRoute
   '/_app/_shell/dashboard/billing': typeof AppShellDashboardBillingRoute
+  '/_app/_shell/dashboard/cloud': typeof AppShellDashboardCloudRoute
   '/_app/_shell/dashboard/licenses': typeof AppShellDashboardLicensesRoute
   '/_app/_shell/dashboard/': typeof AppShellDashboardIndexRoute
   '/_app/_shell/dashboard/api_/convert': typeof AppShellDashboardApiConvertRoute
@@ -349,6 +358,7 @@ export interface FileRouteTypes {
     | '/sign-in/'
     | '/dashboard/api'
     | '/dashboard/billing'
+    | '/dashboard/cloud'
     | '/dashboard/licenses'
     | '/dashboard/'
     | '/dashboard/api/convert'
@@ -382,6 +392,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/dashboard/api'
     | '/dashboard/billing'
+    | '/dashboard/cloud'
     | '/dashboard/licenses'
     | '/dashboard'
     | '/dashboard/api/convert'
@@ -418,6 +429,7 @@ export interface FileRouteTypes {
     | '/_app/sign-in/'
     | '/_app/_shell/dashboard/api'
     | '/_app/_shell/dashboard/billing'
+    | '/_app/_shell/dashboard/cloud'
     | '/_app/_shell/dashboard/licenses'
     | '/_app/_shell/dashboard/'
     | '/_app/_shell/dashboard/api_/convert'
@@ -666,6 +678,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppShellDashboardBillingRouteImport
       parentRoute: typeof AppShellRoute
     }
+    '/_app/_shell/dashboard/cloud': {
+      id: '/_app/_shell/dashboard/cloud'
+      path: '/dashboard/cloud'
+      fullPath: '/dashboard/cloud'
+      preLoaderRoute: typeof AppShellDashboardCloudRouteImport
+      parentRoute: typeof AppShellRoute
+    }
     '/_app/_shell/dashboard/licenses': {
       id: '/_app/_shell/dashboard/licenses'
       path: '/dashboard/licenses'
@@ -687,6 +706,7 @@ interface AppShellRouteChildren {
   AppShellAccountRoute: typeof AppShellAccountRoute
   AppShellDashboardApiRoute: typeof AppShellDashboardApiRoute
   AppShellDashboardBillingRoute: typeof AppShellDashboardBillingRoute
+  AppShellDashboardCloudRoute: typeof AppShellDashboardCloudRoute
   AppShellDashboardLicensesRoute: typeof AppShellDashboardLicensesRoute
   AppShellDashboardIndexRoute: typeof AppShellDashboardIndexRoute
   AppShellDashboardApiConvertRoute: typeof AppShellDashboardApiConvertRoute
@@ -696,6 +716,7 @@ const AppShellRouteChildren: AppShellRouteChildren = {
   AppShellAccountRoute: AppShellAccountRoute,
   AppShellDashboardApiRoute: AppShellDashboardApiRoute,
   AppShellDashboardBillingRoute: AppShellDashboardBillingRoute,
+  AppShellDashboardCloudRoute: AppShellDashboardCloudRoute,
   AppShellDashboardLicensesRoute: AppShellDashboardLicensesRoute,
   AppShellDashboardIndexRoute: AppShellDashboardIndexRoute,
   AppShellDashboardApiConvertRoute: AppShellDashboardApiConvertRoute,
@@ -768,13 +789,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
