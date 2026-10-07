@@ -87,6 +87,23 @@ jobs:
         if: matrix.suite == 'desktop'
         run: cargo test -p convt-app
 
+  release-scripts:
+    name: Release scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Source archive and audit unit tests
+        run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+
   web:
     name: Web
     runs-on: tenki-standard-medium-4c-8g
@@ -101,6 +118,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # apps/docs builds with Blume, which runs on Node 22.19 or newer.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run check-types

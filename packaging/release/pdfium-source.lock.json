@@ -1200,14 +1200,14 @@
     },
     {
       "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/20e97c4b113b79586c29ac57738548939a34d22e",
-      "sha256": "109f4a8ef224cabf1af253765a979b025a79e30abff61cb94927955cc0d679ba",
-      "size_bytes": 276067684,
+      "sha256": "69241005b5192a5b77403ddd5a5635c6463eaf70694f6f5acf7772844879bf76",
+      "size_bytes": 276067967,
       "cache_filename": "pdfium-source/llvm-project-20e97c4b113b79586c29ac57738548939a34d22e.tar.gz",
       "checkout_path": null,
       "revision": "20e97c4b113b79586c29ac57738548939a34d22e",
       "strip_components": 1,
       "role": "Complete LLVM monorepo matching pinned Clang runtime revision: compiler-rt source, CMake modules, LLVM headers/tools and third-party inputs. DEPS libc++/libc++abi snapshots remain separately pinned.",
-      "member_count": 198275,
+      "member_count": 198274,
       "notice_members": [
         {
           "member": "llvm-project-20e97c4b113b79586c29ac57738548939a34d22e/LICENSE.TXT",
@@ -1236,7 +1236,10 @@
       ],
       "retrieval": {
         "type": "canonical-gitiles-archive",
-        "sort_members": true
+        "sort_members": true,
+        "drop_members": [
+          "clang/bindings/python/.git_archival.txt"
+        ]
       }
     }
   ],

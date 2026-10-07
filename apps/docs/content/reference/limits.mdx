@@ -1,0 +1,37 @@
+---
+title: Limits
+description: Rate limits, file sizes, storage, and how long uploads, outputs and jobs last.
+---
+
+## Rate limit
+
+Each API key can make **120 requests per minute** across every job route. The window starts with the first request and resets one minute later. Request 121 inside the window returns `429 rate_limited`.
+
+The limit is per key, not per account. Uploads and downloads through signed URLs do not count, and neither does `GET /v1/formats`.
+
+The API sends no `Retry-After` or `RateLimit` headers. Back off on your side, as shown in [Errors and retries](/guides/errors-and-retries#backoff).
+
+## Sizes and counts
+
+| Limit                                               | Value                                |
+| --------------------------------------------------- | ------------------------------------ |
+| Input file size                                     | 1 byte to 2,000,000,000 bytes (2 GB) |
+| Unexpired jobs with uploads, per account            | 100                                  |
+| Declared input bytes across those jobs, per account | 50 GB                                |
+| Outputs per job                                     | 256 files, 4 GB in total             |
+| Conversion time per attempt                         | 10 minutes                           |
+| Attempts per job                                    | 3                                    |
+
+The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
+
+## Lifetimes
+
+| Item                              | Valid for                                                          |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `upload_url`                      | 15 minutes after the job is created                                |
+| Output download URLs              | `expires_in` seconds, at most 5 minutes; request new ones any time |
+| A job, its upload and its outputs | 24 hours after creation                                            |
+
+## Spend cap
+
+Each job reserves 1 cent when it is created and is billed only if it succeeds. Once billed plus reserved spend reaches your cap for the billing period, creating a job returns `403 limit_reached`. Change the cap on the [dashboard](https://convt.app/dashboard/api).

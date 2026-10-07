@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Same geometry and colors as the Mark component in src/components/logo.tsx. -->
+  <style>
+    .source { fill: #0a0a0a }
+    .top { stop-color: #1fb36c } .bottom { stop-color: #127a47 }
+    .overlap { fill: #0b5c34 }
+    @media (prefers-color-scheme: dark) {
+      .source { fill: #edefee }
+      .top { stop-color: #46d08b } .bottom { stop-color: #1fa463 }
+      .overlap { fill: #a6f0c8 }
+    }
+  </style>
+  <defs>
+    <clipPath id="source"><rect x="2" y="2" width="19" height="19" rx="5"/></clipPath>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+      <stop class="top" offset="0"/><stop class="bottom" offset="1"/>
+    </linearGradient>
+  </defs>
+  <rect class="source" x="2" y="2" width="19" height="19" rx="5"/>
+  <rect x="11" y="11" width="19" height="19" rx="5" fill="url(#green)"/>
+  <rect class="overlap" x="11" y="11" width="19" height="19" rx="5" clip-path="url(#source)"/>
+</svg>

@@ -1,0 +1,162 @@
+---
+title: Node helper
+description: A reusable convert() for Node with format detection, retries, a timeout and cancellation.
+---
+
+`convt.mjs` wraps the whole job flow in one function. The other examples import it. It runs on Node 18 or newer, Bun and Deno, with no packages.
+
+```js convt.mjs lineNumbers expandable
+import { readFile, writeFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const API = process.env.CONVT_API ?? "{{api}}";
+const KEY = process.env.CONVT_API_KEY;
+const FINISHED = ["succeeded", "failed", "cancelled"];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// 120 job-route requests a minute per key. One queue covers create, start,
+// poll, download, cancel and retries so a batch cannot burst past the limit.
+const RATE_GAP_MS = 510;
+let nextSlot = Promise.resolve();
+function pace() {
+  const wait = nextSlot;
+  nextSlot = wait.then(() => sleep(RATE_GAP_MS));
+  return wait;
+}
+
+export class ConvtError extends Error {
+  constructor(code, message, status) {
+    super(`${code}: ${message}`);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+async function request(path, { method = "GET", body, signal } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    await pace();
+    const res = await fetch(API + path, {
+      method,
+      signal,
+      headers: {
+        Authorization: `Bearer ${KEY}`,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    if (res.ok) return JSON.parse(text);
+    let error;
+    try {
+      const { error: e } = JSON.parse(text);
+      error = new ConvtError(e.code, e.message, res.status);
+    } catch {
+      error = new ConvtError("http_error", text, res.status);
+    }
+    // Creating a job is not safe to repeat, so only retry it on 429.
+    const creating = method === "POST" && path === "/v1/jobs";
+    const retryable = res.status === 429 || (!creating && res.status >= 500);
+    if (!retryable || attempt >= 4) throw error;
+    await sleep(Math.min(30_000, 1000 * 2 ** attempt) * (0.5 + Math.random() / 2));
+  }
+}
+
+let formatsByExtension;
+/** Maps a file name to a convt format id using the public GET /v1/formats. */
+export async function formatFor(name) {
+  if (!formatsByExtension) {
+    const formats = await (await fetch(`${API}/v1/formats`)).json();
+    formatsByExtension = new Map(formats.flatMap((f) => f.extensions.map((e) => [e, f.id])));
+  }
+  const id = formatsByExtension.get(extname(name).slice(1).toLowerCase());
+  if (!id) throw new ConvtError("unknown_extension", `No convt format for ${name}`);
+  return id;
+}
+
+/**
+ * Converts bytes and returns { job, outputs }.
+ * Cancels the job if anything fails, so its reservation is released.
+ */
+export async function convert({ bytes, from, to, timeoutMs = 11 * 60_000, pollMs = 1000 }) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const { job, upload_url } = await request("/v1/jobs", {
+    method: "POST",
+    body: { input_format: from, target_format: to, input_bytes: bytes.byteLength },
+    signal,
+  });
+  try {
+    const put = await fetch(upload_url, { method: "PUT", body: bytes, signal });
+    if (!put.ok) throw new ConvtError("upload_failed", await put.text(), put.status);
+
+    let current = await request(`/v1/jobs/${job.id}/start`, { method: "POST", signal });
+    while (!FINISHED.includes(current.status)) {
+      await sleep(pollMs);
+      current = await request(`/v1/jobs/${job.id}`, { signal });
+    }
+    if (current.status !== "succeeded")
+      throw new ConvtError(current.error_code ?? current.status, `job ${current.status}`);
+
+    const { outputs } = await request(`/v1/jobs/${job.id}/download`, { signal });
+    return { job: current, outputs };
+  } catch (error) {
+    await request(`/v1/jobs/${job.id}/cancel`, { method: "POST" }).catch(() => {});
+    throw error;
+  }
+}
+
+/**
+ * Converts a file on disk and writes each output to the current directory.
+ * Outputs come back as input.webp, input-2.png and so on; they are saved
+ * under the input's own name instead: photo.webp, report-2.png.
+ */
+export async function convertFile(path, to, options = {}) {
+  const bytes = await readFile(path);
+  const { outputs } = await convert({ ...options, bytes, from: await formatFor(path), to });
+  const stem = basename(path, extname(path));
+  const saved = [];
+  for (const output of outputs) {
+    const res = await fetch(output.url);
+    if (!res.ok) throw new ConvtError("download_failed", await res.text(), res.status);
+    const name = basename(output.name).replace(/^input/, () => stem);
+    await writeFile(name, Buffer.from(await res.arrayBuffer()));
+    saved.push(name);
+  }
+  return saved;
+}
+
+// node convt.mjs photo.png webp
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const [path, to] = process.argv.slice(2);
+  if (!path || !to) {
+    console.error("usage: node convt.mjs <file> <target-format>");
+    process.exit(2);
+  }
+  for (const name of await convertFile(path, to)) console.log(`saved ${name}`);
+}
+```
+
+Run it from the command line:
+
+```console
+$ export CONVT_API_KEY=cvt_live_...
+$ node convt.mjs report.docx pdf
+saved report.pdf
+```
+
+Or import it:
+
+```js
+import { convertFile } from "./convt.mjs";
+
+await convertFile("clip.mov", "mp4");
+```
+
+## What it handles
+
+- **Format detection.** `formatFor()` maps the extension to a format id with the public `GET /v1/formats`.
+- **Retries.** `429` and `5xx` responses are retried with jittered backoff. Creating a job is retried only on `429`, because repeating it after an unknown failure could reserve two jobs.
+- **Timeout.** The whole conversion gives up after 11 minutes by default.
+- **Cleanup.** Any failure after the job exists cancels it, so you are not left with an open reservation.
+- **Output names.** The API names outputs `input.<ext>`. `convertFile()` saves them under the input's name, so `report.pdf` to PNG writes `report.png`, `report-2.png` and so on.
+- **Rate limit.** Every job-route call, including retries, waits its turn in one shared 510 ms queue so a folder of small files stays under 120 requests a minute. Signed uploads, signed downloads and `GET /v1/formats` are not counted and are not queued.
+- **Polling rate.** Pass `{ pollMs }` as the third argument to `convertFile()` to poll less often when several jobs run at once.

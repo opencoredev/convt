@@ -1,0 +1,270 @@
+overlay: 1.1.0
+info:
+  title: convt public docs
+  version: 1.0.0
+# The server's spec (crates/convt-server/openapi.json) stays the source of truth for
+# paths and schemas. This overlay adds the prose, tags and examples. The live host
+# comes from api-host.ts via the generated servers overlay. It applies on every
+# build, so spec changes flow through.
+actions:
+  - target: $.info
+    update:
+      title: convt API
+      description: |
+        The convt API converts files on convt's servers. A conversion is a **job**: you reserve it, upload the file to a signed URL, start it, poll until it finishes, then fetch signed download URLs for its outputs.
+
+        Every job route takes a `cvt_live_` API key as a Bearer token. Create keys in the [dashboard](https://convt.app/dashboard/api). Each successful job is billed once; failed and cancelled jobs are free.
+
+        Until `api.convt.app` resolves, use the first server listed in this spec. The paths, keys and responses are the same on both hosts.
+
+  - target: $
+    update:
+      tags:
+        - name: Jobs
+          description: Reserve, upload, start, poll, cancel and download a conversion. Every route needs a `cvt_live_` key.
+        - name: Formats
+          description: The formats convt knows. Public, no key needed.
+
+  # Reserve
+  - target: $.paths['/v1/jobs'].post
+    update:
+      tags: [Jobs]
+      summary: Create a job
+      description: |
+        Reserves one conversion and returns a signed `upload_url` that stays valid for 15 minutes (`upload_expires_in` is 900 seconds).
+
+        `input_bytes` must be the exact size of the file you will upload, from 1 byte to 2 GB. The upload signature binds `Content-Length`, so a different size fails at upload or at start.
+
+        Creating a job reserves 1 cent against your spend cap until the job finishes. A job that fails or is cancelled releases the reservation.
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json']
+    update:
+      example:
+        input_format: png
+        target_format: webp
+        input_bytes: 48213
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_format
+    update:
+      description: Format id of the file you upload, such as `png` or `docx`. See [Formats](https://convt.app/docs/reference/formats).
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.target_format
+    update:
+      description: Format id to convert to. It must differ from `input_format` and be a target the input can reach.
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_bytes
+    update:
+      description: Exact size of the upload in bytes.
+  - target: $.paths['/v1/jobs'].post.responses['200']
+    update:
+      description: The job was reserved. Upload the file to `upload_url` next.
+      content:
+        application/json:
+          example:
+            job:
+              id: job_01k6z7v4q8m3x2a9b5c0d1e2f3
+              status: created
+              input_format: png
+              target_format: webp
+              input_bytes: 48213
+              attempt: 0
+              error_code: null
+              expires_at: "2026-10-08T12:00:00Z"
+            upload_url: https://bucket.example/job_01k6z7v4q8m3x2a9b5c0d1e2f3/upload?X-Amz-Signature=…
+            upload_expires_in: 900
+  - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_url
+    update:
+      description: Signed URL. Send the file bytes to it with `PUT`.
+  - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_expires_in
+    update:
+      description: Seconds until `upload_url` stops accepting uploads. Always 900.
+  - target: $.paths['/v1/jobs'].post.responses['400']
+    update:
+      description: "`unsupported_format` or `file_too_large`."
+      content:
+        application/json:
+          example:
+            error:
+              code: unsupported_format
+              message: This input cannot reach the chosen target format.
+  - target: $.paths['/v1/jobs'].post.responses['403']
+    update:
+      description: "`unauthorized` (bad or revoked key), `not_enrolled`, `limit_reached` or `storage_limit_reached`."
+      content:
+        application/json:
+          example:
+            error:
+              code: limit_reached
+              message: Your allowance or spend cap has been reached.
+
+  # Read
+  - target: $.paths['/v1/jobs/{id}'].get
+    update:
+      tags: [Jobs]
+      summary: Get a job
+      description: |
+        Returns the job's current status. Poll this about once a second after you start the job, and stop when `status` is `succeeded`, `failed` or `cancelled`.
+
+        Jobs disappear 24 hours after they were created. After that this returns `404 not_found`, whatever state the job was in.
+  - target: $.paths['/v1/jobs/{id}'].get.responses['200']
+    update:
+      description: The job.
+      content:
+        application/json:
+          example:
+            id: job_01k6z7v4q8m3x2a9b5c0d1e2f3
+            status: running
+            input_format: png
+            target_format: webp
+            input_bytes: 48213
+            attempt: 1
+            error_code: null
+            expires_at: "2026-10-08T12:00:00Z"
+
+  # Start
+  - target: $.paths['/v1/jobs/{id}/start'].post
+    update:
+      tags: [Jobs]
+      summary: Start a job
+      description: |
+        Seals the uploaded file, checks that its size matches `input_bytes`, and queues the job. The response usually shows `queued`.
+
+        Calling start again is safe: a job that is no longer `created` is returned as it is. If the uploaded size does not match, the job is cancelled and the call fails with `size_mismatch`. Reserve a new job to try again.
+
+        If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` succeeded before you retry.
+  - target: $.paths['/v1/jobs/{id}/start'].post.responses['200']
+    update:
+      description: The job, now `queued`, or unchanged if it was already started.
+      content:
+        application/json:
+          example:
+            id: job_01k6z7v4q8m3x2a9b5c0d1e2f3
+            status: queued
+            input_format: png
+            target_format: webp
+            input_bytes: 48213
+            attempt: 0
+            error_code: null
+            expires_at: "2026-10-08T12:00:00Z"
+  - target: $.paths['/v1/jobs/{id}/start'].post.responses['400']
+    update:
+      description: "`size_mismatch`: the upload's size differs from `input_bytes`. The job is cancelled."
+      content:
+        application/json:
+          example:
+            error:
+              code: size_mismatch
+              message: Uploaded size must match the reservation and stay within 2 GB.
+
+  # Cancel
+  - target: $.paths['/v1/jobs/{id}/cancel'].post
+    update:
+      tags: [Jobs]
+      summary: Cancel a job
+      operationId: cancelJob
+      description: |
+        Cancels a job that has not finished and releases its 1-cent reservation. Cancelling a finished job changes nothing and returns it as it is, so check `status` in the response: `succeeded` means the job finished first and was billed.
+
+        The uploaded file still counts toward your storage limit until the job expires 24 hours after creation.
+  - target: $.paths['/v1/jobs/{id}/cancel'].post.responses['200']
+    update:
+      description: The job after cancellation.
+
+  # Download
+  - target: $.paths['/v1/jobs/{id}/download'].get
+    update:
+      tags: [Jobs]
+      summary: Get download URLs
+      description: |
+        Returns a signed URL for every output of a `succeeded` job. Most conversions have one output; some, such as a multi-page PDF to PNG, have several.
+
+        Output names are based on `input`, not on your file's name: `input.webp`, or `input.png`, `input-2.png` and so on for pages. Rename them when you save them.
+
+        The URLs expire after `expires_in` seconds, at most 5 minutes. Call this route again for fresh URLs while the job exists. Calling it before the job succeeds fails with `not_ready`.
+  - target: $.paths['/v1/jobs/{id}/download'].get.responses['200']
+    update:
+      description: Signed URLs for each output.
+      content:
+        application/json:
+          example:
+            outputs:
+              - name: input.webp
+                url: https://bucket.example/job_01k6z7v4q8m3x2a9b5c0d1e2f3/attempt-1/input.webp?X-Amz-Signature=…
+            expires_in: 300
+  - target: $.paths['/v1/jobs/{id}/download'].get.responses['400']
+    update:
+      description: "`not_ready`: the job has not succeeded."
+      content:
+        application/json:
+          example:
+            error:
+              code: not_ready
+              message: Job has no completed outputs.
+
+  # Formats
+  - target: $.paths['/v1/formats'].get
+    update:
+      tags: [Formats]
+      operationId: listFormats
+      summary: List formats
+      description: |
+        Lists every format convt recognizes, with its id, extensions and MIME type. Use the `id` values for `input_format` and `target_format`.
+
+        Not every pair converts in the cloud. The [Formats](https://convt.app/docs/reference/formats) page lists the targets each input can reach through the API.
+      security: []
+  - target: $.paths['/v1/formats'].get.responses['200']
+    update:
+      description: All known formats.
+      content:
+        application/json:
+          example:
+            - id: png
+              name: PNG
+              category: image
+              extensions: [png]
+              mime: image/png
+            - id: webp
+              name: WebP
+              category: image
+              extensions: [webp]
+              mime: image/webp
+
+  # Shared
+  - target: $.paths.*.*.parameters[?@.name == 'id']
+    update:
+      description: The job id returned when you created the job, such as `job_01k6z7v4q8m3x2a9b5c0d1e2f3`.
+      example: job_01k6z7v4q8m3x2a9b5c0d1e2f3
+  - target: $.paths.*.*.responses['401']
+    update:
+      description: "`unauthorized`: no `Authorization: Bearer` header."
+  - target: $.paths.*.*.responses['403']
+    update:
+      description: "`unauthorized` (key invalid or revoked) or a billing limit."
+  - target: $.paths.*.*.responses['404']
+    update:
+      description: "`not_found`: the job does not exist, belongs to another account, or has expired."
+  - target: $.paths.*.*.responses['429']
+    update:
+      description: "`rate_limited`: more than 120 requests in a minute for this key."
+  - target: $.paths.*.*.responses['502']
+    update:
+      description: "`storage_unavailable`: object storage did not answer. Retry with backoff."
+  - target: $.components.securitySchemes.bearerAuth
+    update:
+      description: "A `cvt_live_` API key from the [dashboard](https://convt.app/dashboard/api), sent as `Authorization: Bearer cvt_live_…`. Keep it on your server."
+  - target: $.components.schemas.Job
+    update:
+      description: One conversion and its state.
+  - target: $.components.schemas.Job.properties.id
+    update: { description: "Job id, prefixed `job_`." }
+  - target: $.components.schemas.Job.properties.status
+    update:
+      description: "`created` → `queued` → `running` → `succeeded` or `failed`. `cancelled` can happen at any point before the job finishes. `uploaded` is reserved and not used yet."
+  - target: $.components.schemas.Job.properties.attempt
+    update: { description: How many times a worker has picked up the job. Starts at 0. }
+  - target: $.components.schemas.Job.properties.error_code
+    update:
+      description: Why a `failed` job failed (`conversion_failed`, `expired_or_exhausted` or `worker_shutdown`), otherwise `null`.
+  - target: $.components.schemas.Job.properties.input_bytes
+    update: { description: Size you reserved, in bytes. }
+  - target: $.components.schemas.Job.properties.expires_at
+    update: { description: When the job and its files are deleted, 24 hours after creation. }
+  - target: $.components.schemas.Error
+    update:
+      description: Every JSON error has this shape. `code` is stable; `message` is for people and may change.

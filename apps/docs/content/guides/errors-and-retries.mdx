@@ -1,0 +1,73 @@
+---
+title: Errors and retries
+description: Read convt error responses, decide which ones to retry, and back off correctly.
+---
+
+## Error shape
+
+Every JSON error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "unsupported_format",
+    "message": "This input cannot reach the chosen target format."
+  }
+}
+```
+
+Branch on `code`. It is stable. `message` is written for people and may change.
+
+Two errors come before convt reads your request and are plain text, not JSON:
+
+- `415` when the body of `POST /v1/jobs` is not sent with `Content-Type: application/json`.
+- `422` when that body is not valid JSON, misses a field, or has an extra one.
+
+Fix these in your code. Retrying will not help.
+
+[Errors](/reference/errors) lists every code.
+
+## What to retry
+
+| Response                   | Retry?           | What to do                                                                                                                      |
+| -------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `429 rate_limited`         | Yes              | Wait, then retry. The limit resets within a minute.                                                                             |
+| `502 storage_unavailable`  | Yes              | Retry with backoff. On start, first check that the upload succeeded, because start also returns this when nothing was uploaded. |
+| `500 internal`             | Yes, a few times | Retry with backoff. Report it if it persists.                                                                                   |
+| Network error or timeout   | Yes              | Retry reads freely. For `POST /v1/jobs`, see below.                                                                             |
+| `400`, `401`, `403`, `404` | No               | Fix the request, the key or your billing.                                                                                       |
+| Job `failed`               | No               | Create a new job if the cause was temporary, such as `worker_shutdown`.                                                         |
+
+## Backoff
+
+Wait longer after each failed try, add some randomness, and stop after a few:
+
+```js
+async function withRetry(fn, tries = 5) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const retryable = [429, 500, 502].includes(error.status) || error.name === "TypeError";
+      if (!retryable || attempt + 1 >= tries) throw error;
+      const delay = Math.min(30_000, 1000 * 2 ** attempt) * (0.5 + Math.random() / 2);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+```
+
+The API does not send `Retry-After` or rate-limit headers. Use your own backoff.
+
+## Which calls are safe to repeat
+
+| Call                         | Safe to repeat?                            |
+| ---------------------------- | ------------------------------------------ |
+| `GET /v1/jobs/{id}`          | Yes.                                       |
+| `GET /v1/jobs/{id}/download` | Yes. Each call returns fresh URLs.         |
+| `POST /v1/jobs/{id}/start`   | Yes. A started job is returned unchanged.  |
+| `POST /v1/jobs/{id}/cancel`  | Yes. A finished job is returned unchanged. |
+| `PUT upload_url`             | Yes, until you call start.                 |
+| `POST /v1/jobs`              | **No.** Each call reserves a new job.      |
+
+If `POST /v1/jobs` times out, you cannot tell whether a job was created. The unknown job expires on its own after 24 hours and is never charged, because it was never started. It does hold 1 cent of your spend cap and one storage slot until then.

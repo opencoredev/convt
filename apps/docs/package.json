@@ -1,0 +1,17 @@
+{
+  "name": "@convt/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun scripts/generate.ts && blume dev",
+    "build": "bun scripts/generate.ts && blume build",
+    "preview": "blume preview",
+    "doctor": "blume doctor",
+    "validate": "bun scripts/generate.ts && blume validate",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "dependencies": {
+    "blume": "2.2.0"
+  }
+}
