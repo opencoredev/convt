@@ -389,7 +389,7 @@ mod tests {
         // daily `update_checked`, are ignored.
         std::fs::write(
             &path,
-            "notifications = false\nfuture_key = 1\naccount = \"a@b.c\"\n\
+            "notifications = false\nfuture_key = 1\naccount = \"fixture-account\"\n\
              update_checked = \"2026-10-05\"\n",
         )
         .unwrap();
