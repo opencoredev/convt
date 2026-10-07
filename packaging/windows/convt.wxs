@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="convt" Manufacturer="Convt" Version="$(var.Version)" UpgradeCode="BAE8028B-1352-4B85-B1C7-A10B7EA54D08" Scope="perUser">
     <MajorUpgrade DowngradeErrorMessage="A newer version of convt is already installed." />
-    <MediaTemplate EmbedCab="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Icon Id="convt.ico" SourceFile="$(sys.SOURCEFILEDIR)convt.ico" />
     <Property Id="ARPPRODUCTICON" Value="convt.ico" />
     <StandardDirectory Id="LocalAppDataFolder">

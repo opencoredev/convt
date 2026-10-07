@@ -57,16 +57,26 @@ if (-not $RuntimeDlls) { throw 'Document pack CRT closure missing' }
 $RuntimeDlls | Copy-Item -Destination $Office.Directory.FullName
 rustc --edition=2024 -C opt-level=2 -C target-feature=+crt-static -C link-arg=/Brepro "$PSScriptRoot/document-launcher.rs" -o "$Work/soffice.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Document launcher build failed' }
-$Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" "$Out/documents.tar.gz"
+# Keep the archive beside the payload, not inside it. The v0.2.0 MSI was 537 MiB
+# because WiX harvested this already-gzipped LibreOffice pack (446 MiB).
+# Document support stays opt-in, same as Mac and Linux; pin the digest so a
+# later hosted URL or `convt pack install --source file://...` can verify it.
+$Documents = Join-Path $Repo 'packaging/out/windows/documents.tar.gz'
+$Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" $Documents
 if ($LASTEXITCODE -ne 0 -or $Hash -notmatch '^[a-f0-9]{64}$') { throw 'Document archive creation failed' }
 $env:CONVT_DOCUMENT_PACK_SHA256 = $Hash
-$env:CONVT_DOCUMENT_PACK_URL = 'bundle:documents.tar.gz'
+Remove-Item Env:CONVT_DOCUMENT_PACK_URL -ErrorAction SilentlyContinue
 $env:CONVT_DOCUMENT_PACK_VERSION = 'LibreOffice 25.8.7 Windows x64'
-$env:CONVT_DOCUMENT_PACK_SIZE = (Get-Item "$Out/documents.tar.gz").Length.ToString()
+$env:CONVT_DOCUMENT_PACK_SIZE = (Get-Item $Documents).Length.ToString()
 $env:CONVT_DOCUMENT_PACK_INSTALLED_SIZE = ((Get-ChildItem $Office.Directory.Parent.FullName -Recurse -File | Measure-Object Length -Sum).Sum).ToString()
 cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p convt-app
 if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
 Copy-Item target/x86_64-pc-windows-msvc/release/convt.exe,target/x86_64-pc-windows-msvc/release/convt-app.exe $Out
 Copy-Item LICENSE "$Out/LICENSE.txt"
 Copy-Item "$PSScriptRoot/inputs.lock.json","$PSScriptRoot/build-native.ps1","$PSScriptRoot/build-document-pack.py","$PSScriptRoot/document-launcher.rs","$Repo/packaging/linux/libheif-explicit-init.patch" "$Out/licenses/"
-@{ verification_only = [bool]$VerificationOnly; document_pack_sha256 = $Hash; source_date_epoch = $env:SOURCE_DATE_EPOCH } | ConvertTo-Json | Set-Content "$Out/build-receipt.json" -Encoding utf8
+@{
+    verification_only = [bool]$VerificationOnly
+    document_pack_sha256 = $Hash
+    document_pack = 'packaging/out/windows/documents.tar.gz'
+    source_date_epoch = $env:SOURCE_DATE_EPOCH
+} | ConvertTo-Json | Set-Content "$Out/build-receipt.json" -Encoding utf8

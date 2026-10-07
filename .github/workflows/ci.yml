@@ -102,7 +102,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Source archive and audit unit tests
-        run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+          python3 -m unittest discover -s packaging/windows -p 'test_*.py' -v
 
   web:
     name: Web
