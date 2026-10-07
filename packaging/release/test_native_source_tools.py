@@ -31,6 +31,10 @@ def fixture_lock(evidence, extras=None):
                   "runtime_sha256": "ab" * 32},
         "linked_archives": ["libz.a", "libzstd.a"],
         "startup_objects": ["rcrt1.o"],
+        "compression_closure": {
+            "enabled": ["zlib", "zstd"],
+            "excluded": ["xz/liblzma", "lzo", "lz4"],
+        },
         "build_evidence": evidence,
     }
     if extras:
@@ -61,6 +65,12 @@ class LockAudit(unittest.TestCase):
             self.assertIn("/output/" + Path(entry["cache"]).name, script)
             if "sha256" not in entry:
                 self.assertIn(Path(entry["cache"]).name, tools.SEMANTIC_EVIDENCE)
+
+    def test_appimage_compression_closure_is_zlib_zstd_only(self):
+        lock = json.loads((HERE / "appimage-source-closure.lock.json").read_text())
+        enabled, excluded = tools.locked_squashfuse_codecs(lock)
+        self.assertEqual(enabled, ("ZLIB", "ZSTD"))
+        self.assertEqual(set(excluded), {"XZ", "LZO", "LZ4"})
 
     def test_appimage_sources_are_url_pinned(self):
         lock = json.loads((HERE / "appimage-source-closure.lock.json").read_text())
@@ -196,6 +206,68 @@ class CollectInputs(unittest.TestCase):
                          "reproducible": False}]
             with self.assertRaisesRegex(ValueError, "Linker trace missing locked inputs"):
                 self.collect(cache, fixture_lock(evidence))
+
+    def test_configure_log_accepts_autoconf_quoted_assignment(self):
+        entry = {"cache": "appimage-source/provenance-x/squashfuse-config.log",
+                 "reproducible": False}
+        # Alpine autoconf 2.72 writes the substituted value with quotes and a
+        # leading space (SQ_CHECK_DECOMPRESS does sq_decompressors="$sq_decompressors $1").
+        log = b"\n".join([
+            b"## ----------------- ##",
+            b"## Output variables. ##",
+            b"## ----------------- ##",
+            b"",
+            b"sq_decompressors=' ZLIB ZSTD'",
+            b"ac_cv_search_uncompress='-lz'",
+            b"ac_cv_search_ZSTD_decompress='-lzstd'",
+            b"ac_cv_search_lzma_stream_buffer_decode=no",
+            b"ac_cv_search_lzo1x_decompress_safe=no",
+            b"ac_cv_search_LZ4_decompress_safe=no",
+            b"",
+        ])
+        self.assertNotIn(b"sq_decompressors=ZLIB ZSTD", log)
+        tools.verify_evidence_contents(entry, log, fixture_lock([entry]))
+
+    def test_configure_log_accepts_probe_cache_without_assignment(self):
+        entry = {"cache": "appimage-source/provenance-x/squashfuse-config.log",
+                 "reproducible": False}
+        log = b"\n".join([
+            b"ac_cv_search_uncompress='-lz'",
+            b"ac_cv_search_ZSTD_decompress='-lzstd'",
+            b"ac_cv_search_lzma_stream_buffer_decode=no",
+            b"ac_cv_search_lzo1x_decompress_safe=no",
+            b"ac_cv_search_LZ4_decompress_safe=no",
+            b"",
+        ])
+        tools.verify_evidence_contents(entry, log, fixture_lock([entry]))
+
+    def test_configure_log_missing_list_is_refused(self):
+        entry = {"cache": "appimage-source/provenance-x/squashfuse-config.log",
+                 "reproducible": False}
+        with self.assertRaisesRegex(ValueError, "Configure log missing locked decompressor list ZLIB ZSTD"):
+            tools.verify_evidence_contents(entry, b"checking for gcc... gcc\n", fixture_lock([entry]))
+
+    def test_configure_log_extra_decompressor_is_refused(self):
+        entry = {"cache": "appimage-source/provenance-x/squashfuse-config.log",
+                 "reproducible": False}
+        with self.assertRaisesRegex(ValueError, r"decompressor list .* != locked"):
+            tools.verify_evidence_contents(
+                entry, b"sq_decompressors=' ZLIB XZ ZSTD'\n", fixture_lock([entry]))
+
+    def test_configure_log_excluded_probe_is_refused(self):
+        entry = {"cache": "appimage-source/provenance-x/squashfuse-config.log",
+                 "reproducible": False}
+        log = b"\n".join([
+            b"sq_decompressors=' ZLIB ZSTD'",
+            b"ac_cv_search_uncompress='-lz'",
+            b"ac_cv_search_ZSTD_decompress='-lzstd'",
+            b"ac_cv_search_lzma_stream_buffer_decode='-llzma'",
+            b"ac_cv_search_lzo1x_decompress_safe=no",
+            b"ac_cv_search_LZ4_decompress_safe=no",
+            b"",
+        ])
+        with self.assertRaisesRegex(ValueError, "enabled excluded decompressors"):
+            tools.verify_evidence_contents(entry, log, fixture_lock([entry]))
 
     def test_unknown_unpinned_evidence_is_refused(self):
         entry = {"cache": "appimage-source/provenance-x/mystery.log", "reproducible": False}

@@ -2900,7 +2900,7 @@
       "lzo",
       "lz4"
     ],
-    "evidence": "Actual configure log: sq_decompressors=ZLIB ZSTD; actual linker trace: libzstd.a and libz.a. No lzma/lzo/lz4 archive in linker trace."
+    "evidence": "Autoconf config.log records sq_decompressors=' ZLIB ZSTD' (quoted, leading space from SQ_CHECK_DECOMPRESS). Probes: ac_cv_search_uncompress=-lz, ac_cv_search_ZSTD_decompress=-lzstd; lzma/lzo/lz4 searches failed. Linker trace: libzstd.a and libz.a. No lzma/lzo/lz4 archive in linker trace."
   },
   "binary_checks": [
     {
