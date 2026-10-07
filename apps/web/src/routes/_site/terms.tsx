@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { TextLink } from "#/components/site/layout";
-import { LegalPage, List, Placeholder, type LegalSection } from "#/components/site/legal";
+import { LegalPage, List, type LegalSection } from "#/components/site/legal";
 import { GITHUB_URL, SUPPORT_EMAIL, legal, routes, seo } from "#/lib/site";
 
-// DRAFT pending Leo's legal review. Prices and plan facts match the pricing section
-// and docs/plan.md; the refund policy is still a placeholder (plan P12).
+// Prices and plan facts match the pricing section and docs/plan.md; refunds and key
+// revocation match docs/p7-billing-plan.md. The seller name, refund window, governing
+// law and courts come from `legal` in lib/site.ts.
 
 export const Route = createFileRoute("/_site/terms")({
   head: () =>
@@ -36,9 +37,11 @@ const sections: LegalSection[] = [
     title: "Agreement",
     body: (
       <p>
-        convt is provided by <Placeholder>{legal.entity}</Placeholder> ("we"). By buying a license,
-        starting a trial, creating an account or using the API, you agree to these terms. If you use
-        convt for an organization, you accept them on its behalf.
+        These terms are an agreement between you and {legal.entity} ("we", "us"), the name convt is
+        sold under. Every purchase is processed by Polar as merchant of record (see Payment, taxes
+        and refunds). By buying a license, starting a trial, creating an account or using the API,
+        you agree to these terms. If you use convt for an organization, you accept them on its
+        behalf.
       </p>
     ),
   },
@@ -90,12 +93,23 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Polar is the merchant of record for every purchase: you buy from Polar, which takes
-          payment, charges any sales tax or VAT, and issues your receipt under its own terms.
+          Purchases are processed by Polar (<TextLink href="https://polar.sh">polar.sh</TextLink>)
+          as merchant of record: you buy from Polar, which handles payment, sales tax and VAT, and
+          invoicing, and issues your receipt under its own terms.
         </p>
         <p>
-          Refunds: <Placeholder>[Refund policy to be decided]</Placeholder>. Refunding a purchase
-          revokes its license key, and the dashboard marks it as refunded.
+          If convt is not right for you, email {SUPPORT_EMAIL} within {legal.refundDays} days of
+          paying for a Desktop license or Pro, including a Pro renewal, and we will refund it in
+          full. You do not need to give a reason.
+        </p>
+        <p>
+          Polar sends every refund to the payment method you used. A refund in full revokes the
+          license key that payment bought, and the dashboard marks it as refunded. Keys are checked
+          offline, so revoking one cannot switch off a copy that already uses it; by taking the
+          refund you agree to stop using that key. A refund of a Pro payment does not cancel the
+          subscription, so cancel it on the dashboard as well. API usage pays for conversions that
+          already ran, so we refund it only when we billed it wrongly. None of this limits the
+          rights consumer law gives you where you live.
         </p>
       </>
     ),
@@ -151,25 +165,65 @@ const sections: LegalSection[] = [
         </p>
         <p>
           To the extent the law allows, we are not liable for indirect or consequential losses, and
-          our total liability is limited to what you paid us in the 12 months before the claim.{" "}
-          <Placeholder>[Liability terms to confirm]</Placeholder>
+          our total liability is limited to what you paid us in the 12 months before the claim.
+        </p>
+        <p>
+          Nothing in these terms limits liability that the law does not let us limit, such as for
+          fraud or for death or personal injury caused by negligence, or takes away your statutory
+          rights as a consumer.
         </p>
       </>
     ),
   },
   {
-    id: "law",
-    title: "Changes and governing law",
+    id: "termination",
+    title: "Ending your account",
     body: (
       <>
         <p>
-          We will announce material changes to these terms on this page and by email before they
-          apply. These terms are governed by <Placeholder>{legal.jurisdiction}</Placeholder>.
+          You can stop using convt at any time, and delete your account from Settings on the
+          dashboard. Deleting it first ends any subscription, without a refund for the rest of the
+          period, then removes the account; this usually takes minutes, but takes longer if a
+          billing step has to be retried. Desktop and Pro keys you paid for keep working offline for
+          every version they cover.
         </p>
         <p>
-          Questions: <TextLink href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</TextLink>.
+          We may suspend or close an account, or revoke API keys and cloud access, if you seriously
+          or repeatedly break these terms, if a payment is charged back, or if the law requires it.
+          We will tell you why unless the law stops us.
         </p>
       </>
+    ),
+  },
+  {
+    id: "changes",
+    title: "Changes to these terms",
+    body: (
+      <p>
+        We will announce material changes on this page and by email to account holders before they
+        apply. If you do not accept a change, you can stop using convt and delete your account.
+      </p>
+    ),
+  },
+  {
+    id: "law",
+    title: "Governing law",
+    body: (
+      <p>
+        These terms are governed by {legal.governingLaw}, and any dispute about them goes to{" "}
+        {legal.courts}. If you are a consumer, you also keep the protection of the mandatory law of
+        the country where you live, and can bring a claim in its courts.
+      </p>
+    ),
+  },
+  {
+    id: "contact",
+    title: "Contact",
+    body: (
+      <p>
+        Questions about these terms, refunds or your license:{" "}
+        <TextLink href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</TextLink>.
+      </p>
     ),
   },
 ];
