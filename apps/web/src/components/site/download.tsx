@@ -6,7 +6,15 @@ import { cx, focusRing } from "#/components/app/ui";
  * Copies a file's SHA-256. The full value sits in the title and the copied text,
  * so the page doesn't print 64 hex characters next to every download.
  */
-export function CopySha({ value, className }: { value: string; className?: string }) {
+export function CopySha({
+  value,
+  label = "SHA-256",
+  className,
+}: {
+  value: string;
+  label?: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -25,7 +33,7 @@ export function CopySha({ value, className }: { value: string; className?: strin
       )}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
-      {copied ? "Copied" : "SHA-256"}
+      {copied ? "Copied" : label}
     </button>
   );
 }

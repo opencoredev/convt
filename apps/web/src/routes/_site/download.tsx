@@ -145,16 +145,15 @@ function Hero() {
   );
 }
 
-/** The big button for the visitor's system, its file line, and links to the other systems. */
+/** The big button for the picked system and its file line. */
 function LiveAction() {
-  const { release, os, detected } = Route.useLoaderData();
-  // No build for the picked system (or a phone): offer the first system that has one.
-  const pick = os && publishedFor(release, os).length > 0 ? os : null;
-  const main = pick ? publishedFor(release, pick)[0] : null;
+  const { release, os } = Route.useLoaderData();
+  // No build for the picked system (or a phone): point at the systems that have one.
+  const main = os ? publishedFor(release, os)[0] : undefined;
 
-  if (!main) {
+  if (!os || !main) {
     return (
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-4">
         <a
           href="#platforms"
           className={cx(
@@ -165,18 +164,18 @@ function LiveAction() {
           Choose your system
           <span aria-hidden="true">↓</span>
         </a>
-        <p className="max-w-[420px] text-sm/5 text-pretty text-ink-2">
+        <p className="max-w-[420px] text-[13px]/5 text-pretty text-ink-2">
           {os
             ? `Version ${release.version} has no ${osNames[os]} build yet. It will appear here as soon as it is published.`
             : "convt runs on macOS, Windows and Linux. On a phone, convt Pro converts files in the browser."}
         </p>
+        <OsSwitch />
       </div>
     );
   }
 
   const artifact = main.artifact!;
   const file = fileName(artifact.url);
-  const others = osOrder.filter((o) => o !== pick);
   return (
     <div className="flex w-full flex-col items-center gap-4">
       <PrimaryLink
@@ -185,46 +184,31 @@ function LiveAction() {
         className="h-12 w-full max-w-[320px] gap-2.5 rounded-xl px-6 text-[15px]/5 sm:w-auto"
       >
         <DownloadIcon />
-        Download for {osNames[pick!]}
+        Download for {osNames[os]}
       </PrimaryLink>
       <p className="flex max-w-full flex-wrap items-center justify-center gap-x-2.5 gap-y-1 font-mono text-[11.5px]/4 text-ink-2">
-        <span className="max-w-[260px] truncate sm:max-w-none" title={file}>
-          {file}
+        <span>
+          {kindName(main)} · {formatBytes(artifact.size)}
         </span>
         <span aria-hidden="true" className="text-line-strong">
           ·
         </span>
-        <span>{formatBytes(artifact.size)}</span>
-        <span aria-hidden="true" className="text-line-strong">
-          ·
-        </span>
-        <CopySha value={artifact.sha256} />
-      </p>
-      <p className="text-[13px]/5 text-ink-2">
-        {pick === detected ? "Not on " + osNames[pick!] + "? " : "On another system? "}
-        {others.map((o, i) => (
-          <span key={o}>
-            {i > 0 && " or "}
-            <Link
-              to="."
-              search={{ os: o }}
-              replace
-              resetScroll={false}
-              className={cx(
-                "rounded-sm font-medium text-ink underline decoration-line-strong underline-offset-[3px] hover:decoration-ink",
-                focusRing,
-              )}
-            >
-              {osNames[o]}
-            </Link>
+        <span className="flex items-center gap-2">
+          <span title={artifact.sha256}>
+            SHA-256 {artifact.sha256.slice(0, 8)}…{artifact.sha256.slice(-4)}
           </span>
-        ))}
+          <CopySha value={artifact.sha256} label="Copy" />
+        </span>
       </p>
+      <OsSwitch />
     </div>
   );
 }
 
+/** Same skeleton as a release, with the planned formats in place of a file. No dead buttons. */
 function PreReleaseAction() {
+  const { release, os } = Route.useLoaderData();
+  const planned = os ? release.slots.filter((s) => s.os === os) : [];
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
@@ -236,11 +220,51 @@ function PreReleaseAction() {
           See pricing
         </SecondaryLink>
       </div>
-      <p className="max-w-[440px] text-[13px]/5 text-pretty text-ink-2">
-        Builds for macOS, Windows and Linux appear on this page the moment they are published, each
-        with its checksum and matching source.
+      <p className="max-w-[460px] font-mono text-[11.5px]/4 text-pretty text-ink-2">
+        {os ? `${osNames[os]}: ${planned.map(kindName).join(", ")}` : "macOS, Windows and Linux"}{" "}
+        <span className="whitespace-nowrap">· not published yet</span>
       </p>
+      <OsSwitch />
     </div>
+  );
+}
+
+/** A small picker under the button. Links, so each system has its own URL and works before hydration. */
+function OsSwitch() {
+  const { os, detected } = Route.useLoaderData();
+  return (
+    <nav
+      aria-label="System"
+      className="flex items-center gap-0.5 rounded-full bg-sunken p-0.5 shadow-[inset_0_0_0_1px_var(--line)]"
+    >
+      {osOrder.map((item) => {
+        const active = item === os;
+        return (
+          <Link
+            key={item}
+            to="."
+            search={{ os: item }}
+            replace
+            resetScroll={false}
+            aria-current={active ? "page" : undefined}
+            className={cx(
+              "flex h-7 items-center gap-1.5 rounded-full px-3 text-[12.5px]/4 font-medium transition-colors",
+              active ? "bg-raised text-ink shadow-button" : "text-ink-2 hover:text-ink",
+              focusRing,
+            )}
+          >
+            {osNames[item]}
+            {item === detected && (
+              <span
+                className="size-1.5 rounded-full bg-green"
+                title="Your system"
+                aria-label="(your system)"
+              />
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -395,15 +419,15 @@ function PlatformCard({ os, mine }: { os: Os; mine: boolean }) {
         <p className="text-sm/5 text-pretty text-ink-2">{osBlurb[os]}</p>
       </div>
       <ul className="mt-auto flex flex-col border-t border-divider">
-        {slots.map((slot, i) => (
-          <FormatRow key={slot.kind} slot={slot} primary={i === 0} live={live} />
+        {slots.map((slot) => (
+          <FormatRow key={slot.kind} slot={slot} live={live} />
         ))}
       </ul>
     </article>
   );
 }
 
-function FormatRow({ slot, primary, live }: { slot: Slot; primary: boolean; live: boolean }) {
+function FormatRow({ slot, live }: { slot: Slot; live: boolean }) {
   const { release } = Route.useLoaderData();
   const artifact = slot.artifact;
   const file = artifact ? fileName(artifact.url) : null;
@@ -432,28 +456,17 @@ function FormatRow({ slot, primary, live }: { slot: Slot; primary: boolean; live
           {kindLabels[slot.kind].note}
         </span>
       </div>
-      {artifact &&
-        (primary ? (
-          <PrimaryLink
-            href={artifact.url}
-            download={file!}
-            aria-label={`Download ${kindName(slot)} for ${osNames[slot.os]}`}
-            className="h-9 shrink-0 gap-1.5 px-3.5 text-[13px]/4"
-          >
-            <DownloadIcon className="size-3.5" />
-            Download
-          </PrimaryLink>
-        ) : (
-          <SecondaryLink
-            href={artifact.url}
-            download={file!}
-            aria-label={`Download ${kindName(slot)} for ${osNames[slot.os]}`}
-            className="h-9 shrink-0 gap-1.5 px-3.5"
-          >
-            <DownloadIcon className="size-3.5" />
-            Download
-          </SecondaryLink>
-        ))}
+      {artifact && (
+        <SecondaryLink
+          href={artifact.url}
+          download={file!}
+          aria-label={`Download ${kindName(slot)} for ${osNames[slot.os]}`}
+          className="h-9 shrink-0 gap-1.5 px-3.5"
+        >
+          <DownloadIcon className="size-3.5" />
+          Download
+        </SecondaryLink>
+      )}
     </li>
   );
 }
@@ -561,9 +574,17 @@ function Trust() {
   const { release, os } = Route.useLoaderData();
   const source = release.source;
   const order = os ? [os, ...osOrder.filter((o) => o !== os)] : osOrder;
+  const files = order.flatMap((platform) =>
+    publishedFor(release, platform).map((slot) => ({
+      platform,
+      slot,
+      file: fileName(slot.artifact!.url),
+    })),
+  );
+  // One command per system, filled in with that system's first file.
   const rows = order.flatMap((platform) => {
-    const slot = release.slots.find((s) => s.os === platform && s.artifact);
-    return slot ? [{ platform, file: fileName(slot.artifact!.url) }] : [];
+    const first = files.find((f) => f.platform === platform);
+    return first ? [first] : [];
   });
   return (
     <section
@@ -576,30 +597,44 @@ function Trust() {
           Every file lists its SHA-256. Copy it from the download and compare it with your copy.
         </p>
         {rows.length > 0 && (
-          <details className="group mt-1">
+          <details id="verify" className="group mt-1 scroll-mt-8">
             <summary
               className={cx(
                 "inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm/5 font-medium text-[#157f4a] dark:text-green [&::-webkit-details-marker]:hidden",
                 focusRing,
               )}
             >
-              How to check a download
+              Verify download
               <span aria-hidden="true" className="transition-transform group-open:rotate-90">
                 ›
               </span>
             </summary>
-            <dl className="mt-3 flex min-w-0 flex-col gap-2.5 font-mono text-[12px]/5">
-              {rows.map(({ platform, file }) => (
-                <div key={platform} className="flex flex-col gap-1">
-                  <dt className="font-sans text-xs/4 text-ink-2">
-                    {verifyCommands[platform].label}
-                  </dt>
-                  <dd className="overflow-x-auto rounded-lg bg-code px-3 py-2 whitespace-nowrap text-code-ink">
-                    {verifyCommands[platform].command(file)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <div className="mt-3 flex min-w-0 flex-col gap-4">
+              <p className="text-[13px]/5 text-ink-2">
+                Run the command in the folder you saved the file to. The result should match the
+                SHA-256 below; if it differs, delete the file and download it again.
+              </p>
+              <dl className="flex min-w-0 flex-col gap-2.5 font-mono text-[12px]/5">
+                {rows.map(({ platform, file }) => (
+                  <div key={platform} className="flex flex-col gap-1">
+                    <dt className="font-sans text-xs/4 text-ink-2">
+                      {verifyCommands[platform].label}
+                    </dt>
+                    <dd className="overflow-x-auto rounded-lg bg-code px-3 py-2 whitespace-nowrap text-code-ink">
+                      {verifyCommands[platform].command(file)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <dl className="flex min-w-0 flex-col gap-2 font-mono text-[11px]/4">
+                {files.map(({ slot, file }) => (
+                  <div key={file} className="flex flex-col gap-0.5">
+                    <dt className="truncate text-ink">{file}</dt>
+                    <dd className="break-all text-ink-2">{slot.artifact!.sha256}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </details>
         )}
       </div>
