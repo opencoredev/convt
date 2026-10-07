@@ -24,9 +24,6 @@ export const PRODUCT_HUNT_URL =
  */
 export const PRODUCT_HUNT_FROM = Date.parse("2026-10-07T03:00:00-04:00");
 
-/** PLACEHOLDER: no status page exists yet. Every status link on the site reads this. */
-export const STATUS_URL = "https://status.convt.app";
-
 /** PLACEHOLDER: support inbox (plan P12). */
 export const SUPPORT_EMAIL = "support@convt.app";
 /** PLACEHOLDER: privacy and data-request inbox. */

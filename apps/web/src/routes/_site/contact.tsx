@@ -3,14 +3,13 @@ import type { ReactNode } from "react";
 
 import { cx } from "#/components/app/ui";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
-import { GITHUB_URL, PRIVACY_EMAIL, STATUS_URL, SUPPORT_EMAIL, routes, seo } from "#/lib/site";
+import { GITHUB_URL, PRIVACY_EMAIL, SUPPORT_EMAIL, routes, seo } from "#/lib/site";
 
 export const Route = createFileRoute("/_site/contact")({
   head: () =>
     seo({
       title: "Contact and help · convt",
-      description:
-        "Get help with convt: support email, license keys, billing, service status and bug reports.",
+      description: "Get help with convt: support email, license keys, billing and bug reports.",
       path: routes.contact,
     }),
   component: ContactPage,
@@ -21,11 +20,6 @@ const channels: { title: string; body: ReactNode; action: { label: string; href:
     title: "Email support",
     body: "Questions about the app, a conversion that went wrong, or your purchase.",
     action: { label: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
-  },
-  {
-    title: "Service status",
-    body: "Whether convt.app, cloud conversions and the API are up, and any ongoing incident.",
-    action: { label: "Open the status page", href: STATUS_URL },
   },
   {
     title: "Bugs and feature requests",
