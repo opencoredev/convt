@@ -3515,7 +3515,30 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     );
     let (settings, _) = f.settings(SettingsTab::General, cx);
     let status = label(cx, settings, "update-status").unwrap();
-    assert!(status.contains("0.2.0 is out") && status.contains("0.3.0 needs a renewed license"));
+    assert!(
+        status.starts_with("convt 0.2.0 is available Built Oct 3, 2026.")
+            && status.contains("0.3.0 is out too and needs a renewed license"),
+        "{status}"
+    );
+    assert_eq!(
+        label(cx, settings, "update-version").as_deref(),
+        Some(format!("convt {}", crate::account::VERSION).as_str())
+    );
+    let last = label(cx, settings, "update-last-checked").unwrap();
+    assert!(
+        last.starts_with("Built ") && last.contains(" · Last checked today at "),
+        "{last}"
+    );
+    click(cx, settings, "update-notes");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some("https://convt.app/changelog#v0.2.0")
+    );
+    click(cx, settings, "update-download");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(convt_license::client::DOWNLOAD_URL)
+    );
 
     // Every launch checks, even the same day.
     launch_check(&f, cx);
@@ -3593,6 +3616,64 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
         .serve(Ok(manifest(4, &[("0.1.0", "2026-10-01")], &update_key())));
     assert_eq!(manual_check(&f, cx), Update::UpToDate);
     assert!(!shown(cx, main, "update-card"));
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("You're up to date.")
+    );
+    assert!(!shown(cx, settings, "update-notes"));
+}
+
+#[gpui_kit::test]
+fn check_now_shows_that_it_is_checking(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let built = cx.read(|cx| f.app.read(cx).licensing.build_date().to_string());
+    assert_eq!(
+        label(cx, settings, "update-last-checked"),
+        Some(format!(
+            "Built {} · Not checked yet",
+            super::update::long_date(&built)
+        ))
+    );
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .contains("at launch and every 5 hours")
+    );
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update = Update::Checking;
+            cx.notify();
+        })
+    });
+    assert_eq!(
+        label(cx, settings, "check-updates").as_deref(),
+        Some("Checking…")
+    );
+    // A click while it checks starts nothing more.
+    click(cx, settings, "check-updates");
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 0);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update = Update::Idle;
+            cx.notify();
+        })
+    });
+    assert_eq!(
+        label(cx, settings, "check-updates").as_deref(),
+        Some("Check now")
+    );
+}
+
+#[test]
+fn update_dates_read_as_words() {
+    use super::update::long_date;
+    assert_eq!(long_date("2026-10-03"), "Oct 3, 2026");
+    assert_eq!(long_date("2026-01-31"), "Jan 31, 2026");
+    assert_eq!(long_date("2026-13-01"), "2026-13-01");
+    assert_eq!(long_date("unknown"), "unknown");
 }
 
 #[gpui_kit::test]
@@ -3665,7 +3746,8 @@ fn update_checks_off_ask_only_when_the_user_does(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     f.releases
         .serve(Ok(manifest(1, &[("0.2.0", "2026-10-03")], &update_key())));
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
     assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("On"));
     click(cx, settings, "update-checks");
     assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("Off"));

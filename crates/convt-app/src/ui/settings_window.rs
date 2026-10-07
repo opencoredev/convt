@@ -74,6 +74,7 @@ pub struct SettingsView {
     pub(super) license_notice: Option<String>,
     /// Remove was clicked once under Documents; the row asks again.
     pub(super) confirm_remove_pack: bool,
+    scroll: ScrollHandle,
     _observe: Subscription,
     _appearance: Subscription,
 }
@@ -109,6 +110,7 @@ impl SettingsView {
             license_error: None,
             license_notice: None,
             confirm_remove_pack: false,
+            scroll: ScrollHandle::new(),
         }
     }
 
@@ -116,6 +118,13 @@ impl SettingsView {
         self.tab = tab;
         self.open = None;
         cx.notify();
+    }
+
+    /// Shows General scrolled to the end, where Updates sits above the
+    /// network list.
+    pub fn reveal_updates(&mut self, cx: &mut Context<Self>) {
+        self.set_tab(SettingsTab::General, cx);
+        self.scroll.scroll_to_bottom();
     }
 
     /// Shows the License tab, filling in `key` if given.
@@ -1049,6 +1058,7 @@ impl Render for SettingsView {
                     .id("settings-body")
                     .flex_1()
                     .overflow_y_scroll()
+                    .track_scroll(&self.scroll)
                     .child(body),
             )
     }

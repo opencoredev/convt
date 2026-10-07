@@ -11,6 +11,7 @@
 use std::borrow::Cow;
 
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{ActiveTheme, Icon, IconName, Sizable, Theme};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -394,6 +395,7 @@ pub struct Button {
     icon: Option<IconName>,
     small: bool,
     disabled: bool,
+    loading: bool,
     color: Option<Hsla>,
 }
 
@@ -406,6 +408,7 @@ impl Button {
             icon: None,
             small: false,
             disabled: false,
+            loading: false,
             color: None,
         }
     }
@@ -438,6 +441,13 @@ impl Button {
         self
     }
 
+    /// Busy: a spinner in place of the icon, and no hover. Give it a label
+    /// that says what it's doing, such as "Checking…".
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
+
     /// The label color of a ghost or secondary button, such as red for Remove.
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
@@ -456,6 +466,7 @@ impl Button {
             Look::Ghost => self.color.unwrap_or(p.secondary),
         };
         let (hover_fg, ghost) = (self.color.unwrap_or(p.text), self.look == Look::Ghost);
+        let still = self.disabled || self.loading;
         let base = clickable(self.id, self.label.clone())
             .flex()
             .flex_shrink_0()
@@ -487,7 +498,7 @@ impl Button {
                     shadow(ca(0x0A3C2340), 1., 2.),
                     shadow(ca(0x0A3C231F), 2., 6.),
                 ])
-                .when(!self.disabled, |d| d.hover(|s| s.opacity(0.92))),
+                .when(!still, |d| d.hover(|s| s.opacity(0.92))),
             Look::Secondary => base
                 .bg(p.surface)
                 .shadow({
@@ -495,19 +506,23 @@ impl Button {
                     s.push(inset_ring(p.control_border, 1.));
                     s
                 })
-                .when(!self.disabled, |d| d.hover(|s| s.bg(p.recessed))),
-            Look::Ghost => base.when(!self.disabled, |d| d.hover(|s| s.bg(p.hover))),
+                .when(!still, |d| d.hover(|s| s.bg(p.recessed))),
+            Look::Ghost => base.when(!still, |d| d.hover(|s| s.bg(p.hover))),
         };
         let icon_color = if self.look == Look::Secondary {
             p.secondary
         } else {
             fg
         };
-        base.when(self.disabled, |d| d.opacity(0.45).cursor_default())
-            .children(
-                self.icon
-                    .map(|i| icon(i, if self.small { 13. } else { 14. }, icon_color)),
-            )
+        let icon_size = if self.small { 13. } else { 14. };
+        base.when(self.disabled, |d| d.opacity(0.45))
+            .when(still, |d| d.cursor_default())
+            .when(self.loading, |d| {
+                d.child(Spinner::new().with_size(px(icon_size)).color(icon_color))
+            })
+            .when(!self.loading, |d| {
+                d.children(self.icon.map(|i| icon(i, icon_size, icon_color)))
+            })
             .child(
                 text(size, 16., fg)
                     .font_weight(if self.look == Look::Primary {
@@ -516,9 +531,7 @@ impl Button {
                         FontWeight::MEDIUM
                     })
                     .whitespace_nowrap()
-                    .when(ghost && !self.disabled, |d| {
-                        d.hover(|s| s.text_color(hover_fg))
-                    })
+                    .when(ghost && !still, |d| d.hover(|s| s.text_color(hover_fg)))
                     .child(self.label),
             )
     }
