@@ -12,6 +12,7 @@ import { resendTransport } from "@convt/mail";
 import { createBillingMock, type BillingMock, type HeldDelivery } from "@convt/billing-mock";
 import { sql } from "drizzle-orm";
 
+import type { AnalyticsEvent } from "./analytics";
 import { type CatalogProduct, loadCatalog } from "./catalog";
 import type { FaultPoint } from "./context";
 import { createPolarProvider } from "./polar";
@@ -45,6 +46,7 @@ export async function createHarness(opts: { startMs?: number } = {}) {
   const key = await importSigningKey(new Uint8Array(seed));
   const faults = new Map<FaultPoint, () => void | Promise<void>>();
   const logs: string[] = [];
+  const analytics: AnalyticsEvent[] = [];
   let mailTimeoutMs = 2000;
   const mail = {
     name: "resend" as const,
@@ -74,6 +76,9 @@ export async function createHarness(opts: { startMs?: number } = {}) {
       if (f) await f();
     },
     log: (l) => logs.push(l),
+    captureAnalytics: async (event) => {
+      analytics.push(event);
+    },
   });
   const owner = await tdb.open("owner");
 
@@ -90,6 +95,7 @@ export async function createHarness(opts: { startMs?: number } = {}) {
     publicKey: await publicKeyOf(key),
     seedText: base64urlEncode(new Uint8Array(seed)),
     logs,
+    analytics,
     owner: owner.db as Db,
     setMailTimeout: (ms: number) => {
       mailTimeoutMs = ms;

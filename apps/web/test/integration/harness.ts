@@ -7,6 +7,7 @@ import { freshDatabase, type TestDatabase } from "@convt/db/testing";
 import { createMock } from "@convt/oauth-mock";
 import pg from "pg";
 
+import type { AnalyticsEvent } from "../../src/server/analytics";
 import { createAuth, type RequestScope } from "../../src/server/auth";
 import { readEnv, type AppEnv } from "../../src/server/env";
 import type { MailMessage } from "../../src/server/mail";
@@ -18,6 +19,7 @@ export type Harness = {
   owner: Db;
   env: AppEnv;
   mail: MailMessage[];
+  analytics: AnalyticsEvent[];
   mockUrl: string;
   close: () => Promise<void>;
   /** One auth request as a browser on `ip` with its cookie jar. */
@@ -80,6 +82,7 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
   });
   const pool = new pg.Pool({ connectionString: tdb.webUrl, max: 30 });
   const mail: MailMessage[] = [];
+  const analytics: AnalyticsEvent[] = [];
 
   async function request(
     path: string,
@@ -98,6 +101,9 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
       const auth = createAuth(scope, env, {
         startCookies: false,
         sendMail: async (m) => void mail.push(m),
+        captureAnalytics: async (event) => {
+          analytics.push(event);
+        },
       });
       const url = path.startsWith("http") ? path : `${env.authUrl}/api/auth${path}`;
       const headers: Record<string, string> = {
@@ -133,7 +139,12 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
     const client = await pool.connect();
     try {
       return await fn(
-        createAuth({ db: createDb(client), background: () => {} }, env, { startCookies: false }),
+        createAuth({ db: createDb(client), background: () => {} }, env, {
+          startCookies: false,
+          captureAnalytics: async (event) => {
+            analytics.push(event);
+          },
+        }),
       );
     } finally {
       client.release();
@@ -146,6 +157,7 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
     owner: ownerConn.db,
     env,
     mail,
+    analytics,
     mockUrl,
     request,
     codeFor,

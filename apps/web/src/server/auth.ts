@@ -25,6 +25,12 @@ import { genericOAuth, type GenericOAuthConfig } from "better-auth/plugins/gener
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { and, eq, lt, ne, sql } from "drizzle-orm";
 
+import {
+  captureEvent,
+  signupEventFromAuthHook,
+  type AuthHookContext,
+  type CaptureAnalytics,
+} from "./analytics";
 import { googleEmailIsAuthoritative, type GoogleClaims } from "./authoritative";
 import type { AppEnv } from "./env";
 import { codeEmail, sendMail, type MailMessage } from "./mail";
@@ -45,6 +51,8 @@ export type AuthDeps = {
   sendMail?: (message: MailMessage) => Promise<void>;
   /** Off for Better Auth calls outside a TanStack Start request (tests). */
   startCookies?: boolean;
+  /** Replaces PostHog capture (tests record signup events this way). */
+  captureAnalytics?: CaptureAnalytics;
 };
 
 const idPrefixes: Record<string, IdPrefix> = {
@@ -145,6 +153,7 @@ function mockGoogle(mock: NonNullable<AppEnv["oauthMock"]>): GenericOAuthConfig 
 export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {}) {
   const { db } = scope;
   const deliver = deps.sendMail ?? ((message: MailMessage) => sendMail(env.mail, message));
+  const capture = deps.captureAnalytics ?? ((event) => captureEvent(env.posthog, event));
   // Set by the before hook on /sign-in/email-otp (and the user create hook), read
   // by its after hook. The auth instance lives for one request, so these cannot
   // leak across requests.
@@ -406,9 +415,13 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
     databaseHooks: {
       user: {
         create: {
-          after: async (user) => {
+          after: async (user, hookCtx) => {
             userCreatedHere = user.id;
             await claimPurchases(db, user.id);
+            // Once per account, from the insert path so an ad blocker cannot drop it.
+            scope.background(
+              capture(signupEventFromAuthHook(user.id, hookCtx as AuthHookContext, env.authUrl)),
+            );
           },
         },
         update: { after: async (user) => void (await claimPurchases(db, user.id)) },

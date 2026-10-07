@@ -8,6 +8,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type BillingRpc as Rpc,
   ConfigError,
+  captureEvent,
   createBillingService,
   currentProKey,
   createPolarProvider,
@@ -55,6 +56,7 @@ function setup(raw: Env) {
           ? sequenzyTransport({ apiKey: env.mail.apiKey })
           : logTransport(),
     signingKey: () => key,
+    captureAnalytics: (event) => captureEvent(env.posthog, event),
     config: {
       siteUrl: env.siteUrl,
       mailFrom: env.mail.from,

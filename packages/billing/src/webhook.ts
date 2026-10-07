@@ -7,6 +7,7 @@
 import { sql } from "drizzle-orm";
 import { newId } from "@convt/license";
 
+import { emitAnalytics } from "./analytics";
 import { alert, type BillingContext, fault, one, type Q } from "./context";
 import { applyFacts, BudgetExceeded, checkDeadline, hydrate } from "./ingest";
 import { safeError } from "./outbox";
@@ -111,12 +112,17 @@ export async function processEvent(
         );
       checkDeadline(deadline);
       await fault(ctx, "before-commit");
-      return finish(
-        "processed",
-        outcome.notes.length ? outcome.notes.join("; ").slice(0, 500) : null,
-      );
+      return {
+        ...(await finish(
+          "processed",
+          outcome.notes.length ? outcome.notes.join("; ").slice(0, 500) : null,
+        )),
+        events: outcome.events,
+      };
     });
     if (mode === "delivery") await fault(ctx, "after-commit");
+    if (result.done === "processed" && "events" in result)
+      await emitAnalytics(ctx.captureAnalytics, result.events);
     return text(200, "ok", { eventStatus: result.done, drain: result.done === "processed" });
   } catch (e) {
     const reason =

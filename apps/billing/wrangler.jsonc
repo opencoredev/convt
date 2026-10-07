@@ -19,6 +19,9 @@
     // The public half of the production signing key; release builds embed the same
     // key as CONVT_LICENSE_PUBKEY.
     "LICENSE_PUBLIC_KEY": "FifI4kZfp25-La18pwNa4CJ751s4hDP68D60bp9rQoY",
+    // Same public project key the site uses. Safe in Worker vars.
+    "POSTHOG_KEY": "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw",
+    "POSTHOG_HOST": "https://us.i.posthog.com",
   },
   // Only the webhook path is public; the site reaches everything else through its
   // service binding to the BillingRpc entrypoint.
@@ -47,6 +50,9 @@
         "ALERT_EMAIL": "leodoesdev@gmail.com",
         // Staging's own signing key, separate from production.
         "LICENSE_PUBLIC_KEY": "KtufCO-UrY5lb7CcO7vsyqDd-Mh2Da9bcbD4rBZ0hPY",
+        // Empty: staging sends no PostHog events.
+        "POSTHOG_KEY": "",
+        "POSTHOG_HOST": "https://us.i.posthog.com",
       },
       // Hyperdrive "convt-billing-staging", caching disabled.
       "hyperdrive": [{ "binding": "HYPERDRIVE_BILLING", "id": "c59ed0ee6c8b4dcab137d1549e5984d5" }],
