@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { apiSpendLine, billingHasNoPlan } from "../../src/lib/billing-display";
 import {
   accountView,
   apiKeyView,
@@ -360,11 +361,14 @@ describe("billing per state", () => {
     const api = (v: Partial<SubscriptionRow>) =>
       sub({ kind: "api", interval: null, spendCapCents: 5000, ...v });
     expect(bv([], [], true).api.state).toBe("pending");
+    expect(billingHasNoPlan(bv([], [], true))).toBe(false);
     expect(bv([api({ cardSeenAt: null })]).api.state).toBe("pending");
     expect(bv([api({ status: "incomplete" })]).api.state).toBe("pending");
     const enrolled = bv([api({ cardSeenAt: days(-1) })]);
     expect(enrolled.plan).toBeNull();
     expect(enrolled.api).toEqual({ state: "enrolled", spendCapCents: 5000, endsOn: null });
+    expect(billingHasNoPlan(enrolled)).toBe(false);
+    expect(apiSpendLine(enrolled.api)).toBe("Spend cap $50.00 a month");
     expect(bv([api({ cardSeenAt: days(-1), cancelAtPeriodEnd: true })]).api.endsOn).toBe(
       "2027-10-02",
     );
@@ -372,6 +376,63 @@ describe("billing per state", () => {
       "payment_failed",
     );
     expect(bv([api({ status: "canceled", endedAt: days(-1) })]).api.state).toBe("ended");
+    expect(billingHasNoPlan(bv([api({ status: "canceled", endedAt: days(-1) })]))).toBe(true);
+  });
+
+  test("a Pro trial plus enrolled API is never an empty plan", () => {
+    const b = bv([
+      sub({
+        interval: "month",
+        status: "trialing",
+        trialEndsAt: days(3),
+        currentPeriodEnd: days(3),
+      }),
+      sub({
+        id: "sub_api",
+        kind: "api",
+        interval: null,
+        spendCapCents: 2500,
+        cardSeenAt: days(-1),
+      }),
+    ]);
+    expect(b.plan).toMatchObject({
+      name: "Pro, monthly",
+      status: "trialing",
+    });
+    expect(b.plan?.summary).toStartWith("Free until Oct 7, 2026");
+    expect(b.api).toEqual({ state: "enrolled", spendCapCents: 2500, endsOn: null });
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(apiSpendLine(b.api)).toBe("Spend cap $25.00 a month");
+  });
+
+  test("an incomplete Polar trial with a future trial end still shows as a trial", () => {
+    const b = bv([
+      sub({
+        interval: "month",
+        status: "incomplete",
+        trialEndsAt: days(3),
+        currentPeriodEnd: days(3),
+      }),
+    ]);
+    expect(b.plan?.status).toBe("trialing");
+    expect(b.plan?.summary).toStartWith("Free until Oct 7, 2026");
+    expect(billingHasNoPlan(b)).toBe(false);
+  });
+
+  test("desktop-only and empty accounts still have no plan", () => {
+    expect(billingHasNoPlan(bv([]))).toBe(true);
+    expect(
+      billingHasNoPlan({
+        plan: null,
+        api: { state: "none", spendCapCents: null, endsOn: null },
+      }),
+    ).toBe(true);
+    expect(
+      billingHasNoPlan({
+        plan: null,
+        api: { state: "ended", spendCapCents: 2500, endsOn: null },
+      }),
+    ).toBe(true);
   });
 });
 

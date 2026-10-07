@@ -24,6 +24,7 @@ expectations=(
   "lapsed|dashboard|Ended" "lapsed|dashboard|Builds up to" "lapsed|dashboard/billing|CANCELED"
   "lapsed|dashboard/billing|Pro, monthly (payment failed)"
   "api|dashboard|API this month" "api|dashboard|No plan" "api|dashboard/api|Backend" "api|dashboard/billing|Spend cap"
+  "api|dashboard/billing|API, pay per conversion" "api|dashboard/billing|Billed per conversion"
 )
 expected_for() { for e in "${expectations[@]}"; do IFS='|' read -r f p t <<<"$e"; [[ $f == "$1" && $p == "$2" ]] && echo "$t"; done; }
 
