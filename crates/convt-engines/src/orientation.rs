@@ -89,6 +89,12 @@ pub(crate) fn finish_heif_output(
     if heif == Orientation::NoTransforms {
         return Ok(());
     }
+    if !swaps_dims(heif) {
+        // ImageIO applies 180° and mirrors from irot/imir. Re-applying
+        // would undo them. Same-size EXIF is handled above when those
+        // properties are absent (sips often drops the tag unapplied).
+        return Ok(());
+    }
     apply_if_still_stored(dest, to, options, heif, heif_ispe(&file))
 }
 
@@ -133,8 +139,9 @@ pub(crate) fn needs_source_orientation(
         let max_side = dest.0.max(dest.1);
         dest == scale_to_max_side(stored, max_side) && dest != scale_to_max_side(display, max_side)
     } else {
-        // 180° and mirrors keep aspect. ImageIO often drops the tag without
-        // baking. Dest has no leftover EXIF (caller already baked that).
+        // 180° and mirrors keep aspect. Used for leftover source EXIF when
+        // ImageIO dropped the tag without baking. Do not use this for
+        // irot/imir: ImageIO already applied those.
         same_aspect(dest, stored)
     }
 }
@@ -1732,7 +1739,7 @@ mod tests {
         ] {
             assert!(
                 needs_source_orientation(ori, (64, 48), Some(stored)),
-                "{ori:?} at stored size"
+                "{ori:?} at stored size (EXIF-only; sips drops the tag)"
             );
             assert!(
                 needs_source_orientation(ori, (32, 24), Some(stored)),
@@ -1741,6 +1748,10 @@ mod tests {
             assert!(
                 !needs_source_orientation(ori, (48, 64), Some(stored)),
                 "swapped aspect is not the stored frame for {ori:?}"
+            );
+            assert!(
+                !swaps_dims(ori),
+                "HEIF 180/mirror must not re-apply after ImageIO"
             );
         }
     }
