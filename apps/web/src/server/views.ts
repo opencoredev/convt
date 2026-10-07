@@ -394,6 +394,7 @@ export type CheckoutView =
   | {
       state: "pending" | "trial" | "api_enrolled" | "failed" | "shown" | "not_found";
       product: "desktop" | "pro" | "api" | null;
+      allowTrial: boolean;
     }
   | {
       state: "ready";
@@ -404,6 +405,19 @@ export type CheckoutView =
       token: string;
       licenseId: string;
     };
+
+/** After the success page stops polling. A Pro trial issues no key. */
+export type CheckoutGiveUp =
+  | { state: "trial"; product: "pro"; allowTrial: true }
+  | { state: "email" };
+
+export function checkoutGiveUp(
+  product: CheckoutView["product"] | undefined,
+  allowTrial?: boolean,
+): CheckoutGiveUp {
+  if (product === "pro" && allowTrial) return { state: "trial", product: "pro", allowTrial: true };
+  return { state: "email" };
+}
 
 const productGroup = (p: string | undefined) =>
   p === "desktop" ? "desktop" : p === "api" ? "api" : p ? "pro" : null;
@@ -420,7 +434,7 @@ export function checkoutView(r: CheckoutResult): CheckoutView {
       licenseId: r.licenseId,
     };
   }
-  return { state: r.state, product: productGroup(r.product) };
+  return { state: r.state, product: productGroup(r.product), allowTrial: r.allowTrial === true };
 }
 
 export function apiKeyView(key: ApiKeyRow, now: Date): ApiKey {

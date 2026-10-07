@@ -5,6 +5,8 @@ import {
   apiKeyView,
   billingView,
   browserLabel,
+  checkoutGiveUp,
+  checkoutView,
   lastUsedLabel,
   licenseView,
   licensesView,
@@ -474,4 +476,29 @@ test("the activation link carries the token unchanged", async () => {
   const token = "eyJpZCI6ImxpY18xIn0.c2lnbmF0dXJlLV8";
   expect(activationUrl(token)).toBe(`convt://activate?key=${token}`);
   expect(decodeURIComponent(new URL(activationUrl(token)).searchParams.get("key")!)).toBe(token);
+});
+
+describe("checkout success", () => {
+  test("a Pro trial stays a trial view, including after the page gives up polling", () => {
+    expect(checkoutView({ state: "trial", product: "pro_month", allowTrial: true })).toEqual({
+      state: "trial",
+      product: "pro",
+      allowTrial: true,
+    });
+    expect(checkoutGiveUp("pro", true)).toEqual({
+      state: "trial",
+      product: "pro",
+      allowTrial: true,
+    });
+  });
+
+  test("a paid Desktop checkout that times out still says the key is coming by email", () => {
+    expect(checkoutView({ state: "pending", product: "desktop" })).toEqual({
+      state: "pending",
+      product: "desktop",
+      allowTrial: false,
+    });
+    expect(checkoutGiveUp("desktop", false)).toEqual({ state: "email" });
+    expect(checkoutGiveUp("pro", false)).toEqual({ state: "email" });
+  });
 });

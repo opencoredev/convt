@@ -9,7 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { base64urlDecode, base64urlEncode, newId, randomBytes } from "@convt/license";
 
-import type { CatalogProduct } from "./catalog";
+import { isPro, type CatalogProduct } from "./catalog";
 import { type BillingContext, fault, maskEmail, one, rows } from "./context";
 import { ingestFacts } from "./ingest";
 import { emptyFacts } from "./provider";
@@ -126,6 +126,7 @@ export type CheckoutResult =
   | {
       state: "pending" | "trial" | "api_enrolled" | "failed" | "shown" | "not_found";
       product?: CatalogProduct;
+      allowTrial?: boolean;
     }
   | {
       state: "ready";
@@ -141,6 +142,7 @@ type CheckoutRow = {
   provider_checkout_id: string;
   user_id: string | null;
   product: CatalogProduct;
+  allow_trial: boolean;
   nonce_hash: Uint8Array;
   nonce_expires_at: Date;
   key_disclosed_at: Date | null;
@@ -157,6 +159,7 @@ function parseCookie(value: string | null): { id: string; nonce: Uint8Array } | 
 }
 
 async function stateOf(ctx: BillingContext, row: CheckoutRow) {
+  const now = ctx.clock();
   if (row.product === "desktop") {
     const lic = await one<{
       id: string;
@@ -180,14 +183,31 @@ async function stateOf(ctx: BillingContext, row: CheckoutRow) {
     if (lic.revoked_at) return { state: "failed" } as const;
     return { state: "ready", lic } as const;
   }
-  const sub = await one<{ id: string; status: string; card_seen_at: Date | null }>(
+  let sub = await one<{ id: string; status: string; card_seen_at: Date | null }>(
     ctx.db,
     sql`select id, status, card_seen_at from subscriptions where checkout_id = ${row.id} order by created_at limit 1`,
   );
-  if (!sub)
-    return {
-      state: row.status === "failed" || row.status === "expired" ? "failed" : "pending",
-    } as const;
+  // Polar sometimes creates the subscription before it appears on the checkout.
+  // The buyer's live row for this product is enough to leave pending.
+  if (!sub && row.user_id) {
+    const kind = row.product === "api" ? "api" : "pro";
+    sub = await one(
+      ctx.db,
+      sql`select id, status, card_seen_at from subscriptions
+          where user_id = ${row.user_id} and kind = ${kind}
+            and status in ('incomplete', 'trialing', 'active', 'past_due')
+            and (ended_at is null or ended_at > ${now})
+          order by created_at desc limit 1`,
+    );
+  }
+  if (!sub) {
+    if (row.status === "failed" || row.status === "expired") return { state: "failed" } as const;
+    // Polar already sent the buyer here. A Pro trial issues no key; waiting for
+    // the subscription row would fall through to "key by email" on the success page.
+    if (isPro(row.product) && row.allow_trial && row.status === "succeeded")
+      return { state: "trial" } as const;
+    return { state: "pending" } as const;
+  }
   if (row.product === "api")
     return {
       state:
@@ -235,7 +255,7 @@ export async function checkoutResult(
   const row = await one<CheckoutRow>(
     ctx.db,
     sql`
-    select id, provider_checkout_id, user_id, product, nonce_hash, nonce_expires_at, key_disclosed_at, status, synced_at
+    select id, provider_checkout_id, user_id, product, allow_trial, nonce_hash, nonce_expires_at, key_disclosed_at, status, synced_at
     from checkouts where provider = 'polar' and provider_checkout_id = ${input.providerCheckoutId}`,
   );
   const none = { result: { state: "not_found" } as CheckoutResult, setCookie: null };
@@ -257,20 +277,29 @@ export async function checkoutResult(
   }
 
   let s = await stateOf(ctx, row);
-  if (s.state === "pending" && input.sync && !row.synced_at) {
-    // Pull once the facts are acceptable. A rejected sync (unknown discount,
-    // foreign checkout, …) must not burn synced_at: the next poll retries after
-    // a catalog fix, and the page would otherwise hang until the 60s give-up.
-    const synced = await syncCheckout(ctx, row.provider_checkout_id);
+  if (s.state === "pending" && input.sync) {
+    // Keep pulling while Polar is still attaching the subscription / while
+    // ingest rejects (unknown discount). Only burn synced_at when ingest
+    // accepts, so a catalog fix can unstick the page within the poll window.
+    const synced = await syncCheckout(ctx, row.provider_checkout_id, row.user_id);
     if (synced) {
       await ctx.db.execute(
         sql`update checkouts set synced_at = ${now}, updated_at = ${now} where id = ${row.id} and synced_at is null`,
       );
     }
-    s = await stateOf(ctx, row);
+    const fresh = await one<CheckoutRow>(
+      ctx.db,
+      sql`
+      select id, provider_checkout_id, user_id, product, allow_trial, nonce_hash, nonce_expires_at, key_disclosed_at, status, synced_at
+      from checkouts where id = ${row.id}`,
+    );
+    s = await stateOf(ctx, fresh ?? row);
   }
   if (s.state !== "ready")
-    return { result: { state: s.state, product: row.product }, setCookie: null };
+    return {
+      result: { state: s.state, product: row.product, allowTrial: row.allow_trial },
+      setCookie: null,
+    };
 
   let setCookie: string | null = null;
   if (!owner) {
@@ -303,19 +332,34 @@ export async function checkoutResult(
 /**
  * Pulls one checkout's orders and subscription from the provider through ingest.
  * Returns false when Polar errored or ingest rejected the facts, so the caller
- * can leave synced_at unset and try again.
+ * can leave synced_at unset and try again. When the checkout has no subscription
+ * id yet, hydrate from the customer's trialing/checkout-linked subscriptions.
  */
 export async function syncCheckout(
   ctx: BillingContext,
   providerCheckoutId: string,
+  userId?: string | null,
 ): Promise<boolean> {
   try {
     const co = await ctx.provider.getCheckout(providerCheckoutId);
     const facts = emptyFacts();
     facts.checkouts.push(co);
-    if (co.providerSubscriptionId)
-      facts.subscriptions.push(await ctx.provider.getSubscription(co.providerSubscriptionId));
-    facts.orders.push(...(await ctx.provider.checkoutOrders(providerCheckoutId)));
+    try {
+      if (co.providerSubscriptionId) {
+        facts.subscriptions.push(await ctx.provider.getSubscription(co.providerSubscriptionId));
+      } else if (userId) {
+        for (const s of await ctx.provider.customerSubscriptions(userId)) {
+          if (
+            s.providerCheckoutId === providerCheckoutId ||
+            (s.providerCheckoutId == null && s.status === "trialing")
+          )
+            facts.subscriptions.push(s);
+        }
+      }
+      facts.orders.push(...(await ctx.provider.checkoutOrders(providerCheckoutId)));
+    } catch (e) {
+      ctx.log(`[billing] sync ${providerCheckoutId} related: ${(e as Error).message}`);
+    }
     const outcome = await ingestFacts(ctx, facts, "sync");
     return outcome.rejected === null;
   } catch (e) {
