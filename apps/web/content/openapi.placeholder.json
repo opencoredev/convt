@@ -6,7 +6,12 @@
     "version": "0.0.0-placeholder",
     "description": "Convert files with the same engines as the convt app. Upload a file, start a job, poll until it finishes and download the result. Inputs and outputs are deleted 24 hours after the job is created."
   },
-  "servers": [{ "url": "https://api.convt.app" }],
+  "servers": [
+    {
+      "url": "https://convt-api-production.up.railway.app",
+      "description": "Interim host. https://api.convt.app is the intended canonical host and will replace this once its DNS is live."
+    }
+  ],
   "security": [{ "apiKey": [] }],
   "tags": [
     { "name": "Jobs", "description": "A job converts one input file to one target format." },
