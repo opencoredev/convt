@@ -15,6 +15,7 @@ import {
   table,
 } from "#/components/app/ui";
 import { getBilling } from "#/lib/account";
+import { apiSpendLine, billingHasNoPlan } from "#/lib/billing-display";
 import { links } from "#/lib/config";
 import { formatDate, formatMoney } from "#/lib/format";
 import { openPortal, openReceipt, setPlanCancel, switchPlanInterval } from "#/server/billing-fns";
@@ -69,6 +70,8 @@ function BillingPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const plan = billing.plan;
+  const noPlan = billingHasNoPlan(billing);
+  const apiLine = apiSpendLine(billing.api);
   const otherInterval = plan?.interval === "year" ? "month" : "year";
   const otherLabel = otherInterval === "year" ? "yearly" : "monthly";
 
@@ -231,7 +234,7 @@ function BillingPage() {
                 </div>
               )}
             </>
-          ) : (
+          ) : noPlan ? (
             <>
               <p id="plan-title" className="text-[22px]/7 font-semibold tracking-[-0.02em]">
                 No plan
@@ -251,19 +254,35 @@ function BillingPage() {
                 </TextButton>
               </div>
             </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <p id="plan-title" className="text-[22px]/7 font-semibold tracking-[-0.02em]">
+                  API, pay per conversion
+                </p>
+                <Badge tone={billing.api.state === "enrolled" ? "green" : "neutral"}>
+                  {apiLabel[billing.api.state]}
+                </Badge>
+              </div>
+              <p className="text-[13px]/5 text-ink-2">
+                {apiLine}. Billed per conversion at the end of each month.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <SecondaryLink href={links.buyPro}>
+                  {billing.hadPro ? "Start Pro" : "Start free trial"}
+                </SecondaryLink>
+                <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
+                <SecondaryLink href="/dashboard/api">Manage API</SecondaryLink>
+              </div>
+            </>
           )}
-          {apiLabel[billing.api.state] ? (
+          {(plan || noPlan) && apiLabel[billing.api.state] ? (
             <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-line pt-3.5">
               <span className="text-[13px]/4 font-medium">API, pay per conversion</span>
               <Badge size="sm" tone={billing.api.state === "enrolled" ? "green" : "neutral"}>
                 {apiLabel[billing.api.state]}
               </Badge>
-              <span className="text-[13px]/4 text-ink-2">
-                {billing.api.spendCapCents !== null
-                  ? `Spend cap ${formatMoney(billing.api.spendCapCents)} a month`
-                  : "No spend cap"}
-                {billing.api.endsOn ? `. Ends ${formatDate(billing.api.endsOn)}` : ""}
-              </span>
+              <span className="text-[13px]/4 text-ink-2">{apiLine}</span>
               <a
                 href="/dashboard/api"
                 className="text-[13px]/4 font-medium text-green hover:underline hover:underline-offset-2"

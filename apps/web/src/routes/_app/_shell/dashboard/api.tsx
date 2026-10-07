@@ -4,6 +4,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 
 import { ApiEnrollmentCard } from "#/components/app/api-enrollment";
 import { CodeSample } from "#/components/app/code-sample";
+import { CopyButton } from "#/components/app/copy-button";
 import { UsageChart } from "#/components/app/usage-chart";
 import {
   Card,
@@ -138,13 +139,16 @@ function ApiPage() {
         <Card className="flex flex-col gap-3 p-5">
           <SectionTitle>Your new API key</SectionTitle>
           <p className="text-sm text-ink-2">Save this key now. It will not be shown again.</p>
-          <input
-            aria-label="New API key"
-            readOnly
-            value={shownKey}
-            onFocus={(e) => e.target.select()}
-            className={`w-full rounded-lg border border-line bg-page px-3 py-2 font-mono text-xs ${focusRing}`}
-          />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              aria-label="New API key"
+              readOnly
+              value={shownKey}
+              onFocus={(e) => e.target.select()}
+              className={`min-w-0 w-full rounded-lg border border-line bg-page px-3 py-2 font-mono text-xs ${focusRing}`}
+            />
+            <CopyButton value={shownKey} aria-label="Copy API key" />
+          </div>
           <TextButton className="self-start" onClick={() => setShownKey(null)}>
             I saved the key
           </TextButton>

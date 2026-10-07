@@ -319,6 +319,21 @@ const invoiceStatusLabels: Record<string, string> = {
   void: "Void",
 };
 
+/** Polar sometimes leaves a trial as `incomplete` until the first paid cycle. */
+function openProTrial(subscriptions: SubscriptionRow[], now: Date): SubscriptionRow | null {
+  const open = subscriptions
+    .filter(
+      (s) =>
+        s.kind === "pro" &&
+        (s.status === "trialing" || s.status === "incomplete") &&
+        s.trialEndsAt !== null &&
+        s.trialEndsAt > now &&
+        (s.endedAt === null || s.endedAt > now),
+    )
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return open[0] ?? null;
+}
+
 export function billingView(input: {
   user: UserRow;
   subscriptions: SubscriptionRow[];
@@ -328,7 +343,7 @@ export function billingView(input: {
   now: Date;
 }): Billing {
   const { user, subscriptions, invoices, now } = input;
-  const pro = currentProSubscription(subscriptions, now);
+  const pro = currentProSubscription(subscriptions, now) ?? openProTrial(subscriptions, now);
   let plan: Billing["plan"] = null;
   if (pro) {
     const interval = pro.interval === "year" ? "year" : "month";
@@ -342,6 +357,10 @@ export function billingView(input: {
       pro.status === "incomplete_expired" ||
       pro.status === "paused" ||
       (pro.endedAt !== null && pro.endedAt <= now);
+    const onTrial =
+      !ended &&
+      (pro.status === "trialing" ||
+        (pro.status === "incomplete" && pro.trialEndsAt !== null && pro.trialEndsAt > now));
     let status: NonNullable<Billing["plan"]>["status"];
     let summary: string;
     const cancelsOn =
@@ -350,7 +369,7 @@ export function billingView(input: {
       status = "canceled";
       const on = formatDate(iso(pro.endedAt ?? pro.currentPeriodEnd ?? now));
       summary = `Ended ${on}. Your last key keeps working for every build released before then.`;
-    } else if (pro.status === "trialing") {
+    } else if (onTrial) {
       status = "trialing";
       const trialEnd = pro.trialEndsAt ?? pro.currentPeriodEnd;
       const until = trialEnd ? formatDate(iso(trialEnd)) : "the trial ends";
