@@ -407,7 +407,9 @@ export type CheckoutView =
     };
 
 /** After the success page stops polling. A Pro trial issues no key. */
-export type CheckoutGiveUp = Extract<CheckoutView, { state: "trial" }> | { state: "email" };
+export type CheckoutGiveUp =
+  | { state: "trial"; product: "pro"; allowTrial: true }
+  | { state: "email" };
 
 export function checkoutGiveUp(
   product: CheckoutView["product"] | undefined,

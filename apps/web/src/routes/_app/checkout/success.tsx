@@ -97,7 +97,8 @@ function SuccessPage() {
           ),
         ]);
         if (stopped) return;
-        if (r.state !== "ready") lastKnown.current = { product: r.product, allowTrial: r.allowTrial };
+        if (r.state !== "ready")
+          lastKnown.current = { product: r.product, allowTrial: r.allowTrial };
         if (r.state === "pending") {
           syncNext.current = true;
           if (Date.now() - started > giveUpMs) {
