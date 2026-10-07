@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import stat
+import traceback
 
 REPO = Path(__file__).resolve().parents[2]
 def sha(path):
@@ -111,4 +112,5 @@ if __name__ == '__main__':
         elif args.command=='check':check(args.tree)
         else:archive(args.tree,args.output,args.version,args.epoch,args.verification_only)
     except (OSError,ValueError,subprocess.CalledProcessError) as error:
-        sys.exit(str(error))
+        traceback.print_exc()
+        sys.exit(f'{Path(__file__).name}: {error}')

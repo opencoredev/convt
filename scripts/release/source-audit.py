@@ -13,9 +13,42 @@ import tempfile
 import urllib.request
 
 
+ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+CRATE_LINE = re.compile(r'^(\S+)\s+v(\S+)')
+
+
 def sha(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream,'sha256').hexdigest()
+
+
+def parse_crate_graph_line(line):
+    """Parse one `cargo tree -f '{p}'` line into (name, version).
+
+    Cargo prints `{p}` as `name vversion`, then optional `(proc-macro)`, a
+    non-crates.io source, and a duplicate `(*)`. With `CARGO_TERM_COLOR=always`
+    the marker is a colorized ` ESC(*)` rather than ` (*)`, so splitting on
+    ` (` leaves a third field and `for name, version in ...` raises
+    ValueError: too many values to unpack (expected 2).
+    """
+    raw = line.rstrip('\n')
+    text = ANSI.sub('', raw).strip()
+    if not text or text.startswith('['):
+        return None
+    text = text.split(' (', 1)[0].strip()
+    match = CRATE_LINE.match(text)
+    if match:
+        return match.group(1), match.group(2)
+    raise ValueError(f'{Path(__file__).name}: cannot parse cargo tree package line: {raw!r}')
+
+
+def crate_graph_identities(stdout):
+    identities = set()
+    for line in stdout.splitlines():
+        identity = parse_crate_graph_line(line)
+        if identity:
+            identities.add(identity)
+    return identities
 
 
 def ensure_url(cache, item, cache_field='name'):
@@ -183,10 +216,10 @@ def collect(tree, payload, cache, epoch):
     # without its corresponding source.
     def crate_graph(target):
         with tempfile.TemporaryDirectory(prefix='convt-empty-cargo-') as home:
-            result=subprocess.run(['cargo','tree','--offline','--locked','-p','convt-cli','-p','convt-app','--target',target,
+            result=subprocess.run(['cargo','tree','--offline','--locked','--color','never','-p','convt-cli','-p','convt-app','--target',target,
                                    '-e','normal,build','--prefix','none','-f','{p}'],cwd=tree,check=True,capture_output=True,text=True,
-                                  env={**os.environ,'CARGO_HOME':home})
-        return {tuple(line.split(' (')[0].replace(' v',' ',1).split()) for line in result.stdout.splitlines() if line.strip()}
+                                  env={**os.environ,'CARGO_HOME':home,'CARGO_TERM_COLOR':'never'})
+        return crate_graph_identities(result.stdout)
     licences={(c['name'],c['version']):c['license'] for c in json.loads((tree/'third-party/rust-license-inventory-aarch64-apple-darwin.json').read_text())['source_inventory']}
     def copyleft(expression):
         return all(re.search(r'GPL|MPL|EPL|CDDL|OSL|NOASSERTION',alt) for alt in re.split(r'\s+OR\s+|/',expression.strip('() ')))

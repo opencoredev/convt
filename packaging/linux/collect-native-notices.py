@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import sys
+import traceback
 
 
 def collect(root):
@@ -44,4 +45,5 @@ if __name__ == '__main__':
     try:
         collect(Path(sys.argv[1]).resolve())
     except (ValueError, OSError, KeyError) as error:
-        sys.exit(str(error))
+        traceback.print_exc()
+        sys.exit(f'{Path(__file__).name}: {error}')

@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import traceback
 
 HERE = Path(__file__).resolve().parent
 
@@ -139,4 +140,5 @@ if __name__ == '__main__':
     try:
         generate(args.payload.resolve(), args.output.resolve(), args.release)
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
-        sys.exit(str(error))
+        traceback.print_exc()
+        sys.exit(f'{Path(__file__).name}: {error}')
