@@ -9,8 +9,7 @@ export const Route = createFileRoute("/_site/contact")({
   head: () =>
     seo({
       title: "Contact and help · convt",
-      description:
-        "Get help with convt: support email, license keys, billing and bug reports.",
+      description: "Get help with convt: support email, license keys, billing and bug reports.",
       path: routes.contact,
     }),
   component: ContactPage,
