@@ -1,17 +1,31 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="convt" Manufacturer="Convt" Version="$(var.Version)" UpgradeCode="BAE8028B-1352-4B85-B1C7-A10B7EA54D08" Scope="perMachine">
+  <Package Name="convt" Manufacturer="Convt" Version="$(var.Version)" UpgradeCode="BAE8028B-1352-4B85-B1C7-A10B7EA54D08" Scope="perUser">
     <MajorUpgrade DowngradeErrorMessage="A newer version of convt is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="convt.ico" SourceFile="$(sys.SOURCEFILEDIR)convt.ico" />
     <Property Id="ARPPRODUCTICON" Value="convt.ico" />
-    <StandardDirectory Id="ProgramFiles64Folder">
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
       <Directory Id="INSTALLFOLDER" Name="convt">
+      </Directory>
       </Directory>
     </StandardDirectory>
     <Feature Id="Main" Title="convt" Level="1">
       <ComponentGroupRef Id="Payload" />
+      <ComponentRef Id="StartMenuShortcut" />
     </Feature>
   </Package>
+  <Fragment>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ConvtMenu" Name="convt">
+        <Component Id="StartMenuShortcut" Guid="*">
+          <Shortcut Id="ConvtShortcut" Name="convt" Target="[INSTALLFOLDER]convt-app.exe" WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="RemoveConvtMenu" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\Convt" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Fragment>
   <Fragment>
     <ComponentGroup Id="Payload" Directory="INSTALLFOLDER">
       <Files Include="$(var.Payload)\**" />

@@ -16,11 +16,17 @@ pub fn tool(name: &str) -> Option<PathBuf> {
         "ffmpeg" => "CONVT_FFMPEG",
         "ffprobe" => "CONVT_FFPROBE",
         "soffice" => "CONVT_SOFFICE",
+        "python3" => "CONVT_MATRIX_PYTHON",
         _ => "",
     };
     std::env::var_os(env)
         .map(PathBuf::from)
         .or_else(|| which::which(name).ok())
+        .or_else(|| {
+            (name == "python3")
+                .then(|| which::which("python").ok())
+                .flatten()
+        })
 }
 
 pub fn command(cmd: &mut Command) -> Check<ProcessOutput> {
@@ -38,7 +44,7 @@ pub fn command(cmd: &mut Command) -> Check<ProcessOutput> {
 
 pub fn helper(mode: &str, path: &Path, args: &[&str]) -> Check<ProcessOutput> {
     command(
-        Command::new("python3")
+        Command::new(tool("python3").ok_or("python3 missing")?)
             .arg(
                 std::env::var_os("CONVT_MATRIX_HELPER")
                     .map(PathBuf::from)

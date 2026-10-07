@@ -11,6 +11,13 @@ import sys
 import tempfile
 import zipfile
 
+def heif_library_name():
+    if os.environ.get('CONVT_LIBHEIF_DIR'):
+        library = 'heif.dll' if sys.platform == 'win32' else ('libheif.1.dylib' if sys.platform == 'darwin' else 'libheif.so.1')
+        return str(Path(os.environ['CONVT_LIBHEIF_DIR']) / library)
+    return ctypes.util.find_library('heif')
+
+
 MARKER = 'CONVT_MATRIX_7F3A'
 NS = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
       'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
@@ -23,7 +30,7 @@ NS = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
 def office_convert(src, target, dest):
     dest.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='convt-office-profile-') as profile:
-        tool = os.environ.get('CONVT_SOFFICE') or shutil.which('soffice') or shutil.which('libreoffice')
+        tool = os.environ.get('CONVT_MATRIX_SOFFICE') or os.environ.get('CONVT_SOFFICE') or shutil.which('soffice') or shutil.which('libreoffice')
         result = subprocess.run([tool, '-env:UserInstallation=' + Path(profile).as_uri(),
                                  '--headless', '--norestore', '--convert-to', target,
                                  '--outdir', str(dest), str(src)], capture_output=True, timeout=60)
@@ -187,7 +194,7 @@ def ffmpeg_heic(dest):
 
 
 def heic(dest, compression=1):
-    name = (str(Path(os.environ['CONVT_LIBHEIF_DIR']) / 'libheif.so.1') if os.environ.get('CONVT_LIBHEIF_DIR') else ctypes.util.find_library('heif'))
+    name = heif_library_name()
     if not name:
         sys.exit(77)
     lib = c.CDLL(name)
@@ -235,7 +242,7 @@ def capabilities():
     heif = False
     hevc = False
     try:
-        name = (str(Path(os.environ['CONVT_LIBHEIF_DIR']) / 'libheif.so.1') if os.environ.get('CONVT_LIBHEIF_DIR') else ctypes.util.find_library('heif'))
+        name = heif_library_name()
         if name:
             lib = c.CDLL(name)
             if hasattr(lib, 'heif_init'):
@@ -254,7 +261,7 @@ def capabilities():
 
 def heif_pixels(path):
     import struct
-    lib = c.CDLL((str(Path(os.environ['CONVT_LIBHEIF_DIR']) / 'libheif.so.1') if os.environ.get('CONVT_LIBHEIF_DIR') else ctypes.util.find_library('heif')))
+    lib = c.CDLL(heif_library_name())
     class Error(c.Structure):
         _fields_ = [('code', c.c_int), ('subcode', c.c_int), ('message', c.c_char_p)]
     def fn(name, args, ret):

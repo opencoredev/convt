@@ -36,7 +36,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if ($env:DRY_RUN -eq 'false') { $env:CONVT_LICENSE_ENFORCE = '1' }
-          ./packaging/windows/build.ps1
+          ./packaging/windows/build.ps1 -VerificationOnly:($env:DRY_RUN -eq 'true')
       - name: Azure workload identity login
         if: ${{ !inputs.dry_run }}
         uses: azure/login@v2

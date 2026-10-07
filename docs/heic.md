@@ -4,7 +4,7 @@ The `libheif` engine decodes HEIC and AVIF to PNG and encodes raster inputs to H
 
 ## Library and plugin loading
 
-Discovery checks `CONVT_LIBHEIF_DIR`, the executable directory, fixed bundle directories and system library names. A library must export `struct heif_error heif_convt_init_no_plugins(void)`. The bundled libheif 1.17.6 patch supplies that initializer: it initializes colour conversion, built-in codecs and the library reference count without loading automatic plugins. The engine calls it before any codec or context API, then balances its reference with `heif_deinit` when dropped.
+Discovery checks an absolute `CONVT_LIBHEIF_DIR`, the executable directory and fixed bundle directories. Unix also searches system library names. On Windows, use the bundled library or an absolute `CONVT_LIBHEIF_DIR`; `PATH` and the working directory are not searched. Dependent DLLs must be beside the selected library or in System32. A library must export `struct heif_error heif_convt_init_no_plugins(void)`. The bundled libheif 1.17.6 patch supplies that initializer: it initializes colour conversion, built-in codecs and the library reference count without loading automatic plugins. The engine calls it before any codec or context API, then balances its reference with `heif_deinit` when dropped.
 
 Unpatched system libraries are unavailable, even if they have working codecs. The unavailable reason names the missing secure initializer. Ordinary `heif_init` and context allocation can consume inherited plugin paths, so neither is a safe substitute.
 
