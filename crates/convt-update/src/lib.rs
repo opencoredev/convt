@@ -314,16 +314,10 @@ mod tests {
         assert_eq!(s.uncovered.unwrap().version, "0.3.0");
         assert!(s.covered_artifact.is_some());
         assert!(
-            m.select(
-                "0.1.0",
-                "2026-10-01",
-                "2026-10-03",
-                "macos-arm64",
-                "dmg"
-            )
-            .unwrap()
-            .covered
-            .is_none()
+            m.select("0.1.0", "2026-10-01", "2026-10-03", "macos-arm64", "dmg")
+                .unwrap()
+                .covered
+                .is_none()
         );
     }
     #[test]
