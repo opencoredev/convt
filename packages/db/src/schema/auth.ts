@@ -135,9 +135,16 @@ export const devices = pgTable(
     lastSeenAt: tstz(),
     revokedAt: tstz(),
     ...timestamps,
+    // Added by migration 0006 (CNV-56).
+    /**
+     * The app's device hash as `trials.device_hash` stores it (peppered by the site),
+     * recorded when the device asks for a trial.
+     */
+    deviceHash: text(),
   },
   (t) => [
     uniqueIndex("devices_token_hash_key").on(t.tokenHash),
+    index("devices_device_hash_idx").on(t.deviceHash),
     index("devices_user_id_active_idx")
       .on(t.userId)
       .where(sql`${t.revokedAt} is null`),

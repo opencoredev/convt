@@ -6,7 +6,9 @@
   "main": "@tanstack/react-start/server-entry",
   // Production values. POSTHOG_KEY is the public project API key (safe in the
   // client bundle). Secrets (BETTER_AUTH_SECRET, GITHUB_CLIENT_SECRET,
-  // GOOGLE_CLIENT_SECRET, SEQUENZY_API_KEY) are set with `wrangler secret put`.
+  // GOOGLE_CLIENT_SECRET, SEQUENZY_API_KEY, DEVICE_HASH_SECRET) are set with
+  // `wrangler secret put`. DEVICE_HASH_SECRET peppers desktop device hashes and must
+  // never change once trials exist: a new value lets every computer trial again.
   // Local development overrides these from apps/web/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",

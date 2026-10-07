@@ -9,6 +9,12 @@ MAIL_FROM=convt <hello@convt.test>
 MAILPIT_URL=http://127.0.0.1:8025
 OAUTH_MOCK_URL=http://127.0.0.1:4100
 
+# The pepper for desktop device hashes (/api/device/trial). Outside production a
+# fixed development value is used when this is unset. Production sets it with
+# `wrangler secret put DEVICE_HASH_SECRET` (at least 32 characters); without it
+# /api/device/trial answers 503.
+# DEVICE_HASH_SECRET=
+
 # Production and staging use MAIL_TRANSPORT=sequenzy and the SEQUENZY_API_KEY
 # Worker secret. MAIL_FROM is convt <hello@convt.app>. Local mail stays in Mailpit.
 

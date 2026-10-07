@@ -27,6 +27,8 @@ export const idPrefixes = [
   "dsp",
   "del",
   "alr",
+  // The desktop trial: the trials row id, also the `id` inside its trial token.
+  "trl",
 ] as const;
 
 export type IdPrefix = (typeof idPrefixes)[number];

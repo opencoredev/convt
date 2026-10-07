@@ -9,6 +9,7 @@ import {
   exchangeCode,
   renewDevice,
   signOutDevice,
+  startDeviceTrial,
   type DeviceResponse,
 } from "./device-auth";
 
@@ -21,14 +22,14 @@ function respond(r: DeviceResponse): Response {
 
 const ipOf = (request: Request) => request.headers.get("cf-connecting-ip")?.trim() || "unknown";
 
-export type DeviceRoute = "token" | "license" | "sign-out";
+export type DeviceRoute = "token" | "license" | "trial" | "sign-out";
 
 export async function handleDevice(
   route: DeviceRoute,
   request: Request,
   context: unknown,
 ): Promise<Response> {
-  const { scope } = requestContext(context);
+  const { scope, appEnv } = requestContext(context);
   const body = await readSmallJson(request);
   if (body === "too_large") return respond({ status: 413, body: { error: "too_large" } });
   const input = body?.value ?? null;
@@ -41,7 +42,22 @@ export async function handleDevice(
       return respond(
         await renewDevice(
           scope.db,
-          (userId) => billing().currentProKey(userId),
+          (userId, at, anyPlan) =>
+            anyPlan ? billing().currentKey(userId, at) : billing().currentProKey(userId),
+          token,
+          input,
+          ipOf(request),
+          now,
+        ),
+      );
+    case "trial":
+      return respond(
+        await startDeviceTrial(
+          scope.db,
+          {
+            startTrial: (userId, deviceHash, at) => billing().startTrial(userId, deviceHash, at),
+            secret: appEnv.deviceHashSecret,
+          },
           token,
           input,
           ipOf(request),
