@@ -1,6 +1,5 @@
 <p align="center">
   <a href="https://github.com/opencoredev/convt/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/opencoredev/convt/stars.svg?variant=branded&mode=dark" /></a>
-  <a href="https://github.com/opencoredev/convt/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/opencoredev/convt/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://x.com/leodev"><img alt="Follow @leodev on X" src="https://shieldcn.dev/x/follow/leodev.svg?variant=branded&mode=dark" /></a>
 </p>
 
