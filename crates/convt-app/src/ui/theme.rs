@@ -12,6 +12,7 @@ use std::borrow::Cow;
 
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme, Icon, IconName, Sizable, Theme};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -810,6 +811,46 @@ pub fn segmented(
     p: &Palette,
     on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
 ) -> Div {
+    let segments: Vec<Segment> = choices
+        .iter()
+        .map(|(key, label)| Segment::new(key, label.clone()))
+        .collect();
+    segmented_with(id, &segments, selected, p, on_pick)
+}
+
+/// One choice of [`segmented_with`].
+#[derive(Clone)]
+pub struct Segment {
+    pub key: &'static str,
+    pub label: SharedString,
+    /// Why the choice can't be picked now; shown on hover.
+    pub disabled: Option<SharedString>,
+}
+
+impl Segment {
+    pub fn new(key: &'static str, label: impl Into<SharedString>) -> Self {
+        Self {
+            key,
+            label: label.into(),
+            disabled: None,
+        }
+    }
+
+    pub fn disabled(mut self, reason: Option<impl Into<SharedString>>) -> Self {
+        self.disabled = reason.map(Into::into);
+        self
+    }
+}
+
+/// [`segmented`] with choices that can be disabled. A disabled choice is
+/// dimmed, ignores clicks and says why in a tooltip.
+pub fn segmented_with(
+    id: &str,
+    choices: &[Segment],
+    selected: &str,
+    p: &Palette,
+    on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
+) -> Div {
     div()
         .flex()
         .flex_shrink_0()
@@ -818,9 +859,11 @@ pub fn segmented(
         .rounded(px(radius::CONTROL + 1.))
         .bg(if p.dark { p.recessed } else { p.track })
         .when(p.dark, |d| d.shadow(vec![inset_ring(p.border, 1.)]))
-        .children(choices.iter().map(|(key, label)| {
-            let (key, label) = (*key, label.clone());
+        .children(choices.iter().map(|segment| {
+            let (key, label) = (segment.key, segment.label.clone());
             let on = key == selected;
+            let reason = segment.disabled.clone();
+            let off = reason.is_some();
             let on_pick = on_pick.clone();
             clickable(SharedString::from(format!("{id}-{key}")), label.clone())
                 .aria_selected(on)
@@ -833,12 +876,19 @@ pub fn segmented(
                     d.bg(if p.dark { p.selected } else { p.surface })
                         .shadow(raise(p))
                 })
-                .when(!on, |d| d.hover(|s| s.bg(p.hover)))
-                .on_click(move |_, window, cx| on_pick(key, window, cx))
+                .when(!on && !off, |d| d.hover(|s| s.bg(p.hover)))
+                .when_some(reason, |d, reason| {
+                    d.cursor_default()
+                        .tooltip(move |window, cx| Tooltip::new(reason.clone()).build(window, cx))
+                })
+                .when(!off, |d| {
+                    d.on_click(move |_, window, cx| on_pick(key, window, cx))
+                })
                 .child(
                     text(12., 16., if on { p.text } else { p.secondary })
                         .font_weight(FontWeight::MEDIUM)
                         .whitespace_nowrap()
+                        .when(off, |d| d.opacity(0.5))
                         .child(label),
                 )
         }))
@@ -1212,6 +1262,15 @@ pub fn this_machine() -> &'static str {
         "this Mac"
     } else {
         "this computer"
+    }
+}
+
+/// "This Mac" or "This computer", for a label.
+pub fn this_machine_label() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "This Mac"
+    } else {
+        "This computer"
     }
 }
 

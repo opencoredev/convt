@@ -16,8 +16,11 @@ use gpui_kit::*;
 
 use gpui_kit::component::IconName;
 
-use super::theme::{self, Button, Choice, Palette, Tone, icon, mono, radius, size, space, styled};
+use super::theme::{
+    self, Button, Choice, Palette, Segment, Tone, icon, mono, radius, size, space, styled,
+};
 use super::{blocked_banner, error_text, file_size, human_size, time_left};
+use crate::cloud::CloudAccess;
 use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState, PackPhase, Targets};
 use crate::pack;
@@ -83,6 +86,8 @@ pub struct QuickView {
     pub(super) wanted: Option<&'static Format>,
     /// Some file needed the document pack when the window opened.
     pub(super) offered_pack: bool,
+    /// Convert on convt's cloud instead of on this computer.
+    pub(super) cloud: bool,
     /// The registry the targets were computed with.
     generation: u64,
     _observe: Subscription,
@@ -157,6 +162,7 @@ impl QuickView {
             error,
             wanted,
             offered_pack,
+            cloud: false,
             generation,
         };
         view.load_controls();
@@ -342,9 +348,17 @@ impl QuickView {
             return;
         }
         let output = self.output(cx);
-        let queued = self
-            .app
-            .update(cx, |s, cx| s.convert_to(&files, to, &options, output, cx));
+        let cloud = self.in_cloud(cx);
+        if cloud && !self.app.read(cx).settings.cloud_consent {
+            return;
+        }
+        let queued = self.app.update(cx, |s, cx| {
+            if cloud {
+                s.convert_in_cloud(&files, to, &options, output, cx)
+            } else {
+                s.convert_to(&files, to, &options, output, cx)
+            }
+        });
         let jobs = match queued {
             Ok(jobs) => jobs,
             Err(e) => {
@@ -362,6 +376,98 @@ impl QuickView {
         let app = self.app.clone();
         self.remember(&app, cx);
         cx.notify();
+    }
+
+    /// Whether Cloud conversions can run, and if not, why.
+    fn cloud_access(&self, cx: &App) -> CloudAccess {
+        #[cfg(test)]
+        if let Some(access) = cx.try_global::<TestCloud>() {
+            return access.0.clone();
+        }
+        self.app.read(cx).cloud_access()
+    }
+
+    /// Cloud is picked and can run.
+    fn in_cloud(&self, cx: &App) -> bool {
+        self.cloud && self.cloud_access(cx).ready()
+    }
+
+    pub(super) fn set_cloud(&mut self, cloud: bool, cx: &mut Context<Self>) {
+        self.cloud = cloud && self.cloud_access(cx).ready();
+        self.error = None;
+        cx.notify();
+    }
+
+    /// The user agreed that Cloud uploads their files. Asked once.
+    pub(super) fn agree_to_cloud(&mut self, cx: &mut Context<Self>) {
+        self.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.cloud_consent = true, cx)
+        });
+        cx.notify();
+    }
+
+    /// Asks, the first time Cloud is picked, whether the files may be
+    /// uploaded.
+    fn consent(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
+        if !self.jobs.is_empty() || !self.in_cloud(cx) || self.app.read(cx).settings.cloud_consent {
+            return None;
+        }
+        let what = if self.files.len() == 1 {
+            "this file"
+        } else {
+            "these files"
+        };
+        Some(
+            div().flex_shrink_0().px(px(GUTTER)).pb(px(space::LG)).child(
+                div()
+                    .id("cloud-consent")
+                    .test_support()
+                    .aria_label("Upload to convt's cloud?")
+                    .child(theme::callout(
+                        IconName::Info,
+                        Tone::Neutral,
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(space::LG))
+                            .child(
+                                theme::callout_words(
+                                    "Upload to convt's cloud?",
+                                    format!(
+                                        "Cloud uploads {what} to convt's servers to convert, then deletes {}.",
+                                        if self.files.len() == 1 { "it" } else { "them" }
+                                    ),
+                                    p,
+                                )
+                                .flex_1()
+                                .min_w_0(),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_shrink_0()
+                                    .gap(px(space::SM))
+                                    .child(
+                                        Button::secondary("cloud-consent-cancel", "Cancel")
+                                            .small()
+                                            .build(p)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.set_cloud(false, cx)
+                                            })),
+                                    )
+                                    .child(
+                                        Button::primary("cloud-consent-agree", "Agree")
+                                            .small()
+                                            .build(p)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.agree_to_cloud(cx)
+                                            })),
+                                    ),
+                            ),
+                        p,
+                    )),
+            ),
+        )
     }
 
     fn choose_folder(&mut self, cx: &mut Context<Self>) {
@@ -987,23 +1093,24 @@ impl QuickView {
             .bg(p.chrome)
             .border_t_1()
             .border_color(p.chrome_border);
-        let note = |line: String| {
-            div()
-                .flex()
-                .flex_1()
-                .min_w_0()
-                .items_center()
-                .gap(px(6.))
-                .child(icon(IconName::HardDrive, 13., p.tertiary))
-                .child(styled(size::SMALL, p.secondary).truncate().child(line))
-        };
         if !self.jobs.is_empty() {
             let outputs = self.outputs();
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
+            let status = match (done, self.cloud) {
+                (true, _) => "Done",
+                (false, true) => "Converting in the cloud…",
+                (false, false) => "Converting…",
+            };
             return bar
-                .child(note(if done { "Done" } else { "Converting…" }.to_string()))
+                .child(
+                    styled(size::SMALL, p.secondary)
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .child(status),
+                )
                 .children(first.filter(|_| done).map(|path| {
                     Button::secondary("show-in-folder", "Show in folder")
                         .icon(IconName::FolderOpen)
@@ -1022,34 +1129,53 @@ impl QuickView {
                         .on_click(|_, window, _| window.remove_window()),
                 );
         }
+        let access = self.cloud_access(cx);
+        let cloud = self.in_cloud(cx);
         let state = self.app.read(cx);
-        let disabled =
-            self.to.is_none() || self.supported().is_empty() || !state.license.allows_conversion();
-        let count = match self.supported().len() {
-            0 | 1 => String::new(),
-            n => format!("{n} files · "),
-        };
+        let disabled = self.to.is_none()
+            || self.supported().is_empty()
+            || !state.license.allows_conversion()
+            || (cloud && !state.settings.cloud_consent);
         let label = match self.to {
             Some(to) if !disabled => format!("Convert to {}", to.name),
             _ => "Convert".to_string(),
         };
-        bar.child(note(format!("{count}Runs on {}", theme::this_machine())))
-            .child(
-                Button::ghost("cancel", "Cancel")
-                    .build(p)
-                    .on_click(|_, window, _| window.remove_window()),
-            )
-            .child(
-                Button::primary("convert", label)
-                    .disabled(disabled)
-                    .build(p)
-                    .px(px(18.))
-                    .when(!disabled, |d| {
-                        d.on_click(cx.listener(|this, _, _, cx| this.convert(cx)))
-                    }),
-            )
+        let weak = cx.entity().downgrade();
+        bar.child(div().flex().flex_1().min_w_0().child(theme::segmented_with(
+            "where",
+            &[
+                Segment::new("local", theme::this_machine_label()),
+                Segment::new("cloud", "Cloud").disabled(access.reason()),
+            ],
+            if cloud { "cloud" } else { "local" },
+            p,
+            move |key, _, cx| {
+                let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
+            },
+        )))
+        .child(
+            Button::ghost("cancel", "Cancel")
+                .build(p)
+                .on_click(|_, window, _| window.remove_window()),
+        )
+        .child(
+            Button::primary("convert", label)
+                .disabled(disabled)
+                .build(p)
+                .px(px(18.))
+                .when(!disabled, |d| {
+                    d.on_click(cx.listener(|this, _, _, cx| this.convert(cx)))
+                }),
+        )
     }
 }
+
+/// Tests set this to show Cloud as the account would allow it.
+#[cfg(test)]
+pub(super) struct TestCloud(pub CloudAccess);
+
+#[cfg(test)]
+impl Global for TestCloud {}
 
 /// Space between the window edge and the content.
 const GUTTER: f32 = 24.;
@@ -1335,6 +1461,7 @@ impl Render for QuickView {
                     .overflow_y_scroll()
                     .children(body),
             )
+            .children(self.consent(&p, cx))
             .child(self.footer(&p, cx))
     }
 }

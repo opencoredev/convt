@@ -26,6 +26,7 @@ use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
 use super::{AboutView, Open, PopoverView, menus, theme};
+use crate::cloud::CloudAccess;
 use crate::history::Outcome;
 use crate::jobs::JobId;
 use crate::model::{AppState, PackPhase, Paths, Shared};
@@ -884,6 +885,58 @@ fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) 
         assert!(state.recent.is_empty() && state.queue.entries.is_empty());
     });
     assert!(shown(cx, window, "empty"));
+}
+
+#[gpui_kit::test]
+fn cloud_says_why_it_is_off_and_asks_once_before_uploading(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+
+    // Not ready: Cloud is shown but does nothing.
+    let (window, view) = f.quick(cli(vec![png.clone()], Some("webp"), None), cx);
+    assert_eq!(
+        label(cx, window, "where-local").as_deref(),
+        Some(theme::this_machine_label())
+    );
+    assert_eq!(label(cx, window, "where-cloud").as_deref(), Some("Cloud"));
+    click(cx, window, "where-cloud");
+    cx.read(|cx| assert!(!view.read(cx).cloud));
+    assert!(!shown(cx, window, "cloud-consent"));
+
+    // Ready: picking Cloud asks first, and Convert waits for the answer.
+    cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+    click(cx, window, "where-cloud");
+    cx.read(|cx| assert!(view.read(cx).cloud));
+    assert!(shown(cx, window, "cloud-consent"));
+    click(cx, window, "convert");
+    cx.read(|cx| assert!(view.read(cx).jobs.is_empty() && view.read(cx).error.is_none()));
+    click(cx, window, "cloud-consent-cancel");
+    cx.read(|cx| assert!(!view.read(cx).cloud));
+    assert!(!shown(cx, window, "cloud-consent"));
+    cx.read(|cx| assert!(!f.app.read(cx).settings.cloud_consent));
+
+    click(cx, window, "where-cloud");
+    click(cx, window, "cloud-consent-agree");
+    cx.read(|cx| assert!(f.app.read(cx).settings.cloud_consent));
+    assert!(f.settings_file().contains("cloud_consent = true"));
+    assert!(!shown(cx, window, "cloud-consent"));
+
+    // Convert goes to the cloud, not to a local job; what it can't do shows
+    // like any other error.
+    click(cx, window, "convert");
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(!v.jobs.is_empty() || v.error.is_some());
+    });
+    if let Some(error) = cx.read(|cx| view.read(cx).error.clone()) {
+        assert_eq!(label(cx, window, "error"), Some(error));
+    }
+
+    // Asked once: a new window doesn't ask again.
+    let (window, view) = f.quick(cli(vec![png], Some("webp"), None), cx);
+    click(cx, window, "where-cloud");
+    cx.read(|cx| assert!(view.read(cx).cloud));
+    assert!(!shown(cx, window, "cloud-consent"));
 }
 
 #[gpui_kit::test]
@@ -2119,6 +2172,14 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-jpeg");
         assert!(fits(cx, quick, "convert"), "Quick convert, two files");
+        assert!(fits(cx, quick, "where-cloud"), "Quick convert, Cloud");
+        cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+        click(cx, quick, "where-cloud");
+        assert!(
+            fits(cx, quick, "cloud-consent-agree"),
+            "Quick convert, consent"
+        );
+        cx.update(|cx| cx.remove_global::<super::quick::TestCloud>());
 
         for tab in [SettingsTab::General, SettingsTab::License] {
             cx.update(|cx| super::show_settings(tab, cx));
