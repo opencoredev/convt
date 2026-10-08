@@ -82,6 +82,15 @@ describe("trials", () => {
     }
   });
 
+  test("an unfinished account deletion lapses access before subscription state", async () => {
+    const { u } = await startPro(testMailbox("deleting-pro"));
+    await h.deliverAll();
+    await h.q(
+      sql`insert into account_deletions (id, user_id, status) values (${`del_${u.id}`}, ${u.id}, 'pending')`,
+    );
+    expect(await h.service.currentProAccess(u.id)).toEqual({ kind: "lapsed" });
+  });
+
   test("a trialing subscription and its $0 paid order issue nothing; conversion issues one key and one email", async () => {
     const { subId } = await startPro("trial1@convt.test");
     await h.deliverAll();
