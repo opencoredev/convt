@@ -3,6 +3,7 @@
 //! window are their own windows; the menu bar popover belongs to the tray.
 
 mod account;
+mod chrome;
 mod first_run;
 mod main_window;
 mod pack;
@@ -67,7 +68,7 @@ fn show<V: Render>(
     {
         return Some((handle, view));
     }
-    let opened = gpui_kit::open_window(window_options(size, title, cx), cx, build);
+    let opened = open_window(window_options(size, title, cx), cx, build);
     cx.activate(true);
     match opened {
         Ok((handle, view)) => {
@@ -79,6 +80,23 @@ fn show<V: Render>(
             None
         }
     }
+}
+
+/// Opens a window for the view `build` makes, wrapped in [`chrome::Chrome`]
+/// so a Linux window the compositor leaves undecorated still gets a title bar.
+fn open_window<V: Render>(
+    options: WindowOptions,
+    cx: &mut App,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> gpui_kit::Result<(AnyWindowHandle, Entity<V>)> {
+    let title = options.titlebar.as_ref().and_then(|t| t.title.clone());
+    let mut built = None;
+    let (handle, _) = gpui_kit::open_window(options, cx, |window, cx| {
+        let view = build(window, cx);
+        built = Some(view.clone());
+        cx.new(|_| chrome::Chrome::new(view, title))
+    })?;
+    Ok((handle, built.expect("open_window ran its build closure")))
 }
 
 /// Sends a request where it belongs:
@@ -188,7 +206,7 @@ pub fn open_quick(request: Request, cx: &mut App) {
     // Status is read offline; it may have changed through the CLI.
     app.update(cx, |s, cx| s.refresh_pack(cx));
     let options = window_options(size(px(600.), px(560.)), "Convert", cx);
-    match gpui_kit::open_window(options, cx, |window, cx| {
+    match open_window(options, cx, |window, cx| {
         cx.new(|cx| QuickView::new(app, request, window, cx))
     }) {
         // Each request gets its own window; the global tracks the newest.
@@ -218,6 +236,10 @@ fn window_options(size: Size<Pixels>, title: &str, cx: &App) -> WindowOptions {
             traffic_light_position: theme::transparent_titlebar().then(|| point(px(16.), px(16.))),
         }),
         app_id: Some("convt".into()),
+        // Linux only. Where the compositor can't draw them (GNOME on
+        // Wayland), GPUI falls back to client-side decorations and
+        // `chrome::Chrome` draws the title bar.
+        window_decorations: Some(WindowDecorations::Server),
         ..Default::default()
     }
 }
