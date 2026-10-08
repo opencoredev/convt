@@ -197,8 +197,9 @@ impl CloudApi for Http {
         if cancel.is_cancelled() {
             return Err(CloudError::Cancelled);
         }
-        let response = result.map_err(|e| {
-            tracing::debug!(error = %e, "cloud upload failed");
+        let response = result.map_err(|_| {
+            // Transfer errors can quote the signed link, so none is logged.
+            tracing::debug!("cloud upload failed");
             CloudError::Offline
         })?;
         match response.status().as_u16() {
@@ -246,8 +247,9 @@ impl CloudApi for Http {
         if !secure_url(url) {
             return Err(CloudError::BadResponse);
         }
-        let mut response = self.transfers.get(url).call().map_err(|e| {
-            tracing::debug!(error = %e, "cloud download failed");
+        let mut response = self.transfers.get(url).call().map_err(|_| {
+            // Transfer errors can quote the signed link, so none is logged.
+            tracing::debug!("cloud download failed");
             CloudError::Offline
         })?;
         let status = response.status().as_u16();
