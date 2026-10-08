@@ -522,9 +522,9 @@ impl Render for FirstRunView {
             Step::Done => (
                 "You're set",
                 if cfg!(target_os = "macos") {
-                    "Right-click a file in Finder and pick a format, or drop files on convt: photos become JPEG, screenshots and other images become PNG.".to_string()
+                    "Right-click a file in Finder and pick a format, or drop files on the convt window.".to_string()
                 } else {
-                    "Right-click a file in your file manager and pick a format, or drop files on convt: photos become JPEG, screenshots and other images become PNG.".to_string()
+                    "Right-click a file in your file manager and pick a format, or drop files on the convt window.".to_string()
                 },
                 Some("Back"),
                 "Start converting",

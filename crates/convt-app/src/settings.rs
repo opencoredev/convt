@@ -38,7 +38,7 @@ pub struct Settings {
     /// The highest update manifest `sequence` accepted, so an older signed
     /// manifest can't be replayed to hide a newer release.
     pub update_sequence: u64,
-    /// What Add files converts each kind of file to.
+    /// What files dropped on the menu bar popover convert to, by kind.
     pub defaults: Defaults,
     /// Automation rules. Each enabled rule watches one folder.
     pub automations: Vec<Automation>,
@@ -67,7 +67,7 @@ impl Default for Settings {
     }
 }
 
-/// The format Add files picks for each kind of file, by format id.
+/// The format the popover's drop bar picks for each kind of file, by format id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Defaults {
     /// Camera and web photos (HEIC, AVIF, WebP, JPEG).
@@ -132,14 +132,6 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 5] = [
-        Kind::Photos,
-        Kind::Images,
-        Kind::Video,
-        Kind::Audio,
-        Kind::Documents,
-    ];
-
     /// The kind a file of `format` belongs to. PDFs have none: they are
     /// already what documents become.
     pub fn of(format: &Format) -> Option<Kind> {
@@ -163,26 +155,6 @@ impl Kind {
             other => other,
         }
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Kind::Photos => "Photos",
-            Kind::Images => "Images",
-            Kind::Video => "Video",
-            Kind::Audio => "Audio",
-            Kind::Documents => "Documents",
-        }
-    }
-
-    pub fn id(self) -> &'static str {
-        match self {
-            Kind::Photos => "photos",
-            Kind::Images => "images",
-            Kind::Video => "video",
-            Kind::Audio => "audio",
-            Kind::Documents => "documents",
-        }
-    }
 }
 
 impl Defaults {
@@ -196,6 +168,7 @@ impl Defaults {
         })
     }
 
+    #[cfg(test)]
     pub fn set(&mut self, kind: Kind, to: &Format) {
         let slot = match kind {
             Kind::Photos => &mut self.photos,

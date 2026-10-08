@@ -466,8 +466,8 @@ impl AppState {
         Ok(ids)
     }
 
-    /// The format Add files converts `file` to: the default for its kind, if
-    /// the file can reach it.
+    /// The format the popover's drop bar converts `file` to: the default for
+    /// its kind, if the file can reach it.
     pub fn default_target(&self, file: &Path) -> Option<&'static Format> {
         let from = format_by_extension(file)?;
         let to = self.settings.defaults.get(Kind::of_file(file, from)?)?;

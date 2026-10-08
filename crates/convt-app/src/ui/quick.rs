@@ -98,7 +98,9 @@ impl QuickView {
     ) -> Self {
         let state = app.read(cx);
         let expanded = model::expand_keeping_documents(&state.registry, &request.files);
-        let files = expanded.files;
+        let mut files = expanded.files;
+        let mut seen = std::collections::HashSet::new();
+        files.retain(|f| seen.insert(f.clone()));
         let targets = model::common_targets(&state.registry, &files);
         let generation = state.registry_generation;
         let offered_pack = files.iter().any(|f| pack::needs_pack(&state.registry, f));

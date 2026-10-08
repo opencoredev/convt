@@ -1,17 +1,17 @@
 //! The main window: Activity (running jobs and history in one list, plus
-//! Add files, which converts right away) and Automations.
+//! Add files, which opens Quick convert) and Automations.
 
 use std::path::PathBuf;
 use std::time::Instant;
 
-use convt_core::{FORMATS, Format, format_by_extension, format_by_id};
+use convt_core::{format_by_extension, format_by_id};
 use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
 use gpui_kit::component::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::theme::{self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text};
-use super::{LICENSE_PRICE, SettingsTab, error_text, file_size, human_size, time_left};
+use super::{LICENSE_PRICE, SettingsTab, file_size, human_size, time_left};
 use crate::automation;
 use crate::clock::Local;
 use crate::finder::EXTENSION_SETTINGS;
@@ -19,7 +19,6 @@ use crate::history::{Outcome, Record};
 use crate::jobs::{Entry, Status};
 use crate::model::{self, AppState};
 use crate::request::Request;
-use crate::settings::Kind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
@@ -35,10 +34,6 @@ const GUTTER: f32 = 24.;
 pub struct MainView {
     app: Entity<AppState>,
     pub(super) page: Page,
-    /// The default formats are open for changing.
-    pub(super) editing_defaults: bool,
-    /// What the last Add files couldn't do.
-    pub(super) error: Option<String>,
     _observe: Subscription,
     _appearance: Subscription,
 }
@@ -50,8 +45,6 @@ impl MainView {
             _appearance: theme::observe_appearance(window, cx),
             app,
             page: Page::Activity,
-            editing_defaults: false,
-            error: None,
         }
     }
 
@@ -60,21 +53,19 @@ impl MainView {
         cx.notify();
     }
 
-    /// Converts files right away to their default formats. Files with no
-    /// usable default open Quick convert so the user can pick.
+    /// Opens Quick convert for the files, as a right-click without a target
+    /// does, so the user picks the format.
     pub fn add(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
-        let added = self.app.update(cx, |s, cx| s.add_files(paths, cx));
-        self.error = (!added.errors.is_empty()).then(|| added.errors.join("\n"));
-        if !added.ask.is_empty() {
-            super::open_quick(
-                Request {
-                    files: added.ask,
-                    ..Request::default()
-                },
-                cx,
-            );
+        if paths.is_empty() {
+            return;
         }
-        cx.notify();
+        super::open_quick(
+            Request {
+                files: paths.to_vec(),
+                ..Request::default()
+            },
+            cx,
+        );
     }
 
     pub(super) fn pick_files(&mut self, cx: &mut Context<Self>) {
@@ -184,19 +175,6 @@ impl MainView {
             .child(div().flex_1())
             .children(super::update::sidebar_card(&self.app, p, cx))
             .children(trial_card(&license, p))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .px(px(space::SM))
-                    .pt(px(space::MD))
-                    .child(icon(IconName::HardDrive, 12., p.tertiary))
-                    .child(
-                        styled(size::CAPTION, p.tertiary)
-                            .child(format!("Files stay on {}", theme::this_machine())),
-                    ),
-            )
     }
 
     fn header(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -215,7 +193,10 @@ impl MainView {
                 },
             )
         } else {
-            ("Automations", "Saved rules for folders".to_string())
+            (
+                "Automations",
+                "Convert new screenshots and recordings as they appear".to_string(),
+            )
         };
         div()
             .flex()
@@ -264,163 +245,10 @@ impl MainView {
             })
     }
 
-    fn defaults_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let state = self.app.read(cx);
-        let defaults = state.settings.defaults.clone();
-        let registry = state.registry.clone();
-        let chip = |kind: &'static str, to: &'static str| {
-            div()
-                .flex()
-                .flex_shrink_0()
-                .items_center()
-                .gap(px(5.))
-                .h(px(24.))
-                .px(px(9.))
-                .rounded(px(radius::CONTROL))
-                .bg(p.surface)
-                .border_1()
-                .border_color(p.border)
-                .child(styled(size::SMALL, p.secondary).child(kind))
-                .child(icon(IconName::ArrowRight, 11., p.tertiary))
-                .child(
-                    styled(size::SMALL, p.text)
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(to),
-                )
-        };
-        let summary = div()
-            .flex()
-            .items_center()
-            .gap(px(space::MD))
-            .h(px(48.))
-            .child(
-                styled(size::SMALL, p.secondary)
-                    .flex_shrink_0()
-                    .child("Add files converts to"),
-            )
-            .child(
-                div()
-                    .id("defaults")
-                    .test_support()
-                    .aria_label(SharedString::from(
-                        Kind::ALL
-                            .iter()
-                            .filter_map(|k| {
-                                Some(format!("{} → {}", k.label(), defaults.get(*k)?.name))
-                            })
-                            .collect::<Vec<_>>()
-                            .join(", "),
-                    ))
-                    .flex()
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .gap(px(6.))
-                    .children(
-                        Kind::ALL
-                            .iter()
-                            .filter_map(|k| Some(chip(k.label(), defaults.get(*k)?.name))),
-                    ),
-            )
-            .child(
-                Button::ghost(
-                    "change-defaults",
-                    if self.editing_defaults {
-                        "Done"
-                    } else {
-                        "Change"
-                    },
-                )
-                .small()
-                .color(p.green_text)
-                .build(p)
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.editing_defaults = !this.editing_defaults;
-                    cx.notify();
-                })),
-            );
-        let editor = self.editing_defaults.then(|| {
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(10.))
-                .pb(px(14.))
-                .children(Kind::ALL.iter().map(|&kind| {
-                    let current = defaults.get(kind);
-                    let choices = choices_for(&registry, kind);
-                    div()
-                        .flex()
-                        .items_start()
-                        .gap(px(space::MD))
-                        .child(
-                            styled(size::SMALL, p.secondary)
-                                .w(px(84.))
-                                .flex_shrink_0()
-                                .pt(px(4.))
-                                .child(kind.label()),
-                        )
-                        .child(div().flex().flex_wrap().gap(px(6.)).children(
-                            choices.into_iter().map(|to| {
-                                let on = current == Some(to);
-                                let app = self.app.clone();
-                                theme::clickable(
-                                    SharedString::from(format!("default-{}-{}", kind.id(), to.id)),
-                                    to.name,
-                                )
-                                .aria_selected(on)
-                                .flex()
-                                .items_center()
-                                .h(px(24.))
-                                .px(px(9.))
-                                .rounded(px(radius::CONTROL))
-                                .map(|d| {
-                                    if on {
-                                        d.bg(p.green_tint)
-                                            .shadow(vec![theme::inset_ring(p.green_border, 1.)])
-                                    } else {
-                                        d.bg(p.surface)
-                                            .shadow(vec![theme::inset_ring(p.border, 1.)])
-                                            .hover(|s| s.bg(p.hover))
-                                    }
-                                })
-                                .on_click(move |_, _, cx| {
-                                    app.update(cx, |s, cx| {
-                                        s.update_settings(|s| s.defaults.set(kind, to), cx)
-                                    })
-                                })
-                                .child(
-                                    styled(size::SMALL, if on { p.green_text } else { p.text })
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(to.name),
-                                )
-                            }),
-                        ))
-                }))
-        });
-        div()
-            .flex()
-            .flex_col()
-            .flex_shrink_0()
-            .px(px(GUTTER))
-            .bg(p.recessed)
-            .border_t_1()
-            .border_b_1()
-            .border_color(p.hairline)
-            .child(summary)
-            .children(editor)
-    }
-
-    /// What goes above the list: what Add files couldn't do, and the way
-    /// back to Finder setup.
+    /// What goes above the list: the way back to Finder setup.
     fn notices(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let finder_off = self.app.read(cx).finder_on == Some(false);
         let mut notices = Vec::new();
-        if let Some(e) = self.error.clone() {
-            notices.push(
-                theme::callout(IconName::TriangleAlert, Tone::Error, error_text(e, p), p)
-                    .into_any_element(),
-            );
-        }
         if finder_off {
             notices.push(finder_setup_card(p).into_any_element());
         }
@@ -511,10 +339,10 @@ impl MainView {
 
     fn empty_state(&self, finder_off: bool, p: &Palette, cx: &mut Context<Self>) -> Div {
         let hint = if finder_off {
-            "Drop files here, or use Add files. Turn on the Finder menu above to convert from a right-click.".to_string()
+            "Turn on the Finder menu above to convert from a right-click.".to_string()
         } else {
             format!(
-                "Drop files here, or right-click a file in {} and pick a format.",
+                "Right-click a file in {} and pick a format, or choose files here.",
                 theme::file_manager()
             )
         };
@@ -555,9 +383,6 @@ impl MainView {
                         .icon(IconName::FolderOpen)
                         .build(p)
                         .on_click(cx.listener(|this, _, _, cx| this.pick_files(cx))),
-                )
-                .child(
-                    mono(11., 14., p.tertiary).child("Images · Video · Audio · PDF · Documents"),
                 ),
         )
     }
@@ -616,51 +441,29 @@ impl MainView {
             .px(px(GUTTER))
             .pt(px(space::LG))
             .pb(px(GUTTER))
-            .gap(px(space::XL))
+            .child(theme::section_label("Rules", p))
+            .child(if empty {
+                theme::card(p)
+                    .p(px(space::LG))
+                    .child(styled(size::SMALL, p.secondary).child("No rules yet."))
+            } else {
+                theme::group(rows, p)
+            })
             .child(
                 styled(size::SMALL, p.secondary)
                     .id("automations-intro")
                     .test_support()
-                    .aria_label(
-                        "When a screenshot or screen recording appears in its folder, convt converts it.",
-                    )
-                    .child(
-                        "When a screenshot or screen recording appears in its folder, convt converts it. Screenshots follow the folder this computer saves them to, which is not always the Desktop. Only that folder is watched, not folders inside it.",
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(theme::section_label("Rules", p))
-                    .child(if empty {
-                        theme::card(p)
-                            .p(px(space::LG))
-                            .child(styled(size::SMALL, p.secondary).child("No rules yet."))
-                    } else {
-                        theme::group(rows, p)
-                    }),
+                    .aria_label(AUTOMATIONS_INTRO)
+                    .px(px(2.))
+                    .pt(px(space::SM))
+                    .child(AUTOMATIONS_INTRO),
             )
     }
 }
 
-/// The formats a kind of file can default to: every format some file of
-/// that kind can become, in table order.
-fn choices_for(registry: &convt_core::Registry, kind: Kind) -> Vec<&'static Format> {
-    let inputs: Vec<&Format> = FORMATS
-        .iter()
-        .filter(|f| Kind::of(f) == Some(kind))
-        .collect();
-    FORMATS
-        .iter()
-        .filter(|to| {
-            inputs
-                .iter()
-                .any(|from| registry.targets(from).contains(to))
-        })
-        .take(10)
-        .collect()
-}
+/// What the Automations page says above its rules.
+const AUTOMATIONS_INTRO: &str = "Each rule watches one folder, not the folders inside it. For \
+     screenshots, that's the folder this computer saves them to, which isn't always the Desktop.";
 
 /// Shown on Activity until the Finder extension is on, so skipping or
 /// closing first run still has a way back.
@@ -1006,8 +809,7 @@ impl Render for MainView {
                 .flex_col()
                 .flex_1()
                 .min_w_0()
-                .child(header)
-                .child(self.defaults_bar(&p, cx))
+                .child(header.border_b_1().border_color(p.hairline))
                 .child(self.activity(&p, cx)),
             Page::Automations => div()
                 .flex()

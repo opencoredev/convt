@@ -843,7 +843,7 @@ fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) {
+fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let a = f.bmp("a.bmp");
     let b = f.bmp("b.bmp");
@@ -853,14 +853,21 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
         label(cx, window, "empty-add-files").as_deref(),
         Some("Choose files…")
     );
-    assert_eq!(
-        label(cx, window, "defaults").as_deref(),
-        Some("Photos → JPEG, Images → PNG, Video → MP4, Audio → MP3, Documents → PDF")
-    );
 
-    // The same file twice converts once. Stills that aren't photos become PNG.
-    view.update(cx, |v, cx| v.add(&[a.clone(), b, a], cx));
-    assert_eq!(f.jobs(cx), 2);
+    // Add files converts nothing by itself: Quick convert asks for the
+    // format, and the same file twice is listed once.
+    view.update(cx, |v, cx| v.add(&[a.clone(), b.clone(), a], cx));
+    assert_eq!(f.jobs(cx), 0);
+    let (quick, quick_view) = last_quick(cx);
+    cx.read(|cx| {
+        assert_eq!(
+            quick_view.read(cx).files,
+            [f.dir.path().join("a.bmp"), b.clone()]
+        )
+    });
+    cx.read(|cx| assert!(quick_view.read(cx).to.is_none()));
+    click(cx, quick, "to-png");
+    click(cx, quick, "convert");
     wait_until(cx, "both files", |cx| f.app.read(cx).recent.len() == 2);
     assert!(is_png(&f.dir.path().join("a.png")) && is_png(&f.dir.path().join("b.png")));
     let records = cx.read(|cx| f.app.read(cx).recent.clone());
@@ -870,22 +877,6 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
         assert!(shown(cx, window, &format!("show-{}", record.id)));
     }
     assert!(!shown(cx, window, "empty"));
-
-    // Changing a default changes what Add files does.
-    click(cx, window, "change-defaults");
-    click(cx, window, "default-images-jpeg");
-    cx.read(|cx| assert_eq!(f.app.read(cx).settings.defaults.images, "jpeg"));
-    assert!(f.settings_file().contains("images = \"jpeg\""));
-    let c = f.bmp("c.bmp");
-    view.update(cx, |v, cx| v.add(&[c], cx));
-    wait_until(cx, "c.jpg", |cx| f.app.read(cx).recent.len() == 3);
-    assert!(is_jpeg(&f.dir.path().join("c.jpg")));
-
-    // A file with no usable default (a JPEG with JPEG as the images default) asks.
-    let windows = cx.update(|cx| cx.windows().len());
-    let jpg = f.dir.path().join("c.jpg");
-    view.update(cx, |v, cx| v.add(&[jpg], cx));
-    assert_eq!(cx.update(|cx| cx.windows().len()), windows + 1);
 
     click(cx, window, "clear-finished");
     cx.read(|cx| {
@@ -902,6 +893,9 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     std::fs::write(&broken, "not a bmp").unwrap();
     let (window, view) = f.main(cx);
     view.update(cx, |v, cx| v.add(std::slice::from_ref(&broken), cx));
+    let (quick, _) = last_quick(cx);
+    click(cx, quick, "to-png");
+    click(cx, quick, "convert");
     wait_until(cx, "the failure", |cx| f.app.read(cx).recent.len() == 1);
     let record = cx.read(|cx| f.app.read(cx).recent[0].clone());
     assert!(matches!(record.outcome, Outcome::Failed(_)));
@@ -1292,12 +1286,9 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
 
     let bmp = f.bmp("a.bmp");
     view.update(cx, |v, cx| v.add(std::slice::from_ref(&bmp), cx));
+    let (quick, _) = last_quick(cx);
+    assert!(shown(cx, quick, "download"));
     assert_eq!(f.jobs(cx), 0);
-    assert!(
-        label(cx, main, "error")
-            .unwrap()
-            .starts_with("This build is newer")
-    );
 
     let (quick, _) = f.quick(cli(vec![bmp], Some("jpeg"), None), cx);
     assert!(shown(cx, quick, "download"));
@@ -2309,7 +2300,7 @@ fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext
     // reports, the window draws no bar.
     let (main, _) = f.main(cx);
     assert!(!shown(cx, main, "window-close"));
-    assert!(shown(cx, main, "defaults"));
+    assert!(shown(cx, main, "add-files"));
 
     cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
     let app = f.app.clone();
@@ -2331,7 +2322,7 @@ fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext
     );
     assert_eq!(label(cx, main, "window-close").as_deref(), Some("Close"));
     assert!(
-        shown(cx, main, "defaults"),
+        shown(cx, main, "add-files"),
         "the window's own view still shows"
     );
     let bounds = |cx: &mut TestAppContext, name: &str| {
@@ -2344,7 +2335,7 @@ fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext
     let bar = bounds(cx, "title-bar");
     assert_eq!(bar.size.height, px(super::chrome::TITLE_BAR_HEIGHT));
     assert!(
-        bounds(cx, "defaults").top() >= bar.bottom(),
+        bounds(cx, "add-files").top() >= bar.bottom(),
         "the view starts below the bar"
     );
 
@@ -2761,11 +2752,11 @@ fn documents_added_dropped_or_in_folders_reach_the_offer(cx: &mut TestAppContext
     std::fs::create_dir(&folder).unwrap();
     std::fs::write(folder.join("Budget.xlsx"), b"PK").unwrap();
 
-    // Add files: the BMP converts, the document opens the offer.
+    // Add files: Quick convert offers the pack beside the BMP's formats.
     let (_, main) = f.main(cx);
-    main.update(cx, |v, cx| v.add(&[bmp, docx.clone()], cx));
+    main.update(cx, |v, cx| v.add(&[bmp.clone(), docx.clone()], cx));
     let (window, view) = last_quick(cx);
-    cx.read(|cx| assert_eq!(view.read(cx).files, std::slice::from_ref(&docx)));
+    cx.read(|cx| assert_eq!(view.read(cx).files, [bmp, docx.clone()]));
     assert!(shown(cx, window, "pack-download"));
 
     // A folder's documents aren't dropped on the floor.
