@@ -151,17 +151,7 @@ impl Registry {
     /// none of its preferred targets gets the first few it can reach.
     pub fn menu_targets(&self, from: &'static Format) -> Vec<&'static Format> {
         const MENU_SIZE: usize = 4;
-        let preferred: &[&str] = match (from.id, from.category) {
-            ("gif", _) => &["mp4", "webp", "png"],
-            (_, Category::Image) => &["jpeg", "png", "webp"],
-            (_, Category::Vector) => &["png", "jpeg", "pdf"],
-            (_, Category::Video) => &["mp4", "mov", "gif", "mp3"],
-            (_, Category::Audio) => &["mp3", "m4a", "wav"],
-            (_, Category::Pdf) => &["png", "jpeg", "docx"],
-            (_, Category::Document) => &["pdf", "docx", "txt"],
-            (_, Category::Spreadsheet) => &["pdf", "xlsx", "csv"],
-            (_, Category::Presentation) => &["pdf", "pptx"],
-        };
+        let preferred = crate::menu_preferred(from);
         let reachable = self.targets(from);
         let picked: Vec<_> = preferred
             .iter()

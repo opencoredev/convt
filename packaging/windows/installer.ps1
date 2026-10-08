@@ -15,5 +15,7 @@ $CachedVersion = (& "$Tools/wix.exe" --version | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or ($CachedVersion -split '\+')[0] -ne $WixVersion) {
     throw "Cached WiX version '$CachedVersion' does not match pin $WixVersion. Remove $Tools and rerun."
 }
-& "$Tools/wix.exe" build -arch x64 -d "Version=$Version" -d "Payload=$Payload" "$PSScriptRoot/convt.wxs" -o "packaging/out/windows/convt-$Version-windows-x86_64.msi"
+python "$PSScriptRoot/gen_explorer_verbs.py"
+if ($LASTEXITCODE -ne 0) { throw 'Explorer verb generation failed' }
+& "$Tools/wix.exe" build -arch x64 -d "Version=$Version" -d "Payload=$Payload" "$PSScriptRoot/convt.wxs" "$PSScriptRoot/explorer-verbs.wxs" -o "packaging/out/windows/convt-$Version-windows-x86_64.msi"
 if ($LASTEXITCODE -ne 0) { throw 'WiX installer build failed' }
