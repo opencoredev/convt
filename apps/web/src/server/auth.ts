@@ -25,6 +25,14 @@ import { genericOAuth, type GenericOAuthConfig } from "better-auth/plugins/gener
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { and, eq, lt, ne, sql } from "drizzle-orm";
 
+import { analyticsAllowedFromHeaders } from "#/lib/analytics-consent";
+import {
+  captureEvent,
+  purchaseEventsFromLicenses,
+  signupEventFromAuthHook,
+  type AuthHookContext,
+  type CaptureAnalytics,
+} from "./analytics";
 import { googleEmailIsAuthoritative, type GoogleClaims } from "./authoritative";
 import type { AppEnv } from "./env";
 import { codeEmail, sendMail, type MailMessage } from "./mail";
@@ -45,6 +53,8 @@ export type AuthDeps = {
   sendMail?: (message: MailMessage) => Promise<void>;
   /** Off for Better Auth calls outside a TanStack Start request (tests). */
   startCookies?: boolean;
+  /** Replaces PostHog capture (tests record signup events this way). */
+  captureAnalytics?: CaptureAnalytics;
 };
 
 const idPrefixes: Record<string, IdPrefix> = {
@@ -145,6 +155,29 @@ function mockGoogle(mock: NonNullable<AppEnv["oauthMock"]>): GenericOAuthConfig 
 export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {}) {
   const { db } = scope;
   const deliver = deps.sendMail ?? ((message: MailMessage) => sendMail(env.mail, message));
+  const capture = deps.captureAnalytics ?? ((event) => captureEvent(env.posthog, event));
+  const trackClaimedPurchases = async (userId: string, headers?: Headers | null) => {
+    const claimed = await claimPurchases(db, userId);
+    if (claimed.licenses === 0) return;
+    if (headers && !analyticsAllowedFromHeaders(headers)) return;
+    const licenses = await db.execute<{
+      plan: string;
+      order_id: string | null;
+      subscription_id: string | null;
+    }>(
+      sql`select plan, order_id, subscription_id from licenses where user_id = ${userId} and revoked_at is null`,
+    );
+    for (const event of purchaseEventsFromLicenses(
+      userId,
+      licenses.rows.map((license) => ({
+        plan: license.plan,
+        orderId: license.order_id,
+        subscriptionId: license.subscription_id,
+      })),
+    )) {
+      scope.background(capture(event));
+    }
+  };
   // Set by the before hook on /sign-in/email-otp (and the user create hook), read
   // by its after hook. The auth instance lives for one request, so these cannot
   // leak across requests.
@@ -394,7 +427,7 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
               .where(eq(schema.users.id, userId));
           });
           await revokeAllDevices(db, userId, new Date());
-          await claimPurchases(db, userId);
+          await trackClaimedPurchases(userId, ctx.headers ?? ctx.request?.headers ?? null);
         }
         if (ctx.path === "/email-otp/change-email") {
           const session = ctx.context.session;
@@ -406,12 +439,29 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
     databaseHooks: {
       user: {
         create: {
-          after: async (user) => {
+          after: async (user, hookCtx) => {
             userCreatedHere = user.id;
-            await claimPurchases(db, user.id);
+            const headers =
+              (hookCtx as AuthHookContext)?.headers ??
+              (hookCtx as AuthHookContext)?.request?.headers ??
+              null;
+            await trackClaimedPurchases(user.id, headers);
+            // Once per account, from the insert path so an ad blocker cannot drop it.
+            // Skipped when the request carries DNT, GPC, or the privacy opt-out cookie.
+            const event = signupEventFromAuthHook(user.id, hookCtx as AuthHookContext, env.authUrl);
+            if (event) scope.background(capture(event));
           },
         },
-        update: { after: async (user) => void (await claimPurchases(db, user.id)) },
+        update: {
+          after: async (user, hookCtx) => {
+            await trackClaimedPurchases(
+              user.id,
+              (hookCtx as AuthHookContext)?.headers ??
+                (hookCtx as AuthHookContext)?.request?.headers ??
+                null,
+            );
+          },
+        },
       },
       session: {
         create: {

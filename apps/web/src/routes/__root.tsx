@@ -1,8 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { HeadContent, Scripts, createRootRoute, useMatches } from "@tanstack/react-router";
 
+import { IdentifyUser } from "#/components/identify-user";
 import { PostHogProvider } from "#/components/posthog-provider";
+import { rememberAttribution } from "#/lib/analytics-attribution";
 import { getPublicConfig } from "#/server/public-config";
+import { getSession } from "#/server/session";
 import appCss from "../styles.css?url";
 
 declare module "@tanstack/react-router" {
@@ -32,8 +35,8 @@ const Devtools = import.meta.env.DEV
 
 export const Route = createRootRoute({
   loader: async () => {
-    const config = await getPublicConfig();
-    return { posthog: config.posthog };
+    const [config, session] = await Promise.all([getPublicConfig(), getSession()]);
+    return { posthog: config.posthog, userId: session?.user.id ?? null };
   },
   head: () => ({
     meta: [
@@ -82,6 +85,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function PostHogRoot({ children }: { children: React.ReactNode }) {
-  const { posthog } = Route.useLoaderData();
-  return <PostHogProvider config={posthog}>{children}</PostHogProvider>;
+  const { posthog, userId } = Route.useLoaderData();
+  useEffect(() => {
+    rememberAttribution();
+  }, []);
+  return (
+    <PostHogProvider config={posthog}>
+      <IdentifyUser userId={userId} />
+      {children}
+    </PostHogProvider>
+  );
 }

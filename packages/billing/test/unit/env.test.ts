@@ -110,6 +110,15 @@ test("staging uses sandbox with public URLs and a separate non-dev signing key",
   ).rejects.toThrow(/dev signing key/);
 });
 
+test("an empty POSTHOG_KEY turns billing capture off", () => {
+  expect(readBillingEnv(prod).posthog).toBeNull();
+  expect(readBillingEnv({ ...prod, POSTHOG_KEY: "" }).posthog).toBeNull();
+  expect(readBillingEnv({ ...prod, POSTHOG_KEY: "phc_test" }).posthog).toEqual({
+    key: "phc_test",
+    host: "https://us.i.posthog.com",
+  });
+});
+
 test("license mail defaults to the site's download page and allows an override", () => {
   expect(readBillingEnv(prod).downloadUrl).toBe("https://convt.app/download");
   expect(
