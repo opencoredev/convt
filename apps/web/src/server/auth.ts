@@ -413,6 +413,11 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
         },
         update: { after: async (user) => void (await claimPurchases(db, user.id)) },
       },
+      session: {
+        create: {
+          after: async (session) => void (await claimPurchases(db, session.userId)),
+        },
+      },
       verification: {
         create: {
           // Sign-in codes: one row per identifier, written atomically. The plugin

@@ -334,42 +334,48 @@ function openProTrial(subscriptions: SubscriptionRow[], now: Date): Subscription
   return open[0] ?? null;
 }
 
+function liveDesktopLicense(licenses: LicenseRow[]): LicenseRow | undefined {
+  return licenses.find((l) => l.plan === "desktop" && l.revokedAt === null);
+}
+
 export function billingView(input: {
   user: UserRow;
   subscriptions: SubscriptionRow[];
+  licenses: LicenseRow[];
   invoices: InvoiceRow[];
   card: Billing["card"];
   openApiCheckout: boolean;
   now: Date;
+  /** Polar customer we can open a portal session for; null for a guest-only claim with none stored. */
+  polarCustomerId?: string | null;
 }): Billing {
-  const { user, subscriptions, invoices, now } = input;
+  const { user, subscriptions, licenses, invoices, now } = input;
   const pro = currentProSubscription(subscriptions, now) ?? openProTrial(subscriptions, now);
+  const desktop = liveDesktopLicense(licenses);
+  const ownsDesktop = desktop !== undefined;
+  const polarPortal = Boolean(input.polarCustomerId);
+  const proEnded =
+    pro !== null &&
+    (pro.status === "canceled" ||
+      pro.status === "unpaid" ||
+      pro.status === "incomplete_expired" ||
+      pro.status === "paused" ||
+      (pro.endedAt !== null && pro.endedAt <= now));
   let plan: Billing["plan"] = null;
-  if (pro) {
+  if (pro && !proEnded) {
     const interval = pro.interval === "year" ? "year" : "month";
     const price = proPrice[interval].total;
     const end = pro.currentPeriodEnd ? formatDate(iso(pro.currentPeriodEnd)) : null;
     const includes =
       "Includes the desktop app on your computers, every update while you're subscribed, and API access.";
-    const ended =
-      pro.status === "canceled" ||
-      pro.status === "unpaid" ||
-      pro.status === "incomplete_expired" ||
-      pro.status === "paused" ||
-      (pro.endedAt !== null && pro.endedAt <= now);
     const onTrial =
-      !ended &&
-      (pro.status === "trialing" ||
-        (pro.status === "incomplete" && pro.trialEndsAt !== null && pro.trialEndsAt > now));
+      pro.status === "trialing" ||
+      (pro.status === "incomplete" && pro.trialEndsAt !== null && pro.trialEndsAt > now);
     let status: NonNullable<Billing["plan"]>["status"];
     let summary: string;
     const cancelsOn =
-      !ended && pro.cancelAtPeriodEnd && pro.currentPeriodEnd ? isoDay(pro.currentPeriodEnd) : null;
-    if (ended) {
-      status = "canceled";
-      const on = formatDate(iso(pro.endedAt ?? pro.currentPeriodEnd ?? now));
-      summary = `Ended ${on}. Your last key keeps working for every build released before then.`;
-    } else if (onTrial) {
+      pro.cancelAtPeriodEnd && pro.currentPeriodEnd ? isoDay(pro.currentPeriodEnd) : null;
+    if (onTrial) {
       status = "trialing";
       const trialEnd = pro.trialEndsAt ?? pro.currentPeriodEnd;
       const until = trialEnd ? formatDate(iso(trialEnd)) : "the trial ends";
@@ -386,16 +392,42 @@ export function billingView(input: {
         : `${price}. Renews ${end}. ${includes}`;
     }
     plan = {
+      kind: "pro",
       name: `Pro, ${interval === "year" ? "yearly" : "monthly"}`,
       status,
       summary,
       interval,
       cancelsOn,
     };
+  } else if (ownsDesktop) {
+    const until = desktop ? formatDate(`${desktop.updatesUntil}T00:00:00Z`) : null;
+    plan = {
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+      summary: until
+        ? `Paid once. Updates until ${until}. Your license is on this account and works offline.`
+        : "Paid once. Your license is on this account and works offline.",
+      interval: null,
+      cancelsOn: null,
+    };
+  } else if (pro) {
+    const interval = pro.interval === "year" ? "year" : "month";
+    const on = formatDate(iso(pro.endedAt ?? pro.currentPeriodEnd ?? now));
+    plan = {
+      kind: "pro",
+      name: `Pro, ${interval === "year" ? "yearly" : "monthly"}`,
+      status: "canceled",
+      summary: `Ended ${on}. Your last key keeps working for every build released before then.`,
+      interval,
+      cancelsOn: null,
+    };
   }
   return {
     plan,
     hadPro: subscriptions.some((s) => s.kind === "pro"),
+    ownsDesktop,
+    polarPortal,
     api: apiEnrollment(subscriptions, input.openApiCheckout, now),
     card: input.card,
     receiptEmail: user.email,

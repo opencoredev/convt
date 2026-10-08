@@ -204,6 +204,7 @@ fn run(ffmpeg: &Path, path: &Path, at: &str) -> Option<Vec<u8>> {
         return None;
     }
     let mut command = convt_engines::ffmpeg::thumbnail_command(ffmpeg, path, at, WIDTH);
+    convt_engines::hide_console(&mut command);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

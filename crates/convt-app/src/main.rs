@@ -1,6 +1,11 @@
 //! The convt desktop app. One process runs per user: a second launch hands
 //! its files to the running app and exits.
 
+// Release Windows builds must not allocate a console. A console subsystem
+// binary opens a black "convt" terminal with the Start-menu shortcut, and
+// closing that window kills the app. Debug builds keep a console for logs.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod account;
 mod automation;
 mod clipboard;
@@ -22,6 +27,7 @@ mod tray;
 mod ui;
 mod update;
 
+use std::io::Write;
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -33,6 +39,12 @@ use crate::instance::Role;
 use crate::model::{AppState, Paths, Shared};
 use crate::request::{Command, Request, USAGE};
 
+/// Writes `msg` plus a newline. Ignores failure so a GUI-subsystem process
+/// without a console does not panic on stdout/stderr.
+fn emit(mut w: impl Write, msg: &str) {
+    let _ = writeln!(w, "{msg}");
+}
+
 fn main() -> ExitCode {
     crash_report::install();
     tracing_subscriber::fmt()
@@ -43,15 +55,18 @@ fn main() -> ExitCode {
     let request = match request::parse_args(std::env::args_os().skip(1).collect(), &cwd) {
         Ok(Command::Run(request)) => request,
         Ok(Command::Help) => {
-            println!("{USAGE}");
+            emit(std::io::stdout(), USAGE);
             return ExitCode::SUCCESS;
         }
         Ok(Command::Version) => {
-            println!("convt-app {}", env!("CARGO_PKG_VERSION"));
+            emit(
+                std::io::stdout(),
+                &format!("convt-app {}", env!("CARGO_PKG_VERSION")),
+            );
             return ExitCode::SUCCESS;
         }
         Err(e) => {
-            eprintln!("convt-app: {e}\n\n{USAGE}");
+            emit(std::io::stderr(), &format!("convt-app: {e}\n\n{USAGE}"));
             return ExitCode::from(2);
         }
     };
@@ -59,7 +74,7 @@ fn main() -> ExitCode {
         Ok(Role::Primary(primary)) => primary,
         Ok(Role::Forwarded) => return ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("convt-app: {e}");
+            emit(std::io::stderr(), &format!("convt-app: {e}"));
             return ExitCode::FAILURE;
         }
     };
@@ -67,7 +82,19 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Ignore hangup so closing a launching terminal (or AppImage wrapper) does
+/// not kill the GUI. `--help` / `--version` exit before this runs.
+#[cfg(unix)]
+fn ignore_hangup() {
+    // SAFETY: SIG_IGN is a valid, process-wide handler; no memory is touched.
+    unsafe {
+        libc::signal(libc::SIGHUP, libc::SIG_IGN);
+    }
+}
+
 fn run(primary: instance::Primary, first: Request) {
+    #[cfg(unix)]
+    ignore_hangup();
     let (tx, mut rx) = unbounded::<Request>();
     let app = gpui_kit::application().with_assets(ui::assets());
     let urls = tx.clone();
@@ -159,5 +186,34 @@ mod tests {
         assert!(!super::should_quit_after_last_window(true, 2));
         assert!(super::should_quit_after_last_window(false, 0));
         assert!(!super::should_quit_after_last_window(false, 1));
+    }
+
+    #[test]
+    fn release_windows_builds_use_the_windows_subsystem() {
+        let src = include_str!("main.rs");
+        assert!(
+            src.contains("windows_subsystem = \"windows\""),
+            "convt-app must set windows_subsystem on Windows release builds"
+        );
+        assert!(
+            src.contains("cfg_attr(all(windows, not(debug_assertions))"),
+            "debug and test binaries should keep a console"
+        );
+    }
+
+    #[test]
+    fn help_and_errors_do_not_panic_without_a_console() {
+        super::emit(std::io::sink(), "usage");
+        super::emit(std::io::stderr(), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ignoring_hangup_keeps_the_process_alive() {
+        super::ignore_hangup();
+        // SAFETY: raise(2) delivers SIGHUP to this test process only.
+        unsafe {
+            assert_eq!(libc::raise(libc::SIGHUP), 0);
+        }
     }
 }

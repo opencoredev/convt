@@ -185,8 +185,8 @@ export function validateCatalog(c: Catalog): string[] {
     }
   }
   for (const [id, d] of Object.entries(c.discounts)) {
-    if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints >= 10000)
-      problems.push(`discount ${id}: basis points must be between 1 and 9999`);
+    if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints > 10000)
+      problems.push(`discount ${id}: basis points must be between 1 and 10000`);
     if (d.products.includes("api")) problems.push(`discount ${id}: the API is never discounted`);
   }
   if (
@@ -222,16 +222,43 @@ export function productByPriceId(c: Catalog, priceId: string | null): CatalogPro
 export const isPro = (p: CatalogProduct | null): p is ProProduct =>
   p === "pro_month" || p === "pro_year";
 
+/** Polar line items used when deciding whether a Desktop order charged nothing. */
+export type ComplimentaryDesktopAmounts = {
+  netCents: number;
+  subtotalCents: number;
+  discountCents: number;
+  appliedBalanceCents?: number;
+  items: Array<{ priceId: string | null; amountCents: number }>;
+};
+
+/**
+ * A Polar-signed Desktop order that took no money: a 100% code, Polar zeroing the
+ * line, or store credit covering the list price. Partial unknown discounts are not.
+ */
+export function complimentaryDesktop(c: Catalog, o: ComplimentaryDesktopAmounts): boolean {
+  const price = c.products.desktop;
+  if (o.netCents !== 0) return false;
+  if (o.items.length !== 1 || o.items[0].priceId !== price.priceId) return false;
+  const item = o.items[0].amountCents;
+  if (item !== price.amountCents && item !== 0) return false;
+  if (o.subtotalCents !== price.amountCents && o.subtotalCents !== 0) return false;
+  if (o.subtotalCents === 0) return o.discountCents === 0;
+  return o.discountCents + (o.appliedBalanceCents ?? 0) >= o.subtotalCents;
+}
+
 /**
  * Why a discount on `product` is not acceptable, or null. `discountCents` is checked
  * against the code's percentage of `subtotalCents` when given (orders only).
+ * A complimentary Desktop write-off is accepted even when Polar's discount id is
+ * not in the catalog (giveaway codes, 100% coupons).
  */
 export function discountProblem(
   c: Catalog,
   discountId: string | null,
   product: CatalogProduct,
-  amounts?: { discountCents: number; subtotalCents: number },
+  amounts?: ComplimentaryDesktopAmounts,
 ): string | null {
+  if (product === "desktop" && amounts && complimentaryDesktop(c, amounts)) return null;
   if (!discountId)
     return amounts && amounts.discountCents !== 0 ? "a discount without a code" : null;
   const d = c.discounts[discountId];

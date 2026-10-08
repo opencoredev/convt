@@ -5,7 +5,7 @@
 
 import { sql } from "drizzle-orm";
 
-import { discountProblem, isPro, type CatalogProduct } from "./catalog";
+import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
 import { convergeDesktop, convergePro, convergeApi } from "./converge";
 import { emptyFacts } from "./provider";
@@ -201,12 +201,12 @@ export async function checkFacts(
     if (o.product === "desktop") {
       const price = catalog.products.desktop;
       if (o.reason !== "purchase") return `amount: a Desktop order with reason ${o.reason}`;
-      if (
-        o.items.length !== 1 ||
-        o.items[0].priceId !== price.priceId ||
-        o.items[0].amountCents !== price.amountCents ||
-        o.subtotalCents !== price.amountCents
-      )
+      const listPrice =
+        o.items.length === 1 &&
+        o.items[0].priceId === price.priceId &&
+        o.items[0].amountCents === price.amountCents &&
+        o.subtotalCents === price.amountCents;
+      if (!listPrice && !complimentaryDesktop(catalog, o))
         return `amount: Desktop is ${price.amountCents}, the order is ${o.subtotalCents}`;
       const r = await checkCheckout(
         "order",
@@ -215,7 +215,9 @@ export async function checkFacts(
         o.checkoutRef,
         o.userId,
       );
-      if (r) return r;
+      // Polar-hosted or guest Desktop checkouts we did not record still grant a
+      // license: the payload is Polar-signed for our product and has an email.
+      if (r && !r.startsWith("foreign_checkout:")) return r;
     } else if (isPro(o.product)) {
       if (o.reason === "subscription_create" || o.reason === "subscription_cycle") {
         for (const i of o.items) {
@@ -812,6 +814,16 @@ export async function applyFacts(
   const subs = allSubscriptions(facts);
   const users = new Set<string>();
   for (const x of [...facts.orders, ...subs, ...facts.customers]) if (x.userId) users.add(x.userId);
+  // A guest Polar order names no user id. If a verified account already has that
+  // email (or signs up later and claim_purchases runs), attach it now.
+  for (const o of facts.orders) {
+    if (o.userId || !o.email) continue;
+    const u = await one<{ id: string }>(
+      tx,
+      sql`select id from users where email = ${o.email} and email_verified`,
+    );
+    if (u) users.add(u.id);
+  }
   // A dispute on a subscription invoice converges that subscription, so it takes
   // the subscription's lock like every other fact about it.
   const disputeSubs: string[] = [];
@@ -866,6 +878,7 @@ export async function applyFacts(
     if (s?.kind === "pro") await convergePro(ctx, tx, subId, now);
     else if (s?.kind === "api") await convergeApi(ctx, tx, subId, now);
   }
+  for (const u of users) touched.userIds.add(u);
   for (const u of touched.userIds) await tx.execute(sql`select * from claim_purchases(${u})`);
   return { rejected: null, notes: touched.notes, userIds: [...touched.userIds] };
 }

@@ -92,6 +92,11 @@ jobs:
       - name: Test (desktop)
         if: matrix.suite == 'desktop'
         run: cargo test -p convt-app
+      - name: Windows GUI subsystem
+        if: runner.os == 'Windows' && matrix.suite == 'desktop'
+        run: |
+          cargo build -p convt-app --release
+          ./packaging/windows/smoke.ps1 -AppExe target/release/convt-app.exe
 
   release-scripts:
     name: Release scripts
@@ -109,6 +114,8 @@ jobs:
           python-version: "3.12"
       - name: Source archive and audit unit tests
         run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - name: Windows packaging unit tests
+        run: python3 -m unittest discover -s packaging/windows -p 'test_*.py' -v
 
   web:
     name: Web
@@ -186,8 +193,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/sqlx
-          key: sqlx-cli-${{ runner.os }}-0.9.0
+          # db:ci runs `cargo sqlx`, which needs cargo-sqlx, not only sqlx.
+          path: |
+            ~/.cargo/bin/sqlx
+            ~/.cargo/bin/cargo-sqlx
+          key: sqlx-cli-${{ runner.os }}-0.9.0-cargo
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -199,7 +209,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install SQLx CLI
         run: |
-          if ! command -v sqlx >/dev/null 2>&1; then
+          if ! command -v cargo-sqlx >/dev/null 2>&1; then
             cargo install sqlx-cli --version 0.9.0 --locked --no-default-features --features rustls,postgres
           fi
       - name: Create database roles
