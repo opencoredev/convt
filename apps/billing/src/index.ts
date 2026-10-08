@@ -35,7 +35,7 @@ let cached: { env: BillingEnv; key: Promise<CryptoKey>; service: BillingService 
 function setup(raw: Env) {
   if (cached) return cached;
   const env = readBillingEnv(raw);
-  const catalog = loadCatalog(env.catalogEnv);
+  const catalog = loadCatalog(env.catalogEnv, env.desktopProduct);
   const key = loadSigningKey(env);
   key.catch(() => {});
   const service = createBillingService({
@@ -161,7 +161,7 @@ export class BillingRpc extends WorkerEntrypoint<Env> implements Rpc {
     try {
       const s = setup(this.env);
       await s.key;
-      problems.push(...validateCatalog(loadCatalog(s.env.catalogEnv)));
+      problems.push(...validateCatalog(loadCatalog(s.env.catalogEnv, s.env.desktopProduct)));
     } catch (e) {
       problems.push(e instanceof Error ? e.message : "setup failed");
     }

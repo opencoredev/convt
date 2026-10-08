@@ -37,6 +37,8 @@ export type Catalog = {
   meterName: "api_conversion";
 };
 
+export type DesktopProductIds = { productId: string; priceId: string };
+
 // The Product Hunt launch offer: 30% off Desktop, or off the first 3 months of Pro
 // monthly, until the end of 31 October 2026 Pacific time (the code's ends_at in Polar).
 const productHunt: CatalogDiscount = {
@@ -208,8 +210,16 @@ export function validateCatalog(c: Catalog): string[] {
 }
 
 /** Loads the catalog for an environment, refusing one with an invalid price. */
-export function loadCatalog(env: CatalogEnv): Catalog {
-  const c = catalogs[env];
+export function loadCatalog(env: CatalogEnv, desktop?: DesktopProductIds): Catalog {
+  const c = desktop
+    ? {
+        ...catalogs[env],
+        products: {
+          ...catalogs[env].products,
+          desktop: { ...catalogs[env].products.desktop, ...desktop },
+        },
+      }
+    : catalogs[env];
   const problems = validateCatalog(c).filter((p) => !p.includes("placeholders"));
   if (problems.length) throw new Error(`the ${env} catalog is invalid: ${problems.join("; ")}`);
   return c;

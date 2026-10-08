@@ -10,7 +10,7 @@ These lines are on the approved page, so the product has to back them:
 
 - "40 formats, one menu." Images (14, including HEIC and SVG), video (5), audio (7) and documents (14), plus PDF to images.
 - "Nothing gets uploaded." The desktop app and CLI never send a file anywhere unless the user explicitly sends that job to the cloud (Pro only, see P9). Whether the hero line needs softening is a decision below.
-- Desktop, $29 once: every format offline, macOS, Windows and Linux, 12 months of updates, batch folders and presets. "Keep your version forever."
+- Desktop, $29 once: every format offline, macOS, Windows and Linux, lifetime updates, batch folders and presets. "Keep your version forever."
 - Pro, $12/month or $8/month yearly: everything in Desktop, convert from phone or browser, heavy video jobs in the cloud, every future update included.
 - API: same engines, pay per conversion, no plan needed. The sample uses an `@convt/sdk` package with `convt.convert("report.docx", { to: "pdf" })` and `out.save(...)`.
 - "Both plans start with a 7-day free trial."

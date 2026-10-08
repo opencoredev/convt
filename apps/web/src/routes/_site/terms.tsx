@@ -69,9 +69,9 @@ const sections: LegalSection[] = [
             subscription unless you cancel before it ends. Each account gets one Pro trial.
           </>,
           <>
-            <span className={strong}>Desktop license.</span> $29, paid once. It covers every version
-            released within 12 months of purchase, on macOS, Windows and Linux, and you can keep
-            using those versions for as long as you like.
+            <span className={strong}>Desktop license.</span> $29, paid once. It covers every desktop
+            version released in the future, on macOS, Windows and Linux, and you can keep using it
+            for as long as you like.
           </>,
           <>
             <span className={strong}>convt Pro.</span> $12 a month, or $96 a year ($8 a month). It

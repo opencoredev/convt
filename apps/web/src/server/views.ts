@@ -131,7 +131,7 @@ export function licenseView(row: LicenseRow, activeMacs: number, now: Date): Lic
     // Revocation changes the dashboard only: an activated key keeps working offline.
     updatesLabel = `${disputed ? "Disputed" : "Refunded"} on ${formatDate(iso(row.revokedAt))}. It won't be renewed or reissued. Copies already activated offline keep working.`;
   } else if (row.plan === "desktop") {
-    updatesLabel = `Updates until ${until}`;
+    updatesLabel = "Lifetime updates";
   } else if (row.trial) {
     updatesLabel = covered ? `Trial until ${until}` : `Trial ended ${until}`;
   } else {
@@ -215,9 +215,7 @@ export function planSummary(
       return {
         name: "Desktop",
         priceLabel: "$29, paid once",
-        meta: desktop
-          ? `Updates until ${formatDate(`${desktop.updatesUntil}T00:00:00Z`)}`
-          : "Paid once",
+        meta: desktop ? "Lifetime updates" : "Paid once",
       };
     }
     case "pro_lapsed": {
@@ -400,14 +398,11 @@ export function billingView(input: {
       cancelsOn,
     };
   } else if (ownsDesktop) {
-    const until = desktop ? formatDate(`${desktop.updatesUntil}T00:00:00Z`) : null;
     plan = {
       kind: "desktop",
       name: "Desktop (lifetime)",
       status: "active",
-      summary: until
-        ? `Paid once. Updates until ${until}. Your license is on this account and works offline.`
-        : "Paid once. Your license is on this account and works offline.",
+      summary: "Paid once. Lifetime updates. Your license is on this account and works offline.",
       interval: null,
       cancelsOn: null,
     };

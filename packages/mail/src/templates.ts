@@ -97,7 +97,7 @@ export function licenseIssued(input: LicenseIssuedInput): Rendered {
   const window =
     input.product === "pro"
       ? `This key covers every build released up to ${until}. While you're subscribed, a new key appears on your dashboard each billing period.`
-      : `This key works forever with every build released up to ${until}, and includes 12 months of updates.`;
+      : `This key works forever with every build released up to ${until}, and includes lifetime updates.`;
   return render(`Your ${product} license key`, [
     { p: `Thanks for buying ${product}. Here is your license key:` },
     { key: input.token },

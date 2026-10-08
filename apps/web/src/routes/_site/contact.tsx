@@ -60,8 +60,8 @@ const questions: { q: string; a: ReactNode }[] = [
     a: "Sign in to the app with your convt.app account and start a 7-day trial of convt Pro. Checkout asks for a card, and you pay nothing if you cancel before the trial ends. Each account gets one trial.",
   },
   {
-    q: "What happens when my 12 months of updates end?",
-    a: "Your Desktop license keeps working with every version released in those 12 months, for as long as you use them. Newer versions need a new license or Pro.",
+    q: "Is the Desktop license lifetime?",
+    a: "Yes. Desktop is a one-time purchase with lifetime updates. Your license keeps working unless the purchase is fully refunded or charged back.",
   },
   {
     q: "How do I cancel or change convt Pro?",

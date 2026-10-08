@@ -15,7 +15,7 @@ expectations=(
   "trial|dashboard/billing|TRIAL" "trial|dashboard/billing|Free until"
   "desktop|dashboard|Desktop" "desktop|dashboard|Active on 1 Mac" "desktop|dashboard|Dana's MacBook Air"
   "desktop|dashboard/licenses|Desktop License, bought" "desktop|dashboard/billing|Desktop (lifetime)"
-  "desktop|dashboard/billing|Desktop License, 12 months of updates"
+  "desktop|dashboard/billing|Desktop License, lifetime updates"
   "desktop|dashboard/billing|LIFETIME"
   "pro|dashboard|Renews" "pro|dashboard|Updates included" "pro|dashboard|API this month"
   "pro|dashboard/licenses|Pro, yearly" "pro|dashboard/licenses|Desktop License, bought"
