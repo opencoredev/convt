@@ -38,6 +38,13 @@ pub enum State {
         started: Option<String>,
     },
     TrialEnded,
+    /// Pro access granted by the signed-in account's online trial.
+    AccountTrial {
+        ends_on: String,
+        days_left: i64,
+    },
+    /// Packaged install needs a signed-in account to start its online trial.
+    SignInNeeded,
     Licensed(License),
     /// A valid license whose update window ended before this build was made.
     NotCovered(License),
@@ -47,7 +54,10 @@ impl State {
     pub fn allows_conversion(&self) -> bool {
         matches!(
             self,
-            State::Unrestricted | State::Trial { .. } | State::Licensed(_)
+            State::Unrestricted
+                | State::Trial { .. }
+                | State::AccountTrial { .. }
+                | State::Licensed(_)
         )
     }
 
@@ -60,6 +70,9 @@ impl State {
             }
             State::Trial { days_left: 1, .. } => "Free trial: last day.".into(),
             State::Trial { days_left, .. } => format!("Free trial: {days_left} days left."),
+            State::AccountTrial { days_left: 1, .. } => "Pro trial: last day.".into(),
+            State::AccountTrial { days_left, .. } => format!("Pro trial: {days_left} days left."),
+            State::SignInNeeded => "Sign in to start your free trial.".into(),
             State::Licensed(l) => format!(
                 "Licensed to {} ({}), with updates until {}.",
                 l.email,
@@ -76,6 +89,7 @@ impl State {
             State::TrialEnded => Some(format!(
                 "Your convt trial has ended. Buy a license at {BUY_URL} to keep converting."
             )),
+            State::SignInNeeded => Some("Sign in to start your free trial.".into()),
             State::NotCovered(license) => Some(format!(
                 "This build is newer than your license covers. Your license covers builds \
                  released up to {}; download one from {DOWNLOAD_URL}, or renew to use this one.",
@@ -295,6 +309,7 @@ pub struct Licensing {
     /// by another client stops counting.
     key: Option<String>,
     local_trial_enabled: bool,
+    account_trial_ends_on: Option<String>,
 }
 
 impl Licensing {
@@ -304,7 +319,12 @@ impl Licensing {
         } else {
             None
         };
-        Self { config, key, local_trial_enabled: true }
+        Self {
+            config,
+            key,
+            local_trial_enabled: true,
+            account_trial_ends_on: None,
+        }
     }
 
     /// Reads the stored key again.
@@ -321,6 +341,11 @@ impl Licensing {
     /// Packaged desktop builds use the account trial; the CLI keeps its local trial.
     pub fn disable_local_trial(&mut self) {
         self.local_trial_enabled = false;
+    }
+
+    /// Sets the current account trial returned by convt.app. No key is stored.
+    pub fn set_account_trial(&mut self, ends_on: Option<String>) {
+        self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
     }
 
     pub fn build_date(&self) -> &str {
@@ -346,9 +371,19 @@ impl Licensing {
                 Err(_) => State::NotCovered(license),
             };
         }
+        if let Some(ends_on) = &self.account_trial_ends_on {
+            if let Some(end) = date::to_days(ends_on) {
+                if today <= end {
+                    return State::AccountTrial {
+                        ends_on: ends_on.clone(),
+                        days_left: end - today + 1,
+                    };
+                }
+            }
+        }
         let started = self.trial_started();
         if !self.local_trial_enabled && started.is_none() {
-            return State::TrialEnded;
+            return State::SignInNeeded;
         }
         let elapsed = started
             .as_deref()

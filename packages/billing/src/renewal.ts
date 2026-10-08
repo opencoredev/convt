@@ -9,7 +9,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { schema as t, type Db } from "@convt/db";
 import { rows } from "./context";
 import type { BillingContext } from "./context";
-import { createCheckout } from "./checkout";
+import { canStartProTrial } from "./checkout";
 
 export type CurrentProKey = { key: string; updatesUntil: string } | null;
 
@@ -67,13 +67,14 @@ export async function currentProAccess(
     return { kind: "trial", endsOn: live.trial_ends_at.toISOString().slice(0, 10) };
   if (live?.status === "unpaid" || live?.status === "incomplete") return { kind: "lapsed" };
   if (live) return { kind: "pro" };
-  if (await hasProSubscription(ctx.db, userId)) return { kind: "lapsed" };
-  const [user] = await rows<{ id: string; email: string }>(
+  const deleting = await rows<{ x: number }>(
     ctx.db,
-    sql`
-    select id, email from users where id = ${userId} limit 1`,
+    sql`select 1 as x from account_deletions where user_id = ${userId} and status <> 'done' limit 1`,
   );
-  if (!user) return { kind: "lapsed" };
-  const checkout = await createCheckout(ctx, { product: "pro_month", user });
-  return checkout.ok ? { kind: "can_start_trial", checkoutUrl: checkout.url } : { kind: "lapsed" };
+  if (deleting.length) return { kind: "lapsed" };
+  if (await hasProSubscription(ctx.db, userId)) return { kind: "lapsed" };
+  const eligible = await canStartProTrial(ctx.db, userId, ctx.clock());
+  return eligible
+    ? { kind: "can_start_trial", checkoutUrl: `${ctx.config.siteUrl}/checkout/pro` }
+    : { kind: "lapsed" };
 }

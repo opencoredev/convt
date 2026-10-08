@@ -762,6 +762,16 @@ impl SettingsView {
                     "Every feature works during the trial. A {LICENSE_PRICE} license keeps them."
                 ),
             ),
+            State::AccountTrial { .. } => (
+                IconName::Calendar,
+                Tone::Green,
+                "Every feature works during your Pro trial.".to_string(),
+            ),
+            State::SignInNeeded => (
+                IconName::TriangleAlert,
+                Tone::Error,
+                "Sign in to start your free trial.".to_string(),
+            ),
             State::TrialEnded => (
                 IconName::TriangleAlert,
                 Tone::Error,

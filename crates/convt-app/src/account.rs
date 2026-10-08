@@ -20,7 +20,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use convt_license::account::{Api, ApiError, Access as RemoteAccess, LicenseReply, Pending, Session};
+use convt_license::account::{
+    Access as RemoteAccess, Api, ApiError, LicenseReply, Pending, Session,
+};
 use convt_license::client::{ActivateError, Renewed, today};
 use convt_license::date;
 use gpui_kit::{Context, Task};
@@ -188,6 +190,10 @@ impl AppState {
     /// Opens convt.app/device in the browser with a new sign-in flow. A flow
     /// already waiting is replaced, so only the newest page's link counts.
     pub fn start_sign_in(&mut self, cx: &mut Context<Self>) {
+        self.start_sign_in_page(None, cx);
+    }
+
+    fn start_sign_in_page(&mut self, provider: Option<Provider>, cx: &mut Context<Self>) {
         let account = &mut self.account;
         // A link already came back and its code is being traded; a second
         // flow now would race the first one's result.
@@ -203,7 +209,14 @@ impl AppState {
                 return;
             }
         };
-        let page = pending.url(&account.url, &device_name(), os_name(), VERSION);
+        let mut page = pending.url(&account.url, &device_name(), os_name(), VERSION);
+        if let Some(provider) = provider {
+            page.push_str("&provider=");
+            page.push_str(match provider {
+                Provider::Google => "google",
+                Provider::Email => "email",
+            });
+        }
         account.pending = Some(pending);
         account.page = Some(page.clone());
         account.sign_in = SignIn::Waiting;
@@ -214,13 +227,7 @@ impl AppState {
     /// [`Self::start_sign_in`], with the page told which button was pressed.
     // CNV-70 adds `&provider=` to the page.
     pub fn start_sign_in_with(&mut self, provider: Provider, cx: &mut Context<Self>) {
-        self.start_sign_in(cx);
-        if let Some(page) = self.account.page.as_mut() {
-            let value = match provider { Provider::Google => "google", Provider::Email => "email" };
-            page.push_str("&provider=");
-            page.push_str(value);
-            cx.open_url(page);
-        }
+        self.start_sign_in_page(Some(provider), cx);
     }
 
     /// Opens the account's trial checkout and keeps refreshing until the
@@ -344,6 +351,8 @@ impl AppState {
         self.account._refresh_task = None;
         self.account.awaiting_trial = false;
         self.account.trial_poll_started = None;
+        self.update_settings(|s| s.trial_ends_on = None, cx);
+        self.licensing.set_account_trial(None);
         // Best effort: the dashboard can sign this computer out too.
         let api = self.account.api.clone();
         self.account._sign_in_task = Some(background(
@@ -398,37 +407,53 @@ impl AppState {
                 self.account.access = reply.access.map(|access| match access {
                     RemoteAccess::Pro => Access::Pro,
                     RemoteAccess::Trial { ends_on } => Access::Trial { ends_on },
-                    RemoteAccess::CanStartTrial { checkout_url } => Access::CanStartTrial { checkout_url },
+                    RemoteAccess::CanStartTrial { checkout_url } => {
+                        Access::CanStartTrial { checkout_url }
+                    }
                     RemoteAccess::Lapsed => Access::Lapsed,
                 });
-                if let Some(Access::Trial { ends_on }) = &self.account.access {
-                    let ends_on = ends_on.clone();
-                    self.update_settings(|s| s.trial_ends_on = Some(ends_on), cx);
+                match &self.account.access {
+                    Some(Access::Trial { ends_on }) => {
+                        let ends_on = ends_on.clone();
+                        self.update_settings(|s| s.trial_ends_on = Some(ends_on.clone()), cx);
+                        self.licensing.set_account_trial(Some(ends_on));
+                    }
+                    Some(Access::Pro | Access::CanStartTrial { .. } | Access::Lapsed) | None => {
+                        self.update_settings(|s| s.trial_ends_on = None, cx);
+                        self.licensing.set_account_trial(None);
+                    }
                 }
-                if self.account.access.as_ref().is_some_and(|a| matches!(a, Access::Trial { .. })) {
+                if self
+                    .account
+                    .access
+                    .as_ref()
+                    .is_some_and(|a| matches!(a, Access::Trial { .. } | Access::Pro))
+                {
                     self.account.awaiting_trial = false;
                     self.account.trial_poll_started = None;
                 }
                 match reply.key {
-                Some(key) => match self.licensing.offer_key(&key) {
-                Ok(Renewed::Stored(l)) => Refresh::Done(format!(
-                    "Got your Pro key, with updates until {}.",
-                    l.updates_until
-                )),
-                Ok(Renewed::Kept(l)) => Refresh::Done(format!(
-                    "Your license is up to date, with updates until {}.",
-                    l.updates_until
-                )),
-                Err(ActivateError::Store(e)) => {
-                    Refresh::Failed(format!("The new key couldn't be saved: {e}"))
+                    Some(key) => match self.licensing.offer_key(&key) {
+                        Ok(Renewed::Stored(l)) => Refresh::Done(format!(
+                            "Got your Pro key, with updates until {}.",
+                            l.updates_until
+                        )),
+                        Ok(Renewed::Kept(l)) => Refresh::Done(format!(
+                            "Your license is up to date, with updates until {}.",
+                            l.updates_until
+                        )),
+                        Err(ActivateError::Store(e)) => {
+                            Refresh::Failed(format!("The new key couldn't be saved: {e}"))
+                        }
+                        Err(_) => Refresh::Failed(format!(
+                            "convt.app sent a key this build doesn't accept. {kept}"
+                        )),
+                    },
+                    None => {
+                        Refresh::Done(format!("This account has no Pro key on convt.app. {kept}"))
+                    }
                 }
-                Err(_) => Refresh::Failed(format!(
-                    "convt.app sent a key this build doesn't accept. {kept}"
-                )),
-            },
-                None => Refresh::Done(format!("This account has no Pro key on convt.app. {kept}")),
-                }
-            },
+            }
             Err(ApiError::SignedOut) => {
                 // Revoked from the dashboard: forget the token here too.
                 if let Err(e) = self.licensing.clear_session() {
@@ -442,21 +467,30 @@ impl AppState {
             Err(e) => Refresh::Failed(format!("Couldn't refresh the license. {e} {kept}")),
         };
         if self.account.awaiting_trial
-            && self.account.trial_poll_started.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(15 * 60))
+            && self
+                .account
+                .trial_poll_started
+                .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(15 * 60))
             && matches!(self.account.access, Some(Access::CanStartTrial { .. }))
         {
-            if let Some(token) = self.account.session.as_ref().map(|s| s.token.clone()) {
-                let api = self.account.api.clone();
-                self.account._refresh_task = Some(background(
-                    cx,
-                    move || {
-                        std::thread::sleep(std::time::Duration::from_secs(5));
-                        api.current_key(&token, VERSION)
-                    },
-                    |state, result, cx| state.renewed(result, cx),
-                ));
+            if self.account.session.is_some() {
+                self.account._refresh_task = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_secs(5))
+                        .await;
+                    let _ = this.update(cx, |state, cx| {
+                        if state.account.awaiting_trial && state.account.refresh != Refresh::Running
+                        {
+                            state.refresh_license(cx);
+                        }
+                    });
+                }));
             }
-        } else if self.account.trial_poll_started.is_some_and(|t| t.elapsed() >= std::time::Duration::from_secs(15 * 60)) {
+        } else if self
+            .account
+            .trial_poll_started
+            .is_some_and(|t| t.elapsed() >= std::time::Duration::from_secs(15 * 60))
+        {
             self.account.awaiting_trial = false;
             self.account.trial_poll_started = None;
         }

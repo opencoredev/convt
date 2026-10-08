@@ -13,8 +13,8 @@ use convt_core::{
 };
 use convt_license::License;
 use convt_license::account::{self, Api};
-use convt_license::date;
 use convt_license::client::{self, Licensing};
+use convt_license::date;
 use futures::StreamExt;
 use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
@@ -329,8 +329,14 @@ impl AppState {
         let mut licensing = Licensing::new(paths.license);
         #[cfg(not(test))]
         licensing.disable_local_trial();
+        let today = date::from_days(client::today());
+        let cached_trial = settings
+            .trial_ends_on
+            .clone()
+            .filter(|ends_on| ends_on.as_str() >= today.as_str());
+        licensing.set_account_trial(cached_trial.clone());
         let mut account = Account::new(paths.account_url, paths.account_api, licensing.session());
-        if let Some(ends_on) = settings.trial_ends_on.clone() {
+        if let Some(ends_on) = cached_trial {
             account.access = Some(crate::account::Access::Trial { ends_on });
         }
         let mut state = Self {
@@ -500,8 +506,7 @@ impl AppState {
         {
             return Err(reason.into());
         }
-        let online_trial = matches!(self.account.access.as_ref(), Some(crate::account::Access::Trial { ends_on }) if ends_on.as_str() >= date::from_days(client::today()).as_str());
-        let allowed = if online_trial { Ok(()) } else { self.licensing.begin_conversion() };
+        let allowed = self.licensing.begin_conversion();
         self.license = self.licensing.state();
         if let Err(blocked) = allowed {
             cx.notify();

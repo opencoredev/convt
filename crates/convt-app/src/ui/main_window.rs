@@ -517,6 +517,23 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
             false,
             format!("Buy license · {LICENSE_PRICE}"),
         ),
+        State::AccountTrial { days_left, .. } => (
+            "Pro trial",
+            match days_left {
+                1 => "1 day left".to_string(),
+                n => format!("{n} days left"),
+            },
+            0.,
+            false,
+            format!("Buy license · {LICENSE_PRICE}"),
+        ),
+        State::SignInNeeded => (
+            "Pro trial",
+            "Sign in to start".into(),
+            0.,
+            false,
+            "Sign in".into(),
+        ),
         State::TrialEnded => (
             "Trial ended",
             String::new(),
