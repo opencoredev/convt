@@ -5,7 +5,7 @@
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 
 use super::theme::{self, Button, Clickable, Palette, size, space, styled, text_button};
 use convt_license::Plan;

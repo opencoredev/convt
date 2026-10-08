@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use convt_core::Preset;
 use convt_license::client::{BUY_URL, DOWNLOAD_URL, State};
-use gpui_kit::component::IconName;
+use theme::IconName;
 use gpui_kit::*;
 
 pub use about::AboutView;
@@ -35,29 +35,107 @@ use crate::model;
 use crate::request::Request;
 use theme::Palette;
 
-/// The icons the windows draw: checkmarks, dropdown chevrons and the drop
-/// bar's arrow. Register it with `Application::with_assets`; without it
-/// every icon draws empty.
+/// The icons the windows draw, from Hugeicons (see [`theme::IconName`]).
+/// Register it with `Application::with_assets`; without it every icon draws
+/// empty.
 pub fn assets() -> Assets {
     Assets
 }
 
-/// gpui-kit's default icons, plus the few convt draws from the rest of the
-/// Lucide catalog (see [`EXTRA_ICONS`]).
+/// The bundled Hugeicons and Google's G. The component library's own
+/// controls (the spinner, a text field's clear button) load gpui-kit's
+/// Lucide paths, so those few paths answer with the matching Hugeicon too;
+/// everything else falls through to gpui-kit's set.
 pub struct Assets;
 
-/// Lucide icons outside gpui-kit's default set, at the path their
-/// `gpui_kit::assets::IconName` gives. Copied one by one, because the whole
-/// catalog is megabytes; Lucide's ISC notice ships with gpui-kit-assets'.
-const EXTRA_ICONS: &[(&str, &[u8])] = &[(
-    "icons/cloud.svg",
-    include_bytes!("../../assets/icons/cloud.svg"),
-)];
+macro_rules! hugeicons {
+    ($($file:literal),* $(,)?) => {
+        &[$((
+            concat!("icons/hugeicons/", $file, ".svg"),
+            include_bytes!(concat!("../../assets/icons/hugeicons/", $file, ".svg")),
+        )),*]
+    };
+}
+
+/// Every file `assets/icons/generate.mjs` writes, at the path
+/// [`theme::IconName`] gives it, and the Google G.
+const ICONS: &[(&str, &[u8])] = hugeicons![
+    "add",
+    "alert-circle",
+    "alert-triangle",
+    "arrow-down",
+    "arrow-right",
+    "calendar",
+    "cancel",
+    "cancel-circle",
+    "check",
+    "check-circle",
+    "chevron-down",
+    "chevron-right",
+    "chevrons-up-down",
+    "cloud",
+    "computer",
+    "document",
+    "download",
+    "edit",
+    "external-link",
+    "folder",
+    "folder-open",
+    "google",
+    "hard-drive",
+    "inbox",
+    "info",
+    "key",
+    "loading",
+    "magic-wand",
+    "mail",
+    "minus",
+    "refresh",
+    "restore",
+    "rotate",
+    "settings",
+    "sparkles",
+    "square",
+    "star",
+    "user-circle",
+];
+
+const GOOGLE_G: (&str, &[u8]) = (
+    "icons/google-g.svg",
+    include_bytes!("../../assets/icons/google-g.svg"),
+);
+
+/// The Lucide paths gpui-kit's components load, and the Hugeicon each gets.
+const COMPONENT_ICONS: &[(&str, &str)] = &[
+    ("icons/loader.svg", "loading"),
+    ("icons/loader-circle.svg", "loading"),
+    ("icons/close.svg", "cancel"),
+    ("icons/check.svg", "check"),
+    ("icons/chevron-down.svg", "chevron-down"),
+    ("icons/chevron-right.svg", "chevron-right"),
+    ("icons/minus.svg", "minus"),
+    ("icons/plus.svg", "add"),
+];
+
+impl Assets {
+    fn bundled(path: &str) -> Option<&'static [u8]> {
+        let lucide = COMPONENT_ICONS
+            .iter()
+            .find(|(lucide, _)| *lucide == path)
+            .map(|(_, file)| format!("icons/hugeicons/{file}.svg"));
+        let path = lucide.as_deref().unwrap_or(path);
+        ICONS
+            .iter()
+            .chain(std::iter::once(&GOOGLE_G))
+            .find(|(p, _)| *p == path)
+            .map(|(_, bytes)| *bytes)
+    }
+}
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
-        match EXTRA_ICONS.iter().find(|(p, _)| *p == path) {
-            Some((_, bytes)) => Ok(Some(std::borrow::Cow::Borrowed(*bytes))),
+        match Self::bundled(path) {
+            Some(bytes) => Ok(Some(std::borrow::Cow::Borrowed(bytes))),
             None => gpui_kit::assets::Assets.load(path),
         }
     }
@@ -65,8 +143,9 @@ impl AssetSource for Assets {
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut all = gpui_kit::assets::Assets.list(path)?;
         all.extend(
-            EXTRA_ICONS
+            ICONS
                 .iter()
+                .chain(std::iter::once(&GOOGLE_G))
                 .filter(|(p, _)| p.starts_with(path))
                 .map(|(p, _)| SharedString::from(*p)),
         );

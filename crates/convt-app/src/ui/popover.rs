@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use convt_core::format_by_id;
 use convt_license::client::State;
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 

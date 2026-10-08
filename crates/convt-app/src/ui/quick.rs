@@ -14,7 +14,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 
 use super::theme::{
     self, Button, Choice, Palette, Segment, Tone, icon, mono, radius, size, space, styled,

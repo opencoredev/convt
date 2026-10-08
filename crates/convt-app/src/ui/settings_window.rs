@@ -6,7 +6,7 @@ use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 
 use super::theme::{
     self, Button, Choice, Palette, Tone, icon, mono, primary_button, radius, secondary_button,

@@ -1,9 +1,10 @@
 //! The convt look: one visual system for every window. It holds the light and
-//! dark palettes, the bundled Geist fonts, the type and spacing scale, and the
-//! controls the windows share. The theme follows the system appearance.
+//! dark palettes, the bundled Inter and Geist Mono fonts, the Hugeicons set,
+//! the type and spacing scale, and the controls the windows share. The theme
+//! follows the system appearance.
 //!
 //! The system, in short: neutral surfaces with one accent (the brand green),
-//! Geist for words and Geist Mono for file facts (sizes, formats, paths).
+//! Inter for words and Geist Mono for file facts (sizes, formats, paths).
 //! Sizes come from [`space`] and [`radius`]; text from [`text`] and [`mono`]
 //! at the sizes in [`size`]. Lists and settings sit in [`group`]s of
 //! [`row`]s; anything that needs the user's attention is a [`callout`].
@@ -12,19 +13,20 @@ use std::borrow::Cow;
 
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::spinner::Spinner;
-use gpui_kit::component::{ActiveTheme, Icon, IconName, Sizable, Theme};
+use gpui_kit::component::{ActiveTheme, Icon, IconNamed, Sizable, Theme};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-pub const SANS: &str = "Geist";
+pub const SANS: &str = "Inter";
 pub const MONO: &str = "Geist Mono";
 
-/// Geist and Geist Mono 1.7.2, under the SIL Open Font License 1.1
+/// Inter 4.1 and Geist Mono 1.7.2, under the SIL Open Font License 1.1
 /// (`assets/fonts/OFL.txt`).
-const FONTS: [&[u8]; 6] = [
-    include_bytes!("../../assets/fonts/Geist-Regular.ttf"),
-    include_bytes!("../../assets/fonts/Geist-Medium.ttf"),
-    include_bytes!("../../assets/fonts/Geist-SemiBold.ttf"),
+const FONTS: [&[u8]; 7] = [
+    include_bytes!("../../assets/fonts/Inter-Regular.ttf"),
+    include_bytes!("../../assets/fonts/Inter-Medium.ttf"),
+    include_bytes!("../../assets/fonts/Inter-SemiBold.ttf"),
+    include_bytes!("../../assets/fonts/Inter-Bold.ttf"),
     include_bytes!("../../assets/fonts/GeistMono-Regular.ttf"),
     include_bytes!("../../assets/fonts/GeistMono-Medium.ttf"),
     include_bytes!("../../assets/fonts/GeistMono-SemiBold.ttf"),
@@ -215,7 +217,7 @@ pub fn palette(cx: &App) -> Palette {
 pub fn init(cx: &mut App) {
     let fonts = FONTS.iter().map(|f| Cow::Borrowed(*f)).collect();
     if let Err(e) = cx.text_system().add_fonts(fonts) {
-        tracing::warn!(error = %e, "could not load the Geist fonts");
+        tracing::warn!(error = %e, "could not load the bundled fonts");
     }
     crate::thumbs::init(cx);
     follow_system(None, cx);
@@ -278,7 +280,7 @@ pub fn observe_appearance<V: 'static>(window: &mut Window, cx: &mut Context<V>) 
     })
 }
 
-/// Text in Geist at a design size: `size` and `line` in pixels.
+/// Text in Inter at a design size: `size` and `line` in pixels.
 pub fn text(size: f32, line: f32, color: Hsla) -> Div {
     div()
         .font_family(SANS)
@@ -297,11 +299,127 @@ pub fn styled(step: (f32, f32), color: Hsla) -> Div {
     text(step.0, step.1, color)
 }
 
-/// An icon from the bundled set (see `ui::assets`).
-/// `name` is a component icon or, for one outside that set, one from
-/// `gpui_kit::assets::IconName`, the whole bundled Lucide catalog.
-pub fn icon(name: impl Into<Icon>, size: f32, color: Hsla) -> Icon {
+/// The icons the windows draw: Hugeicons' free stroke-rounded set (MIT),
+/// written to `assets/icons/hugeicons` by `assets/icons/generate.mjs`. Every
+/// window draws these, never gpui-kit's Lucide set; `ui::assets` also serves
+/// them at the Lucide paths the component library's own controls load.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IconName {
+    ArrowDown,
+    ArrowRight,
+    Ban,
+    Bot,
+    Calendar,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    ChevronsUpDown,
+    CircleAlert,
+    CircleCheck,
+    CircleUser,
+    CircleX,
+    Close,
+    Cloud,
+    Computer,
+    Document,
+    Download,
+    Edit,
+    ExternalLink,
+    Folder,
+    FolderOpen,
+    Google,
+    HardDrive,
+    Inbox,
+    Info,
+    Key,
+    Loader,
+    Mail,
+    Minus,
+    Plus,
+    RefreshCw,
+    RotateCw,
+    Settings,
+    Sparkles,
+    Star,
+    TriangleAlert,
+    WindowMaximize,
+    WindowRestore,
+}
+
+impl IconName {
+    pub const ALL: [IconName; 39] = {
+        use IconName::*;
+        [
+            ArrowDown, ArrowRight, Ban, Bot, Calendar, Check, ChevronDown, ChevronRight,
+            ChevronsUpDown, CircleAlert, CircleCheck, CircleUser, CircleX, Close, Cloud, Computer,
+            Document, Download, Edit, ExternalLink, Folder, FolderOpen, Google, HardDrive, Inbox,
+            Info, Key, Loader, Mail, Minus, Plus, RefreshCw, RotateCw, Settings, Sparkles, Star,
+            TriangleAlert, WindowMaximize, WindowRestore,
+        ]
+    };
+
+    /// The file name in `assets/icons/hugeicons`, without `.svg`.
+    pub fn file(self) -> &'static str {
+        use IconName::*;
+        match self {
+            ArrowDown => "arrow-down",
+            ArrowRight => "arrow-right",
+            Ban => "cancel-circle",
+            Bot => "magic-wand",
+            Calendar => "calendar",
+            Check => "check",
+            ChevronDown => "chevron-down",
+            ChevronRight => "chevron-right",
+            ChevronsUpDown => "chevrons-up-down",
+            CircleAlert => "alert-circle",
+            CircleCheck => "check-circle",
+            CircleUser => "user-circle",
+            CircleX => "cancel-circle",
+            Close => "cancel",
+            Cloud => "cloud",
+            Computer => "computer",
+            Document => "document",
+            Download => "download",
+            Edit => "edit",
+            ExternalLink => "external-link",
+            Folder => "folder",
+            FolderOpen => "folder-open",
+            Google => "google",
+            HardDrive => "hard-drive",
+            Inbox => "inbox",
+            Info => "info",
+            Key => "key",
+            Loader => "loading",
+            Mail => "mail",
+            Minus => "minus",
+            Plus => "add",
+            RefreshCw => "refresh",
+            RotateCw => "rotate",
+            Settings => "settings",
+            Sparkles => "sparkles",
+            Star => "star",
+            TriangleAlert => "alert-triangle",
+            WindowMaximize => "square",
+            WindowRestore => "restore",
+        }
+    }
+}
+
+impl IconNamed for IconName {
+    fn path(self) -> SharedString {
+        format!("icons/hugeicons/{}.svg", self.file()).into()
+    }
+}
+
+/// An icon from the bundled Hugeicons set (see [`IconName`]).
+pub fn icon(name: IconName, size: f32, color: Hsla) -> Icon {
     Icon::new(name).size(px(size)).text_color(color)
+}
+
+/// Google's four-color G, for "Continue with Google". Drawn as an image,
+/// because icons take one color.
+pub fn google_mark(size: f32) -> Img {
+    img("icons/google-g.svg").size(px(size)).flex_shrink_0()
 }
 
 /// The height of a text field, matching [`select`].

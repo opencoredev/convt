@@ -7,7 +7,7 @@ use gpui_kit::component::Sizable;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::*;
 
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 
 use super::theme::{self, Button, Clickable, Palette, Tone, radius, size, space, styled};
 use crate::account::VERSION;
@@ -50,7 +50,7 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
             "Update available",
             format!("convt {version}"),
             Button::primary("update-download", "Download")
-                .icon(IconName::ArrowDown)
+                .icon(IconName::Download)
                 .small(),
             DOWNLOAD_URL.to_string(),
         ),
@@ -295,7 +295,7 @@ fn status(state: &AppState, on: bool, p: &Palette) -> AnyElement {
                 ));
             }
             let download = Button::primary("update-download", "Download")
-                .icon(IconName::ArrowDown)
+                .icon(IconName::Download)
                 .small()
                 .build(p)
                 .on_click(open(DOWNLOAD_URL.to_string()));

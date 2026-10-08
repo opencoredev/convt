@@ -2403,55 +2403,27 @@ fn an_unreadable_folder_does_not_hide_the_others() {
 
 #[test]
 fn the_icons_the_windows_draw_are_bundled() {
+    use super::theme::IconName;
     use gpui_kit::AssetSource;
-    use gpui_kit::component::{IconName, IconNamed};
+    use gpui_kit::component::IconNamed;
     let assets = super::assets();
-    for icon in [
-        IconName::ArrowDown,
-        IconName::ArrowRight,
-        IconName::Ban,
-        IconName::Bot,
-        IconName::Calendar,
-        IconName::Check,
-        IconName::ChevronRight,
-        IconName::ChevronsUpDown,
-        IconName::CircleAlert,
-        IconName::CircleCheck,
-        IconName::CircleUser,
-        IconName::CircleX,
-        IconName::ExternalLink,
-        IconName::Folder,
-        IconName::FolderOpen,
-        IconName::HardDrive,
-        IconName::Inbox,
-        IconName::Info,
-        IconName::Loader,
-        IconName::Plus,
-        IconName::RefreshCw,
-        IconName::RotateCw,
-        IconName::Settings,
-        IconName::Star,
-        IconName::TriangleAlert,
-        IconName::ChevronDown,
-        // The title bar Linux windows draw (`chrome.rs`).
-        IconName::Minus,
-        IconName::WindowMaximize,
-        IconName::WindowRestore,
-        IconName::Close,
-    ] {
+    for icon in IconName::ALL {
         let path = icon.path();
+        let svg = assets.load(&path).unwrap();
+        let svg = svg.unwrap_or_else(|| panic!("{path} is missing, so it would draw empty"));
+        // Hugeicons, not a Lucide icon with the same name.
         assert!(
-            assets.load(&path).unwrap().is_some(),
-            "{path} is missing, so it would draw empty"
+            String::from_utf8_lossy(&svg).contains("stroke-width=\"1.5\""),
+            "{path} isn't a Hugeicon"
         );
     }
-    // Icons outside the component set, from the whole catalog
-    // (`super::EXTRA_ICONS`).
-    let path = gpui_kit::assets::IconName::Cloud.path();
-    assert!(
-        assets.load(&path).unwrap().is_some(),
-        "{path} is missing, so it would draw empty"
-    );
+    // The component library's own icons (the spinner, a field's clear
+    // button) answer with Hugeicons too.
+    for path in ["icons/loader.svg", "icons/close.svg", "icons/check.svg"] {
+        let svg = assets.load(path).unwrap().unwrap();
+        assert!(String::from_utf8_lossy(&svg).contains("stroke-width=\"1.5\""), "{path}");
+    }
+    assert!(assets.load("icons/google-g.svg").unwrap().is_some());
 }
 
 #[test]

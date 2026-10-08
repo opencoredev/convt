@@ -12,7 +12,7 @@
 
 use convt_license::License;
 use convt_license::client::{BUY_URL, State};
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;

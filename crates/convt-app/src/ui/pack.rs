@@ -5,7 +5,7 @@
 //! handler, [`download_button`], is the one caller of
 //! `AppState::download_pack`. Opening a window or showing a card never does.
 
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -28,7 +28,7 @@ fn download_label(verb: &str, offer: &pack::Offer) -> String {
 fn download_button(app: &Entity<AppState>, label: String, p: &Palette) -> theme::Clickable {
     let app = app.clone();
     Button::primary("pack-download", label)
-        .icon(IconName::ArrowDown)
+        .icon(IconName::Download)
         .small()
         .build(p)
         .on_click(move |_, _, cx| app.update(cx, |s, cx| s.download_pack(cx)))

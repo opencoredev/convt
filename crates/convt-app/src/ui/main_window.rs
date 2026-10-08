@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use convt_core::{format_by_extension, format_by_id};
 use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
-use gpui_kit::component::IconName;
+use super::theme::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -597,7 +597,7 @@ fn name_line(input: &std::path::Path, to: &str, cloud: Option<String>, p: &Palet
                 .items_center()
                 .gap(px(4.))
                 .pl(px(2.))
-                .child(icon(gpui_kit::assets::IconName::Cloud, 13., p.tertiary))
+                .child(icon(IconName::Cloud, 13., p.tertiary))
                 .child(styled(size::SMALL, p.tertiary).child("Cloud"))
         }))
 }
