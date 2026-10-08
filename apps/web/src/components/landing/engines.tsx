@@ -1,6 +1,6 @@
 import { Mark } from "#/components/logo";
 
-import { Container } from "./ui";
+import { Container, revealDelay } from "./ui";
 
 const engines = [
   {
@@ -66,8 +66,8 @@ export function Engines() {
             </div>
             <Connectors />
             <ul className="mt-6 grid w-full gap-4 sm:grid-cols-2 min-[1120px]:mt-0 min-[1120px]:flex min-[1120px]:w-[1056px]">
-              {engines.map((engine) => (
-                <EngineCard key={engine.name} {...engine} />
+              {engines.map((engine, i) => (
+                <EngineCard key={engine.name} index={i} {...engine} />
               ))}
             </ul>
           </div>
@@ -118,9 +118,21 @@ function Connectors() {
   );
 }
 
-function EngineCard({ name, from, to, description, kind, formats }: (typeof engines)[number]) {
+function EngineCard({
+  name,
+  from,
+  to,
+  description,
+  kind,
+  formats,
+  index,
+}: (typeof engines)[number] & { index: number }) {
   return (
-    <li className="flex flex-col justify-between gap-7 rounded-[14px] bg-[#0b0d0cdb] p-6 shadow-[0_0_0_1px_#ffffff14,0_24px_48px_#00000066] min-[1120px]:w-[252px] min-[1120px]:shrink-0">
+    <li
+      data-reveal=""
+      style={revealDelay(index)}
+      className="reveal lift flex flex-col justify-between gap-7 rounded-[14px] bg-[#0b0d0cdb] p-6 shadow-[0_0_0_1px_#ffffff14,0_24px_48px_#00000066] hover:shadow-[0_0_0_1px_#4cc28366,0_24px_48px_#00000080] min-[1120px]:w-[252px] min-[1120px]:shrink-0"
+    >
       <div className="flex flex-col gap-5">
         <p className="flex items-center gap-2 font-mono text-[12px]/[16px] text-land-mono">
           {from}

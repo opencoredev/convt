@@ -2,7 +2,6 @@ import { Mark } from "#/components/logo";
 import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
-import { useDownloadCtaLabel } from "./use-download-cta";
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
 export function CallToAction() {
@@ -39,7 +38,6 @@ export function CallToAction() {
 }
 
 function DownloadActions() {
-  const label = useDownloadCtaLabel();
   return (
     <>
       <ButtonLink
@@ -47,7 +45,7 @@ function DownloadActions() {
         href={routes.download}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
-        {label}
+        Get convt
       </ButtonLink>
       <ButtonLink
         variant="secondary"

@@ -1,5 +1,5 @@
 import { Download04Icon } from "@hugeicons/core-free-icons";
-import type { ComponentProps, ReactNode } from "react";
+import type { CSSProperties, ComponentProps, ReactNode } from "react";
 
 import { Icon } from "#/components/icon";
 
@@ -79,4 +79,9 @@ export function MisoPhoto({ className, ...props }: ComponentProps<"img">) {
 
 export function DownloadIcon() {
   return <Icon icon={Download04Icon} size={16} strokeWidth={1.8} />;
+}
+
+/** Stagger for siblings that fade in together (`.reveal` in styles.css). */
+export function revealDelay(index: number): CSSProperties {
+  return { "--reveal-delay": `${index * 80}ms` } as CSSProperties;
 }

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { Icon } from "#/components/icon";
 
-import { Container, MisoPhoto } from "./ui";
+import { Container, MisoPhoto, revealDelay } from "./ui";
 
 const groups = [
   {
@@ -70,8 +70,8 @@ export function Formats() {
         </p>
       </div>
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {groups.map((group) => (
-          <FormatCard key={group.name} {...group} />
+        {groups.map((group, i) => (
+          <FormatCard key={group.name} index={i} {...group} />
         ))}
       </ul>
     </Container>
@@ -82,13 +82,19 @@ function FormatCard({
   name,
   formats,
   preview,
+  index,
 }: {
   name: string;
   formats: string[];
   preview: ReactNode;
+  index: number;
 }) {
   return (
-    <li className="flex flex-col overflow-clip rounded-[14px] bg-raised shadow-land-card">
+    <li
+      data-reveal=""
+      style={revealDelay(index)}
+      className="reveal lift flex flex-col overflow-clip rounded-[14px] bg-raised shadow-land-card hover:shadow-[0_0_0_1px_#2e3331,0_12px_32px_#00000080]"
+    >
       <div className="h-[200px] shrink-0">{preview}</div>
       <div className="flex flex-col gap-3.5 p-5">
         <div className="flex items-baseline justify-between">

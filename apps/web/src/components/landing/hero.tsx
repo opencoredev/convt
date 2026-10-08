@@ -1,8 +1,8 @@
 import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
 
+import { ConvertDemo } from "./convert-demo";
 import { ProductHuntBadge } from "./product-hunt-badge";
-import { useDownloadCtaLabel } from "./use-download-cta";
-import { ButtonLink, ComingSoon, Container, DownloadIcon, MisoPhoto } from "./ui";
+import { ButtonLink, ComingSoon, Container, DownloadIcon } from "./ui";
 
 export function Hero() {
   return (
@@ -26,13 +26,13 @@ export function Hero() {
         </div>
         <ProductHuntBadge />
       </div>
-      <ConvertPanel />
+      <ConvertDemo />
     </Container>
   );
 }
 
+// "Get convt" goes to /download, which asks a new visitor to create an account first.
 function HeroActions() {
-  const label = useDownloadCtaLabel();
   return (
     <>
       <ButtonLink
@@ -41,7 +41,7 @@ function HeroActions() {
         className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
       >
         <DownloadIcon />
-        {label}
+        Get convt
       </ButtonLink>
       <ButtonLink
         variant="secondary"
@@ -51,64 +51,5 @@ function HeroActions() {
         Star on GitHub
       </ButtonLink>
     </>
-  );
-}
-
-function ConvertPanel() {
-  return (
-    <figure className="bg-land-glow flex items-center justify-center overflow-clip rounded-2xl bg-bottom px-5 py-12 lg:h-[560px] lg:py-0">
-      <figcaption className="sr-only">A 4.8 MB HEIC photo converted to a 612 KB WebP.</figcaption>
-      <div className="flex w-full min-w-0 flex-col items-center gap-7 lg:w-auto lg:flex-row">
-        <FileCard name="miso.heic" size="4.8 MB" alt="A cat photo saved as miso.heic" />
-        <div className="bg-land-green flex size-12 shrink-0 rotate-90 items-center justify-center rounded-full shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_4px_12px_#0a3c2340] lg:rotate-0">
-          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M5 12h14M13 6l6 6-6 6"
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-        <FileCard name="miso.webp" size="612 KB" alt="The same photo converted to miso.webp" done />
-      </div>
-    </figure>
-  );
-}
-
-function FileCard({
-  name,
-  size,
-  alt,
-  done,
-}: {
-  name: string;
-  size: string;
-  alt: string;
-  done?: boolean;
-}) {
-  return (
-    <div className="flex w-[320px] max-w-full flex-col gap-3 rounded-[14px] bg-raised px-2.5 pt-2.5 pb-3.5 shadow-land-float">
-      <MisoPhoto
-        alt={alt}
-        width={300}
-        height={220}
-        className="aspect-[300/220] w-full rounded-lg object-cover"
-      />
-      <div className="flex items-center justify-between px-1">
-        <span className="text-[14px]/[18px] font-medium text-ink">{name}</span>
-        <span
-          className={
-            done
-              ? "font-mono text-[12px]/[16px] text-green"
-              : "font-mono text-[12px]/[16px] text-land-muted"
-          }
-        >
-          {size}
-        </span>
-      </div>
-    </div>
   );
 }
