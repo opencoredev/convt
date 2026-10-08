@@ -57,7 +57,7 @@ export interface BillingRpc {
     userId: string,
   ): Promise<
     | { kind: "pro" }
-    | { kind: "trial"; endsOn: string }
+    | { kind: "trial"; endsOn: string; endsAt: string }
     | { kind: "can_start_trial"; checkoutUrl: string }
     | { kind: "lapsed" }
   >;

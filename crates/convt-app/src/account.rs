@@ -28,9 +28,20 @@ use convt_license::date;
 use gpui_kit::{Context, Task};
 
 use crate::model::AppState;
+use crate::settings::TrialCache;
 use crate::request::AuthReply;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn trial_poll_delay(elapsed_secs: u64, rate_limited: bool) -> std::time::Duration {
+    if rate_limited {
+        std::time::Duration::from_secs(120)
+    } else if elapsed_secs < 120 {
+        std::time::Duration::from_secs(10)
+    } else {
+        std::time::Duration::from_secs(60)
+    }
+}
 
 /// Where a sign-in stands. Whether the app is signed in is
 /// [`Account::session`]; this is the flow on top of it.
@@ -351,7 +362,7 @@ impl AppState {
         self.account._refresh_task = None;
         self.account.awaiting_trial = false;
         self.account.trial_poll_started = None;
-        self.update_settings(|s| s.trial_ends_on = None, cx);
+        self.update_settings(|s| s.trial_cache = None, cx);
         self.licensing.set_account_trial(None);
         // Best effort: the dashboard can sign this computer out too.
         let api = self.account.api.clone();
@@ -402,11 +413,13 @@ impl AppState {
 
     fn renewed(&mut self, result: Result<LicenseReply, ApiError>, cx: &mut Context<Self>) {
         let kept = "The license on this computer stays as it is.";
+        let rate_limited = matches!(&result, Err(ApiError::RateLimited));
         self.account.refresh = match result {
             Ok(reply) => {
-                self.account.access = reply.access.map(|access| match access {
+                let remote_access = reply.access.clone();
+                self.account.access = remote_access.clone().map(|access| match access {
                     RemoteAccess::Pro => Access::Pro,
-                    RemoteAccess::Trial { ends_on } => Access::Trial { ends_on },
+                    RemoteAccess::Trial { ends_on, .. } => Access::Trial { ends_on },
                     RemoteAccess::CanStartTrial { checkout_url } => {
                         Access::CanStartTrial { checkout_url }
                     }
@@ -415,11 +428,23 @@ impl AppState {
                 match &self.account.access {
                     Some(Access::Trial { ends_on }) => {
                         let ends_on = ends_on.clone();
-                        self.update_settings(|s| s.trial_ends_on = Some(ends_on.clone()), cx);
-                        self.licensing.set_account_trial(Some(ends_on));
+                        let ends_at = match &remote_access {
+                            Some(RemoteAccess::Trial { ends_at, .. }) => ends_at.clone(),
+                            _ => None,
+                        };
+                        self.update_settings(
+                            |s| {
+                                s.trial_cache = ends_at.clone().map(|ends_at| TrialCache {
+                                    ends_at,
+                                    fetched_on: date::from_days(today()),
+                                })
+                            },
+                            cx,
+                        );
+                        self.licensing.set_account_trial_exact(Some(ends_on), ends_at);
                     }
                     Some(Access::Pro | Access::CanStartTrial { .. } | Access::Lapsed) | None => {
-                        self.update_settings(|s| s.trial_ends_on = None, cx);
+                        self.update_settings(|s| s.trial_cache = None, cx);
                         self.licensing.set_account_trial(None);
                     }
                 }
@@ -461,7 +486,7 @@ impl AppState {
                 }
                 self.account.session = None;
                 self.account.access = None;
-                self.update_settings(|s| s.trial_ends_on = None, cx);
+                self.update_settings(|s| s.trial_cache = None, cx);
                 self.licensing.set_account_trial(None);
                 Refresh::Failed(format!(
                     "This computer was signed out of convt.app. Sign in again to keep Pro renewing. {kept}"
@@ -477,10 +502,13 @@ impl AppState {
             && matches!(self.account.access, Some(Access::CanStartTrial { .. }))
         {
             if self.account.session.is_some() {
+                let elapsed = self
+                    .account
+                    .trial_poll_started
+                    .map_or(0, |t| t.elapsed().as_secs());
+                let delay = trial_poll_delay(elapsed, rate_limited);
                 self.account._refresh_task = Some(cx.spawn(async move |this, cx| {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_secs(5))
-                        .await;
+                    cx.background_executor().timer(delay).await;
                     let _ = this.update(cx, |state, cx| {
                         if state.account.awaiting_trial && state.account.refresh != Refresh::Running
                         {

@@ -10,7 +10,7 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::VerifyingKey;
 
@@ -310,6 +310,7 @@ pub struct Licensing {
     key: Option<String>,
     local_trial_enabled: bool,
     account_trial_ends_on: Option<String>,
+    account_trial_ends_at: Option<SystemTime>,
 }
 
 impl Licensing {
@@ -324,6 +325,7 @@ impl Licensing {
             key,
             local_trial_enabled: true,
             account_trial_ends_on: None,
+            account_trial_ends_at: None,
         }
     }
 
@@ -346,6 +348,18 @@ impl Licensing {
     /// Sets the current account trial returned by convt.app. No key is stored.
     pub fn set_account_trial(&mut self, ends_on: Option<String>) {
         self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
+        self.account_trial_ends_at = self.account_trial_ends_on.as_deref().and_then(|date| {
+            crate::date::to_days(date).and_then(|day| {
+                (day * 86_400).try_into().ok().map(|seconds| UNIX_EPOCH + Duration::from_secs(seconds))
+            })
+        });
+    }
+
+    /// Sets the exact online trial end. Older servers may omit it; those are
+    /// treated conservatively as ending at the start of the display day.
+    pub fn set_account_trial_exact(&mut self, ends_on: Option<String>, ends_at: Option<String>) {
+        self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
+        self.account_trial_ends_at = ends_at.and_then(parse_utc_timestamp);
     }
 
     pub fn build_date(&self) -> &str {
@@ -358,6 +372,16 @@ impl Licensing {
     }
 
     pub fn state(&self) -> State {
+        if let Some(end) = self.account_trial_ends_at
+            && let Ok(remaining) = end.duration_since(SystemTime::now())
+            && remaining > Duration::ZERO
+            && let Some(ends_on) = &self.account_trial_ends_on
+        {
+            return State::AccountTrial {
+                ends_on: ends_on.clone(),
+                days_left: remaining.as_secs().div_ceil(86_400) as i64,
+            };
+        }
         self.state_on(today())
     }
 
@@ -371,7 +395,8 @@ impl Licensing {
                 Err(_) => State::NotCovered(license),
             };
         }
-        if let Some(ends_on) = &self.account_trial_ends_on
+        if self.account_trial_ends_at.is_none()
+            && let Some(ends_on) = &self.account_trial_ends_on
             && let Some(end) = date::to_days(ends_on)
             && today <= end
         {
@@ -502,6 +527,19 @@ impl Licensing {
     pub fn clear_session(&self) -> Result<(), String> {
         self.config.store.delete(ACCOUNT)
     }
+}
+
+fn parse_utc_timestamp(value: String) -> Option<SystemTime> {
+    let (date, time) = value.strip_suffix('Z')?.split_once('T')?;
+    let day = crate::date::to_days(date)?;
+    let mut parts = time.split(':');
+    let hour: u64 = parts.next()?.parse().ok()?;
+    let minute: u64 = parts.next()?.parse().ok()?;
+    let second: u64 = parts.next()?.split('.').next()?.parse().ok()?;
+    if hour >= 24 || minute >= 60 || second >= 60 { return None; }
+    let seconds = (day as u64).checked_mul(86_400)?
+        .checked_add(hour * 3_600 + minute * 60 + second)?;
+    Some(UNIX_EPOCH + Duration::from_secs(seconds))
 }
 
 /// What [`Licensing::offer_key`] did with a key renewal fetched.

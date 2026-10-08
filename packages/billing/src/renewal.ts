@@ -32,7 +32,7 @@ export async function currentProKey(db: Db, userId: string): Promise<CurrentProK
 
 export type CurrentProAccess =
   | { kind: "pro" }
-  | { kind: "trial"; endsOn: string }
+  | { kind: "trial"; endsOn: string; endsAt: string }
   | { kind: "can_start_trial"; checkoutUrl: string }
   | { kind: "lapsed" };
 
@@ -62,17 +62,25 @@ export async function currentProAccess(
   ctx: BillingContext,
   userId: string,
 ): Promise<CurrentProAccess> {
-  const live = await proSubscription(ctx.db, userId, ctx.clock());
-  if (live?.status === "trialing" && live.trial_ends_at && live.trial_ends_at > ctx.clock())
-    return { kind: "trial", endsOn: live.trial_ends_at.toISOString().slice(0, 10) };
-  if (live?.status === "trialing") return { kind: "lapsed" };
-  if (live?.status === "unpaid" || live?.status === "incomplete") return { kind: "lapsed" };
-  if (live) return { kind: "pro" };
   const deleting = await rows<{ x: number }>(
     ctx.db,
     sql`select 1 as x from account_deletions where user_id = ${userId} and status <> 'done' limit 1`,
   );
   if (deleting.length) return { kind: "lapsed" };
+  const live = await proSubscription(ctx.db, userId, ctx.clock());
+  if (
+    (live?.status === "trialing" || live?.status === "incomplete") &&
+    live.trial_ends_at &&
+    live.trial_ends_at > ctx.clock()
+  )
+    return {
+      kind: "trial",
+      endsOn: live.trial_ends_at.toISOString().slice(0, 10),
+      endsAt: live.trial_ends_at.toISOString(),
+    };
+  if (live?.status === "trialing") return { kind: "lapsed" };
+  if (live?.status === "unpaid" || live?.status === "incomplete") return { kind: "lapsed" };
+  if (live) return { kind: "pro" };
   if (await hasProSubscription(ctx.db, userId)) return { kind: "lapsed" };
   const eligible = await canStartProTrial(ctx.db, userId, ctx.clock());
   return eligible

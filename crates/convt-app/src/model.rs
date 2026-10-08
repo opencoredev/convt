@@ -329,15 +329,26 @@ impl AppState {
         let mut licensing = Licensing::new(paths.license);
         #[cfg(not(test))]
         licensing.disable_local_trial();
-        let today = date::from_days(client::today());
-        let cached_trial = settings
-            .trial_ends_on
-            .clone()
-            .filter(|ends_on| ends_on.as_str() >= today.as_str());
-        licensing.set_account_trial(cached_trial.clone());
-        let mut account = Account::new(paths.account_url, paths.account_api, licensing.session());
-        if let Some(ends_on) = cached_trial {
-            account.access = Some(crate::account::Access::Trial { ends_on });
+        let session = licensing.session();
+        let cached_trial = settings.trial_cache.clone().filter(|cache| {
+            session.is_some()
+                && date::to_days(&cache.fetched_on).is_some_and(|fetched| {
+                    cache.ends_at.len() >= 10
+                        && date::to_days(&cache.ends_at[..10])
+                            .is_some_and(|ends| ends <= fetched + 8 && ends >= fetched)
+                })
+        });
+        licensing.set_account_trial_exact(
+            cached_trial
+                .as_ref()
+                .map(|cache| cache.ends_at[..10].to_string()),
+            cached_trial.as_ref().map(|cache| cache.ends_at.clone()),
+        );
+        let mut account = Account::new(paths.account_url, paths.account_api, session);
+        if let Some(cache) = cached_trial {
+            account.access = Some(crate::account::Access::Trial {
+                ends_on: cache.ends_at[..10].to_string(),
+            });
         }
         let mut state = Self {
             registry,

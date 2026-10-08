@@ -249,7 +249,7 @@ export type ProAccessSource = (
   userId: string,
 ) => Promise<
   | { kind: "pro" }
-  | { kind: "trial"; endsOn: string }
+  | { kind: "trial"; endsOn: string; endsAt: string }
   | { kind: "can_start_trial"; checkoutUrl: string }
   | { kind: "lapsed" }
 >;
@@ -287,7 +287,7 @@ export async function renewDevice(
     updates_until: current?.updatesUntil ?? null,
     access:
       access.kind === "trial"
-        ? { kind: access.kind, ends_on: access.endsOn }
+        ? { kind: access.kind, ends_on: access.endsOn, ends_at: access.endsAt }
         : access.kind === "can_start_trial"
           ? { kind: access.kind, checkout_url: access.checkoutUrl }
           : { kind: access.kind },

@@ -233,7 +233,7 @@ pub trait Api: Send + Sync {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Access {
     Pro,
-    Trial { ends_on: String },
+    Trial { ends_on: String, ends_at: Option<String> },
     CanStartTrial { checkout_url: String },
     Lapsed,
 }
@@ -498,14 +498,15 @@ mod tests {
         );
         let (base, _) = serve_once(
             200,
-            r#"{"key":null,"access":{"kind":"trial","ends_on":"2026-10-15"}}"#,
+            r#"{"key":null,"access":{"kind":"trial","ends_on":"2026-10-15","ends_at":"2026-10-15T12:00:00Z"}}"#,
         );
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
             Ok(LicenseReply {
                 key: None,
                 access: Some(Access::Trial {
-                    ends_on: "2026-10-15".into()
+                    ends_on: "2026-10-15".into(),
+                    ends_at: Some("2026-10-15T12:00:00Z".into()),
                 })
             })
         );
