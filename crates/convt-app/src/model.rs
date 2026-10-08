@@ -883,7 +883,7 @@ impl AppState {
                 actions: Vec::new(),
             });
         }
-        if self.quit_when_idle && cx.windows().is_empty() && !self.settings.menu_bar_icon {
+        if self.quit_when_idle && cx.windows().is_empty() && !self.settings.stays_in_menu_bar() {
             cx.quit();
         }
     }

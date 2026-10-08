@@ -387,11 +387,30 @@ impl SettingsView {
             )
             .into_any_element()
         });
-        let desktop_label = if finder.is_some() {
-            "Finder and menu bar"
-        } else {
-            "Menu bar"
+        // Only macOS keeps running for a menu bar icon; elsewhere the switch
+        // would do nothing.
+        let menu_bar = cfg!(target_os = "macos").then(|| {
+            theme::row(
+                "Menu bar icon",
+                Some(theme::detail("Shows progress and takes dropped files", p)),
+                menu_bar,
+                p,
+            )
+            .into_any_element()
+        });
+        let desktop_label = match (finder.is_some(), menu_bar.is_some()) {
+            (true, true) => Some("Finder and menu bar"),
+            (true, false) => Some("Finder"),
+            (false, true) => Some("Menu bar"),
+            (false, false) => None,
         };
+        let desktop = desktop_label.map(|label| {
+            section(
+                label,
+                theme::group(finder.into_iter().chain(menu_bar), p),
+                p,
+            )
+        });
 
         div()
             .flex()
@@ -459,20 +478,7 @@ impl SettingsView {
                 ),
                 p,
             ))
-            .child(section(
-                desktop_label,
-                theme::group(
-                    finder.into_iter().chain([theme::row(
-                        "Menu bar icon",
-                        Some(theme::detail("Shows progress and takes dropped files", p)),
-                        menu_bar,
-                        p,
-                    )
-                    .into_any_element()]),
-                    p,
-                ),
-                p,
-            ))
+            .children(desktop)
             .child(section(
                 "Documents",
                 theme::group([documents.into_any_element()], p),

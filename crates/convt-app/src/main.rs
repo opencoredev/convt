@@ -158,7 +158,7 @@ fn last_window_closed(cx: &mut App, _: gpui_kit::WindowId) {
         return;
     }
     let state = model::shared(cx);
-    let keep_running = cfg!(target_os = "macos") && state.read(cx).settings.menu_bar_icon;
+    let keep_running = state.read(cx).settings.stays_in_menu_bar();
     if keep_running {
         // macOS keeps the process alive when the menu bar item is enabled.
         // Calling cx.quit() from the window-closed observer starts GPUI's

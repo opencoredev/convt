@@ -998,13 +998,19 @@ fn settings_change_and_persist(cx: &mut TestAppContext) {
     assert!(cx.read(|cx| f.app.read(cx).settings.notifications));
     click(cx, window, "notifications");
     click(cx, window, "reveal");
-    click(cx, window, "menu-bar-icon");
-    let saved = f.settings_file();
-    for line in [
-        "notifications = false",
-        "reveal_when_done = true",
-        "menu_bar_icon = false",
-    ] {
+    let saved = if cfg!(target_os = "macos") {
+        click(cx, window, "menu-bar-icon");
+        let saved = f.settings_file();
+        assert!(saved.contains("menu_bar_icon = false"), "{saved}");
+        saved
+    } else {
+        assert!(
+            !shown(cx, window, "menu-bar-icon"),
+            "no menu bar switch where it does nothing"
+        );
+        f.settings_file()
+    };
+    for line in ["notifications = false", "reveal_when_done = true"] {
         assert!(saved.contains(line), "{line} in {saved}");
     }
 
