@@ -18,7 +18,9 @@ args.output.mkdir(exist_ok=False)
 linux = args.downloads / 'linux-release-review'
 macos = args.downloads / 'macos-release-review'
 windows = args.downloads / 'windows-release-review'
-assets = [linux / f'convt-{args.version}-source.tar.gz', linux / 'source-audit.json']
+assets = [linux / f'convt-{args.version}-source.tar.gz',
+          linux / f'convt-{args.version}-source-closure.tar.gz',
+          linux / 'source-audit.json']
 for kind in ('.deb', '.rpm', '.AppImage'):
     matches = list(linux.glob(f'*{kind}'))
     if len(matches) != 1:

@@ -88,10 +88,22 @@ def refuse_build_output_in_archive(archive_path, root):
     return names
 
 def pack_source_archive(tree, archive_path, epoch):
-    """Write a deterministic source tarball and refuse leaked build output."""
+    """Write the public source checkout without audit staging data.
+
+    The audit runs in the frozen tree and materializes corresponding native
+    sources, Cargo inventories, and other evidence under ``third-party``.
+    Those generated inputs are validated through ``source-audit.json`` but are
+    not part of the public checkout archive. Including them made the archive
+    repeat the separately delivered native/document inputs and pushed the
+    v0.3.0 asset over a gigabyte.
+    """
     tree=tree.resolve()
     tar=subprocess.Popen(['tar','--sort=name',f'--mtime=@{epoch}','--owner=0','--group=0','--numeric-owner',
                             '--exclude=*/__pycache__','--exclude=*/.cache',
+                            # Source-audit evidence and fetched corresponding
+                            # sources are validated separately and must not be
+                            # copied into the compact source checkout archive.
+                            f'--exclude={tree.name}/third-party',
                             # Build output from audits run inside the tree is not source.
                             f'--exclude={tree.name}/target','-C',str(tree.parent),'-cf','-',tree.name], stdout=subprocess.PIPE)
     with Path(archive_path).open('wb') as stream:
@@ -100,6 +112,18 @@ def pack_source_archive(tree, archive_path, epoch):
     if tar.wait() or gzip.returncode:
         raise ValueError('source archive failed')
     refuse_build_output_in_archive(archive_path, tree.name)
+
+def pack_source_closure_archive(tree, archive_path, epoch):
+    """Write the audited generated closure as a separate deterministic asset."""
+    tree=tree.resolve()
+    tar=subprocess.Popen(['tar','--sort=name',f'--mtime=@{epoch}','--owner=0','--group=0','--numeric-owner',
+                            '--exclude=*/__pycache__','--exclude=*/.cache',
+                            '-C',str(tree.parent),'-cf','-',f'{tree.name}/third-party'], stdout=subprocess.PIPE)
+    with Path(archive_path).open('wb') as stream:
+        gzip=subprocess.run(['gzip','-n'], stdin=tar.stdout, stdout=stream)
+    tar.stdout.close()
+    if tar.wait() or gzip.returncode:
+        raise ValueError('source closure archive failed')
 
 def archive(tree, output, version, epoch, verification):
     # Full lockfile vendoring makes the CLI rebuild independent of a host cache.
@@ -132,6 +156,7 @@ def archive(tree, output, version, epoch, verification):
     # their original notices, source headers and Cargo checksums.
     archive_path = output/f'convt-{version}-source.tar.gz'
     pack_source_archive(tree, archive_path, epoch)
+    pack_source_closure_archive(tree, output/f'convt-{version}-source-closure.tar.gz', epoch)
     if gaps and not verification:
         raise ValueError('Publication blocked: ' + '; '.join(gaps))
     print(f'Source archive: {archive_path}; {len(gaps)} publication gaps')
