@@ -77,8 +77,7 @@ export async function createCheckout(
   if (product === "pro_month" || product === "pro_year") {
     if (!(await canStartProTrial(ctx.db, user!.id, now))) {
       const live = await rows(ctx.db, liveSql("pro", user!.id, now));
-      if (live.length)
-        return { ok: false, refusal: "already_pro" };
+      if (live.length) return { ok: false, refusal: "already_pro" };
     }
     allowTrial = await canStartProTrial(ctx.db, user!.id, now);
   }
