@@ -426,7 +426,13 @@ impl Render for PopoverView {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .px(px(16.))
+                    // The traffic lights sit at the left of a transparent title bar.
+                    .pl(px(if theme::transparent_titlebar() {
+                        84.
+                    } else {
+                        16.
+                    }))
+                    .pr(px(16.))
                     .pt(px(14.))
                     .pb(px(10.))
                     .child(theme::lockup(13., &p))
