@@ -34,9 +34,13 @@ pub fn report(error: &dyn std::fmt::Display, title: &str, fatal: bool) {
     if fatal && try_software_reexec() {
         return;
     }
-    show_dialog(&message);
     if fatal {
+        show_dialog(&message);
         FAILED.store(true, Ordering::SeqCst);
+    } else {
+        // A later Settings or Quick convert failure must not freeze the
+        // windows that are still open.
+        spawn_dialog(&message);
     }
 }
 
@@ -119,6 +123,16 @@ pub fn try_software_reexec() -> bool {
 pub fn show_dialog(message: &str) {
     if let Some(mut cmd) = dialog_command(message) {
         let _ = cmd.status();
+    }
+}
+
+fn spawn_dialog(message: &str) {
+    if let Some(mut cmd) = dialog_command(message) {
+        let _ = std::thread::Builder::new()
+            .name("convt-window-error".into())
+            .spawn(move || {
+                let _ = cmd.status();
+            });
     }
 }
 

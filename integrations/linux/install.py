@@ -62,15 +62,20 @@ def appimage_path():
     return path.resolve() if path.is_file() else None
 
 
+# legacy_app() turns this off so unmarked old menus are regenerated with
+# their saved executable, not $APPIMAGE.
+HONOR_APPIMAGE = True
+
+
 def app_path():
-    if image := appimage_path():
+    if HONOR_APPIMAGE and (image := appimage_path()):
         return str(image)
     return APP
 
 
 def cli_command():
     """How to run the CLI. AppImage menus use --cli on the stable file."""
-    if image := appimage_path():
+    if HONOR_APPIMAGE and (image := appimage_path()):
         return [str(image), "--cli"]
     return [CONVT]
 
@@ -374,12 +379,14 @@ def thunar_path():
 @contextmanager
 def legacy_app(app):
     """Regenerate a legacy template with its original executable path."""
-    global APP
+    global APP, HONOR_APPIMAGE
     previous, APP = APP, app
+    previous_honor, HONOR_APPIMAGE = HONOR_APPIMAGE, False
     try:
         yield
     finally:
         APP = previous
+        HONOR_APPIMAGE = previous_honor
 
 
 def legacy_command(value, desktop=False, app_entry=False):

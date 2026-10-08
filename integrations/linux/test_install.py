@@ -522,6 +522,19 @@ class SystemIntegration(unittest.TestCase):
             self.assertNotIn(".mount_convt123", command[0])
             self.assertNotIn(".mount_convt123", desktop)
 
+    def test_legacy_recognition_uses_the_saved_path_inside_an_appimage(self):
+        with tempfile.TemporaryDirectory(prefix="convt-legacy-appimage-") as tmp:
+            image = Path(tmp) / "convt-linux-x86_64.AppImage"
+            image.write_text("payload")
+            old = "/opt/old/convt-app"
+            with mock.patch.object(install, "APP", str(image.resolve())), \
+                    mock.patch.dict(os.environ, {"APPIMAGE": str(image)}):
+                self.assertEqual(install.app_path(), str(image.resolve()))
+                with install.legacy_app(old):
+                    self.assertEqual(install.app_path(), old)
+                    self.assertEqual(install.menu_command("webp")[0], old)
+                self.assertEqual(install.app_path(), str(image.resolve()))
+
     def test_nautilus_extension_bakes_resolved_binaries(self):
         source = (HERE / "nautilus/convt_nautilus.py").read_text()
         with mock.patch.object(install, "CONVT", "/opt/convt/convt"), \

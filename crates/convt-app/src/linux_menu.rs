@@ -89,16 +89,14 @@ fn user_data() -> PathBuf {
 
 fn kinds_in(root: &Path, user_scripts: bool) -> Vec<String> {
     let mut out = Vec::new();
-    if dir_has(&root.join("kio/servicemenus"), "convt-") {
+    if dir_has_owned(&root.join("kio/servicemenus"), "convt-") {
         out.push("Dolphin".into());
     }
-    if dir_has(&root.join("nemo/actions"), "convt-") {
+    if dir_has_owned(&root.join("nemo/actions"), "convt-") {
         out.push("Nemo".into());
     }
-    if root
-        .join("nautilus-python/extensions/convt_nautilus.py")
-        .is_file()
-        || (user_scripts && dir_has(&root.join("nautilus/scripts/Convert with convt"), ""))
+    if owned_menu_file(&root.join("nautilus-python/extensions/convt_nautilus.py"))
+        || (user_scripts && dir_has_owned(&root.join("nautilus/scripts/Convert with convt"), ""))
     {
         out.push("GNOME Files".into());
     }
@@ -124,17 +122,32 @@ fn thunar_actions_in(uca: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(uca) else {
         return false;
     };
-    text.contains("convt-generated: linux-integration") || text.contains("<unique-id>convt-")
+    // A user action named convt-custom is not ours. Only the installer marker
+    // counts, including unmarked files we later recognize by regenerating.
+    text.contains("convt-generated: linux-integration")
 }
 
-fn dir_has(dir: &Path, prefix: &str) -> bool {
+fn owned_menu_file(path: &Path) -> bool {
+    if path
+        .symlink_metadata()
+        .map(|m| !m.file_type().is_file() || m.file_type().is_symlink())
+        .unwrap_or(true)
+    {
+        return false;
+    }
+    std::fs::read_to_string(path)
+        .map(|text| text.contains("convt-generated: linux-integration"))
+        .unwrap_or(false)
+}
+
+fn dir_has_owned(dir: &Path, prefix: &str) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return false;
     };
     entries.flatten().any(|entry| {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        prefix.is_empty() || name.starts_with(prefix)
+        (prefix.is_empty() || name.starts_with(prefix)) && owned_menu_file(&entry.path())
     })
 }
 
@@ -226,14 +239,30 @@ mod tests {
     fn probe_reads_dolphin_nemo_and_gnome_files() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
+        let marker = "# convt-generated: linux-integration-v1\n";
         std::fs::create_dir_all(root.join("kio/servicemenus")).unwrap();
-        std::fs::write(root.join("kio/servicemenus/convt-0.desktop"), "x").unwrap();
+        std::fs::write(root.join("kio/servicemenus/convt-0.desktop"), marker).unwrap();
         std::fs::create_dir_all(root.join("nemo/actions")).unwrap();
-        std::fs::write(root.join("nemo/actions/convt-jpeg.nemo_action"), "x").unwrap();
+        std::fs::write(root.join("nemo/actions/convt-jpeg.nemo_action"), marker).unwrap();
         std::fs::create_dir_all(root.join("nautilus/scripts/Convert with convt")).unwrap();
-        std::fs::write(root.join("nautilus/scripts/Convert with convt/JPEG"), "x").unwrap();
+        std::fs::write(
+            root.join("nautilus/scripts/Convert with convt/JPEG"),
+            marker,
+        )
+        .unwrap();
         assert_eq!(kinds_in(root, true), ["Dolphin", "Nemo", "GNOME Files"]);
         assert_eq!(kinds_in(root, false), ["Dolphin", "Nemo"]);
+    }
+
+    #[test]
+    fn probe_ignores_unrelated_convt_named_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("nemo/actions")).unwrap();
+        std::fs::write(root.join("nemo/actions/convt-personal.nemo_action"), "mine").unwrap();
+        std::fs::create_dir_all(root.join("kio/servicemenus")).unwrap();
+        std::fs::write(root.join("kio/servicemenus/convt-0.desktop"), "mine").unwrap();
+        assert!(kinds_in(root, true).is_empty());
     }
 
     #[test]
@@ -248,5 +277,11 @@ mod tests {
         .unwrap();
         assert!(thunar_actions_in(&uca));
         assert!(!thunar_actions_in(&dir.path().join("missing.xml")));
+        std::fs::write(
+            &uca,
+            "<action><unique-id>convt-custom</unique-id><command>echo keep</command></action>",
+        )
+        .unwrap();
+        assert!(!thunar_actions_in(&uca));
     }
 }
