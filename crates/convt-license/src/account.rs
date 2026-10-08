@@ -496,6 +496,19 @@ mod tests {
                 access: None
             })
         );
+        let (base, _) = serve_once(
+            200,
+            r#"{"key":null,"access":{"kind":"trial","ends_on":"2026-10-15"}}"#,
+        );
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                access: Some(Access::Trial {
+                    ends_on: "2026-10-15".into()
+                })
+            })
+        );
         let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
