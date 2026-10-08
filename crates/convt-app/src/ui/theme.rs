@@ -12,7 +12,6 @@ use std::borrow::Cow;
 
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::spinner::Spinner;
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme, Icon, IconName, Sizable, Theme};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -813,11 +812,11 @@ pub fn segmented(
     p: &Palette,
     on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
 ) -> Div {
-    let segments: Vec<Segment> = choices
+    let choices: Vec<Segment> = choices
         .iter()
         .map(|(key, label)| Segment::new(key, label.clone()))
         .collect();
-    segmented_with(id, &segments, selected, p, on_pick)
+    segments(id, &choices, selected, p, &[], on_pick)
 }
 
 /// One choice of [`segmented_with`].
@@ -845,12 +844,37 @@ impl Segment {
 }
 
 /// [`segmented`] with choices that can be disabled. A disabled choice is
-/// dimmed, ignores clicks and says why in a tooltip.
+/// dimmed, ignores clicks and says why in a note above it while hovered, so
+/// the note never covers the label it explains (GPUI's own tooltip follows
+/// the pointer and, near a window's bottom edge, lands on the control).
 pub fn segmented_with(
     id: &str,
     choices: &[Segment],
     selected: &str,
     p: &Palette,
+    window: &mut Window,
+    cx: &mut App,
+    on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
+) -> Div {
+    let hovers: Vec<(&'static str, Entity<bool>, bool)> = choices
+        .iter()
+        .filter(|segment| segment.disabled.is_some())
+        .map(|segment| {
+            let key = SharedString::from(format!("{id}-{}-hover", segment.key));
+            let state = window.use_keyed_state(key, cx, |_, _| false);
+            let on = *state.read(cx);
+            (segment.key, state, on)
+        })
+        .collect();
+    segments(id, choices, selected, p, &hovers, on_pick)
+}
+
+fn segments(
+    id: &str,
+    choices: &[Segment],
+    selected: &str,
+    p: &Palette,
+    hovers: &[(&'static str, Entity<bool>, bool)],
     on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
 ) -> Div {
     div()
@@ -866,8 +890,10 @@ pub fn segmented_with(
             let on = key == selected;
             let reason = segment.disabled.clone();
             let off = reason.is_some();
+            let hover = hovers.iter().find(|(k, ..)| *k == key).cloned();
             let on_pick = on_pick.clone();
-            clickable(SharedString::from(format!("{id}-{key}")), label.clone())
+            let element_id = SharedString::from(format!("{id}-{key}"));
+            clickable(element_id.clone(), label.clone())
                 .aria_selected(on)
                 .flex()
                 .items_center()
@@ -879,9 +905,50 @@ pub fn segmented_with(
                         .shadow(raise(p))
                 })
                 .when(!on && !off, |d| d.hover(|s| s.bg(p.hover)))
-                .when_some(reason, |d, reason| {
-                    d.cursor_default()
-                        .tooltip(move |window, cx| Tooltip::new(reason.clone()).build(window, cx))
+                .when(off, |d| d.cursor_default())
+                .when_some(hover.zip(reason), |d, ((_, state, shown), reason)| {
+                    let note = shown.then(|| {
+                        // Drawn over the window's other content, its bottom
+                        // left corner 8px above the choice's top left.
+                        div().absolute().top_0().left_0().child(deferred(
+                            anchored()
+                                .anchor(Anchor::BottomLeft)
+                                .snap_to_window_with_margin(px(8.))
+                                // Padding, not margin: `anchored` sizes to
+                                // its child's box and ignores margins.
+                                .child(
+                                    div().pb(px(8.)).child(
+                                        div()
+                                            .id(SharedString::from(format!("{element_id}-reason")))
+                                            .test_support()
+                                            .aria_label(reason.clone())
+                                            .px(px(8.))
+                                            .py(px(5.))
+                                            .rounded(px(radius::SM + 1.))
+                                            .bg(p.overlay)
+                                            .shadow(vec![
+                                                inset_ring(p.border, 1.),
+                                                shadow(p.shadow_soft, 4., 12.),
+                                            ])
+                                            .child(
+                                                styled(size::SMALL, p.text)
+                                                    .whitespace_nowrap()
+                                                    .child(reason),
+                                            ),
+                                    ),
+                                ),
+                        ))
+                    });
+                    d.relative()
+                        .on_hover(move |hovered, _, cx| {
+                            state.update(cx, |s, cx| {
+                                if *s != *hovered {
+                                    *s = *hovered;
+                                    cx.notify();
+                                }
+                            })
+                        })
+                        .children(note)
                 })
                 .when(!off, |d| {
                     d.on_click(move |_, window, cx| on_pick(key, window, cx))

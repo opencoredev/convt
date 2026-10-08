@@ -1182,6 +1182,8 @@ impl QuickView {
             ],
             if cloud { "cloud" } else { "local" },
             p,
+            window,
+            cx,
             move |key, _, cx| {
                 let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
             },
@@ -1417,7 +1419,7 @@ fn unreachable(to: &Format, files: usize) -> String {
 }
 
 impl Render for QuickView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
         // Documents waiting for the pack have their own card.
         let waiting = self.waiting_for_pack(cx);
@@ -1506,6 +1508,6 @@ impl Render for QuickView {
                     .children(body),
             )
             .children(consent)
-            .child(self.footer(asking, &p, cx))
+            .child(self.footer(asking, &p, window, cx))
     }
 }
