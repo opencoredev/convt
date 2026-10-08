@@ -373,7 +373,8 @@ impl Licensing {
     }
 
     pub fn state(&self) -> State {
-        if let Some(end) = self.account_trial_ends_at
+        if self.config.enforce
+            && let Some(end) = self.account_trial_ends_at
             && let Ok(remaining) = end.duration_since(SystemTime::now())
             && remaining > Duration::ZERO
             && let Some(ends_on) = &self.account_trial_ends_on
@@ -656,6 +657,15 @@ mod tests {
             matches!(l.state(), State::AccountTrial { ends_on: ref got, days_left, .. } if got == &ends_on && days_left >= 2)
         );
         assert!(l.begin_conversion().is_ok());
+    }
+
+    #[test]
+    fn a_source_build_ignores_an_account_trial() {
+        let f = Fixture::new();
+        let mut l = f.licensing(false);
+        let ends_on = date::from_days(today() + 2);
+        l.set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T23:59:59Z")));
+        assert_eq!(l.state(), State::Unrestricted);
     }
 
     #[test]
