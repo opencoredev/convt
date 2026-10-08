@@ -24,6 +24,8 @@ def write_tree(root):
     (root/'target'/'release'/'.fingerprint'/'aho-corasick-0'/'lib-aho_corasick').write_text('build-a\n')
     (root/'__pycache__').mkdir()
     (root/'__pycache__'/'x.pyc').write_bytes(b'x')
+    (root/'third-party'/'native').mkdir(parents=True)
+    (root/'third-party'/'native'/'downloaded-source.tar.gz').write_bytes(b'large audit input')
 
 class FreezeModeTests(unittest.TestCase):
     def test_mode_change_rejected(self):
@@ -66,6 +68,7 @@ class SourceArchiveMembers(unittest.TestCase):
             self.assertIn(f'{root.name}/README',names)
             self.assertFalse(any(Path(n).parts[:2]==(root.name,'target') for n in names))
             self.assertFalse(any('__pycache__' in Path(n).parts for n in names))
+            self.assertFalse(any(Path(n).parts[:2]==(root.name,'third-party') for n in names))
 
     def test_two_packs_match_when_only_target_differs(self):
         with tempfile.TemporaryDirectory(prefix='convt-source-repro-') as tmp:
