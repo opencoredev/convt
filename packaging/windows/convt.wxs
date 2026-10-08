@@ -13,6 +13,7 @@
     <Feature Id="Main" Title="convt" Level="1">
       <ComponentGroupRef Id="Payload" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentGroupRef Id="ExplorerVerbs" />
     </Feature>
   </Package>
   <Fragment>

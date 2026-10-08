@@ -86,6 +86,9 @@ jobs:
       - name: HEIC orientation (macOS sips, must not skip)
         if: runner.os == 'macOS' && matrix.suite == 'core'
         run: cargo test -p convt-engines --lib heic_orientation -- --nocapture --test-threads=1
+      - name: Windows Explorer packaging smoke
+        if: runner.os == 'Windows' && matrix.suite == 'core'
+        run: ./packaging/windows/smoke.ps1
       - name: Clippy (desktop)
         if: matrix.suite == 'desktop'
         run: cargo clippy -p convt-app --all-targets -- -D warnings
@@ -109,6 +112,8 @@ jobs:
           python-version: "3.12"
       - name: Source archive and audit unit tests
         run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - name: Windows packaging unit tests
+        run: python3 -m unittest discover -s packaging/windows -p 'test_*.py' -v
 
   web:
     name: Web

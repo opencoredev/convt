@@ -1,0 +1,1675 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <StandardDirectory Id="SendToFolder">
+      <Component Id="SendToShortcut" Guid="*">
+        <Shortcut Id="ConvtSendTo" Name="Convt" Target="[INSTALLFOLDER]convt-app.exe" Arguments="open --" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKMU" Key="Software\Convt" Name="SendTo" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Fragment>
+  <Fragment>
+    <ComponentGroup Id="ExplorerVerbs">
+      <ComponentRef Id="SendToShortcut" />
+      <Component Id="ExplorerVerb_jpg" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt\shell\10_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt\shell\10_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt\shell\20_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt\shell\20_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpg\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_jpeg" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt\shell\10_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt\shell\10_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt\shell\20_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt\shell\20_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_jfif" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt\shell\10_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt\shell\10_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt\shell\20_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt\shell\20_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.jfif\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_png" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt\shell\20_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt\shell\20_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.png\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_webp" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webp\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_heic" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heic\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_heif" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.heif\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_avif" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avif\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_gif" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\10_mp4" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP4" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\10_mp4\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp4 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\20_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\20_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\30_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\30_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.gif\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_tiff" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tiff\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_tif" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tif\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_bmp" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.bmp\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_ico" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ico\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_tga" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.tga\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_ppm" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppm\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_pgm" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pgm\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_pbm" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pbm\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_pnm" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pnm\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_qoi" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.qoi\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_exr" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\10_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\10_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\20_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\20_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\30_webp" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WEBP" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\30_webp\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to webp -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.exr\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_svg" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\10_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\10_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\20_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\20_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\30_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\30_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.svg\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_mp4" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\10_mov" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MOV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\10_mov\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mov -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\20_gif" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="GIF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\20_gif\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to gif -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\30_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\30_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp4\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_m4v" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\10_mov" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MOV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\10_mov\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mov -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\20_gif" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="GIF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\20_gif\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to gif -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\30_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\30_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4v\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_mov" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\10_mp4" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP4" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\10_mp4\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp4 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\20_gif" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="GIF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\20_gif\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to gif -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\30_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\30_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mov\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_webm" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\10_mp4" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP4" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\10_mp4\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp4 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\20_mov" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MOV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\20_mov\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mov -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\30_gif" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="GIF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\30_gif\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to gif -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\40_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\40_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.webm\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_mkv" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\10_mp4" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP4" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\10_mp4\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp4 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\20_mov" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MOV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\20_mov\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mov -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\30_gif" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="GIF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\30_gif\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to gif -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\40_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\40_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mkv\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_avi" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\10_mp4" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP4" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\10_mp4\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp4 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\20_mov" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MOV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\20_mov\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mov -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\30_gif" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="GIF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\30_gif\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to gif -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\40_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\40_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.avi\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_mp3" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt\shell\10_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt\shell\10_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt\shell\20_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt\shell\20_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.mp3\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_wav" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt\shell\20_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt\shell\20_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.wav\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_flac" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\20_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\20_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\30_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\30_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.flac\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_aac" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\20_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\20_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\30_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\30_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.aac\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_m4a" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt\shell\20_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt\shell\20_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.m4a\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_ogg" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\20_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\20_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\30_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\30_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ogg\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_oga" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\20_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\20_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\30_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\30_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.oga\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_opus" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\10_mp3" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="MP3" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\10_mp3\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to mp3 -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\20_m4a" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="M4A" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\20_m4a\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to m4a -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\30_wav" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="WAV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\30_wav\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to wav -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.opus\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_pdf" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\10_png" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PNG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\10_png\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to png -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\20_jpeg" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="JPEG" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\20_jpeg\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to jpeg -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\30_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\30_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pdf\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_docx" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt\shell\20_txt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="TXT" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt\shell\20_txt\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to txt -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.docx\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_doc" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\20_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\20_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\30_txt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="TXT" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\30_txt\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to txt -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.doc\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_odt" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\20_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\20_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\30_txt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="TXT" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\30_txt\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to txt -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odt\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_rtf" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\20_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\20_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\30_txt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="TXT" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\30_txt\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to txt -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.rtf\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_txt" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt\shell\20_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt\shell\20_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.txt\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_html" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\20_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\20_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\30_txt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="TXT" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\30_txt\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to txt -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.html\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_htm" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\20_docx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="DOCX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\20_docx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to docx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\30_txt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="TXT" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\30_txt\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to txt -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.htm\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_pptx" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pptx\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pptx\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pptx\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pptx\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.pptx\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_ppt" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt\shell\20_pptx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PPTX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt\shell\20_pptx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pptx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ppt\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_odp" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt\shell\20_pptx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PPTX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt\shell\20_pptx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pptx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.odp\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_xlsx" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt\shell\20_csv" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="CSV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt\shell\20_csv\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to csv -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xlsx\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_xls" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\20_xlsx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="XLSX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\20_xlsx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to xlsx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\30_csv" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="CSV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\30_csv\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to csv -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.xls\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_ods" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\20_xlsx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="XLSX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\20_xlsx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to xlsx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\30_csv" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="CSV" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\30_csv\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to csv -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.ods\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="ExplorerVerb_csv" Guid="*">
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="Convert with Convt" KeyPath="yes" />
+          <RegistryValue Type="string" Name="Icon" Value="[INSTALLFOLDER]convt-app.exe,0" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Player" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt\shell\10_pdf" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="PDF" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt\shell\10_pdf\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to pdf -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt\shell\20_xlsx" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="XLSX" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt\shell\20_xlsx\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open --to xlsx -- &quot;%1&quot;" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt\shell\90_more" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Name="MUIVerb" Value="More options…" />
+          <RegistryValue Type="string" Name="MultiSelectModel" Value="Document" />
+        </RegistryKey>
+        <RegistryKey Root="HKMU" Key="Software\Classes\SystemFileAssociations\.csv\shell\ConvertWithConvt\shell\90_more\command" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; open -- &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

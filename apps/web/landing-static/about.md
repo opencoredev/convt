@@ -10,7 +10,7 @@ convt puts those tools behind one menu. It knows 40 formats across images, video
 
 ## How it is built
 
-The conversion engine is written in Rust. Video and audio go through FFmpeg, office documents through LibreOffice, PDF pages through PDFium, and photos and SVG through pure Rust libraries. The desktop app is built with GPUI, and the right-click menu plugs into the file manager: Finder on macOS, and Nautilus, Dolphin, Nemo and Thunar on Linux, with Explorer on Windows to follow. The same engine powers the `convt` command line tool.
+The conversion engine is written in Rust. Video and audio go through FFmpeg, office documents through LibreOffice, PDF pages through PDFium, and photos and SVG through pure Rust libraries. The desktop app is built with GPUI, and the right-click menu plugs into the file manager: Finder on macOS, Explorer on Windows, and Nautilus, Dolphin, Nemo and Thunar on Linux. The same engine powers the `convt` command line tool.
 
 convt is open source under the GNU Affero General Public License v3.0.
 
