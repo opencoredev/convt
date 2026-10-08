@@ -1,6 +1,6 @@
 //! The Settings window: General, Presets and License.
 
-use convt_core::{FORMATS, Format, Options, Preset, format_by_id};
+use convt_core::{Category, FORMATS, Format, Options, Preset, format_by_id};
 use convt_license::client::{BUY_URL, State};
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
@@ -47,6 +47,8 @@ const TABS: [(SettingsTab, &str, &str, IconName); 3] = [
 
 /// Space between the window edge and the settings content.
 const GUTTER: f32 = 24.;
+/// The width of the dropdowns in General, so they line up.
+const SELECT_WIDTH: f32 = 200.;
 
 /// The dropdown that is open, if any.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -243,7 +245,7 @@ impl SettingsView {
         let output_select = theme::select(
             "output",
             output,
-            210.,
+            SELECT_WIDTH,
             false,
             self.open == Some(Open::Output),
             vec![
@@ -276,8 +278,8 @@ impl SettingsView {
         let jobs_select = theme::select(
             "jobs",
             jobs,
-            130.,
-            true,
+            SELECT_WIDTH,
+            false,
             self.open == Some(Open::Jobs),
             job_choices,
             p,
@@ -478,20 +480,18 @@ impl SettingsView {
                             p,
                         )
                         .into_any_element(),
-                        theme::row(
-                            "Show a notification",
-                            Some(theme::detail("When a file is done", p)),
-                            notifications,
-                            p,
-                        )
-                        .into_any_element(),
-                        theme::row(
-                            reveal_label,
-                            Some(theme::detail("When a file is done", p)),
-                            reveal,
-                            p,
-                        )
-                        .into_any_element(),
+                    ],
+                    p,
+                ),
+                p,
+            ))
+            .child(section(
+                "When a file is done",
+                theme::group(
+                    [
+                        theme::row("Show a notification", None, notifications, p)
+                            .into_any_element(),
+                        theme::row(reveal_label, None, reveal, p).into_any_element(),
                     ],
                     p,
                 ),
@@ -567,42 +567,73 @@ impl SettingsView {
                 .into_any_element()
             })
             .collect();
-        let chips = div()
-            .flex()
-            .flex_wrap()
-            .gap(px(6.))
-            .children(self.outputs.iter().map(|&to| {
-                let on = self.preset_to == Some(to);
-                let weak = cx.entity().downgrade();
-                theme::clickable(SharedString::from(format!("new-to-{}", to.id)), to.name)
-                    .aria_selected(on)
-                    .flex()
-                    .items_center()
-                    .h(px(24.))
-                    .px(px(9.))
-                    .rounded(px(radius::CONTROL))
-                    .map(|d| {
-                        if on {
-                            d.bg(p.green_tint)
-                                .shadow(vec![theme::inset_ring(p.green_border, 1.)])
-                        } else {
-                            d.bg(p.surface)
-                                .shadow(vec![theme::inset_ring(p.border, 1.)])
-                                .hover(|s| s.bg(p.hover))
-                        }
+        let chip = |to: &'static Format| {
+            let on = self.preset_to == Some(to);
+            let weak = cx.entity().downgrade();
+            theme::clickable(SharedString::from(format!("new-to-{}", to.id)), to.name)
+                .aria_selected(on)
+                .flex()
+                .items_center()
+                .h(px(24.))
+                .px(px(9.))
+                .rounded(px(radius::CONTROL))
+                .map(|d| {
+                    if on {
+                        d.bg(p.green_tint)
+                            .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                    } else {
+                        d.bg(p.surface)
+                            .shadow(vec![theme::inset_ring(p.border, 1.)])
+                            .hover(|s| s.bg(p.hover))
+                    }
+                })
+                .on_click(move |_, _, cx| {
+                    let _ = weak.update(cx, |this, cx| {
+                        this.preset_to = (this.preset_to != Some(to)).then_some(to);
+                        cx.notify();
+                    });
+                })
+                .child(
+                    mono(11., 14., if on { p.green_text } else { p.text })
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(to.name),
+                )
+        };
+        // The targets by kind, so the list reads in groups.
+        let chips =
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(space::SM))
+                .children(TARGET_GROUPS.iter().filter_map(|(label, kinds)| {
+                    let formats: Vec<&'static Format> = self
+                        .outputs
+                        .iter()
+                        .copied()
+                        .filter(|f| kinds.contains(&f.category))
+                        .collect();
+                    (!formats.is_empty()).then(|| {
+                        div()
+                            .flex()
+                            .items_start()
+                            .gap(px(space::MD))
+                            .child(
+                                styled(size::SMALL, p.secondary)
+                                    .w(px(76.))
+                                    .flex_shrink_0()
+                                    .pt(px(4.))
+                                    .child(*label),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_1()
+                                    .flex_wrap()
+                                    .gap(px(6.))
+                                    .children(formats.into_iter().map(chip)),
+                            )
                     })
-                    .on_click(move |_, _, cx| {
-                        let _ = weak.update(cx, |this, cx| {
-                            this.preset_to = (this.preset_to != Some(to)).then_some(to);
-                            cx.notify();
-                        });
-                    })
-                    .child(
-                        mono(11., 14., if on { p.green_text } else { p.text })
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(to.name),
-                    )
-            }));
+                }));
         let labelled = |label: &'static str, field: AnyElement| {
             div()
                 .flex()
@@ -936,6 +967,22 @@ impl SettingsView {
         cx.notify();
     }
 }
+
+/// The groups the preset form lists targets in.
+const TARGET_GROUPS: [(&str, &[Category]); 4] = [
+    ("Images", &[Category::Image, Category::Vector]),
+    ("Video", &[Category::Video]),
+    ("Audio", &[Category::Audio]),
+    (
+        "Documents",
+        &[
+            Category::Pdf,
+            Category::Document,
+            Category::Presentation,
+            Category::Spreadsheet,
+        ],
+    ),
+];
 
 /// What reaches the network without a click, for the General tab. Update
 /// checks and license refresh are listed together, as the privacy policy

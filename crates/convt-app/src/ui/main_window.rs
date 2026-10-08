@@ -454,6 +454,7 @@ impl MainView {
                     .id("automations-intro")
                     .test_support()
                     .aria_label(AUTOMATIONS_INTRO)
+                    .max_w(px(560.))
                     .px(px(2.))
                     .pt(px(space::SM))
                     .child(AUTOMATIONS_INTRO),
