@@ -11,7 +11,22 @@ export SOURCE_DATE_EPOCH=$bundle_epoch
 # silently download its own unpinned runtime. Fetch locked sources first —
 # a clean runner has an empty packaging/.cache.
 python3 "$repo/packaging/release/appimage-source-closure.py" fetch --cache "$cache"
-python3 "$repo/packaging/release/appimage-source-build.py" --cache "$cache"
+# Reuse a hash-matching rebuilt runtime. The pinned build.py recipe still
+# runs on a miss so corresponding-source pins stay untouched.
+if ! python3 - "$cache" "$repo/packaging/release/appimage-source-closure.lock.json" <<'PY'
+import hashlib, json, pathlib, sys
+cache, lock_path = map(pathlib.Path, sys.argv[1:])
+lock = json.loads(lock_path.read_text())
+runtime = cache / "appimage-source/rebuilt/runtime-x86_64"
+expected = lock["build"]["runtime_sha256"]
+if runtime.is_file() and hashlib.sha256(runtime.read_bytes()).hexdigest() == expected:
+    print("Reusing cached AppImage runtime", expected)
+    sys.exit(0)
+sys.exit(1)
+PY
+then
+  python3 "$repo/packaging/release/appimage-source-build.py" --cache "$cache"
+fi
 cp "$cache/appimage-source/rebuilt/runtime-x86_64" "$cache/runtime-source-built-x86_64"
 python3 "$repo/packaging/linux/fetch.py" "$cache" "$repo/packaging/linux/appimage-inputs.lock.json"
 work=$(mktemp -d)

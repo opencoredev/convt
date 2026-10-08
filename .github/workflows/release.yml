@@ -14,7 +14,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: desktop-release
+  # Queue, do not cancel. A Cargo.lock or desktop push with the same version
+  # starts this workflow, then preflight sets publish=false. Cancelling the
+  # in-flight run would drop a real publish with no replacement.
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   preflight:
@@ -126,6 +129,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
       - run: cargo fetch --locked
       - uses: actions/download-artifact@v4
         with:

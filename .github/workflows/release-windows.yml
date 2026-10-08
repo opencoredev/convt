@@ -27,6 +27,9 @@ on:
         type: boolean
 permissions:
   contents: read
+concurrency:
+  group: release-windows-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-latest
@@ -55,9 +58,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-release
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Restore Windows download cache
+        uses: actions/cache@v4
+        with:
+          path: packaging/cache/windows
+          key: windows-bundle-${{ hashFiles('packaging/windows/inputs.lock.json') }}
       - name: Build the unsigned Windows payload (verification gates)
         shell: pwsh
         env:
