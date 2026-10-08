@@ -17,8 +17,11 @@ import urllib.request
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_CASK = REPO / "Casks" / "convt.rb"
 TAP_REPO = "opencoredev/homebrew-tap"
-VERSION_RE = re.compile(r'^(\s*version\s+")([^"]+)(")\s*$', re.M)
-SHA_RE = re.compile(r'^(\s*sha256(?:\s+arm:)?\s+")([0-9a-f]{64})(")\s*$', re.M)
+# `[ \t]*` rather than `\s*` before `$`: under re.M, `\s*` also eats the
+# newline and the blank line after the stanza, which `brew style` requires.
+VERSION_RE = re.compile(r'^([ \t]*version[ \t]+")([^"]+)(")[ \t]*$', re.M)
+SHA_RE = re.compile(r'^([ \t]*sha256(?:[ \t]+arm:)?[ \t]+")([0-9a-f]{64})(")[ \t]*$', re.M)
+URL_RE = re.compile(r'^([ \t]*url[ \t]+")([^"]+)(")', re.M)
 VERSION_VALUE = re.compile(r"^\d+\.\d+\.\d+$")
 SHA_VALUE = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED = (
@@ -87,11 +90,13 @@ def bump_cask(text: str, *, version: str, sha256: str, url: str | None = None) -
     if count != 1:
         raise ValueError("expected exactly one sha256 stanza")
     if url is not None:
-        bumped, count = re.compile(r'^(\s*url\s+")([^"]+)(")', re.M).subn(
-            rf"\g<1>{url}\g<3>", bumped, count=1
-        )
-        if count != 1:
+        current_url = URL_RE.search(bumped)
+        if current_url is None or len(URL_RE.findall(bumped)) != 1:
             raise ValueError("expected exactly one url stanza")
+        # A url written with #{version} already points at this release; keep
+        # it, so the cask stays the template Homebrew expects.
+        if current_url[2].replace("#{version}", version) != url:
+            bumped = URL_RE.sub(lambda m: m[1] + url + m[3], bumped, count=1)
     validate_cask(bumped)
     return bumped
 

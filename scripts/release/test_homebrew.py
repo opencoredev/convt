@@ -82,6 +82,19 @@ class BumpTests(unittest.TestCase):
         self.assertIn("zap trash:", bumped)
         self.assertEqual(bumped.count("cask "), 1)
 
+    def test_bump_changes_only_the_version_and_sha_lines(self):
+        bumped = homebrew.bump_cask(CASK, version="9.9.9", sha256="c" * 64)
+        before, after = CASK.splitlines(), bumped.splitlines()
+        self.assertEqual(len(before), len(after))
+        changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
+        self.assertEqual(len(changed), 2)
+
+    def test_a_github_release_url_keeps_its_version_template(self):
+        url = "https://github.com/opencoredev/convt/releases/download/v9.9.9/convt-macos-arm64.dmg"
+        bumped = homebrew.bump_cask(CASK, version="9.9.9", sha256="c" * 64, url=url)
+        self.assertIn("/download/v#{version}/convt-macos-arm64.dmg", bumped)
+        self.assertNotIn("v9.9.9", bumped)
+
     def test_url_override_keeps_the_manifest_host(self):
         url = "https://downloads.convt.app/9.9.9/convt-macos-arm64.dmg"
         bumped = homebrew.bump_cask(CASK, version="9.9.9", sha256="c" * 64, url=url)
