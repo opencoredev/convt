@@ -460,6 +460,9 @@ impl AppState {
                     tracing::warn!(error = %e, "could not forget a revoked sign-in");
                 }
                 self.account.session = None;
+                self.account.access = None;
+                self.update_settings(|s| s.trial_ends_on = None, cx);
+                self.licensing.set_account_trial(None);
                 Refresh::Failed(format!(
                     "This computer was signed out of convt.app. Sign in again to keep Pro renewing. {kept}"
                 ))
