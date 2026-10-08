@@ -280,6 +280,11 @@ pub struct AppState {
 pub const INSTALLING: &str =
     "convt is installing an update and restarts in a moment. Convert again after it does.";
 
+/// Why document support can't download or be removed while an update
+/// installs: quitting for the restart would stop it.
+pub const INSTALLING_PACK: &str =
+    "convt is installing an update and restarts in a moment. Try again after it does.";
+
 /// The app's one [`AppState`].
 pub struct Shared(pub Entity<AppState>);
 
@@ -598,6 +603,11 @@ impl AppState {
         {
             return;
         }
+        if self.installing() {
+            self.pack.notice = Some(INSTALLING_PACK.into());
+            cx.notify();
+            return;
+        }
         if matches!(self.pack.status, pack::Status::Installed(_)) && self.documents_converting() {
             self.pack.notice =
                 Some("Wait for the document conversions to finish, then download it again.".into());
@@ -638,6 +648,11 @@ impl AppState {
     pub fn remove_pack(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         if matches!(self.pack.phase, PackPhase::Working(_)) || self.pack.removing {
             return Err("Wait for the download to finish first.".into());
+        }
+        if self.installing() {
+            self.pack.notice = Some(INSTALLING_PACK.into());
+            cx.notify();
+            return Err(INSTALLING_PACK.into());
         }
         if self.documents_converting() {
             let error = "Wait for the document conversions to finish, then remove it.";
@@ -786,7 +801,7 @@ impl AppState {
     pub fn activate(&mut self, key: &str, cx: &mut Context<Self>) -> Result<License, String> {
         let result = self.licensing.activate(key).map_err(|e| e.to_string());
         self.license = self.licensing.state();
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
         result
     }
@@ -795,7 +810,7 @@ impl AppState {
     pub fn deactivate(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         let result = self.licensing.deactivate();
         self.license = self.licensing.state();
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
         result
     }

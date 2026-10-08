@@ -13,15 +13,18 @@
 //! must match the manifest's size and SHA-256 ([`download`]); then the app
 //! offers "Restart to update", which checks the file again, installs it and
 //! starts the new version ([`install`]). While it installs, new conversions
-//! are refused and quitting waits for the install to finish. Other installs (deb, rpm, the tarball, an app convt can't
-//! replace) open the download page instead. A newer build the license
+//! and document pack work are refused and quitting waits for the install to
+//! finish. A verified download keeps the manifest that named it, so a
+//! relaunch offers "Restart to update" again after checking both offline.
+//! Other installs (deb, rpm, the tarball, an app convt can't replace) open
+//! the download page instead. A newer build the license
 //! doesn't cover offers the purchase page. A failed check (offline, a bad
 //! signature, a rollback) is silent except for a line in Settings.
 
 pub mod download;
 pub mod install;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -313,6 +316,9 @@ pub struct Updater {
     task: Option<Task<()>>,
     /// Never dropped part-way: its end lets a waiting quit through.
     install: Option<Task<()>>,
+    /// Counts checks, so a check's result applies only while it is the
+    /// latest one and still owns the state.
+    check: u64,
     /// Why "Restart to update" waited, such as running conversions.
     pub notice: Option<String>,
 }
@@ -371,6 +377,75 @@ fn select(
     }
 }
 
+/// Where a verified download keeps the manifest that named it, inside its
+/// version folder. Download file names never start with a dot.
+const SAVED_MANIFEST: &str = ".manifest.json";
+
+/// What a launch finds in the updates folder, before any network request.
+#[derive(Default)]
+struct Restored {
+    /// A verified download, still covered: the manifest's bytes, the version,
+    /// the file and its artifact.
+    ready: Option<(Vec<u8>, String, PathBuf, Artifact)>,
+    /// The version and why, when the last install failed after this app quit.
+    failed: Option<(String, String)>,
+}
+
+/// What a launch needs to look for a download ready to install.
+struct ReadyCheck {
+    key: VerifyingKey,
+    minimum_sequence: u64,
+    build_date: String,
+    updates_until: String,
+    target: (&'static str, &'static str),
+}
+
+/// Reads the updates folder at launch, offline: the result an install left,
+/// and a download whose saved manifest still verifies, still offers that
+/// version to this license, and whose file still matches its size and hash.
+fn restore(dir: &Path, ready: Option<ReadyCheck>, now: u64) -> Restored {
+    let failed = install::take_result(dir).filter(|(version, _)| newer_than_running(version));
+    let ready = ready.and_then(|c| {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .find_map(|entry| {
+                let bytes = std::fs::read(entry.path().join(SAVED_MANIFEST)).ok()?;
+                let (Update::Available { version, .. }, Some(artifact)) = select(
+                    &bytes,
+                    &c.key,
+                    c.minimum_sequence,
+                    &c.build_date,
+                    &c.updates_until,
+                    c.target,
+                    now,
+                ) else {
+                    return None;
+                };
+                if entry.file_name() != version.as_str() {
+                    return None;
+                }
+                let path = download::destination(dir, &version, &artifact);
+                download::check(&path, &artifact).ok()?;
+                Some((bytes, version, path, artifact))
+            })
+    });
+    Restored { ready, failed }
+}
+
+/// Whether `version` is newer than this build: an install of it that
+/// reported failure and left this build running did fail.
+fn newer_than_running(version: &str) -> bool {
+    match (
+        semver::Version::parse(version),
+        semver::Version::parse(VERSION),
+    ) {
+        (Ok(v), Ok(running)) => v > running,
+        _ => false,
+    }
+}
+
 /// The last day of updates this machine's license covers. Without a license
 /// (a trial, or a build that checks none) every build is fair game.
 fn updates_until(state: &State) -> String {
@@ -383,9 +458,32 @@ fn updates_until(state: &State) -> String {
 impl AppState {
     /// Runs the day's license renewal and update check if they are due, now
     /// and then every [`DAILY_CHECKS`] for as long as convt runs.
+    /// A self-updating install first looks, off the UI thread and offline,
+    /// for a download ready to install and for the result of an install that
+    /// ran after the last quit; the day's checks follow.
     pub fn start_daily_checks(&mut self, cx: &mut Context<Self>) {
-        self.daily_checks(cx);
+        let restore = self.restore_work();
+        if restore.is_none() {
+            self.daily_checks(cx);
+        }
         self._daily_checks = Some(cx.spawn(async move |this, cx| {
+            if let Some(work) = restore {
+                let (tx, rx) = futures::channel::oneshot::channel();
+                std::thread::Builder::new()
+                    .name("convt-update".into())
+                    .spawn(move || drop(tx.send(work())))
+                    .expect("spawn the update thread");
+                let found = rx.await.unwrap_or_default();
+                if this
+                    .update(cx, |s, cx| {
+                        s.restored(found, cx);
+                        s.daily_checks(cx);
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+            }
             loop {
                 cx.background_executor().timer(DAILY_CHECKS).await;
                 if this.update(cx, |s, cx| s.daily_checks(cx)).is_err() {
@@ -402,6 +500,41 @@ impl AppState {
         // The other: when update checks are on, at most once a day, fetch the
         // signed list of releases.
         self.check_updates_if_due(cx);
+    }
+
+    /// The launch's look at the updates folder, when this install updates
+    /// itself.
+    fn restore_work(&self) -> Option<impl FnOnce() -> Restored + Send + 'static> {
+        let dir = self.update_config.install.as_ref()?.dir.clone();
+        let ready = match (self.settings.update_checks, self.update_config.key) {
+            (true, Some(key)) => Some(ReadyCheck {
+                key,
+                minimum_sequence: self.settings.update_sequence,
+                build_date: self.licensing.build_date().to_string(),
+                updates_until: updates_until(&self.license),
+                target: self.update_config.target,
+            }),
+            _ => None,
+        };
+        Some(move || restore(&dir, ready, now_unix()))
+    }
+
+    /// Applies what the launch found, unless a check or a click got there
+    /// first.
+    fn restored(&mut self, found: Restored, cx: &mut Context<Self>) {
+        if self.update != Update::Idle {
+            return;
+        }
+        if let Some((bytes, version, path, artifact)) = found.ready {
+            self.update_manifest = Some(Arc::new(bytes));
+            self.updater.artifact = Some(artifact);
+            self.update = Update::Ready { version, path };
+        }
+        if let Some((version, why)) = found.failed {
+            // Try again reuses the download when it's still here.
+            self.update = Update::InstallFailed { version, why };
+        }
+        cx.notify();
     }
 
     /// Whether an update is installing: conversions wait, and so does quitting.
@@ -424,7 +557,8 @@ impl AppState {
     /// before the result shows; if either can't be saved, nothing is accepted,
     /// so a restart can neither repeat the day's request nor replay an older
     /// manifest. A check that fails while an update is ready keeps "Restart
-    /// to update".
+    /// to update". A result applies only while its check still owns the
+    /// state, so it never replaces what came after it, such as an install.
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {
         if !self.settings.update_checks
             || matches!(
@@ -447,30 +581,42 @@ impl AppState {
         }
         let ready = matches!(self.update, Update::Ready { .. }).then(|| self.update.clone());
         self.update = Update::Checking;
+        self.updater.check += 1;
+        let check = self.updater.check;
         let fetch = self.update_config.fetch.clone();
         let minimum = self.settings.update_sequence;
         self._update_task = Some(background(
             cx,
             move || fetch_verified(&*fetch, &key, minimum, now_unix()),
             move |state, result, cx| {
-                let failed = |note| ready.clone().unwrap_or(Update::Failed(note));
-                state.update = match result {
-                    Err(note) => failed(note),
-                    Ok((bytes, sequence)) => {
-                        let seq = sequence.max(state.settings.update_sequence);
-                        match state.save_settings_now(|s| s.update_sequence = seq, cx) {
-                            Err(e) => failed(format!(
+                if state.updater.check != check || state.update != Update::Checking {
+                    return;
+                }
+                let accepted = result.and_then(|(bytes, sequence)| {
+                    let seq = sequence.max(state.settings.update_sequence);
+                    state
+                        .save_settings_now(|s| s.update_sequence = seq, cx)
+                        .map(|()| bytes)
+                        .map_err(|e| {
+                            format!(
                                 "The list of releases was ignored because settings couldn't be saved: {e}"
-                            )),
-                            Ok(()) => {
-                                state.update_manifest = Some(Arc::new(bytes));
-                                state.reselect_update();
-                                state.download_update(cx);
-                                state.update.clone()
-                            }
-                        }
+                            )
+                        })
+                });
+                match (accepted, ready) {
+                    (Ok(bytes), ready) => {
+                        state.update_manifest = Some(Arc::new(bytes));
+                        // A ready download of the same build stays ready.
+                        state.update = ready.unwrap_or(Update::Idle);
+                        state.reselect_update(cx);
                     }
-                };
+                    // The license may have changed while it checked.
+                    (Err(_), Some(ready)) => {
+                        state.update = ready;
+                        state.reselect_update(cx);
+                    }
+                    (Err(note), None) => state.update = Update::Failed(note),
+                }
                 cx.notify();
             },
         ));
@@ -478,13 +624,15 @@ impl AppState {
     }
 
     /// Picks from the last accepted manifest again for the current license,
-    /// after a check or when activation, removal or renewal changed it.
-    pub fn reselect_update(&mut self) {
+    /// after a check or when activation, removal or renewal changed it, and
+    /// starts downloading a covered build this install can update itself
+    /// with. A running check picks for itself when it ends, and an install
+    /// in progress is left to finish.
+    pub fn reselect_update(&mut self, cx: &mut Context<Self>) {
         let (Some(bytes), Some(key)) = (&self.update_manifest, self.update_config.key) else {
             return;
         };
-        // Past the point of no return: the install finishes and convt quits.
-        if matches!(self.update, Update::Installing { .. }) {
+        if matches!(self.update, Update::Checking | Update::Installing { .. }) {
             return;
         }
         let (update, artifact) = select(
@@ -507,6 +655,9 @@ impl AppState {
         self.updater.stop();
         self.updater.artifact = artifact;
         self.update = update;
+        if matches!(self.update, Update::Available { .. }) {
+            self.download_update(cx);
+        }
     }
 
     /// Downloads the covered update in the background, if this install
@@ -527,11 +678,14 @@ impl AppState {
             return;
         };
         self.updater.stop();
+        let source = install.source.clone();
+        let dir = install.dir.clone();
+        // One update at a time. Only here, on the UI thread: a stopped
+        // attempt still running never deletes anything outside its folder.
+        download::keep_only(&dir, &version);
         let cancel = Arc::new(AtomicBool::new(false));
         self.updater.cancel = Some(cancel.clone());
         let (tx, mut rx) = futures::channel::mpsc::unbounded();
-        let source = install.source.clone();
-        let dir = install.dir.clone();
         let thread_version = version.clone();
         std::thread::Builder::new()
             .name("convt-update".into())
@@ -575,6 +729,12 @@ impl AppState {
         match event {
             Event::Progress(p) => *percent = p,
             Event::Done(Ok(path)) => {
+                // Kept with the file, so a relaunch can offer it again.
+                if let (Some(bytes), Some(folder)) = (&self.update_manifest, path.parent())
+                    && let Err(e) = std::fs::write(folder.join(SAVED_MANIFEST), &**bytes)
+                {
+                    tracing::warn!(error = %e, "couldn't keep the update's manifest");
+                }
                 self.update = Update::Ready {
                     version: version.clone(),
                     path,
@@ -594,9 +754,10 @@ impl AppState {
 
     /// "Restart to update": checks the file against the manifest once more
     /// and installs it off the UI thread, then quits so the helper can start
-    /// the new version. Waits while conversions run, since quitting would
-    /// stop them; while it installs, new conversions are refused and a quit
-    /// waits for the install to end.
+    /// the new version. Waits while conversions run or document support
+    /// downloads, installs or is removed, since quitting would stop them;
+    /// while it installs, new conversions and pack work are refused and a
+    /// quit waits for the install to end.
     pub fn restart_to_update(&mut self, cx: &mut Context<Self>) {
         let Update::Ready { version, path } = self.update.clone() else {
             return;
@@ -610,9 +771,17 @@ impl AppState {
         ) else {
             return;
         };
-        if self.queue.active() > 0 {
-            self.updater.notice =
-                Some("Wait for the conversions to finish; restarting would stop them.".into());
+        let busy = if self.queue.active() > 0 {
+            Some("Wait for the conversions to finish; restarting would stop them.")
+        } else if matches!(self.pack.phase, crate::model::PackPhase::Working(_))
+            || self.pack.removing
+        {
+            Some("Wait for document support to finish; restarting would stop it.")
+        } else {
+            None
+        };
+        if let Some(busy) = busy {
+            self.updater.notice = Some(busy.into());
             cx.notify();
             return;
         }

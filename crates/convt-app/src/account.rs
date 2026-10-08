@@ -356,7 +356,7 @@ impl AppState {
         };
         self.license = self.licensing.state();
         // A renewed key may cover an update that needed renewing.
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
     }
 }

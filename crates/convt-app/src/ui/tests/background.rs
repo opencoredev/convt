@@ -362,3 +362,33 @@ fn conversions_wait_while_an_update_installs(cx: &mut TestAppContext) {
     // Nothing was running, so it quits for the relaunch.
     assert_eq!(quits(cx), 1);
 }
+
+#[gpui_kit::test]
+fn a_silent_conversion_as_the_last_window_closes_finishes_first(cx: &mut TestAppContext) {
+    // Documents "convert" for 200 ms through the fake document engine.
+    let packs = Arc::new(TestPacks::default());
+    packs.installed.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs);
+    background(&f, cx, false);
+    let docx = f.docx("Report.docx");
+    let (window, _) = f.main(cx);
+    // The window closes, and before the deferred quit runs a right-click
+    // conversion arrives.
+    window
+        .update(cx, |_, window, _| window.remove_window())
+        .unwrap();
+    cx.update(|cx| super::super::route(cli(vec![docx], Some("pdf"), None), cx));
+    let job = f.last_job(cx);
+    assert_eq!(quits(cx), 0, "not while the conversion runs");
+    wait_until(cx, "the job to finish", |cx| {
+        f.app
+            .read(cx)
+            .entry(job)
+            .is_some_and(|e| e.status.is_finished())
+    });
+    cx.read(|cx| {
+        let status = &f.app.read(cx).entry(job).unwrap().status;
+        assert!(matches!(status, crate::jobs::Status::Done(_)), "{status:?}");
+    });
+    assert_eq!(quits(cx), 1, "then once");
+}
