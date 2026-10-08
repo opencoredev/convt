@@ -67,6 +67,26 @@ def app_path():
         return str(image)
     return APP
 
+
+def cli_command():
+    """How to run the CLI. AppImage menus use --cli on the stable file."""
+    if image := appimage_path():
+        return [str(image), "--cli"]
+    return [CONVT]
+
+
+def bake_nautilus_extension(text):
+    """Pin CONVT and APP so the extension still works when PATH does not
+    contain them (AppImage users, or a Settings install that only had them
+    on PATH for the installer)."""
+    text, n = re.subn(r"^CONVT = .*$", f"CONVT = {cli_command()!r}", text, count=1, flags=re.M)
+    if n != 1:
+        raise ValueError("nautilus extension is missing a CONVT assignment")
+    text, n = re.subn(r"^APP = .*$", f"APP = {app_path()!r}", text, count=1, flags=re.M)
+    if n != 1:
+        raise ValueError("nautilus extension is missing an APP assignment")
+    return text
+
 MARKER = "# convt-generated: linux-integration-v1\n"
 ACTION_MARKER = "<!-- convt-generated: linux-integration-v1 -->"
 SCRIPT_SHEBANG = "#!/bin/sh\n"
@@ -247,11 +267,14 @@ def install_thunar(groups):
 
 
 def install_nautilus():
-    out = DATA / "nautilus-python/extensions"
-    out.mkdir(parents=True, exist_ok=True)
+    dest = DATA / "nautilus-python/extensions/convt_nautilus.py"
+    if not user_path_safe(dest, DATA):
+        print(f"preserving redirected nautilus extension: {dest}")
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
     source = Path(__file__).parent / "nautilus/convt_nautilus.py"
-    write_owned(out / source.name, source.read_text(), "nautilus")
-    print(f"nautilus: extension in {out} (needs nautilus-python; run `nautilus -q`)")
+    write_owned(dest, bake_nautilus_extension(source.read_text()), "nautilus")
+    print(f"nautilus: extension in {dest.parent} (needs nautilus-python; run `nautilus -q`)")
 
 
 def nautilus_script(target=None):
@@ -274,12 +297,18 @@ def nautilus_scripts(groups):
 
 def install_nautilus_scripts(groups):
     root = DATA / "nautilus/scripts" / NAUTILUS_SCRIPT_FOLDER
-    if root.is_dir() and not root.is_symlink() and user_path_safe(root, DATA):
+    if not user_path_safe(root, DATA):
+        print(f"preserving redirected nautilus scripts: {root}")
+        return
+    if root.is_dir() and not root.is_symlink():
         for old in root.iterdir():
             remove_owned(old, "nautilus-scripts")
     scripts = nautilus_scripts(groups)
     for name, text in scripts.items():
         path = DATA / "nautilus/scripts" / name
+        if not user_path_safe(path, DATA):
+            print(f"preserving redirected nautilus scripts: {path}")
+            continue
         path.parent.mkdir(parents=True, exist_ok=True)
         if write_owned(path, text, "nautilus-scripts"):
             path.chmod(0o755)

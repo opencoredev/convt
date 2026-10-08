@@ -830,11 +830,17 @@ fn linux_menu_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         Status::Installing => ("Installing…".to_string(), p.secondary),
         Status::Removing => ("Removing…".to_string(), p.secondary),
         Status::Installed(kinds) => (
-            format!("On. Right-click a file in {} to convert.", kinds.join(", ")),
+            format!(
+                "On. Right-click a file in {} to convert. Restart the file manager if the menu is missing.",
+                kinds.join(", ")
+            ),
             p.green,
         ),
         Status::System(kinds) => (
-            format!("On. The package installed menus for {}.", kinds.join(", ")),
+            format!(
+                "On. The package installed menus for {}. Set up to add Thunar or GNOME Files scripts.",
+                kinds.join(", ")
+            ),
             p.green,
         ),
         Status::MissingInstaller => ("This build has no menu installer.".to_string(), p.secondary),
@@ -845,9 +851,11 @@ fn linux_menu_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         ),
     };
     let busy = matches!(status, Status::Installing | Status::Removing);
+    // Packaged installs still need Setup: Thunar is user-only, and GNOME
+    // Files without python3-nautilus only sees the per-user scripts.
     let show_setup = matches!(
         status,
-        Status::NotInstalled | Status::Failed(_) | Status::MissingInstaller
+        Status::NotInstalled | Status::Failed(_) | Status::MissingInstaller | Status::System(_)
     );
     let show_remove = matches!(status, Status::Installed(_));
     field_top(

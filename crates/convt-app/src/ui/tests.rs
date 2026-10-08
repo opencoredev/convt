@@ -1095,6 +1095,7 @@ fn linux_settings_installs_and_removes_the_right_click_menu(cx: &mut TestAppCont
         status.contains("GNOME Files") && status.contains("Dolphin"),
         "{status}"
     );
+    assert!(status.contains("Restart the file manager"), "{status}");
     assert!(shown(cx, window, "remove-linux-menu"));
     assert!(!shown(cx, window, "setup-linux-menu"));
 
@@ -1127,6 +1128,23 @@ fn linux_settings_refreshes_menu_status(cx: &mut TestAppContext) {
     let status = label(cx, window, "linux-menu-status").expect("status");
     assert!(status.contains("Thunar"), "{status}");
     assert!(shown(cx, window, "remove-linux-menu"));
+}
+
+#[cfg(target_os = "linux")]
+#[gpui_kit::test]
+fn linux_settings_offers_setup_when_the_package_already_installed_menus(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    *f.linux_menus.status.lock().unwrap() =
+        crate::linux_menu::Status::System(vec!["Dolphin".into(), "Nemo".into()]);
+    cx.update(|cx| super::show_settings(SettingsTab::General, cx));
+    let (window, _) = window_of::<SettingsView>(cx);
+    let status = label(cx, window, "linux-menu-status").expect("status");
+    assert!(
+        status.contains("Dolphin") && status.contains("Nemo"),
+        "{status}"
+    );
+    assert!(shown(cx, window, "setup-linux-menu"));
+    assert!(!shown(cx, window, "remove-linux-menu"));
 }
 
 #[cfg(target_os = "linux")]
@@ -1443,6 +1461,8 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     assert!(body.contains("JPEG") && body.contains("PNG"), "{body}");
     #[cfg(target_os = "linux")]
     assert!(body.contains("Settings"), "{body}");
+    #[cfg(target_os = "windows")]
+    assert!(!body.contains("Settings"), "{body}");
     assert!(f.dir.path().join("license.key").exists());
 
     // "Start converting" finishes first run and opens the main window.

@@ -338,6 +338,18 @@ class Nautilus(unittest.TestCase):
     def targets(self, ext):
         return {"png": ("jpeg", "webp", "gif"), "jpg": ("png", "webp", "gif")}.get(ext, ())
 
+    def test_as_argv_accepts_a_list_or_a_string(self):
+        self.assertEqual(self.ext.as_argv("convt"), ["convt"])
+        self.assertEqual(self.ext.as_argv(["/app.AppImage", "--cli"]), ["/app.AppImage", "--cli"])
+
+    def test_cli_list_argv_runs_appimage_cli(self):
+        self.ext.cached_targets.cache_clear()
+        with mock.patch.object(self.ext, "CONVT", ["/app.AppImage", "--cli"]), \
+                mock.patch.object(self.ext.subprocess, "run",
+                                  return_value=types.SimpleNamespace(stdout="jpeg")) as run:
+            self.assertEqual(self.ext.targets_for("png"), ("jpeg",))
+        self.assertEqual(run.call_args.args[0][:3], ["/app.AppImage", "--cli", "targets"])
+
     def test_menu_offers_common_targets_and_opens_the_app(self):
         paths = ["/tmp/a b.png", "/tmp/it's \"q\".JPG"]
         with mock.patch.object(self.ext, "targets_for", self.targets):
@@ -438,6 +450,17 @@ class NautilusScripts(Fixture):
         self.assertEqual(webp.stat().st_mode & 0o111, 0o111)
         self.assertTrue((webp.read_text()).startswith("#!/bin/sh\n" + install.MARKER))
 
+    def test_install_scripts_does_not_follow_redirected_user_directories(self):
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        data = self.tmp / "data"
+        (data / "nautilus").mkdir(parents=True)
+        (data / "nautilus/scripts").symlink_to(outside, target_is_directory=True)
+        with mock.patch.object(install, "DATA", data), contextlib.redirect_stdout(io.StringIO()):
+            install.install_nautilus_scripts(GROUPS)
+        self.assertTrue((data / "nautilus/scripts").is_symlink())
+        self.assertEqual(list(outside.iterdir()), [])
+
 
 class SystemIntegration(unittest.TestCase):
     def test_explicit_user_install_retires_duplicates_without_touching_other_files(self):
@@ -498,6 +521,49 @@ class SystemIntegration(unittest.TestCase):
             self.assertIn(str(image.resolve()), desktop)
             self.assertNotIn(".mount_convt123", command[0])
             self.assertNotIn(".mount_convt123", desktop)
+
+    def test_nautilus_extension_bakes_resolved_binaries(self):
+        source = (HERE / "nautilus/convt_nautilus.py").read_text()
+        with mock.patch.object(install, "CONVT", "/opt/convt/convt"), \
+                mock.patch.object(install, "APP", "/opt/convt/convt-app"), \
+                mock.patch.dict(os.environ, {"APPIMAGE": ""}):
+            baked = install.bake_nautilus_extension(source)
+        self.assertIn("CONVT = ['/opt/convt/convt']", baked)
+        self.assertIn("APP = '/opt/convt/convt-app'", baked)
+        assignment = baked[baked.index("CONVT = "):baked.index("CACHE_TTL")]
+        self.assertNotIn("shutil.which", assignment)
+
+    def test_appimage_bakes_cli_flag_and_stable_file(self):
+        with tempfile.TemporaryDirectory(prefix="convt-nautilus-bake-") as tmp:
+            image = Path(tmp) / "convt-linux-x86_64.AppImage"
+            image.write_text("payload")
+            mount = Path(tmp) / ".mount_convt123"
+            source = (HERE / "nautilus/convt_nautilus.py").read_text()
+            with mock.patch.object(install, "CONVT", str(mount / "convt")), \
+                    mock.patch.object(install, "APP", str(mount / "convt-app")), \
+                    mock.patch.dict(os.environ, {"APPIMAGE": str(image)}):
+                baked = install.bake_nautilus_extension(source)
+                command = install.cli_command()
+            resolved = str(image.resolve())
+            self.assertEqual(command, [resolved, "--cli"])
+            self.assertIn(f"CONVT = {command!r}", baked)
+            self.assertIn(f"APP = {resolved!r}", baked)
+            self.assertNotIn(".mount_convt123", baked)
+
+    def test_install_nautilus_writes_the_baked_extension(self):
+        with tempfile.TemporaryDirectory(prefix="convt-nautilus-install-") as tmp:
+            data = Path(tmp) / "user"
+            with mock.patch.object(install, "DATA", data), \
+                    mock.patch.object(install, "CONVT", "/opt/convt/convt"), \
+                    mock.patch.object(install, "APP", "/opt/convt/convt-app"), \
+                    mock.patch.dict(os.environ, {"APPIMAGE": ""}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                install.install_nautilus()
+            dest = data / "nautilus-python/extensions/convt_nautilus.py"
+            text = dest.read_text()
+            self.assertTrue(text.startswith(install.MARKER) or "CONVT = ['/opt/convt/convt']" in text)
+            self.assertIn("CONVT = ['/opt/convt/convt']", text)
+            self.assertIn("APP = '/opt/convt/convt-app'", text)
 
 
 class Ownership(Fixture):
