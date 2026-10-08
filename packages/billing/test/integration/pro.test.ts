@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
 
 import { localProducts } from "@convt/billing-mock";
-import { createHarness, type Harness } from "../../src/testing";
+import { createHarness, testMailbox, type Harness } from "../../src/testing";
 
 let h: Harness;
 beforeAll(async () => {
@@ -50,6 +50,17 @@ async function startPro(email: string, interval: "month" | "year" = "month") {
 }
 
 describe("trials", () => {
+  test("device access is read-only and points to the session checkout route", async () => {
+    const u = await h.user(testMailbox("device-trial"));
+    const before = await h.q<{ n: number }>(sql`select count(*)::int as n from checkouts`);
+    expect(await h.service.currentProAccess(u.id)).toEqual({
+      kind: "can_start_trial",
+      checkoutUrl: "http://localhost:3000/checkout/pro",
+    });
+    const after = await h.q<{ n: number }>(sql`select count(*)::int as n from checkouts`);
+    expect(after[0].n).toBe(before[0].n);
+  });
+
   test("a trialing subscription and its $0 paid order issue nothing; conversion issues one key and one email", async () => {
     const { subId } = await startPro("trial1@convt.test");
     await h.deliverAll();

@@ -17,6 +17,7 @@ import type { BillingProvider } from "./provider";
 import { backfillPolarOrders } from "./backfill";
 import { reconcileDaily, reconcileFrequent } from "./reconcile";
 import { handleWebhook } from "./webhook";
+import { currentProAccess } from "./renewal";
 
 export type ServiceDeps = {
   connect: () => Promise<{ db: Db; close: () => Promise<void> }>;
@@ -102,6 +103,7 @@ export function createBillingService(deps: ServiceDeps) {
       }),
     advanceDeletion: (id: string) => withCtx((c) => advanceDeletion(c, id)),
     deletionStatus: (userId: string) => withCtx((c) => deletionStatus(c, userId)),
+    currentProAccess: (userId: string) => withCtx((c) => currentProAccess(c, userId)),
   };
 }
 
