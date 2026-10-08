@@ -776,7 +776,7 @@ impl SettingsView {
             State::SignInNeeded => (
                 IconName::TriangleAlert,
                 Tone::Error,
-                "Sign in to start your free trial.".to_string(),
+                "The 7-day Pro trial comes with a convt.app account. Sign in below, or enter a license key.".to_string(),
             ),
             State::TrialEnded => (
                 IconName::TriangleAlert,
