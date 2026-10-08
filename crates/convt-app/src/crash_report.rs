@@ -2,18 +2,21 @@
 //! chains to the platform hook; network work is always best effort.
 use std::backtrace::Backtrace;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const POSTHOG_KEY: &str = "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw";
 const POSTHOG_URL: &str = "https://us.i.posthog.com/batch/";
 
 pub fn logs_dir() -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("CONVT_LOG_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let home = std::env::var_os("HOME").map(PathBuf::from);
     #[cfg(target_os = "macos")]
     {
-        return home.map(|p| p.join("Library/Logs/convt"));
+        return home.map(|p| p.join("Library/Logs/Convt"));
     }
     #[cfg(target_os = "windows")]
     {
@@ -33,38 +36,27 @@ pub fn logs_dir() -> Option<PathBuf> {
 }
 
 /// Removes user paths while retaining useful crate-relative source locations.
+/// Spaces inside a folder name are part of the path, not a delimiter.
 pub fn scrub(input: &str) -> String {
-    let home = std::env::var_os("HOME").map(|p| PathBuf::from(p).to_string_lossy().into_owned());
     let mut out = input.to_string();
-    if let Some(home) = home {
+    if let Some(home) =
+        std::env::var_os("HOME").map(|p| PathBuf::from(p).to_string_lossy().into_owned())
+        && !home.is_empty()
+    {
         out = out.replace(&home, "<HOME>");
     }
-    let re = |s: String, pat: &str, replacement: &str| {
-        let mut out = String::with_capacity(s.len());
-        for part in s.split(pat) {
-            if !out.is_empty() {
-                out.push_str(replacement);
-            }
-            out.push_str(part);
-        }
-        out
-    };
     // Common absolute path roots and drive paths. This intentionally errs on
     // the side of removing a path rather than leaking a user's identity.
-    for root in ["/Users/", "/home/", "C:\\Users\\"] {
-        let mut rest = out.as_str();
-        let mut cleaned = String::new();
-        while let Some(i) = rest.find(root) {
-            cleaned.push_str(&rest[..i]);
-            let tail = &rest[i..];
-            let end = tail
-                .find(|c: char| c.is_whitespace() || c == ')' || c == ']' || c == '"')
-                .unwrap_or(tail.len());
-            cleaned.push_str("<PATH>");
-            rest = &tail[end..];
-        }
-        cleaned.push_str(rest);
-        out = cleaned;
+    for root in [
+        "<HOME>/",
+        "<HOME>\\",
+        "/Users/",
+        "/home/",
+        "C:\\Users\\",
+        "C:/Users/",
+        "~/",
+    ] {
+        out = replace_rooted_paths(&out, root);
     }
     // User supplied filenames are commonly present without an absolute root.
     let mut words = Vec::new();
@@ -80,8 +72,51 @@ pub fn scrub(input: &str) -> String {
             words.push(word.to_string());
         }
     }
-    let _ = &re;
     words.join(" ")
+}
+
+fn replace_rooted_paths(input: &str, root: &str) -> String {
+    let mut rest = input;
+    let mut cleaned = String::new();
+    while let Some(i) = rest.find(root) {
+        cleaned.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let end = path_extent(tail);
+        cleaned.push_str("<PATH>");
+        rest = &tail[end..];
+    }
+    cleaned.push_str(rest);
+    cleaned
+}
+
+/// How far a rooted path extends. Spaces stay inside the path; we stop at
+/// punctuation that typically ends a path in a log line (`: `, `)`, `"`).
+fn path_extent(tail: &str) -> usize {
+    let mut end = 0;
+    let mut chars = tail.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            ')' | ']' | '"' | '\'' | ',' | ';' | '\n' | '\r' | '\t' => return i,
+            ':' => match chars.peek() {
+                Some((_, ' ')) | None => return i,
+                _ => end = i + c.len_utf8(),
+            },
+            ' ' => match chars.peek() {
+                None => return i,
+                Some((_, next))
+                    if matches!(
+                        *next,
+                        '(' | ')' | ']' | '"' | '\'' | ',' | ';' | '\n' | '\r'
+                    ) =>
+                {
+                    return i;
+                }
+                _ => end = i + 1,
+            },
+            _ => end = i + c.len_utf8(),
+        }
+    }
+    end
 }
 
 fn do_not_track() -> bool {
@@ -142,11 +177,24 @@ fn metadata() -> serde_json::Map<String, serde_json::Value> {
     p
 }
 
-fn event(kind: &str, value: &str, stack: &str, error_kind: Option<&str>) -> serde_json::Value {
+fn event(
+    kind: &str,
+    value: &str,
+    stack: &str,
+    error_kind: Option<&str>,
+    from_format: Option<&str>,
+    to_format: Option<&str>,
+) -> serde_json::Value {
     let frame = serde_json::json!({"filename":"<scrubbed>","function":"convt","lineno":0,"colno":0,"in_app":true});
     let mut props = metadata();
     if let Some(k) = error_kind {
         props.insert("error_kind".into(), k.into());
+    }
+    if let Some(from) = from_format {
+        props.insert("from_format".into(), from.into());
+    }
+    if let Some(to) = to_format {
+        props.insert("to_format".into(), to.into());
     }
     props.insert("$exception_list".into(), serde_json::json!([{"type":kind,"value":scrub(value),"stacktrace":{"frames":[frame],"raw":scrub(stack)}}]));
     serde_json::json!({"event":"$exception","api_key":POSTHOG_KEY,"properties":props})
@@ -212,7 +260,7 @@ fn resend() {
     let _ = fs::read_dir(dir).map(|entries| {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|x| x.to_str()) != Some("log") {
+            if !is_crash_log(&path) {
                 continue;
             }
             let sent = path.with_extension("sent");
@@ -220,7 +268,7 @@ fn resend() {
                 continue;
             }
             if let Ok(text) = fs::read_to_string(&path)
-                && send(event("panic", &text, &text, None)).is_ok()
+                && send(event("panic", &text, &text, None, None, None)).is_ok()
             {
                 let _ = fs::write(sent, b"sent");
             }
@@ -228,15 +276,40 @@ fn resend() {
     });
 }
 
+/// Handled errors that are not a conversion. Conversions use
+/// [`report_conversion`] so format ids can go on the event.
+#[allow(dead_code)]
 pub fn report_error(kind: &str, message: &str) {
+    report_conversion(kind, message, None, None);
+}
+
+/// A failed conversion. `from` and `to` are format ids only — no paths.
+pub fn report_conversion(kind: &str, message: &str, from: Option<&str>, to: Option<&str>) {
     let stack = Backtrace::force_capture().to_string();
     let kind = kind.to_string();
     let message = message.to_string();
+    let from = from.map(str::to_string);
+    let to = to.map(str::to_string);
     let _ = std::thread::Builder::new()
         .name("convt-error-report".into())
         .spawn(move || {
-            let _ = send(event("ConversionError", &message, &stack, Some(&kind)));
+            let _ = send(event(
+                "ConversionError",
+                &message,
+                &stack,
+                Some(&kind),
+                from.as_deref(),
+                to.as_deref(),
+            ));
         });
+}
+
+/// Crash files only. The rotating app log lives next to them and must not
+/// be uploaded as a panic.
+pub fn is_crash_log(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("crash-") && n.ends_with(".log"))
 }
 
 pub fn install() {
@@ -246,7 +319,7 @@ pub fn install() {
         let location = info.location();
         let backtrace = Backtrace::force_capture().to_string();
         let _ = write_crash(&message, location, &backtrace);
-        let _ = send(event("panic", &message, &backtrace, None));
+        let _ = send(event("panic", &message, &backtrace, None, None, None));
         previous(info);
     }));
     let _ = std::thread::Builder::new()
@@ -260,7 +333,7 @@ mod tests {
 
     #[test]
     fn exception_schema_is_nested_in_properties() {
-        let value = event("panic", "boom", "stack", None);
+        let value = event("panic", "boom", "stack", None, None, None);
         assert!(
             value
                 .get("properties")
@@ -274,7 +347,39 @@ mod tests {
     fn telemetry_opt_out_suppresses_crash_send() {
         let allowed = telemetry_enabled(false, true);
         assert!(!allowed);
-        assert!(send_with_gate(event("panic", "boom", "stack", None), allowed).is_err());
+        assert!(
+            send_with_gate(event("panic", "boom", "stack", None, None, None), allowed).is_err()
+        );
+    }
+
+    #[test]
+    fn conversion_event_carries_formats_not_paths() {
+        let value = event(
+            "ConversionError",
+            "/Users/alice/holiday.png failed",
+            "stack",
+            Some("engine_failed"),
+            Some("png"),
+            Some("webp"),
+        );
+        let props = value.get("properties").unwrap();
+        assert_eq!(
+            props.get("from_format").and_then(|v| v.as_str()),
+            Some("png")
+        );
+        assert_eq!(
+            props.get("to_format").and_then(|v| v.as_str()),
+            Some("webp")
+        );
+        let msg = props["$exception_list"][0]["value"].as_str().unwrap();
+        assert!(!msg.contains("alice") && !msg.contains("holiday"));
+    }
+
+    #[test]
+    fn only_crash_files_are_pending_reports() {
+        assert!(is_crash_log(Path::new("/tmp/crash-1-2.log")));
+        assert!(!is_crash_log(Path::new("/tmp/convt.log")));
+        assert!(!is_crash_log(Path::new("/tmp/convt.log.1")));
     }
     #[test]
     fn scrubs_platform_paths() {
@@ -288,6 +393,64 @@ mod tests {
             assert!(!x.contains(".jpg") && !x.contains(".png") && !x.contains(".pdf"));
         }
     }
+
+    #[test]
+    fn scrubs_macos_paths_with_spaces_in_folder_names() {
+        let folder = format!("{} {}", "Private", "Client");
+        let user = "alex";
+        let path = format!("/Users/{user}/{folder}/shot.png");
+        let out = scrub(&format!("could not read {path}: denied"));
+        assert!(!out.contains(user), "{out}");
+        assert!(!out.contains("Private"), "{out}");
+        assert!(!out.contains("Client"), "{out}");
+        assert!(!out.contains("shot"), "{out}");
+        assert!(out.contains("<PATH>"), "{out}");
+        assert!(out.contains("denied"), "{out}");
+        let dir_only = scrub(&format!("unreadable /Users/{user}/{folder}"));
+        assert!(
+            !dir_only.contains("Private") && !dir_only.contains("Client"),
+            "{dir_only}"
+        );
+    }
+
+    #[test]
+    fn scrubs_windows_paths_with_spaces_in_folder_names() {
+        let folder = format!("{} {}", "My", "Documents");
+        let user = "blake";
+        let path = format!("C:\\Users\\{user}\\{folder}\\x.png");
+        let out = scrub(&format!("could not read {path}: denied"));
+        assert!(!out.contains(user), "{out}");
+        assert!(!out.contains("My"), "{out}");
+        assert!(!out.contains("Documents"), "{out}");
+        assert!(!out.contains(".png"), "{out}");
+        assert!(out.contains("<PATH>"), "{out}");
+        assert!(out.contains("denied"), "{out}");
+        let dir_only = scrub(&format!("unreadable C:\\Users\\{user}\\{folder}"));
+        assert!(
+            !dir_only.contains("My") && !dir_only.contains("Documents"),
+            "{dir_only}"
+        );
+    }
+
+    #[test]
+    fn scrubs_linux_paths_with_spaces_in_folder_names() {
+        let folder = format!("{} {}", "Work", "Files");
+        let user = "casey";
+        let path = format!("/home/{user}/{folder}/notes.pdf");
+        let out = scrub(&format!("could not read {path}: denied"));
+        assert!(!out.contains(user), "{out}");
+        assert!(!out.contains("Work"), "{out}");
+        assert!(!out.contains("Files"), "{out}");
+        assert!(!out.contains("notes"), "{out}");
+        assert!(out.contains("<PATH>"), "{out}");
+        assert!(out.contains("denied"), "{out}");
+        let dir_only = scrub(&format!("unreadable /home/{user}/{folder}"));
+        assert!(
+            !dir_only.contains("Work") && !dir_only.contains("Files"),
+            "{dir_only}"
+        );
+    }
+
     #[test]
     fn scrub_keeps_crate_location() {
         assert!(scrub("crates/convt-app/src/main.rs:42").contains("<PATH>"));

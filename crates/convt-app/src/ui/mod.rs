@@ -9,6 +9,7 @@ mod pack;
 mod popover;
 mod quick;
 mod settings_window;
+pub mod support;
 #[cfg(test)]
 mod tests;
 pub mod theme;
