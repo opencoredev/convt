@@ -558,6 +558,11 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
     } else {
         "Buy a license"
     };
+    // The License tab has the sign-in button and follows the flow.
+    let sign_in = matches!(state, State::SignInNeeded).then(|| {
+        theme::text_button("sign-in-banner", "Sign in", p.green_text, 12.)
+            .on_click(|_, _, cx| show_license(None, cx))
+    });
     let download = matches!(state, State::NotCovered(_)).then(|| {
         theme::text_button("download", "Download a covered build", p.green_text, 12.)
             .on_click(|_, _, cx| cx.open_url(DOWNLOAD_URL))
@@ -585,6 +590,7 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
                     .flex()
                     .items_center()
                     .gap(px(16.))
+                    .children(sign_in)
                     .child(
                         theme::text_button("buy", buy, p.green_text, 12.)
                             .on_click(|_, _, cx| cx.open_url(BUY_URL)),

@@ -1476,13 +1476,30 @@ fn the_sidebar_sign_in_button_opens_the_license_tab(cx: &mut TestAppContext) {
         Some("Sign in to start your free trial.")
     );
     click(cx, main, "trial-buy");
-    let (_, view) = window_of::<SettingsView>(cx);
+    let (settings, view) = window_of::<SettingsView>(cx);
     cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::License));
     assert_eq!(
         cx.opened_url(),
         None,
         "Sign in must not open the pricing page"
     );
+    settings
+        .update(cx, |_, window, _| window.remove_window())
+        .unwrap();
+
+    // A refused conversion says to sign in, and offers it.
+    let png = f.png("a.png");
+    cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+    let (quick, _) = window_of::<QuickView>(cx);
+    assert_eq!(
+        label(cx, quick, "license-banner").as_deref(),
+        Some("Sign in to start your free trial.")
+    );
+    click(cx, quick, "sign-in-banner");
+    let (_, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::License));
+    assert_eq!(cx.opened_url(), None);
+    assert_eq!(f.jobs(cx), 0);
 }
 
 #[gpui_kit::test]
