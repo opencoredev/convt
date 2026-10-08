@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import geistMonoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url";
-import geistUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
+import interUrl from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 
 import { getPublicConfig } from "#/server/public-config";
 import { getSession } from "#/server/session";
@@ -58,7 +58,7 @@ export const Route = createFileRoute("/")({
           rel: "preload",
           as: "font",
           type: "font/woff2",
-          href: geistUrl,
+          href: interUrl,
           crossOrigin: "anonymous",
         },
         {

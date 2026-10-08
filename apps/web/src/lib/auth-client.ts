@@ -68,8 +68,9 @@ async function post<T>(path: string, body: unknown): Promise<AuthResult<T>> {
 export const sendSignInCode = (email: string) =>
   post("/email-otp/send-verification-otp", { email: email.trim(), type: "sign-in" });
 
+/** `user.createdAt` tells a new account from a returning one (lib/sign-in.ts isNewAccount). */
 export const signInWithCode = (email: string, otp: string) =>
-  post("/sign-in/email-otp", { email: email.trim(), otp });
+  post<{ user?: { createdAt?: unknown } }>("/sign-in/email-otp", { email: email.trim(), otp });
 
 export const sendVerificationCode = (email: string) =>
   post("/email-otp/send-verification-otp", { email, type: "email-verification" });
@@ -129,14 +130,23 @@ export async function fetchSignedInAccount(): Promise<Account | null> {
 
 export type SocialProvider = "github" | "google";
 
-/** Starts GitHub or Google sign-in and leaves the page for the provider. */
-export async function startSocialSignIn(
-  provider: SocialProvider,
-  redirectTo: string,
-): Promise<AuthResult> {
+/**
+ * Starts GitHub or Google sign-in and leaves the page for the provider. A new account
+ * lands on `newUserCallbackURL` when one is given, a returning one on `callbackURL`.
+ */
+export async function startSocialSignIn({
+  provider,
+  callbackURL,
+  newUserCallbackURL,
+}: {
+  provider: SocialProvider;
+  callbackURL: string;
+  newUserCallbackURL?: string;
+}): Promise<AuthResult> {
   const result = await post<{ url: string }>("/sign-in/social", {
     provider,
-    callbackURL: redirectTo,
+    callbackURL,
+    ...(newUserCallbackURL ? { newUserCallbackURL } : {}),
     errorCallbackURL: "/sign-in",
     disableRedirect: true,
   });

@@ -1,5 +1,7 @@
+import { Copy01Icon } from "@hugeicons/core-free-icons";
 import { useId, useRef, useState } from "react";
 
+import { Icon } from "#/components/icon";
 import { apiBaseUrl } from "#/lib/config";
 
 import { cx } from "./ui";
@@ -122,23 +124,7 @@ export function CodeSample() {
           onClick={copy}
           className="flex cursor-pointer items-center gap-1.5 rounded-sm text-xs/4 font-medium text-[#8a8f8c] outline-none hover:text-[#edefee] focus-visible:ring-2 focus-visible:ring-[#3fcb84]"
         >
-          <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
-            <path
-              d="M4.5 4.5 H10.5 V10.5 H4.5 Z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M2.5 8.5 V2.5 H8.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <Icon icon={Copy01Icon} size={13} strokeWidth={1.6} />
           <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>

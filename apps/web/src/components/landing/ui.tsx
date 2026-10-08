@@ -1,4 +1,7 @@
-import type { ComponentProps, ReactNode } from "react";
+import { Download04Icon } from "@hugeicons/core-free-icons";
+import type { CSSProperties, ComponentProps, ReactNode } from "react";
+
+import { Icon } from "#/components/icon";
 
 export const focusRing =
   "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-green";
@@ -75,16 +78,10 @@ export function MisoPhoto({ className, ...props }: ComponentProps<"img">) {
 }
 
 export function DownloadIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">
-      <path
-        d="M7 1.5v8M3.5 6.5L7 10l3.5-3.5M2 12.5h10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Icon icon={Download04Icon} size={16} strokeWidth={1.8} />;
+}
+
+/** Stagger for siblings that fade in together (`.reveal` in styles.css). */
+export function revealDelay(index: number): CSSProperties {
+  return { "--reveal-delay": `${index * 80}ms` } as CSSProperties;
 }

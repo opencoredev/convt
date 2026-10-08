@@ -1,6 +1,9 @@
+import { PlayIcon } from "@hugeicons/core-free-icons";
 import type { ReactNode } from "react";
 
-import { Container, MisoPhoto } from "./ui";
+import { Icon } from "#/components/icon";
+
+import { Container, MisoPhoto, revealDelay } from "./ui";
 
 const groups = [
   {
@@ -67,8 +70,8 @@ export function Formats() {
         </p>
       </div>
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {groups.map((group) => (
-          <FormatCard key={group.name} {...group} />
+        {groups.map((group, i) => (
+          <FormatCard key={group.name} index={i} {...group} />
         ))}
       </ul>
     </Container>
@@ -79,13 +82,19 @@ function FormatCard({
   name,
   formats,
   preview,
+  index,
 }: {
   name: string;
   formats: string[];
   preview: ReactNode;
+  index: number;
 }) {
   return (
-    <li className="flex flex-col overflow-clip rounded-[14px] bg-raised shadow-land-card">
+    <li
+      data-reveal=""
+      style={revealDelay(index)}
+      className="reveal lift flex flex-col overflow-clip rounded-[14px] bg-raised shadow-land-card hover:shadow-[0_0_0_1px_#2e3331,0_12px_32px_#00000080]"
+    >
       <div className="h-[200px] shrink-0">{preview}</div>
       <div className="flex flex-col gap-3.5 p-5">
         <div className="flex items-baseline justify-between">
@@ -136,9 +145,12 @@ function VideoPreview() {
         />
         <div className="absolute inset-0 bg-[#00000047]" />
         <div className="relative flex size-10 items-center justify-center rounded-full bg-[#ffffffeb]">
-          <svg width="14" height="16" viewBox="0 0 14 16">
-            <path d="M2 1.5v13L13 8 2 1.5Z" fill="#0a0a0a" />
-          </svg>
+          <Icon
+            icon={PlayIcon}
+            size={18}
+            strokeWidth={2}
+            className="fill-[#0a0a0a] text-[#0a0a0a]"
+          />
         </div>
       </div>
       <div className="flex w-full items-center gap-2.5 font-mono text-[10.5px]/[14px]">

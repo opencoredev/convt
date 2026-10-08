@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type { Account } from "#/lib/types";
 
 import { CallToAction, Footer } from "./closing";
@@ -16,6 +18,7 @@ export function LandingPage({
   sales: "desktop" | "all";
   account: Account | null;
 }) {
+  useReveal();
   return (
     <div className="min-h-screen overflow-x-clip bg-page text-ink">
       <a
@@ -29,10 +32,42 @@ export function LandingPage({
         <Hero />
         <Formats />
         <Engines />
-        <Pricing sales={sales} />
-        <CallToAction />
+        <div data-reveal="" className="reveal">
+          <Pricing sales={sales} />
+        </div>
+        <div data-reveal="" className="reveal">
+          <CallToAction />
+        </div>
       </main>
       <Footer />
     </div>
   );
+}
+
+/**
+ * Fades `[data-reveal]` elements in as they scroll into view. Without JavaScript, or with
+ * reduced motion, everything is simply visible: only elements still below the fold when
+ * the page hydrates get hidden, so nothing on screen blinks out. Same as /brand.
+ */
+function useReveal() {
+  useEffect(() => {
+    const items = [...document.querySelectorAll<HTMLElement>("[data-reveal]")];
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || !(entry.target instanceof HTMLElement)) continue;
+          entry.target.dataset.reveal = "shown";
+          observer.unobserve(entry.target);
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px" },
+    );
+    for (const item of items) {
+      if (item.getBoundingClientRect().top < innerHeight) continue;
+      item.dataset.reveal = "hidden";
+      observer.observe(item);
+    }
+    return () => observer.disconnect();
+  }, []);
 }

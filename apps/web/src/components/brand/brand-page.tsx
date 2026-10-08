@@ -1032,13 +1032,13 @@ function Typography() {
         <SectionHeading
           id="type-title"
           title="Type"
-          body="Geist for everything people read, Geist Mono for file names, sizes and commands. Both are free under the SIL Open Font License."
+          body="Inter for everything people read, Geist Mono for file names, sizes and commands. Both are free under the SIL Open Font License. The wordmark is Geist SemiBold, outlined."
         />
         <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
           <TypeCard
-            name="Geist"
-            usage="Wordmark in SemiBold, headings in Medium with tight tracking, body in Regular."
-            href="https://vercel.com/font"
+            name="Inter"
+            usage="Headings in Medium with tight tracking, body in Regular."
+            href="https://rsms.me/inter/"
           >
             <p className="text-[96px]/[1] font-semibold tracking-[-0.04em] text-ink sm:text-[128px]/[1]">
               Aa

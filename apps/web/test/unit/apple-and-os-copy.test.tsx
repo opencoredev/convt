@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { SocialSignIn } from "../../src/components/app/social-sign-in";
+import { GoogleSignIn, OtherSignIn } from "../../src/components/app/social-sign-in";
 import { checkoutAside, downloadAction } from "../../src/lib/checkout-copy";
 import {
   downloadCtaLabel,
@@ -25,28 +25,30 @@ const env = readEnv({
 });
 const noop = () => {};
 
-test("sign-in shows no Apple button while Apple is not configured", () => {
-  const html = renderToStaticMarkup(
-    <SocialSignIn available={availableProviders(env)} onSelect={noop} />,
+const both = (available: Parameters<typeof OtherSignIn>[0]["available"]) =>
+  renderToStaticMarkup(
+    <>
+      <GoogleSignIn available={available} onSelect={noop} />
+      <OtherSignIn available={available} onSelect={noop} />
+    </>,
   );
-  expect(html).toContain(">GitHub</button>");
-  expect(html).toContain(">Google</button>");
+
+test("sign-in shows no Apple button while Apple is not configured", () => {
+  const html = both(availableProviders(env));
+  expect(html).toContain("Continue with Google</button>");
+  expect(html).toContain("GitHub</button>");
   expect(html).not.toContain("Apple");
 });
 
 test("sign-in renders the Apple button once it is configured", () => {
-  const html = renderToStaticMarkup(
-    <SocialSignIn available={{ github: false, google: false, apple: true }} onSelect={noop} />,
-  );
+  const html = both({ github: false, google: false, apple: true });
   expect(html).toContain(">Apple</button>");
   expect(html).not.toContain("GitHub");
+  expect(html).not.toContain("Google");
 });
 
-test("sign-in drops the 'or continue with' divider when no provider is configured", () => {
-  const html = renderToStaticMarkup(
-    <SocialSignIn available={{ github: false, google: false, apple: false }} onSelect={noop} />,
-  );
-  expect(html).toBe("");
+test("sign-in drops Google, the 'or' divider and the provider links when none is configured", () => {
+  expect(both({ github: false, google: false, apple: false })).toBe("");
 });
 
 const method = (id: SignInMethod["id"], accountId: string | null = null): SignInMethod => ({

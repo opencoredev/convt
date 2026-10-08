@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 
 /* Dark mode follows the `dark` class on <html>, set from the user's choice or the OS. */
@@ -52,7 +52,7 @@
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
   --color-page: var(--page);
@@ -85,6 +85,8 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* Inter's contextual alternates and the straight-sided 1 and l read better at UI sizes. */
+  font-feature-settings: "cv11", "ss01";
 }
 
 /* app tokens */
@@ -112,6 +114,12 @@ body {
   --shadow-float: rgb(10 60 35 / 10%) 0 0 0 1px, rgb(10 60 35 / 12%) 0 4px 14px;
   --shadow-note: rgb(0 0 0 / 6%) 0 0 0 1px, rgb(10 30 20 / 15%) 0 8px 24px;
   --avatar-ring: rgb(0 0 0 / 10%);
+  /* Sign-in screens: the light pill and the dithered glow (components/app/dither-glow.tsx). */
+  --pill: #f1f2f1;
+  --pill-hover: #e8eae9;
+  --pill-line: rgb(0 0 0 / 4%);
+  --glow: 31 179 108;
+  --glow-peak: 0.52;
 }
 
 .dark {
@@ -135,6 +143,11 @@ body {
     rgb(255 255 255 / 8%) 0 0 0 1px, rgb(0 0 0 / 60%) 0 24px 60px, rgb(0 0 0 / 40%) 0 4px 12px;
   --shadow-note: var(--shadow-float);
   --avatar-ring: rgb(255 255 255 / 10%);
+  --pill: #1a1d1c;
+  --pill-hover: #222624;
+  --pill-line: #2a2f2d;
+  --glow: 52 196 122;
+  --glow-peak: 0.5;
 }
 
 @theme inline {
@@ -151,6 +164,8 @@ body {
   --color-code-ink: var(--code-ink);
   --color-code-ring: var(--code-ring);
   --color-panel: var(--panel);
+  --color-pill: var(--pill);
+  --color-pill-hover: var(--pill-hover);
   --shadow-button: var(--shadow-button);
   --shadow-input: var(--shadow-input);
   --shadow-float: var(--shadow-float);
@@ -231,6 +246,33 @@ body {
   image-rendering: pixelated;
 }
 
+/* Sign-in screens: each block rises 8px into place in order (components/app/auth-screen.tsx). */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+/* Desktop sign-in approved: the check settles in from 90% with a soft green ring. */
+@keyframes device-done {
+  from {
+    opacity: 0;
+    scale: 0.9;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--green) 35%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 14px color-mix(in oklab, var(--green) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .auth-rise {
+    animation: auth-rise 520ms var(--ease-out) var(--d, 0ms) both;
+  }
+  .device-done {
+    animation: device-done 700ms var(--ease-out) 120ms both;
+  }
+}
+
 /* The checkout page's indeterminate progress bar (reduced motion: static). */
 @keyframes convt-progress {
   0% {
@@ -246,6 +288,443 @@ body {
   from {
     opacity: 0;
     transform: translateY(-4px) scale(0.97);
+  }
+}
+
+/* landing hero demo */
+/*
+ * components/landing/convert-demo.tsx. One 10 s timeline for every part; positions are
+ * custom properties in board em so the narrow layout only swaps the variables. Without
+ * motion (reduced, or before the animations apply) the board shows the finished state.
+ */
+.demo {
+  --src-x: 2.2em;
+  --src-y: 5.4em;
+  --menu-x: 7.6em;
+  --menu-y: 9.2em;
+  --sub-x: 16.4em;
+  --sub-y: 14.3em;
+  --res-x: 28.4em;
+  --res-y: 5.4em;
+  --c-start: 33em 20em;
+  --c-file: 7.5em 9.1em;
+  --c-convt: 12.4em 15.1em;
+  --c-webp: 18.2em 15.1em;
+  --c-rest: 24em 18.5em;
+  width: 40em;
+  height: 22em;
+  font-size: min(22px, 2.5cqw);
+}
+@container (max-width: 560px) {
+  .demo {
+    --src-x: 0.4em;
+    --src-y: 1.6em;
+    --menu-x: 5.8em;
+    --menu-y: 5.4em;
+    --sub-x: 14.6em;
+    --sub-y: 10.5em;
+    --res-x: 10.6em;
+    --res-y: 18.2em;
+    --c-start: 16em 27em;
+    --c-file: 5.7em 5.3em;
+    --c-convt: 10.4em 11.3em;
+    --c-webp: 16.2em 11.3em;
+    --c-rest: 6em 23em;
+    width: 20em;
+    height: 27.6em;
+    font-size: 5cqw;
+  }
+  .demo-arrow {
+    display: none;
+  }
+}
+.demo-menu,
+.demo-sub,
+.demo-cursor,
+.demo-bar {
+  opacity: 0;
+}
+.demo-menu,
+.demo-sub {
+  transform-origin: top left;
+}
+.demo-step::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.5;
+  vertical-align: 1px;
+}
+
+@keyframes demo-cursor {
+  0%,
+  6% {
+    translate: var(--c-start);
+    opacity: 0;
+    scale: 1;
+  }
+  8% {
+    translate: var(--c-start);
+    opacity: 1;
+    animation-timing-function: var(--ease-in-out);
+  }
+  20% {
+    translate: var(--c-file);
+    scale: 1;
+  }
+  21.5% {
+    translate: var(--c-file);
+    scale: 0.85;
+  }
+  23% {
+    translate: var(--c-file);
+    scale: 1;
+    animation-timing-function: var(--ease-in-out);
+  }
+  33% {
+    translate: var(--c-convt);
+    animation-timing-function: var(--ease-in-out);
+  }
+  36% {
+    translate: var(--c-convt);
+    animation-timing-function: var(--ease-in-out);
+  }
+  44% {
+    translate: var(--c-webp);
+    scale: 1;
+  }
+  45.5% {
+    translate: var(--c-webp);
+    scale: 0.85;
+  }
+  47% {
+    translate: var(--c-webp);
+    scale: 1;
+    animation-timing-function: var(--ease-in-out);
+  }
+  62%,
+  90% {
+    translate: var(--c-rest);
+    opacity: 1;
+  }
+  96%,
+  100% {
+    translate: var(--c-rest);
+    opacity: 0;
+  }
+}
+@keyframes demo-select {
+  0%,
+  21% {
+    background-color: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  22%,
+  47% {
+    background-color: rgb(255 255 255 / 8%);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 14%);
+  }
+  50%,
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes demo-select-label {
+  0%,
+  21% {
+    background-color: transparent;
+  }
+  22%,
+  47% {
+    background-color: #1f7a4d;
+  }
+  50%,
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes demo-menu {
+  0%,
+  22% {
+    opacity: 0;
+    scale: 0.97;
+  }
+  24%,
+  46% {
+    opacity: 1;
+    scale: 1;
+  }
+  49%,
+  100% {
+    opacity: 0;
+    scale: 1;
+  }
+}
+@keyframes demo-sub {
+  0%,
+  35% {
+    opacity: 0;
+    scale: 0.97;
+  }
+  37%,
+  46% {
+    opacity: 1;
+    scale: 1;
+  }
+  49%,
+  100% {
+    opacity: 0;
+    scale: 1;
+  }
+}
+@keyframes demo-hl {
+  0%,
+  32% {
+    background-color: transparent;
+    color: inherit;
+  }
+  33%,
+  47% {
+    background-color: #1f7a4d;
+    color: #ffffff;
+  }
+  49%,
+  100% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+@keyframes demo-pick {
+  0%,
+  42% {
+    background-color: transparent;
+    color: inherit;
+  }
+  43%,
+  47% {
+    background-color: #1f7a4d;
+    color: #ffffff;
+  }
+  49%,
+  100% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+@keyframes demo-result {
+  0%,
+  49% {
+    opacity: 0;
+    translate: 0 0.4em;
+    scale: 0.96;
+    animation-timing-function: var(--ease-out);
+  }
+  55%,
+  92% {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+  98%,
+  100% {
+    opacity: 0;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@keyframes demo-bar {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  64% {
+    opacity: 1;
+  }
+  66%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes demo-bar-fill {
+  0%,
+  51% {
+    scale: 0 1;
+    animation-timing-function: var(--ease-in-out);
+  }
+  64%,
+  100% {
+    scale: 1 1;
+  }
+}
+@keyframes demo-size {
+  0%,
+  65% {
+    opacity: 0;
+  }
+  68%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes demo-badge {
+  0%,
+  65% {
+    opacity: 0;
+    scale: 0.6;
+    animation-timing-function: var(--ease-out);
+  }
+  70%,
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes demo-step-1 {
+  0%,
+  17% {
+    color: #838985;
+  }
+  19%,
+  33% {
+    color: #4cc283;
+  }
+  35%,
+  100% {
+    color: #838985;
+  }
+}
+@keyframes demo-step-2 {
+  0%,
+  33% {
+    color: #838985;
+  }
+  35%,
+  48% {
+    color: #4cc283;
+  }
+  50%,
+  100% {
+    color: #838985;
+  }
+}
+@keyframes demo-step-3 {
+  0%,
+  52% {
+    color: #838985;
+  }
+  55%,
+  92% {
+    color: #4cc283;
+  }
+  95%,
+  100% {
+    color: #838985;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-figure {
+    --demo: 10s linear infinite;
+  }
+  .demo .demo-cursor {
+    animation: demo-cursor var(--demo);
+  }
+  .demo .demo-select {
+    animation: demo-select var(--demo);
+  }
+  .demo .demo-select-label {
+    animation: demo-select-label var(--demo);
+  }
+  .demo .demo-menu {
+    animation: demo-menu var(--demo);
+  }
+  .demo .demo-sub {
+    animation: demo-sub var(--demo);
+  }
+  .demo .demo-convt {
+    animation: demo-hl var(--demo);
+  }
+  .demo .demo-pick {
+    animation: demo-pick var(--demo);
+  }
+  .demo .demo-result {
+    animation: demo-result var(--demo);
+  }
+  .demo .demo-bar {
+    animation: demo-bar var(--demo);
+  }
+  .demo .demo-bar-fill {
+    animation: demo-bar-fill var(--demo);
+  }
+  .demo .demo-size,
+  .demo .demo-arrow {
+    animation: demo-size var(--demo);
+  }
+  .demo .demo-badge {
+    animation: demo-badge var(--demo);
+  }
+  .demo-steps .demo-step-1 {
+    animation: demo-step-1 var(--demo);
+  }
+  .demo-steps .demo-step-2 {
+    animation: demo-step-2 var(--demo);
+  }
+  .demo-steps .demo-step-3 {
+    animation: demo-step-3 var(--demo);
+  }
+  /* Off screen, every part holds its frame; the steps follow the board. */
+  .demo[data-playing="false"] *,
+  .demo-figure:has(.demo[data-playing="false"]) .demo-step {
+    animation-play-state: paused;
+  }
+}
+
+/*
+ * Landing sections fade up as they scroll in (landing-page.tsx sets data-reveal), using
+ * `transform` so cards can lift on hover with `translate` without the two fighting.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    transition:
+      opacity 700ms var(--ease-out) var(--reveal-delay, 0ms),
+      transform 700ms var(--ease-out) var(--reveal-delay, 0ms);
+  }
+  .reveal[data-reveal="hidden"] {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  .lift {
+    transition:
+      translate 220ms var(--ease-out),
+      box-shadow 220ms ease;
+  }
+  .reveal.lift {
+    transition:
+      opacity 700ms var(--ease-out) var(--reveal-delay, 0ms),
+      transform 700ms var(--ease-out) var(--reveal-delay, 0ms),
+      translate 220ms var(--ease-out),
+      box-shadow 220ms ease;
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      translate: 0 -3px;
+    }
+  }
+}
+.reveal[data-reveal="hidden"]:focus-within {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+@media print {
+  .reveal[data-reveal] {
+    opacity: 1;
+    transform: none;
   }
 }
 

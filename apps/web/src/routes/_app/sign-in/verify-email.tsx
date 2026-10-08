@@ -1,18 +1,24 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useId, useState } from "react";
 
-import { AuthLayout } from "#/components/app/auth-layout";
+import { AuthScreen, AuthTitle, QuietButton, Rise, darkPill } from "#/components/app/auth-screen";
 import { CodeInput } from "#/components/app/code-input";
 import { FormError, FormStatus } from "#/components/app/form-error";
-import { PrimaryButton, TextButton } from "#/components/app/ui";
 import { sendVerificationCode, signOut, verifyEmail } from "#/lib/auth-client";
 import { magicLinkMinutes, signInCodeLength } from "#/lib/config";
+import { safeRedirect } from "#/lib/safe-redirect";
+import { authSearch, siteOrigin } from "#/lib/sign-in";
 import { getSession } from "#/server/session";
 
 // After a GitHub sign-up, or a Google one for an address Google does not own,
 // convt has no proof the address is the user's. The dashboard, purchases and
 // account data stay closed until a code sent to it comes back.
 export const Route = createFileRoute("/_app/sign-in/verify-email")({
+  // `redirect` (or `next`): where to go once the address is confirmed, such as /download.
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    const { redirect: to } = authSearch(search);
+    return to ? { redirect: to } : {};
+  },
   beforeLoad: async () => {
     const session = await getSession();
     if (!session) throw redirect({ to: "/sign-in" });
@@ -26,6 +32,7 @@ export const Route = createFileRoute("/_app/sign-in/verify-email")({
 
 function VerifyEmailPage() {
   const { email } = Route.useLoaderData();
+  const { redirect: redirectTo } = Route.useSearch();
   const codeLabelId = useId();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,53 +51,61 @@ function VerifyEmailPage() {
   }
 
   return (
-    <AuthLayout>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[28px]/[34px] font-semibold tracking-[-0.025em]">Confirm your email</h1>
-        <p className="text-sm/[22px] break-words text-ink-2">
-          {sent
-            ? `We sent a code to ${email}. It works once and expires in ${magicLinkMinutes} minutes.`
-            : `Your account uses ${email}. Confirm it with a code before you see licenses and receipts.`}
-        </p>
-      </div>
-      {sent ? (
-        <div className="flex flex-col gap-2">
-          <p id={codeLabelId} className="text-[13px]/4 font-medium">
-            Enter the code from the email
-          </p>
-          <CodeInput
-            key={attempt}
-            length={signInCodeLength}
-            labelId={codeLabelId}
-            onComplete={async (code) => {
-              setError(null);
-              setStatus(null);
-              const result = await verifyEmail(email, code);
-              if (result.ok) return window.location.assign("/dashboard");
-              setError(result.message);
-              setAttempt((n) => n + 1);
-            }}
-          />
+    <AuthScreen>
+      <Rise index={1}>
+        <AuthTitle
+          strong
+          sub={
+            sent
+              ? `We sent a code to ${email}. It works once and expires in ${magicLinkMinutes} minutes.`
+              : `Your account uses ${email}. Confirm it with a code before you see licenses and receipts.`
+          }
+        >
+          Confirm your email
+        </AuthTitle>
+      </Rise>
+      <Rise index={2} className="mt-9 flex flex-col items-center gap-3">
+        {sent ? (
+          <>
+            <p id={codeLabelId} className="text-[13px]/4 font-medium text-ink-2">
+              Enter the code from the email
+            </p>
+            <CodeInput
+              key={attempt}
+              length={signInCodeLength}
+              labelId={codeLabelId}
+              onComplete={async (code) => {
+                setError(null);
+                setStatus(null);
+                const result = await verifyEmail(email, code);
+                if (result.ok)
+                  return window.location.assign(safeRedirect(redirectTo, siteOrigin()));
+                setError(result.message);
+                setAttempt((n) => n + 1);
+              }}
+            />
+          </>
+        ) : (
+          <button type="button" disabled={busy} className={darkPill} onClick={send}>
+            Email me a code
+          </button>
+        )}
+        <div className="text-center">
+          <FormError>{error}</FormError>
+          <FormStatus>{status}</FormStatus>
         </div>
-      ) : (
-        <PrimaryButton disabled={busy} className="h-10 text-sm/4.5" onClick={send}>
-          Email me a code
-        </PrimaryButton>
-      )}
-      <FormError>{error}</FormError>
-      <FormStatus>{status}</FormStatus>
-      <div className="flex flex-wrap gap-4">
-        {sent ? <TextButton onClick={send}>Resend code</TextButton> : null}
-        <TextButton
-          tone="muted"
+      </Rise>
+      <Rise index={3} className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2">
+        {sent ? <QuietButton onClick={send}>Resend code</QuietButton> : null}
+        <QuietButton
           onClick={async () => {
             await signOut();
             window.location.assign("/sign-in");
           }}
         >
           Use a different account
-        </TextButton>
-      </div>
-    </AuthLayout>
+        </QuietButton>
+      </Rise>
+    </AuthScreen>
   );
 }

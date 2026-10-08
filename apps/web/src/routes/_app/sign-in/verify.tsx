@@ -1,10 +1,11 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
-import { AuthLayout } from "#/components/app/auth-layout";
+import { AuthScreen, AuthTitle, Rise, darkPill } from "#/components/app/auth-screen";
 import { FormError } from "#/components/app/form-error";
-import { PrimaryButton, cx, focusRing } from "#/components/app/ui";
+import { cx, focusRing } from "#/components/app/ui";
 import { signInWithCode } from "#/lib/auth-client";
+import { isNewAccount, landingAfterSignIn, siteOrigin } from "#/lib/sign-in";
 
 // The link in the sign-in email: /sign-in/verify#email=...&code=... The fragment
 // never reaches the server, logs or referrers. The page reads it, removes it from
@@ -42,43 +43,59 @@ function VerifyPage() {
   }, [navigate]);
 
   return (
-    <AuthLayout>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[28px]/[34px] font-semibold tracking-[-0.025em]">Sign in to convt</h1>
-        <p className="text-sm/[22px] break-words text-ink-2">
-          {pending === undefined
-            ? "Reading your sign-in link."
-            : pending
-              ? `Continue as ${pending.email}.`
-              : "This sign-in link is incomplete. Open it again from the email, or enter the code on the sign-in page."}
-        </p>
-      </div>
+    <AuthScreen>
+      <Rise index={1}>
+        <AuthTitle
+          sub={
+            pending === undefined
+              ? "Reading your sign-in link."
+              : pending
+                ? `Continue as ${pending.email}.`
+                : "This sign-in link is incomplete. Open it again from the email, or enter the code on the sign-in page."
+          }
+        >
+          Sign in to convt
+        </AuthTitle>
+      </Rise>
       {pending ? (
-        <div className="flex flex-col gap-3">
-          <PrimaryButton
+        <Rise index={2} className="mt-9 flex flex-col gap-3">
+          <button
+            type="button"
             disabled={busy}
-            className="h-10 text-sm/4.5"
+            className={darkPill}
             onClick={async () => {
               setBusy(true);
               setError(null);
               const result = await signInWithCode(pending.email, pending.code);
-              if (result.ok) return window.location.assign("/dashboard");
+              if (result.ok)
+                return window.location.assign(
+                  landingAfterSignIn({
+                    redirect: undefined,
+                    newAccount: isNewAccount(result.data?.user?.createdAt),
+                    origin: siteOrigin(),
+                  }),
+                );
               setBusy(false);
               setError(result.message);
             }}
           >
             Continue
-          </PrimaryButton>
-          <FormError>{error}</FormError>
-        </div>
+          </button>
+          <FormError className="text-center">{error}</FormError>
+        </Rise>
       ) : null}
-      <Link
-        to="/sign-in"
-        search={pending?.email ? { email: pending.email } : {}}
-        className={cx("self-start rounded-sm text-[13px]/4 text-ink-2 hover:text-ink", focusRing)}
-      >
-        Back to sign in
-      </Link>
-    </AuthLayout>
+      <Rise index={3} className="mt-6 flex justify-center">
+        <Link
+          to="/sign-in"
+          search={pending?.email ? { email: pending.email } : {}}
+          className={cx(
+            "rounded-sm text-[13px]/4 text-ink-2 underline-offset-[3px] hover:text-ink hover:underline",
+            focusRing,
+          )}
+        >
+          Back to sign in
+        </Link>
+      </Rise>
+    </AuthScreen>
   );
 }
