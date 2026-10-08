@@ -57,16 +57,42 @@ if (-not $RuntimeDlls) { throw 'Document pack CRT closure missing' }
 $RuntimeDlls | Copy-Item -Destination $Office.Directory.FullName
 rustc --edition=2024 -C opt-level=2 -C target-feature=+crt-static -C link-arg=/Brepro "$PSScriptRoot/document-launcher.rs" -o "$Work/soffice.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Document launcher build failed' }
-$Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" "$Out/documents.tar.gz"
+# Keep the archive beside the payload, not inside it. The v0.2.0 MSI was 537 MiB
+# because WiX harvested this already-gzipped LibreOffice pack (446 MiB).
+# Mac and Linux already download that pack on demand after Install; Windows
+# publishes the same asset on the GitHub release and compiles its URL in.
+$Version = ((Get-Content Cargo.toml | Select-String '^version = "([0-9.]+)"$' | Select-Object -First 1).Matches[0].Groups[1].Value)
+$DocumentsDir = Join-Path $Repo 'packaging/out/windows'
+$Documents = Join-Path $DocumentsDir 'documents.tar.gz'
+$Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" $Documents
 if ($LASTEXITCODE -ne 0 -or $Hash -notmatch '^[a-f0-9]{64}$') { throw 'Document archive creation failed' }
-$env:CONVT_DOCUMENT_PACK_SHA256 = $Hash
-$env:CONVT_DOCUMENT_PACK_URL = 'bundle:documents.tar.gz'
-$env:CONVT_DOCUMENT_PACK_VERSION = 'LibreOffice 25.8.7 Windows x64'
-$env:CONVT_DOCUMENT_PACK_SIZE = (Get-Item "$Out/documents.tar.gz").Length.ToString()
-$env:CONVT_DOCUMENT_PACK_INSTALLED_SIZE = ((Get-ChildItem $Office.Directory.Parent.FullName -Recurse -File | Measure-Object Length -Sum).Sum).ToString()
-cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p convt-app
-if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
+$CallerPackUrl = if (Test-Path Env:CONVT_DOCUMENT_PACK_URL) { $env:CONVT_DOCUMENT_PACK_URL } else { $null }
+$PublishedJson = python "$PSScriptRoot/document_pack.py" publish $Documents $Version $DocumentsDir
+if ($LASTEXITCODE -ne 0) { throw 'Document pack publish failed' }
+$Published = $PublishedJson | ConvertFrom-Json
+if ($Published.sha256 -ne $Hash) { throw "Document pack digest changed during publish: $($Published.sha256)" }
+try {
+    $env:CONVT_DOCUMENT_PACK_SHA256 = $Hash
+    $env:CONVT_DOCUMENT_PACK_URL = $Published.url
+    $env:CONVT_DOCUMENT_PACK_VERSION = 'LibreOffice 25.8.7 Windows x64'
+    $env:CONVT_DOCUMENT_PACK_SIZE = $Published.size.ToString()
+    $env:CONVT_DOCUMENT_PACK_INSTALLED_SIZE = ((Get-ChildItem $Office.Directory.Parent.FullName -Recurse -File | Measure-Object Length -Sum).Sum).ToString()
+    cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p convt-app
+    if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
+} finally {
+    if ($null -eq $CallerPackUrl) {
+        Remove-Item Env:CONVT_DOCUMENT_PACK_URL -ErrorAction SilentlyContinue
+    } else {
+        $env:CONVT_DOCUMENT_PACK_URL = $CallerPackUrl
+    }
+}
 Copy-Item target/x86_64-pc-windows-msvc/release/convt.exe,target/x86_64-pc-windows-msvc/release/convt-app.exe $Out
 Copy-Item LICENSE "$Out/LICENSE.txt"
 Copy-Item "$PSScriptRoot/inputs.lock.json","$PSScriptRoot/build-native.ps1","$PSScriptRoot/build-document-pack.py","$PSScriptRoot/document-launcher.rs","$Repo/packaging/linux/libheif-explicit-init.patch" "$Out/licenses/"
-@{ verification_only = [bool]$VerificationOnly; document_pack_sha256 = $Hash; source_date_epoch = $env:SOURCE_DATE_EPOCH } | ConvertTo-Json | Set-Content "$Out/build-receipt.json" -Encoding utf8
+@{
+    verification_only = [bool]$VerificationOnly
+    document_pack_sha256 = $Hash
+    document_pack = "packaging/out/windows/$($Published.name)"
+    document_pack_url = $Published.url
+    source_date_epoch = $env:SOURCE_DATE_EPOCH
+} | ConvertTo-Json | Set-Content "$Out/build-receipt.json" -Encoding utf8

@@ -71,11 +71,14 @@ jobs:
       - name: Package unsigned per-user MSI
         shell: pwsh
         run: ./packaging/windows/installer.ps1
-      - name: Smoke the GUI subsystem
+      - name: Smoke-test the extracted MSI
         shell: pwsh
         run: ./packaging/windows/smoke.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release-review
-          path: packaging/out/windows/*.msi
+          path: |
+            packaging/out/windows/*.msi
+            packaging/out/windows/*-documents.tar.gz
+            packaging/out/windows/*-documents.tar.gz.sha256
           if-no-files-found: error
