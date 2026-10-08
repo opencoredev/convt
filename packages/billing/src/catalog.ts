@@ -153,6 +153,16 @@ const production = withIds(
     // launch checkouts hang on /checkout/success and never grant Pro.
     "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt,
     "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHunt,
+    "17bb47c4-8b7b-4fb5-b013-31ad52a0e909": {
+      code: "K0SIYK55",
+      basisPoints: 10000,
+      products: ["pro_month"],
+    },
+    "8a134038-3319-4905-a893-8635b0fd7cd7": {
+      code: "SUIGL3WV",
+      basisPoints: 10000,
+      products: ["desktop"],
+    },
   },
 );
 
