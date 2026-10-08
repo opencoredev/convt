@@ -29,6 +29,8 @@ pub struct Settings {
     /// The UTC day (`YYYY-MM-DD`) the app last asked convt.app for the
     /// current Pro key, so launches renew at most once a day.
     pub license_checked: Option<String>,
+    /// Cached online Pro trial, accepted only for a signed-in device session.
+    pub trial_cache: Option<TrialCache>,
     /// Check convt.app for a newer build at launch and every few hours. On
     /// by default. Check now works either way.
     pub update_checks: bool,
@@ -57,6 +59,7 @@ impl Default for Settings {
             menu_bar_icon: true,
             first_run_done: false,
             license_checked: None,
+            trial_cache: None,
             update_checks: true,
             update_checked_at: None,
             update_sequence: 0,
@@ -65,6 +68,12 @@ impl Default for Settings {
             cloud_consent: false,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrialCache {
+    pub ends_at: String,
+    pub fetched_on: String,
 }
 
 /// The format the popover's drop bar picks for each kind of file, by format id.

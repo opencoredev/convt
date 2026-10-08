@@ -14,6 +14,7 @@ use convt_core::{
 use convt_license::License;
 use convt_license::account::{self, Api};
 use convt_license::client::{self, Licensing};
+use convt_license::date;
 use futures::StreamExt;
 use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
@@ -325,8 +326,26 @@ impl AppState {
                 };
             }
         });
-        let licensing = Licensing::new(paths.license);
-        let account = Account::new(paths.account_url, paths.account_api, licensing.session());
+        let mut licensing = Licensing::new(paths.license);
+        #[cfg(not(test))]
+        licensing.disable_local_trial();
+        let session = licensing.session();
+        let cached_trial = settings
+            .trial_cache
+            .clone()
+            .filter(|cache| cached_trial_is_valid(cache, session.is_some(), client::today()));
+        licensing.set_account_trial_exact(
+            cached_trial
+                .as_ref()
+                .map(|cache| cache.ends_at[..10].to_string()),
+            cached_trial.as_ref().map(|cache| cache.ends_at.clone()),
+        );
+        let mut account = Account::new(paths.account_url, paths.account_api, session);
+        if let Some(cache) = cached_trial {
+            account.access = Some(crate::account::Access::Trial {
+                ends_on: cache.ends_at[..10].to_string(),
+            });
+        }
         let mut state = Self {
             registry,
             registry_generation: 0,
@@ -1081,6 +1100,15 @@ impl AppState {
     }
 }
 
+fn cached_trial_is_valid(cache: &crate::settings::TrialCache, signed_in: bool, today: i64) -> bool {
+    signed_in
+        && date::to_days(&cache.fetched_on).is_some_and(|fetched| {
+            cache.ends_at.len() >= 10
+                && date::to_days(&cache.ends_at[..10])
+                    .is_some_and(|ends| ends <= fetched + 8 && ends >= fetched && fetched <= today)
+        })
+}
+
 /// The target and options a request or a picker selection resolves to.
 pub fn resolve(
     state: &AppState,
@@ -1146,6 +1174,25 @@ mod tests {
         assert_eq!(b(1, 0, 0).unwrap().1, "Converted 1 file.");
         assert_eq!(b(2, 1, 0).unwrap().1, "Converted 2 files; 1 file failed.");
         assert_eq!(b(0, 2, 0).unwrap().0, "Conversion failed");
+    }
+
+    #[test]
+    fn cached_account_trials_need_a_session_and_a_short_fetch_window() {
+        let today = date::to_days("2026-10-08").unwrap();
+        let valid = crate::settings::TrialCache {
+            ends_at: "2026-10-14T12:00:00Z".into(),
+            fetched_on: "2026-10-08".into(),
+        };
+        assert!(cached_trial_is_valid(&valid, true, today));
+        assert!(!cached_trial_is_valid(&valid, false, today));
+        assert!(!cached_trial_is_valid(
+            &crate::settings::TrialCache {
+                ends_at: "2099-01-01T00:00:00Z".into(),
+                fetched_on: "2026-10-08".into(),
+            },
+            true,
+            today,
+        ));
     }
 
     #[test]

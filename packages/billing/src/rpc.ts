@@ -53,6 +53,14 @@ export interface BillingRpc {
    * it for a signed-in desktop device, with the user id from the device token.
    */
   currentProKey(userId: string): Promise<{ key: string; updatesUntil: string } | null>;
+  currentProAccess(
+    userId: string,
+  ): Promise<
+    | { kind: "pro" }
+    | { kind: "trial"; endsOn: string; endsAt: string }
+    | { kind: "can_start_trial"; checkoutUrl: string }
+    | { kind: "lapsed" }
+  >;
 }
 
 export type { CheckoutRefusal, CheckoutResult, CatalogProduct };

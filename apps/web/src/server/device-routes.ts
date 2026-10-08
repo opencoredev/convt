@@ -50,6 +50,7 @@ export async function handleDevice(
           input,
           ipOf(request),
           now,
+          (userId) => billing().currentProAccess(userId),
         ),
       );
     case "sign-out":

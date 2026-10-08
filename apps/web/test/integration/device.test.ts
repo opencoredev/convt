@@ -266,6 +266,24 @@ describe("cross-account isolation", () => {
   });
 });
 
+describe("trial access", () => {
+  test("renewal returns the exact end alongside its display day", async () => {
+    const token = await signIn("pro@convt.test");
+    const end = new Date(Date.now() + 3 * 86_400_000);
+    const res = await renewDevice(web, proKey, token, {}, nextIp(), new Date(), async () => ({
+      kind: "trial",
+      endsOn: end.toISOString().slice(0, 10),
+      endsAt: end.toISOString(),
+    }));
+    expect(res.status).toBe(200);
+    expect(res.body.access).toEqual({
+      kind: "trial",
+      ends_on: end.toISOString().slice(0, 10),
+      ends_at: end.toISOString(),
+    });
+  });
+});
+
 describe("rate limits", () => {
   test("approvals per user, exchanges per IP and renewals per device", async () => {
     const id = await userId("api@convt.test");

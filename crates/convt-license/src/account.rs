@@ -218,7 +218,7 @@ pub trait Api: Send + Sync {
     /// Trades a one-time code and its verifier for a device token.
     fn exchange(&self, code: &str, verifier: &str) -> Result<Session, ApiError>;
     /// The account's current Pro key, or `None` if it has none.
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError>;
+    fn current_key(&self, token: &str, version: &str) -> Result<LicenseReply, ApiError>;
     /// Revokes this device's token on the server.
     fn sign_out(&self, token: &str) -> Result<(), ApiError>;
     /// A five-minute credential for the cloud API, if the account has paid
@@ -227,6 +227,26 @@ pub trait Api: Send + Sync {
         let _ = token;
         Err(ApiError::Server(404))
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Access {
+    Pro,
+    Trial {
+        ends_on: String,
+        ends_at: Option<String>,
+    },
+    CanStartTrial {
+        checkout_url: String,
+    },
+    Lapsed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LicenseReply {
+    pub key: Option<String>,
+    pub access: Option<Access>,
 }
 
 /// [`Api`] over HTTPS to [`account_url`].
@@ -309,18 +329,25 @@ impl Api for Http {
         serde_json::from_value(json).map_err(|_| ApiError::BadResponse)
     }
 
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError> {
+    fn current_key(&self, token: &str, version: &str) -> Result<LicenseReply, ApiError> {
         let (status, json) = self.post(
             "/api/device/license",
             Some(token),
             serde_json::json!({ "version": version }),
         )?;
         check(status)?;
-        match json.get("key") {
+        let key = match json.get("key") {
             Some(serde_json::Value::String(key)) => Ok(Some(key.clone())),
             Some(serde_json::Value::Null) => Ok(None),
             _ => Err(ApiError::BadResponse),
-        }
+        }?;
+        let access = json
+            .get("access")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| ApiError::BadResponse)?;
+        Ok(LicenseReply { key, access })
     }
 
     fn sign_out(&self, token: &str) -> Result<(), ApiError> {
@@ -461,13 +488,33 @@ mod tests {
 
         let (base, got) = serve_once(200, r#"{"key":"k.s"}"#);
         let key = Http::new(&base).current_key("cvd_x", "0.1.0").unwrap();
-        assert_eq!(key.as_deref(), Some("k.s"));
+        assert_eq!(key.key.as_deref(), Some("k.s"));
         let request = got.recv().unwrap().to_ascii_lowercase();
         assert!(request.starts_with("post /api/device/license "));
         assert!(request.contains("authorization: bearer cvd_x"));
 
         let (base, _) = serve_once(200, r#"{"key":null}"#);
-        assert_eq!(Http::new(&base).current_key("t", "v"), Ok(None));
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                access: None
+            })
+        );
+        let (base, _) = serve_once(
+            200,
+            r#"{"key":null,"access":{"kind":"trial","ends_on":"2026-10-15","ends_at":"2026-10-15T12:00:00Z"}}"#,
+        );
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                access: Some(Access::Trial {
+                    ends_on: "2026-10-15".into(),
+                    ends_at: Some("2026-10-15T12:00:00Z".into()),
+                })
+            })
+        );
         let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
