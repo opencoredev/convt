@@ -1866,7 +1866,8 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
         assert!(f.app.read(cx).account.awaiting_trial);
         assert_eq!(view.read(cx).stage(cx), Stage::AwaitingTrial);
     });
-    assert_eq!(f.api.calls(), (0, 1, 0));
+    // One check from onboarding, one as checkout opens; reopening adds none.
+    assert_eq!(f.api.calls(), (0, 2, 0));
     // Lapsed buys.
     set(cx, Some(Access::Lapsed));
     click(cx, window, "onboarding-primary");
