@@ -1,10 +1,55 @@
 # Extract the per-user MSI, convert an image and a video, install the
 # document pack from the sibling release archive, convert a Word file to
-# PDF, and prove convt-app.exe stays running.
+# PDF, and prove convt-app.exe stays running. With -AppExe / -CliExe,
+# only the PE subsystem and Start-menu shortcut are checked (CI desktop).
+param(
+    [string]$AppExe,
+    [string]$CliExe
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Repo = (Resolve-Path "$PSScriptRoot/../..").Path
 Set-Location $Repo
+$PeOnly = $PSBoundParameters.ContainsKey('AppExe') -or $PSBoundParameters.ContainsKey('CliExe')
+
+python "$PSScriptRoot/test_pe_subsystem.py"
+if ($LASTEXITCODE -ne 0) { throw 'packaging/windows unit tests failed' }
+$Wxs = Get-Content "$PSScriptRoot/convt.wxs" -Raw
+if ($Wxs -notmatch 'Target="\[INSTALLFOLDER\]convt-app\.exe"') {
+    throw 'convt.wxs Start menu shortcut must target convt-app.exe'
+}
+
+function Test-PeSubsystems {
+    param([string]$Gui, [string]$Cli)
+    if ($Gui) {
+        python "$PSScriptRoot/pe_subsystem.py" --require-gui $Gui
+        if ($LASTEXITCODE -ne 0) { throw 'convt-app.exe must use the WINDOWS_GUI subsystem' }
+    }
+    if ($Cli) {
+        python "$PSScriptRoot/pe_subsystem.py" --require-console $Cli
+        if ($LASTEXITCODE -ne 0) { throw 'convt.exe must stay a console binary' }
+    }
+}
+
+if (-not $AppExe) {
+    $Candidate = Join-Path $Repo 'packaging/out/windows/payload/convt-app.exe'
+    if (Test-Path $Candidate) { $AppExe = $Candidate }
+}
+if (-not $CliExe) {
+    $Candidate = Join-Path $Repo 'packaging/out/windows/payload/convt.exe'
+    if (Test-Path $Candidate) { $CliExe = $Candidate }
+}
+if ($AppExe -or $CliExe) {
+    Test-PeSubsystems -Gui $AppExe -Cli $CliExe
+} elseif ($PeOnly) {
+    Write-Host 'No convt-app.exe to inspect; source checks passed.'
+}
+
+if ($PeOnly) {
+    Write-Host 'Windows GUI subsystem smoke passed'
+    return
+}
+
 $Msi = Get-Item "$Repo/packaging/out/windows/convt-*-windows-x86_64.msi" | Select-Object -First 1
 if (-not $Msi) { throw 'MSI is missing; run installer.ps1 first' }
 $Limit = 120MB
@@ -28,6 +73,9 @@ if ($Forbidden) {
 $Convt = Get-ChildItem $Extract -Recurse -Filter convt.exe | Select-Object -First 1
 if (-not $Convt) { throw 'Extracted MSI has no convt.exe' }
 $Bin = $Convt.Directory.FullName
+$ExtractedApp = Join-Path $Bin 'convt-app.exe'
+if (-not (Test-Path -LiteralPath $ExtractedApp)) { throw 'Extracted MSI has no convt-app.exe' }
+Test-PeSubsystems -Gui $ExtractedApp -Cli $Convt.FullName
 $Work = Join-Path $Repo 'packaging/out/windows/smoke'
 New-Item -ItemType Directory -Force "$Work/in","$Work/out" | Out-Null
 # GitHub's workspace is on D:\, whose volume root is not a trusted pack
@@ -119,9 +167,7 @@ if ($Pdf.Length -lt 32 -or [System.Text.Encoding]::ASCII.GetString($PdfHead) -ne
     throw ("{0} is not a PDF ({1} bytes)" -f $Pdf.Name, $Pdf.Length)
 }
 Write-Host ("{0}: {1} bytes" -f $Pdf.Name, $Pdf.Length)
-$App = Join-Path $Bin 'convt-app.exe'
-if (-not (Test-Path -LiteralPath $App)) { throw 'Extracted MSI has no convt-app.exe' }
-$Gui = Start-Process -FilePath $App -PassThru -WindowStyle Hidden
+$Gui = Start-Process -FilePath $ExtractedApp -PassThru -WindowStyle Hidden
 if (-not $Gui) { throw 'convt-app.exe did not start' }
 try {
     Start-Sleep -Seconds 5
