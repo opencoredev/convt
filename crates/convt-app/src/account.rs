@@ -42,6 +42,30 @@ pub enum SignIn {
     Failed(String),
 }
 
+/// Which sign-in button was pressed. convt.app/device goes straight to that
+/// way of signing in instead of showing its chooser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    Google,
+    Email,
+}
+
+/// What the signed-in account allows on this computer, as of the last
+/// license refresh. `None` on [`Account::access`] until one has answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Access {
+    /// Paid Pro; its key is stored like any other.
+    Pro,
+    /// A Pro trial through Polar. Conversions work through this UTC day
+    /// (`YYYY-MM-DD`). No key is signed for a trial.
+    Trial { ends_on: String },
+    /// No subscription, and the account can still start its one trial:
+    /// [`AppState::start_trial`] opens this checkout.
+    CanStartTrial { checkout_url: String },
+    /// No Pro and no trial left: buying is the way on.
+    Lapsed,
+}
+
 /// Where the last license refresh stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refresh {
@@ -64,6 +88,11 @@ pub struct Account {
     /// Something to tell the user that isn't the state of a flow, such as a
     /// sign-in link the app ignored.
     pub notice: Option<String>,
+    /// What the account allows, from the last refresh.
+    pub access: Option<Access>,
+    /// The trial checkout is open in the browser; refreshes repeat until it
+    /// comes back as a trial or Pro.
+    pub awaiting_trial: bool,
     _sign_in_task: Option<Task<()>>,
     _refresh_task: Option<Task<()>>,
 }
@@ -79,6 +108,8 @@ impl Account {
             sign_in: SignIn::Idle,
             refresh: Refresh::Idle,
             notice: None,
+            access: None,
+            awaiting_trial: false,
             _sign_in_task: None,
             _refresh_task: None,
         }
@@ -176,6 +207,23 @@ impl AppState {
         account.sign_in = SignIn::Waiting;
         cx.open_url(&page);
         cx.notify();
+    }
+
+    /// [`Self::start_sign_in`], with the page told which button was pressed.
+    // CNV-70 adds `&provider=` to the page.
+    pub fn start_sign_in_with(&mut self, _provider: Provider, cx: &mut Context<Self>) {
+        self.start_sign_in(cx);
+    }
+
+    /// Opens the account's trial checkout and keeps refreshing until the
+    /// trial shows up. Does nothing unless [`Access::CanStartTrial`].
+    // CNV-70 adds the polling.
+    pub fn start_trial(&mut self, cx: &mut Context<Self>) {
+        if let Some(Access::CanStartTrial { checkout_url }) = &self.account.access {
+            cx.open_url(checkout_url);
+            self.account.awaiting_trial = true;
+            cx.notify();
+        }
     }
 
     /// Opens the waiting flow's page again, for a browser tab that was closed.
