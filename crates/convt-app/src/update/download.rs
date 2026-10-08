@@ -8,7 +8,13 @@
 //! is still reading can never write into another attempt's file. A file
 //! already downloaded for the same version is checked again and reused, and
 //! the installer checks it once more right before it installs ([`check`]).
-//! A download that receives nothing for [`IDLE`] fails instead of hanging.
+//! A download that receives nothing for [`IDLE`] fails instead of hanging,
+//! and the socket read gives up after the same time, so the thread reading
+//! a stalled or stopped download ends on its own.
+//!
+//! Only the UI thread deletes other versions' downloads ([`keep_only`]),
+//! before it starts an attempt, so a stopped attempt that is still running
+//! can never delete what a newer one downloaded.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -66,13 +72,23 @@ pub struct Http {
 
 impl Http {
     pub fn new() -> Self {
+        Self::with(true, IDLE)
+    }
+
+    /// `https_only` is off only in tests against a loopback server.
+    fn with(https_only: bool, idle: Duration) -> Self {
         let agent = ureq::Agent::config_builder()
-            .https_only(true)
+            .https_only(https_only)
             // GitHub release downloads redirect twice; leave some room.
             .max_redirects(5)
             .http_status_as_error(false)
             .timeout_connect(Some(Duration::from_secs(20)))
             .timeout_recv_response(Some(Duration::from_secs(30)))
+            // ureq counts this from each wait for body bytes, not from the
+            // first, so it is an idle limit: a read that gets nothing for
+            // `idle` fails and the reader thread ends.
+            // `a_stalled_socket_read_ends_on_its_own` checks it does.
+            .timeout_recv_body(Some(idle))
             // An installer is tens of megabytes; allow a slow line.
             .timeout_global(Some(Duration::from_secs(60 * 60)))
             .user_agent(format!("convt/{VERSION}"))
@@ -199,6 +215,21 @@ pub fn prune(dir: &Path, running: &str) {
     }
 }
 
+/// Deletes every other version's download folder in `dir`: one update at a
+/// time. Called on the UI thread before an attempt starts, never by an
+/// attempt itself. Files in `dir` (the install result) stay.
+pub fn keep_only(dir: &Path, version: &str) {
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if entry.file_name() != version
+            && path.is_dir()
+            && let Err(e) = fs::remove_dir_all(&path)
+        {
+            tracing::warn!(error = %e, path = %path.display(), "couldn't delete an older update");
+        }
+    }
+}
+
 /// Creates a `.part` file next to `path` that no other attempt uses.
 fn create_part(path: &Path) -> Result<(PathBuf, File), Error> {
     static ATTEMPT: AtomicU64 = AtomicU64::new(0);
@@ -222,9 +253,10 @@ fn create_part_counting(path: &Path, attempt: &AtomicU64) -> Result<(PathBuf, Fi
 }
 
 /// Downloads `artifact` for `version` into `dir` and returns the verified
-/// file. Other versions' downloads in `dir` are deleted first. `progress`
-/// gets the bytes so far; `cancelled` is polled between reads and while
-/// waiting for them.
+/// file. It touches only its own version's folder; the caller clears out
+/// the others first ([`keep_only`]). `progress` gets the bytes so far;
+/// `cancelled` is polled before it starts, between reads and while waiting
+/// for them.
 pub fn fetch(
     source: &dyn Source,
     artifact: &Artifact,
@@ -245,23 +277,13 @@ fn fetch_within(
     cancelled: &dyn Fn() -> bool,
     idle: Duration,
 ) -> Result<PathBuf, Error> {
+    if cancelled() {
+        return Err(Error::Cancelled);
+    }
     let path = destination(dir, version, artifact);
     if verified(&path, artifact) {
         progress(artifact.size);
         return Ok(path);
-    }
-    // One update at a time: drop older downloads.
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if entry.file_name() != version {
-                let p = entry.path();
-                let _ = if p.is_dir() {
-                    fs::remove_dir_all(&p)
-                } else {
-                    fs::remove_file(&p)
-                };
-            }
-        }
     }
     let parent = path.parent().expect("a version folder");
     fs::create_dir_all(parent).map_err(disk)?;
@@ -514,6 +536,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir_all(dir.path().join("9.1.0")).unwrap();
         fs::write(dir.path().join("9.1.0/convt.AppImage"), b"old").unwrap();
+        fs::write(dir.path().join("install-result.json"), b"{}").unwrap();
         let body = b"a new convt".to_vec();
         let a = artifact(&body);
         let source = Fake::new(Ok(body));
@@ -521,9 +544,183 @@ mod tests {
             fetch(&source, &a, "9.2.0", dir.path(), &|_| {}, &|| true),
             Err(Error::Cancelled)
         );
-        assert!(leftovers(dir.path()).is_empty());
+        assert_eq!(source.opened.load(Ordering::SeqCst), 0);
+        keep_only(dir.path(), "9.2.0");
+        assert_eq!(leftovers(dir.path()), ["install-result.json"]);
         run(&source, &a, dir.path()).unwrap();
-        assert_eq!(leftovers(dir.path()), ["9.2.0/convt-linux-x86_64.AppImage"]);
+        let mut left = leftovers(dir.path());
+        left.sort();
+        assert_eq!(
+            left,
+            ["9.2.0/convt-linux-x86_64.AppImage", "install-result.json"]
+        );
+    }
+
+    #[test]
+    fn an_older_attempt_never_deletes_a_newer_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_body = b"an old convt".to_vec();
+        let new_body = b"a new convt".to_vec();
+        let (old, new) = (artifact(&old_body), artifact(&new_body));
+        // The first attempt, for 9.1.0, is held before its first byte.
+        let release = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stopped = std::sync::atomic::AtomicBool::new(false);
+        let held = BlockedSource(old_body, release.clone());
+        std::thread::scope(|s| {
+            let first = s.spawn(|| {
+                fetch(&held, &old, "9.1.0", dir.path(), &|_| {}, &|| {
+                    stopped.load(Ordering::SeqCst)
+                })
+            });
+            // Meanwhile the UI stops it and starts 9.2.0, which finishes.
+            std::thread::sleep(Duration::from_millis(50));
+            stopped.store(true, Ordering::SeqCst);
+            keep_only(dir.path(), "9.2.0");
+            run_version(&Fake::new(Ok(new_body.clone())), &new, "9.2.0", dir.path()).unwrap();
+            release.store(true, Ordering::SeqCst);
+            assert_eq!(first.join().unwrap(), Err(Error::Cancelled));
+        });
+        // A stopped attempt that only now gets going deletes nothing either.
+        assert_eq!(
+            fetch(
+                &Fake::new(Ok(b"x".to_vec())),
+                &old,
+                "9.1.0",
+                dir.path(),
+                &|_| {},
+                &|| true
+            ),
+            Err(Error::Cancelled)
+        );
+        let mut left = leftovers(dir.path());
+        left.sort();
+        assert_eq!(left, ["9.2.0/convt-linux-x86_64.AppImage"]);
+        assert_eq!(
+            fs::read(dir.path().join("9.2.0/convt-linux-x86_64.AppImage")).unwrap(),
+            new_body
+        );
+    }
+
+    fn run_version(
+        source: &Fake,
+        a: &Artifact,
+        version: &str,
+        dir: &Path,
+    ) -> Result<PathBuf, Error> {
+        fetch(source, a, version, dir, &|_| {}, &|| false)
+    }
+
+    /// A loopback server for one request: it declares 100 bytes, sends
+    /// `chunks` of them `gap` apart, then holds the connection for `hang`.
+    fn slow_server(
+        chunks: usize,
+        gap: Duration,
+        hang: Duration,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{BufRead, BufReader};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/convt.AppImage", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap() > 2 {
+                line.clear();
+            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n")
+                .unwrap();
+            for _ in 0..chunks {
+                stream.write_all(b"x").unwrap();
+                std::thread::sleep(gap);
+            }
+            std::thread::sleep(hang);
+        });
+        (url, server)
+    }
+
+    /// The real transport against a loopback server that goes quiet: the
+    /// socket read gives up about the idle limit after the last byte, by
+    /// itself, while a server that is slow but keeps sending is not cut
+    /// off, however long the whole body takes.
+    #[test]
+    fn a_stalled_socket_read_ends_on_its_own() {
+        let idle = Duration::from_millis(500);
+        let http = Http::with(false, idle);
+        // Ten bytes 200 ms apart: two seconds in all, never idle for 500 ms.
+        let (url, server) = slow_server(10, Duration::from_millis(200), Duration::from_secs(5));
+        let mut body = http.open(&url).unwrap();
+        let started = Instant::now();
+        let mut got = 0;
+        let mut buf = [0; 64];
+        let err = loop {
+            match body.read(&mut buf) {
+                Ok(0) => panic!("the body ended early"),
+                Ok(n) => got += n,
+                Err(e) => break e,
+            }
+        };
+        assert_eq!(got, 10, "slow bytes still arrive: {err}");
+        let waited = started.elapsed();
+        assert!(waited >= Duration::from_millis(1900), "{waited:?}");
+        assert!(waited < Duration::from_millis(4000), "{waited:?}");
+        drop(body);
+        server.join().unwrap();
+
+        // A cancelled download returns at once, and the thread still
+        // reading its body ends by itself soon after: nothing stays blocked.
+        let (url, server) = slow_server(0, Duration::ZERO, Duration::from_secs(5));
+        let dir = tempfile::tempdir().unwrap();
+        let mut a = artifact(&[b'x'; 100]);
+        a.url = url;
+        let ended = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let source = ReaderEnd(Http::with(false, idle), ended.clone());
+        let started = Instant::now();
+        let cancel_at = Duration::from_millis(100);
+        assert_eq!(
+            fetch(&source, &a, "9.2.0", dir.path(), &|_| {}, &|| {
+                started.elapsed() > cancel_at
+            }),
+            Err(Error::Cancelled)
+        );
+        assert!(started.elapsed() < Duration::from_millis(400));
+        assert!(!ended.load(Ordering::SeqCst), "still waiting on the socket");
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !ended.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < deadline,
+                "the reader thread is still blocked"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        server.join().unwrap();
+    }
+
+    /// [`Http`] whose body reader notes when it is dropped, which happens
+    /// when the thread reading it ends.
+    struct ReaderEnd(Http, std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+    struct NoteDrop(
+        Box<dyn Read + Send>,
+        std::sync::Arc<std::sync::atomic::AtomicBool>,
+    );
+
+    impl Read for NoteDrop {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.0.read(buf)
+        }
+    }
+
+    impl Drop for NoteDrop {
+        fn drop(&mut self) {
+            self.1.store(true, Ordering::SeqCst);
+        }
+    }
+
+    impl Source for ReaderEnd {
+        fn open(&self, url: &str) -> Result<Box<dyn Read + Send>, Error> {
+            Ok(Box::new(NoteDrop(self.0.open(url)?, self.1.clone())))
+        }
     }
 
     /// Reads nothing until `release` is set, then serves `body`.

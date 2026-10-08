@@ -1,8 +1,10 @@
 //! Quitting, and the app menu. Quit (⌘Q on macOS, Ctrl+Q elsewhere) works
 //! from every window and from the tray menu, and asks nothing first. While
-//! an update installs, every quit waits for the install to finish, so convt
-//! is never left half replaced. macOS also gets the menu bar menus: convt,
-//! Edit and Window.
+//! an update installs, these quits wait for the install to finish. A quit
+//! from the Dock, a logout or a shutdown goes through AppKit, which GPUI
+//! gives no way to delay, so the install itself never leaves convt half
+//! replaced (`update/install.rs` swaps the bundle in one step). macOS also
+//! gets the menu bar menus: convt, Edit and Window.
 
 use gpui_kit::{App, Global, KeyBinding, Menu, MenuItem, OsAction, SystemMenuType, actions};
 
@@ -36,7 +38,7 @@ pub fn init(cx: &mut App) {
 
 /// Quits now, whatever is open or running, unless an update is installing:
 /// then the quit happens when the install ends. The quit observers
-/// (`thumbs`) clean up. Every way of quitting comes through here.
+/// (`thumbs`) clean up. Every quit convt starts itself comes through here.
 pub fn quit(cx: &mut App) {
     if let Some(install) = cx.try_global::<Install>()
         && install.running

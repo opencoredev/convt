@@ -10,21 +10,28 @@
 //!   certificate chain whose leaf carries that Team ID. A running app with
 //!   no Team ID (ad-hoc signed, as a build from source is) has nothing to
 //!   compare against, so it relies on the hash and the signature check
-//!   alone. The bundle replaces the running one with two renames (rolled
-//!   back if the second fails). A shell waits for this process to exit, then
-//!   `open`s the bundle.
+//!   alone. The bundle replaces the running one in a single exchange
+//!   (`renamex_np` with `RENAME_SWAP`), so `convt.app` is whole at every
+//!   moment, even if convt exits mid-update; a file system that can't swap
+//!   gets two renames, rolled back if the second fails. A shell waits for
+//!   this process to exit, then `open`s the bundle.
 //! - Windows: a hidden PowerShell waits, with no time limit, for this
 //!   process to exit, runs the MSI with `/passive` (the MSI is per-user and
-//!   upgrades in place), then starts convt again. If it can't tell that
-//!   convt exited, it installs nothing.
+//!   upgrades in place), records msiexec's exit code in
+//!   [`RESULT_FILE`] in the updates folder, then starts convt again, updated
+//!   or not. The next launch reads that file ([`take_result`]) and says when
+//!   the install failed. If it can't tell that convt exited, it installs
+//!   nothing.
 //! - Linux: the AppImage named by `$APPIMAGE` is replaced with a rename in
 //!   its own folder, and a shell starts it once this process has quit.
 //!
 //! The shells on macOS and Linux wait by reading a pipe whose only write end
 //! this process holds; it closes when the process exits, however it exits.
 //! The staging and backup copies have fixed hidden names next to the
-//! target, and leftovers from an interrupted update are swept first. The
-//! app never quits while an install runs (`menu::quit` waits for it).
+//! target, and leftovers from an interrupted update are swept first. Quit
+//! waits while an install runs (`menu::quit`), but a quit from the Dock or
+//! the system can't be held back, which is why the swap has no moment
+//! without a convt to start.
 //!
 //! Anything else (the deb, rpm and tarball, an app running from its disk
 //! image or a folder convt can't write to) keeps the download page.
@@ -106,22 +113,35 @@ fn sibling(path: &Path, tag: &str) -> PathBuf {
 }
 
 /// Deletes the staging and backup copies earlier updates of `path` left
-/// next to it: `.<name>.new*` and `.<name>.old*`.
+/// next to it: exactly the names [`sibling`] makes (`.<name>.new` and
+/// `.<name>.old`), and those with a process id after a dash, which older
+/// builds used. Anything else that starts the same way stays.
 pub fn sweep(path: &Path) {
     let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
         return;
     };
     let name = name.to_string_lossy();
-    let prefixes = [format!(".{name}.new"), format!(".{name}.old")];
     for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
         let file = entry.file_name();
-        let file = file.to_string_lossy();
-        if prefixes.iter().any(|p| file.starts_with(p.as_str()))
+        if is_leftover(&file.to_string_lossy(), &name)
             && let Err(e) = remove_any(&entry.path())
         {
             tracing::warn!(error = %e, path = %entry.path().display(), "couldn't delete an old update copy");
         }
     }
+}
+
+/// Whether `file` is a staging or backup copy of `name`.
+fn is_leftover(file: &str, name: &str) -> bool {
+    ["new", "old"].iter().any(|tag| {
+        file.strip_prefix(&format!(".{name}.{tag}"))
+            .is_some_and(|rest| {
+                rest.is_empty()
+                    || rest.strip_prefix('-').is_some_and(|pid| {
+                        !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())
+                    })
+            })
+    })
 }
 
 fn remove_any(path: &Path) -> io::Result<()> {
@@ -133,11 +153,32 @@ fn remove_any(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Replaces `current` with `staged`, which must be in the same folder: the
-/// current one moves aside, the staged one takes its name, and the old one
-/// is deleted. If the second rename fails the first is undone, so `current`
-/// is never left missing.
+/// Replaces `current` with `staged`, which must be in the same folder, and
+/// deletes the old one. Where the file system can, the two trade places in
+/// one step, so `current` is never missing even if this process dies part
+/// way. Elsewhere the current one moves aside and the staged one takes its
+/// name; if that second rename fails the first is undone.
 pub fn swap_in(current: &Path, staged: &Path) -> io::Result<()> {
+    swap_using(current, staged, exchange)
+}
+
+fn swap_using(
+    current: &Path,
+    staged: &Path,
+    exchange: impl Fn(&Path, &Path) -> io::Result<()>,
+) -> io::Result<()> {
+    match exchange(staged, current) {
+        Ok(()) => {
+            // `staged` now holds the old copy. The running process keeps its
+            // open files, so it can go; a later sweep gets it if this fails.
+            if let Err(e) = remove_any(staged) {
+                tracing::warn!(error = %e, "couldn't delete the old convt");
+            }
+            return Ok(());
+        }
+        Err(e) if !cannot_exchange(&e) => return Err(e),
+        Err(_) => {}
+    }
     let backup = sibling(current, "old");
     remove_any(&backup)?;
     fs::rename(current, &backup)?;
@@ -147,11 +188,63 @@ pub fn swap_in(current: &Path, staged: &Path) -> io::Result<()> {
         }
         return Err(e);
     }
-    // The running process keeps its open files; the old copy can go.
     if let Err(e) = remove_any(&backup) {
         tracing::warn!(error = %e, "couldn't delete the old convt");
     }
     Ok(())
+}
+
+/// Whether an [`exchange`] failed because the file system or the OS can't
+/// swap, rather than because of the paths.
+fn cannot_exchange(e: &io::Error) -> bool {
+    if e.kind() == io::ErrorKind::Unsupported {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        // ENOTSUP and EOPNOTSUPP are the same number on some systems.
+        e.raw_os_error().is_some_and(|code| {
+            [libc::ENOTSUP, libc::EOPNOTSUPP, libc::EINVAL, libc::ENOSYS].contains(&code)
+        })
+    }
+    #[cfg(not(unix))]
+    false
+}
+
+/// Swaps what `a` and `b` name in one atomic step: `renamex_np` with
+/// `RENAME_SWAP` on macOS, `renameat2` with `RENAME_EXCHANGE` on Linux.
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_env = "gnu")))]
+fn exchange(a: &Path, b: &Path) -> io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = |p: &Path| {
+        std::ffi::CString::new(p.as_os_str().as_bytes())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+    };
+    let (a, b) = (c(a)?, c(b)?);
+    // SAFETY: both are valid NUL-terminated paths for the duration of the call.
+    #[cfg(target_os = "macos")]
+    let r = unsafe { libc::renamex_np(a.as_ptr(), b.as_ptr(), libc::RENAME_SWAP) };
+    // SAFETY: as above; AT_FDCWD resolves relative paths as rename does.
+    #[cfg(target_os = "linux")]
+    let r = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            a.as_ptr(),
+            libc::AT_FDCWD,
+            b.as_ptr(),
+            libc::RENAME_EXCHANGE,
+        )
+    };
+    if r == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", all(target_os = "linux", target_env = "gnu"))))]
+fn exchange(_: &Path, _: &Path) -> io::Result<()> {
+    Err(io::ErrorKind::Unsupported.into())
 }
 
 /// Replaces the file at `target` with a copy of `new`: copied next to it
@@ -248,10 +341,20 @@ pub fn ps_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 
-/// The PowerShell script that installs `msi` once `pid` has exited and then
-/// starts convt again: from the folder the MSI records, else `exe`. It waits
-/// as long as convt runs, and installs nothing unless convt has exited.
-pub fn windows_script(pid: u32, msi: &Path, exe: &Path) -> String {
+/// Where the Windows helper records how msiexec ended, in the updates folder.
+pub const RESULT_FILE: &str = "install-result.json";
+
+/// The exit codes msiexec ends a good install with: done, done and a
+/// restart starts, done and a restart is needed.
+const MSI_OK: [i64; 3] = [0, 1641, 3010];
+
+/// The PowerShell script that installs `msi` (the MSI of `version`) once
+/// `pid` has exited and then starts convt again: from the folder the MSI
+/// records, else `exe`. It waits as long as convt runs, and installs nothing
+/// unless convt has exited. msiexec's exit code goes into `result` (-1 if it
+/// didn't start, nothing if Windows didn't say), which the next launch reads; a failed install still
+/// starts the old convt, so it can say so.
+pub fn windows_script(pid: u32, msi: &Path, exe: &Path, version: &str, result: &Path) -> String {
     // Windows paths can't contain double quotes, so quoting the MSI path for
     // msiexec's command line is safe.
     let args = format!("/i \"{}\" /passive /norestart", msi.display());
@@ -260,14 +363,54 @@ pub fn windows_script(pid: u32, msi: &Path, exe: &Path) -> String {
          $p = Get-Process -Id {pid} -ErrorAction SilentlyContinue\n\
          if ($p) {{ $p.WaitForExit(); if (-not $p.HasExited) {{ exit 1 }} }}\n\
          $ErrorActionPreference = 'SilentlyContinue'\n\
-         Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\msiexec.exe') -ArgumentList {args} -Wait\n\
+         $i = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\msiexec.exe') -ArgumentList {args} -Wait -PassThru\n\
+         $code = if ($i) {{ $i.ExitCode }} else {{ -1 }}\n\
+         if ($null -ne $code) {{ @{{ version = {version}; exit_code = $code }} | ConvertTo-Json -Compress | Set-Content -LiteralPath {result} -Encoding UTF8 }}\n\
          $exe = {exe}\n\
          $dir = (Get-ItemProperty -Path 'HKCU:\\Software\\Convt' -Name InstallFolder).InstallFolder\n\
          if ($dir) {{ $c = Join-Path $dir 'convt-app.exe'; if (Test-Path -LiteralPath $c) {{ $exe = $c }} }}\n\
          Start-Process -FilePath $exe\n",
         args = ps_quote(&args),
+        version = ps_quote(version),
+        result = ps_quote(&result.display().to_string()),
         exe = ps_quote(&exe.display().to_string()),
     )
+}
+
+/// What the Windows helper wrote after msiexec ran.
+#[derive(serde::Deserialize)]
+struct InstallResult {
+    version: String,
+    exit_code: i64,
+}
+
+/// Reads and deletes the result an earlier install left in `dir`. Returns
+/// the version and why, in a short line, when that install failed; `None`
+/// when it worked or there's nothing to read.
+pub fn take_result(dir: &Path) -> Option<(String, String)> {
+    let path = dir.join(RESULT_FILE);
+    let text = fs::read_to_string(&path).ok()?;
+    if let Err(e) = fs::remove_file(&path) {
+        tracing::warn!(error = %e, "couldn't delete the install result");
+    }
+    // PowerShell 5 writes UTF-8 with a byte order mark.
+    let result: InstallResult = match serde_json::from_str(text.trim_start_matches('\u{feff}')) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "couldn't read the install result");
+            return None;
+        }
+    };
+    if MSI_OK.contains(&result.exit_code) {
+        return None;
+    }
+    let why = match result.exit_code {
+        -1 => "The installer couldn't be started.".to_string(),
+        1602 => "The install was cancelled.".to_string(),
+        1618 => "Another install was running. Try again in a moment.".to_string(),
+        code => format!("Windows Installer stopped with error {code}."),
+    };
+    Some((result.version, why))
 }
 
 /// `script` as `-EncodedCommand` takes it: base64 of UTF-16LE, so no
@@ -444,7 +587,16 @@ mod platform {
 
     pub fn install(msi: &Path) -> Result<(), String> {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let script = windows_script(std::process::id(), msi, &exe);
+        // Downloads live in `<updates>/<version>/`.
+        let folder = msi
+            .parent()
+            .ok_or("The update's folder couldn't be found.")?;
+        let version = folder
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let result = folder.parent().unwrap_or(folder).join(RESULT_FILE);
+        let script = windows_script(std::process::id(), msi, &exe, &version, &result);
         let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
         let powershell = Path::new(&root).join("System32\\WindowsPowerShell\\v1.0\\powershell.exe");
         Command::new(powershell)
@@ -589,6 +741,8 @@ mod tests {
             fs::read_to_string(current.join("Contents/version")).unwrap(),
             "new"
         );
+        // An exchange leaves it for the next sweep, as the install does first.
+        sweep(&current);
         assert_eq!(names(dir.path()), ["convt.app"]);
     }
 
@@ -613,6 +767,8 @@ mod tests {
             fs::read_to_string(current.join("Contents/version")).unwrap(),
             "new"
         );
+        // An exchange leaves it for the next sweep, as the install does first.
+        sweep(&current);
         assert_eq!(names(dir.path()), ["convt.app"]);
     }
 
@@ -629,11 +785,81 @@ mod tests {
         // Other apps' files and similar names stay.
         bundle(dir.path(), "Other.app", "other");
         fs::write(dir.path().join(".convt.apples"), b"x").unwrap();
+        for neighbor in [
+            ".convt.app.old-notes",
+            ".convt.app.newer",
+            ".convt.app.new-",
+            ".convt.app.old-12a",
+            ".convt.app.new.bak",
+        ] {
+            fs::write(dir.path().join(neighbor), b"keep").unwrap();
+        }
         sweep(&current);
         assert_eq!(
             names(dir.path()),
-            [".convt.apples", "Other.app", "convt.app"]
+            [
+                ".convt.app.new-",
+                ".convt.app.new.bak",
+                ".convt.app.newer",
+                ".convt.app.old-12a",
+                ".convt.app.old-notes",
+                ".convt.apples",
+                "Other.app",
+                "convt.app"
+            ]
         );
+    }
+
+    #[test]
+    fn without_an_atomic_exchange_the_swap_falls_back_to_renames() {
+        let unsupported = |_: &Path, _: &Path| Err(io::Error::from(io::ErrorKind::Unsupported));
+        let dir = tempfile::tempdir().unwrap();
+        let current = bundle(dir.path(), "convt.app", "old");
+        let staged = bundle(dir.path(), ".convt.app.new", "new");
+        swap_using(&current, &staged, unsupported).unwrap();
+        assert_eq!(
+            fs::read_to_string(current.join("Contents/version")).unwrap(),
+            "new"
+        );
+        assert_eq!(names(dir.path()), ["convt.app"]);
+        // A failed second rename puts the old one back.
+        let missing = dir.path().join(".convt.app.new");
+        assert!(swap_using(&current, &missing, unsupported).is_err());
+        assert_eq!(
+            fs::read_to_string(current.join("Contents/version")).unwrap(),
+            "new"
+        );
+        assert_eq!(names(dir.path()), ["convt.app"]);
+        // Any other exchange error stops before anything moves.
+        let staged = bundle(dir.path(), ".convt.app.new", "newer");
+        let denied = |_: &Path, _: &Path| Err(io::Error::from(io::ErrorKind::PermissionDenied));
+        assert!(swap_using(&current, &staged, denied).is_err());
+        assert_eq!(names(dir.path()), [".convt.app.new", "convt.app"]);
+    }
+
+    /// The atomic exchange itself, where this OS has one and the temp
+    /// folder's file system supports it.
+    #[test]
+    fn the_exchange_swaps_both_names_in_one_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = bundle(dir.path(), "convt.app", "old");
+        let staged = bundle(dir.path(), ".convt.app.new", "new");
+        match exchange(&staged, &current) {
+            Err(e) if cannot_exchange(&e) => {
+                eprintln!("no atomic exchange here: {e}");
+                return;
+            }
+            r => r.unwrap(),
+        }
+        // Both names exist at every point: each now holds the other copy.
+        let version = |b: &Path| fs::read_to_string(b.join("Contents/version")).unwrap();
+        assert_eq!(version(&current), "new");
+        assert_eq!(version(&staged), "old");
+        // What an exit right after the exchange leaves: the next update's
+        // sweep removes the old copy.
+        sweep(&current);
+        assert_eq!(names(dir.path()), ["convt.app"]);
+        assert_eq!(version(&current), "new");
     }
 
     #[cfg(unix)]
@@ -704,6 +930,8 @@ mod tests {
             4242,
             Path::new(r"C:\Users\O'Neil\AppData\Local\convt\updates\9.2.0\convt.msi"),
             Path::new(r"C:\Users\O'Neil\AppData\Local\convt\convt-app.exe"),
+            "9.2.0",
+            Path::new(r"C:\Users\O'Neil\AppData\Local\convt\updates\install-result.json"),
         );
         assert!(script.contains("Get-Process -Id 4242"));
         assert!(script.contains("WaitForExit()"));
@@ -715,9 +943,18 @@ mod tests {
                 && script.find("HasExited").unwrap() < script.find("msiexec").unwrap()
         );
         assert!(script.contains(
-            r#"-ArgumentList '/i "C:\Users\O''Neil\AppData\Local\convt\updates\9.2.0\convt.msi" /passive /norestart'"#
+            r#"-ArgumentList '/i "C:\Users\O''Neil\AppData\Local\convt\updates\9.2.0\convt.msi" /passive /norestart' -Wait -PassThru"#
         ));
         assert!(script.contains(r"$exe = 'C:\Users\O''Neil\AppData\Local\convt\convt-app.exe'"));
+        // msiexec's exit code is kept for the next launch, before convt
+        // starts again whatever it was.
+        assert!(script.contains("$code = if ($i) { $i.ExitCode } else { -1 }"));
+        assert!(script.contains(
+            r"@{ version = '9.2.0'; exit_code = $code } | ConvertTo-Json -Compress | Set-Content -LiteralPath 'C:\Users\O''Neil\AppData\Local\convt\updates\install-result.json'"
+        ));
+        let recorded = script.find("Set-Content").unwrap();
+        assert!(script.find("msiexec").unwrap() < recorded);
+        assert!(recorded < script.rfind("Start-Process -FilePath $exe").unwrap());
         // Base64 of UTF-16LE, decodable back to the script.
         use base64::Engine as _;
         let bytes = base64::engine::general_purpose::STANDARD
@@ -728,6 +965,38 @@ mod tests {
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         assert_eq!(String::from_utf16(&units).unwrap(), script);
+    }
+
+    #[test]
+    fn the_next_launch_reads_the_install_result_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(RESULT_FILE);
+        assert_eq!(take_result(dir.path()), None, "nothing to read");
+        // What ConvertTo-Json and Set-Content -Encoding UTF8 write.
+        for (code, why) in [
+            (1603, Some("Windows Installer stopped with error 1603.")),
+            (1602, Some("The install was cancelled.")),
+            (-1, Some("The installer couldn't be started.")),
+            (0, None),
+            (3010, None),
+            (1641, None),
+        ] {
+            fs::write(
+                &file,
+                format!("\u{feff}{{\"version\":\"9.2.0\",\"exit_code\":{code}}}\r\n"),
+            )
+            .unwrap();
+            assert_eq!(
+                take_result(dir.path()),
+                why.map(|w| ("9.2.0".to_string(), w.to_string())),
+                "{code}"
+            );
+            assert!(!file.exists(), "read once, then deleted");
+        }
+        // Garbage is deleted too, and shows nothing.
+        fs::write(&file, b"not json").unwrap();
+        assert_eq!(take_result(dir.path()), None);
+        assert!(!file.exists());
     }
 
     /// Updates a copy of an installed convt.app from a real release disk
