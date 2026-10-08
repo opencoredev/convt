@@ -123,6 +123,8 @@ fn is_credential(value: &str) -> bool {
         "apikey:",
         "authorization=",
         "authorization:",
+        "jwt=",
+        "jwt:",
     ];
     if keyed.iter().any(|prefix| lower.starts_with(prefix)) {
         return true;
