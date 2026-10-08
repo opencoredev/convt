@@ -1577,7 +1577,7 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
     assert!(reloaded.automations[2].enabled);
 
     // The main window shows the same rules.
-    click(cx, popover, "new-rule");
+    click(cx, popover, "manage-rules");
     let (main, view) = window_of::<MainView>(cx);
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
     assert_eq!(label(cx, main, "automation-2").as_deref(), Some("On"));

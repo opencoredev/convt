@@ -232,8 +232,7 @@ impl PopoverView {
                             .child("Automations"),
                     )
                     .child(
-                        Button::ghost("new-rule", "New rule")
-                            .icon(IconName::Plus)
+                        Button::ghost("manage-rules", "Manage")
                             .color(p.green_text)
                             .small()
                             .build(p)
