@@ -4,9 +4,9 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
+use super::theme::IconName;
 use convt_core::{format_by_extension, format_by_id};
 use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
-use super::theme::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 

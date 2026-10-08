@@ -17,7 +17,7 @@ use gpui_kit::*;
 use super::theme::IconName;
 
 use super::theme::{
-    self, Button, Choice, Palette, Segment, Tone, icon, mono, radius, size, space, styled,
+    self, Button, Choice, Palette, Tile, Tone, icon, mono, radius, size, space, styled,
 };
 use super::{blocked_banner, error_text, file_size, human_size, time_left};
 use crate::cloud::CloudAccess;
@@ -73,6 +73,10 @@ pub struct QuickView {
     /// default: Transparent where the format keeps it, White where it can't.
     pub(super) background: Option<Background>,
     open: Option<Open>,
+    /// The Options row is expanded into its controls.
+    pub(super) options_open: bool,
+    /// The file name shows as a field instead of as text.
+    pub(super) editing_name: bool,
     /// Where the files go. `None` is next to each file.
     pub(super) save_dir: Option<PathBuf>,
     pub(super) file_name: Entity<InputState>,
@@ -155,6 +159,8 @@ impl QuickView {
             strip_audio: false,
             background: None,
             open: None,
+            options_open: false,
+            editing_name: false,
             save_dir,
             file_name,
             jobs: Vec::new(),
@@ -753,6 +759,14 @@ impl QuickView {
         )
     }
 
+    /// Shows the file name as a field, focused, for typing a new one.
+    pub(super) fn edit_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.editing_name = true;
+        let focus = self.file_name.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
     fn toggle(&mut self, which: Open, cx: &mut Context<Self>) {
         self.open = if self.open == Some(which) {
             None
@@ -937,14 +951,164 @@ impl QuickView {
                 p,
             )
         });
-        let rows: Vec<AnyElement> = [quality, size, codec, background, audio]
+        let mut rows: Vec<AnyElement> = [quality, size, codec, background, audio]
             .into_iter()
             .flatten()
             .collect();
         if rows.is_empty() {
             return None;
         }
-        Some(section("Options", p).child(theme::group(rows, p)))
+        // One row that says what the options are; a click opens them.
+        let summary = SharedString::from(self.options_summary(to, cx));
+        let open = self.options_open;
+        let header = theme::clickable("options-toggle", summary.clone())
+            .aria_expanded(open)
+            .flex()
+            .items_center()
+            .gap(px(space::MD))
+            .min_h(px(46.))
+            .px(px(space::LG))
+            .hover(|s| s.bg(p.hover))
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.options_open = !this.options_open;
+                this.open = None;
+                cx.notify();
+            }))
+            .child(
+                styled(size::BODY, p.text)
+                    .font_weight(FontWeight::MEDIUM)
+                    .flex_shrink_0()
+                    .child("Options"),
+            )
+            .child(
+                div()
+                    .id("options-summary")
+                    .test_support()
+                    .aria_label(summary.clone())
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .justify_end()
+                    .when(!open, |d| {
+                        d.child(
+                            styled(size::SMALL, p.secondary)
+                                .truncate()
+                                .child(summary.clone()),
+                        )
+                    }),
+            )
+            .child(icon(
+                if open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                },
+                14.,
+                p.tertiary,
+            ))
+            .into_any_element();
+        if !open {
+            rows.clear();
+        }
+        rows.insert(0, header);
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .px(px(GUTTER))
+                .pb(px(20.))
+                .child(theme::group(rows, p)),
+        )
+    }
+
+    /// "Balanced · Original size · Transparent": the options as they are now.
+    pub(super) fn options_summary(&self, to: &'static Format, cx: &App) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if quality_applies(to) {
+            parts.push(
+                match QUALITY
+                    .iter()
+                    .find(|(k, ..)| *k == quality_key(self.quality))
+                {
+                    Some((_, label, _)) => label.to_string(),
+                    None => format!("Quality {}", self.quality.unwrap_or_default()),
+                },
+            );
+        }
+        if let Some((_, choices)) = size_choices(to) {
+            parts.push(
+                choices
+                    .iter()
+                    .find(|(v, _)| *v == self.size)
+                    .map(|(v, l)| {
+                        if v.is_none() {
+                            "Original size".to_string()
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .or_else(|| self.size.map(|v| size_label(to, v)))
+                    .unwrap_or_else(|| "Original size".into()),
+            );
+        }
+        if codec_applies(to) {
+            parts.push(
+                self.video_codec
+                    .unwrap_or(VideoCodec::H264)
+                    .name()
+                    .to_string(),
+            );
+        }
+        if background_applies(to, &self.files) {
+            let default = default_background(&self.app.read(cx).registry, to, &self.files);
+            parts.push(
+                shown_background(to, self.background)
+                    .or(default)
+                    .map_or_else(|| "Automatic".to_string(), |b| b.name().to_string()),
+            );
+        }
+        if audio_applies(to) && self.strip_audio {
+            parts.push("No audio".into());
+        }
+        parts.join(" · ")
+    }
+
+    /// Where the conversion runs, as two tiles.
+    fn where_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let access = self.cloud_access(cx);
+        let cloud = self.in_cloud(cx);
+        let weak = cx.entity().downgrade();
+        div()
+            .flex()
+            .flex_col()
+            .px(px(GUTTER))
+            .pb(px(20.))
+            .child(theme::tiles(
+                "where",
+                &[
+                    Tile {
+                        key: "local",
+                        icon: IconName::Computer,
+                        title: theme::this_machine_label().into(),
+                        line: "Private, works offline".into(),
+                        disabled: None,
+                    },
+                    Tile {
+                        key: "cloud",
+                        icon: IconName::Cloud,
+                        title: "Cloud".into(),
+                        line: "Faster for big videos".into(),
+                        disabled: access.reason().map(Into::into),
+                    },
+                ],
+                if cloud { "cloud" } else { "local" },
+                p,
+                window,
+                cx,
+                move |key, _, cx| {
+                    let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
+                },
+            ))
     }
 
     fn save_section(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -953,16 +1117,32 @@ impl QuickView {
             None => "Same folder".to_string(),
         };
         let name = (self.files.len() == 1 && self.to.is_some()).then(|| {
-            row_label(
-                "File name",
+            let control = if self.editing_name {
                 div()
                     .w(px(260.))
                     .flex_shrink_0()
                     .font_family(theme::MONO)
                     .text_size(px(12.))
-                    .child(theme::small_field(&self.file_name, "file-name")),
-                p,
-            )
+                    .child(theme::small_field(&self.file_name, "file-name"))
+                    .into_any_element()
+            } else {
+                let current = SharedString::from(self.file_name.read(cx).value().to_string());
+                theme::clickable("file-name-edit", current.clone())
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .max_w(px(320.))
+                    .h(px(theme::SMALL_FIELD_HEIGHT))
+                    .px(px(8.))
+                    .mr(px(-8.))
+                    .rounded(px(radius::CONTROL))
+                    .hover(|s| s.bg(p.hover))
+                    .on_click(cx.listener(|this, _, window, cx| this.edit_name(window, cx)))
+                    .child(mono(12., 16., p.text).min_w_0().truncate().child(current))
+                    .child(icon(IconName::Edit, 13., p.tertiary))
+                    .into_any_element()
+            };
+            row_label("File name", control, p)
         });
         let folder = row_label(
             "Save to",
@@ -1005,7 +1185,10 @@ impl QuickView {
                 ),
             p,
         );
-        section("Save", p).child(theme::group(std::iter::once(folder).chain(name), p))
+        section("Save", p).child(theme::group(
+            name.into_iter().chain(std::iter::once(folder)),
+            p,
+        ))
     }
 
     fn progress_section(&self, p: &Palette) -> Stateful<Div> {
@@ -1162,7 +1345,6 @@ impl QuickView {
                         .on_click(|_, window, _| window.remove_window()),
                 );
         }
-        let access = self.cloud_access(cx);
         let cloud = self.in_cloud(cx);
         let state = self.app.read(cx);
         let disabled = self.to.is_none()
@@ -1173,35 +1355,22 @@ impl QuickView {
             Some(to) if !disabled => format!("Convert to {}", to.name),
             _ => "Convert".to_string(),
         };
-        let weak = cx.entity().downgrade();
-        bar.child(div().flex().flex_1().min_w_0().child(theme::segmented_with(
-            "where",
-            &[
-                Segment::new("local", theme::this_machine_label()),
-                Segment::new("cloud", "Cloud").disabled(access.reason()),
-            ],
-            if cloud { "cloud" } else { "local" },
-            p,
-            window,
-            cx,
-            move |key, _, cx| {
-                let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
-            },
-        )))
-        .child(
-            Button::ghost("cancel", "Cancel")
-                .build(p)
-                .on_click(|_, window, _| window.remove_window()),
-        )
-        .child(
-            Button::primary("convert", label)
-                .disabled(disabled)
-                .build(p)
-                .px(px(18.))
-                .when(!disabled, |d| {
-                    d.on_click(cx.listener(|this, _, _, cx| this.convert(cx)))
-                }),
-        )
+        let _ = window;
+        bar.child(div().flex_1())
+            .child(
+                Button::ghost("cancel", "Cancel")
+                    .build(p)
+                    .on_click(|_, window, _| window.remove_window()),
+            )
+            .child(
+                Button::primary("convert", label)
+                    .disabled(disabled)
+                    .build(p)
+                    .px(px(18.))
+                    .when(!disabled, |d| {
+                        d.on_click(cx.listener(|this, _, _, cx| this.convert(cx)))
+                    }),
+            )
     }
 }
 
@@ -1472,6 +1641,9 @@ impl Render for QuickView {
             }
             // Nothing to save while every file waits for the document pack.
             if !self.supported().is_empty() || waiting == 0 {
+                if self.to.is_some() {
+                    body.push(self.where_section(&p, window, cx).into_any_element());
+                }
                 body.push(self.save_section(&p, cx).into_any_element());
             }
             body

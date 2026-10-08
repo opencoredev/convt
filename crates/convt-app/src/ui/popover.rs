@@ -9,9 +9,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use super::theme::IconName;
 use convt_core::format_by_id;
 use convt_license::client::State;
-use super::theme::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 

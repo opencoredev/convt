@@ -21,11 +21,12 @@ use gpui_kit::{
 };
 use tempfile::TempDir;
 
-use super::first_run::{FirstRunView, Step};
+use super::first_run::{FirstRunView, Question, Screen, Stage};
 use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
 use super::{AboutView, Open, PopoverView, menus, theme};
+use crate::account::{Access, Provider, SignIn};
 use crate::cloud::CloudAccess;
 use crate::history::Outcome;
 use crate::jobs::JobId;
@@ -34,6 +35,7 @@ use crate::pack::{self, Failure, FailureKind};
 use crate::request::{Request, Source};
 use crate::tray::{self, Indicator};
 use crate::update::{Fetch, FetchError, Update, UpdateConfig};
+use convt_license::client::BUY_URL;
 
 struct Fixture {
     dir: TempDir,
@@ -366,6 +368,26 @@ impl Fixture {
                 serde_json::to_string(&session).unwrap(),
             )
             .unwrap();
+            client::Config {
+                enforce: true,
+                public_key: Some(test_key().verifying_key()),
+                build_date: BUILD_DATE.into(),
+                trial_file: Some(dir.join("trial")),
+                store: KeyStore::File(dir.join("license.key")),
+            }
+        })
+    }
+
+    /// A licensed build whose document pack is `packs`, with `key` stored.
+    fn licensed_with_packs(
+        cx: &mut TestAppContext,
+        packs: Arc<TestPacks>,
+        key: Option<&str>,
+    ) -> Self {
+        Self::build_with(cx, packs, |dir| {
+            if let Some(key) = key {
+                std::fs::write(dir.join("license.key"), key).unwrap();
+            }
             client::Config {
                 enforce: true,
                 public_key: Some(test_key().verifying_key()),
@@ -761,6 +783,37 @@ fn links_and_requests_that_need_a_choice_open_quick_convert(cx: &mut TestAppCont
 }
 
 #[gpui_kit::test]
+fn quick_convert_sums_up_its_options_in_one_row(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (window, view) = f.quick(cli(vec![f.png("beach.png")], None, None), cx);
+    click(cx, window, "to-webp");
+    // Collapsed: one row that says what the options are.
+    assert_eq!(
+        label(cx, window, "options-summary").as_deref(),
+        Some("Balanced · Original size · Transparent")
+    );
+    assert!(!shown(cx, window, "quality-best"));
+    click(cx, window, "options-toggle");
+    click(cx, window, "quality-best");
+    click(cx, window, "options-toggle");
+    assert!(!shown(cx, window, "quality-best"));
+    assert_eq!(
+        label(cx, window, "options-summary").as_deref(),
+        Some("Best · Original size · Transparent")
+    );
+
+    // The name keeps the file's stem, as text, until it's clicked.
+    assert_eq!(
+        label(cx, window, "file-name-edit").as_deref(),
+        Some("beach.webp")
+    );
+    assert!(!shown(cx, window, "file-name"));
+    click(cx, window, "file-name-edit");
+    assert!(shown(cx, window, "file-name"));
+    cx.read(|cx| assert!(view.read(cx).editing_name));
+}
+
+#[gpui_kit::test]
 fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let png = f.png("a.png");
@@ -779,6 +832,7 @@ fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) 
 
     // Picking another target renames the output and offers its options.
     click(cx, window, "to-webp");
+    click(cx, window, "options-toggle");
     cx.read(|cx| {
         let view = view.read(cx);
         assert_eq!(view.to.map(|f| f.id), Some("webp"));
@@ -1421,6 +1475,14 @@ fn an_activate_link_fills_in_the_key_without_activating(cx: &mut TestAppContext)
     assert!(f.dir.path().join("license.key").exists());
 }
 
+/// Finishes onboarding's last moment: the main window opens after it.
+fn finish_onboarding(cx: &mut TestAppContext, view: &Entity<FirstRunView>) {
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    cx.executor()
+        .advance_clock(super::first_run::CALIBRATE + Duration::from_millis(50));
+    cx.run_until_parked();
+}
+
 #[gpui_kit::test]
 fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
@@ -1428,34 +1490,44 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     let (window, view) = window_of::<FirstRunView>(cx);
     cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
     assert!(!f.settings_file().contains("first_run_done = true"));
-    let start = super::first_run::first_step();
-    // The first screen is step 1, whether or not this platform has the
-    // Finder step.
-    let total = if start == Step::Finder { 3 } else { 2 };
-    assert_eq!(
-        label(cx, window, "step"),
-        Some(format!("STEP 1 OF {total}"))
-    );
-    if start == Step::Finder {
-        click(cx, window, "first-run-back");
-    }
+    // Sign in, or a key. No local trial.
+    assert!(shown(cx, window, "onboarding-google"));
+    assert!(shown(cx, window, "onboarding-email"));
+    assert!(!shown(cx, window, "plan-trial"));
 
-    // "I have a license" activates the key and moves on.
-    click(cx, window, "plan-key");
+    // "I have a license key" activates the key and shows it.
+    click(cx, window, "onboarding-key-link");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Key));
     let input = cx.read(|cx| view.read(cx).key.clone());
     set_input(cx, window, &input, "nonsense");
-    click(cx, window, "first-run-next");
+    click(cx, window, "onboarding-activate");
     assert!(shown(cx, window, "error"));
     let key = license_key(concat!("a", "@", "example.com"), "2027-10-01");
     set_input(cx, window, &input, &key);
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
-    let body = label(cx, window, "first-run-body").expect("done body");
-    assert!(body.contains("pick a format"), "{body}");
+    click(cx, window, "onboarding-activate");
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).screen,
+            Screen::Account,
+            "{:?}",
+            view.read(cx).error
+        )
+    });
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have a convt license")
+    );
     assert!(f.dir.path().join("license.key").exists());
+    assert!(!f.dir.path().join("trial").exists(), "no trial started");
 
-    // "Start converting" finishes first run and opens the main window.
-    click(cx, window, "first-run-next");
+    // Continue, the last moment, then the main window.
+    click(cx, window, "onboarding-primary");
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Setting convt up…")
+    );
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+    finish_onboarding(cx, &view);
     window_of::<MainView>(cx);
     cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
     assert!(f.settings_file().contains("first_run_done = true"));
@@ -1467,75 +1539,233 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn closing_first_run_before_the_last_step_shows_it_again(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, None);
+fn closing_first_run_before_the_end_shows_it_again(cx: &mut TestAppContext) {
+    let key = pro_key(concat!("pro", "@", "example.com"), "2027-10-01");
+    let f = Fixture::licensed(cx, None, Some(&key));
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
-    if super::first_run::first_step() == Step::Finder {
-        click(cx, window, "first-run-back");
-    }
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
-    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+    click(cx, window, "onboarding-primary");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
     window
         .update(cx, |_, window, _| window.remove_window())
         .unwrap();
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
     cx.update(|cx| super::route(Request::default(), cx));
     window_of::<FirstRunView>(cx);
     cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
 }
 
 #[gpui_kit::test]
-fn the_finder_step_preview_is_not_a_switch(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, None);
-    let app = f.app.clone();
-    let (window, _) = open(cx, move |window, cx| {
-        cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
-    });
-    if cfg!(target_os = "macos") {
-        assert_eq!(label(cx, window, "step").as_deref(), Some("STEP 1 OF 3"));
+fn onboarding_opens_at_three_quarters_of_the_display(cx: &mut TestAppContext) {
+    let _f = Fixture::licensed(cx, None, None);
+    let wanted = cx.update(|cx| super::first_run_size(cx));
+    assert!(wanted.width >= px(super::FIRST_RUN_SIZE.0));
+    assert!(wanted.height >= px(super::FIRST_RUN_SIZE.1));
+    let display = cx.update(|cx| cx.primary_display().map(|d| d.bounds().size));
+    if let Some(display) = display {
+        assert_eq!(
+            wanted.width,
+            (display.width * 0.75)
+                .max(px(super::FIRST_RUN_SIZE.0))
+                .round()
+        );
     }
-    assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("Turn on the Finder menu")
-    );
-    let body = label(cx, window, "first-run-body").expect("body");
-    assert!(body.contains("scroll"), "{body}");
-    assert!(body.contains("Extensions"), "{body}");
-    assert_eq!(
-        label(cx, window, "finder-preview-badge").as_deref(),
-        Some("Preview")
-    );
-    assert_eq!(
-        label(cx, window, "finder-preview-caption").as_deref(),
-        Some("This picture isn't a switch.")
-    );
-    assert_eq!(
-        label(cx, window, "first-run-next").as_deref(),
-        Some("Open System Settings")
-    );
-    click(cx, window, "finder-preview");
-    assert_eq!(cx.opened_url(), None);
-    click(cx, window, "first-run-next");
-    assert_eq!(
-        cx.opened_url().as_deref(),
-        Some(crate::finder::EXTENSION_SETTINGS)
-    );
-    assert_eq!(
-        label(cx, window, "first-run-next").as_deref(),
-        Some("Continue")
-    );
+}
 
+#[gpui_kit::test]
+fn the_sign_in_buttons_ask_for_their_provider(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    for (button, provider) in [
+        ("onboarding-google", Provider::Google),
+        ("onboarding-email", Provider::Email),
+    ] {
+        click(cx, window, button);
+        let page = cx.opened_url().expect("the device page opened");
+        assert!(
+            page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
+            "{page}"
+        );
+        cx.read(|cx| {
+            assert_eq!(view.read(cx).stage(cx), Stage::Waiting);
+            assert_eq!(view.read(cx).provider, provider);
+        });
+        assert_eq!(
+            label(cx, window, "onboarding-title").as_deref(),
+            Some("Finish signing in in your browser")
+        );
+        click(cx, window, "onboarding-reopen");
+        assert_eq!(cx.opened_url().as_deref(), Some(page.as_str()));
+        click(cx, window, "onboarding-cancel");
+        cx.read(|cx| assert_eq!(view.read(cx).stage(cx), Stage::SignIn));
+    }
+    // A failed sign-in says why and tries again with the same button.
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
-            s.finder_on = Some(true);
+            s.account.sign_in = SignIn::Failed("The link expired.".into());
             cx.notify();
         })
     });
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("The Finder menu is on")
+        label(cx, window, "error").as_deref(),
+        Some("The link expired.")
     );
+    click(cx, window, "onboarding-retry");
+    cx.read(|cx| assert_eq!(view.read(cx).stage(cx), Stage::Waiting));
+    assert_eq!(f.jobs(cx), 0);
+}
+
+#[gpui_kit::test]
+fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, concat!("pro", "@", "example.com"));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = false, cx)
+        })
+    });
+    let app = f.app.clone();
+    let (window, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    let set = |cx: &mut TestAppContext, access: Option<Access>| {
+        cx.update(|cx| {
+            f.app.update(cx, |s, cx| {
+                s.account.access = access;
+                s.account.awaiting_trial = false;
+                cx.notify();
+            })
+        })
+    };
+    // No answer from the account yet.
+    set(cx, None);
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Checking your account…")
+    );
+    assert!(!shown(cx, window, "onboarding-primary"));
+
+    let checkout = "https://checkout.example.com/trial";
+    for (access, title, primary) in [
+        (Access::Pro, "You have convt Pro", "Continue"),
+        (
+            Access::Trial {
+                ends_on: "2026-10-15".into(),
+            },
+            "Your free trial is on",
+            "Continue",
+        ),
+        (
+            Access::CanStartTrial {
+                checkout_url: checkout.into(),
+            },
+            "Start your 7-day free trial",
+            "Start free trial",
+        ),
+        (Access::Lapsed, "Your Pro plan has ended", "Get convt Pro"),
+    ] {
+        set(cx, Some(access.clone()));
+        assert_eq!(
+            label(cx, window, "onboarding-title").as_deref(),
+            Some(title)
+        );
+        assert_eq!(
+            label(cx, window, "onboarding-primary").as_deref(),
+            Some(primary)
+        );
+        assert_eq!(
+            label(cx, window, "account-status").as_deref(),
+            Some(concat!("Signed in as pro", "@", "example.com"))
+        );
+    }
+
+    // The trial starts through checkout, and onboarding waits for it.
+    set(
+        cx,
+        Some(Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        }),
+    );
+    click(cx, window, "onboarding-primary");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    cx.read(|cx| assert_eq!(view.read(cx).stage(cx), Stage::AwaitingTrial));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Finish checkout in your browser")
+    );
+    // Lapsed buys.
+    set(cx, Some(Access::Lapsed));
+    click(cx, window, "onboarding-primary");
+    assert_eq!(cx.opened_url().as_deref(), Some(BUY_URL));
+    // "Not now" goes on without a plan.
+    click(cx, window, "onboarding-not-now");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+#[gpui_kit::test]
+fn yes_to_documents_installs_the_pack(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let key = pro_key(concat!("pro", "@", "example.com"), "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have convt Pro")
+    );
+    click(cx, window, "onboarding-primary");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Question(Question::Documents)));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Convert PDFs and documents too?")
+    );
+    // The arrow keys move between the tiles; nothing downloads until a pick.
+    cx.simulate_keystrokes(window, "right");
+    cx.read(|cx| assert!(!view.read(cx).yes));
+    cx.simulate_keystrokes(window, "left");
+    cx.read(|cx| assert!(view.read(cx).yes));
+    assert_eq!(packs.installs(), 0);
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).documents_supported()
+    });
+    assert_eq!(packs.installs(), 1);
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    finish_onboarding(cx, &view);
+    window_of::<MainView>(cx);
+}
+
+#[gpui_kit::test]
+fn no_to_documents_downloads_nothing(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let key = pro_key(concat!("pro", "@", "example.com"), "2027-10-01");
+    let _f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-no");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 0);
+}
+
+#[gpui_kit::test]
+fn the_finder_question_opens_system_settings_on_yes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    let app = f.app.clone();
+    let (window, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Finder), window, cx))
+    });
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Add convt to Finder?")
+    );
+    click(cx, window, "question-yes");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
 }
 
 #[gpui_kit::test]
@@ -1599,37 +1829,14 @@ fn a_build_from_source_never_shows_first_run(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppContext) {
+fn signing_in_from_onboarding_brings_it_back_with_the_key(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
-    let app = f.app.clone();
-    let (window, view) = open(cx, move |window, cx| {
-        cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
-    });
-    cx.update(|cx| cx.set_global(Open(window, view.downgrade())));
-    // Starting the trial opens no browser and calls nothing.
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
-    assert_eq!(cx.opened_url(), None);
-    click(cx, window, "first-run-back");
-
-    // "Sign in with convt.app" opens the device page and waits.
-    assert_eq!(
-        label(cx, window, "sign-in").as_deref(),
-        Some("Sign in with convt.app")
-    );
-    click(cx, window, "sign-in");
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-google");
     let page = cx.opened_url().expect("the device page opened");
-    assert!(
-        page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
-        "{page}"
-    );
-    assert_eq!(
-        label(cx, window, "account-status").as_deref(),
-        Some("Waiting for your browser…")
-    );
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Plan));
 
-    // The browser's answer brings first run back, signed in, with the key.
+    // The browser's answer brings onboarding back, signed in, with the key.
     *f.api.exchange.lock().unwrap() = Ok(Session {
         email: concat!("pro", "@", "example.com").into(),
         token: "cvd_new".into(),
@@ -1643,54 +1850,44 @@ fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppCon
     wait_until(cx, "the key arrived", |cx| {
         matches!(f.app.read(cx).license, client::State::Licensed(_))
     });
-    // The plan step now shows the Pro plan instead of offering a trial.
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("You have Pro")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have convt Pro")
     );
-    assert_eq!(
-        label(cx, window, "plan-licensed").as_deref(),
-        Some("convt Pro")
-    );
-    assert!(!shown(cx, window, "plan-trial"));
     assert_eq!(
         label(cx, window, "account-status").as_deref(),
         Some(concat!("Signed in as pro", "@", "example.com"))
     );
     cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
     assert_eq!(f.jobs(cx), 0);
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+    click(cx, window, "onboarding-primary");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
 }
 
 #[gpui_kit::test]
-fn first_run_shows_a_license_it_already_has_instead_of_the_trial(cx: &mut TestAppContext) {
-    for (key, title, plan) in [
+fn first_run_shows_a_license_it_already_has(cx: &mut TestAppContext) {
+    for (key, title) in [
         (
             pro_key(concat!("pro", "@", "example.com"), "2027-10-01"),
-            "You have Pro",
-            "convt Pro",
+            "You have convt Pro",
         ),
         (
             license_key(concat!("a", "@", "example.com"), "2027-10-01"),
-            "You have a license",
-            "convt license",
+            "You have a convt license",
         ),
     ] {
         let f = Fixture::licensed(cx, None, Some(&key));
         cx.update(|cx| super::route(Request::default(), cx));
         let (window, view) = window_of::<FirstRunView>(cx);
-        if super::first_run::first_step() == Step::Finder {
-            click(cx, window, "first-run-back");
-        }
-        assert_eq!(label(cx, window, "first-run-title").as_deref(), Some(title));
-        assert_eq!(label(cx, window, "plan-licensed").as_deref(), Some(plan));
-        assert!(!shown(cx, window, "plan-trial") && !shown(cx, window, "plan-key"));
+        assert_eq!(
+            label(cx, window, "onboarding-title").as_deref(),
+            Some(title)
+        );
+        assert!(!shown(cx, window, "onboarding-google"));
         // Continue moves on without starting a trial or asking for a key.
-        click(cx, window, "first-run-next");
-        cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+        click(cx, window, "onboarding-primary");
         assert!(!f.dir.path().join("trial").exists(), "no trial started");
-        click(cx, window, "first-run-next");
+        finish_onboarding(cx, &view);
         cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
         cx.update(|cx| {
             cx.windows()
@@ -1839,14 +2036,19 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
         }
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
-            cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
+            cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
         });
-        assert!(shown(cx, first, "finder-preview"));
+        assert!(shown(cx, first, "onboarding-google"));
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
-            cx.new(|cx| FirstRunView::new(app, Step::Done, window, cx))
+            cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Documents), window, cx))
         });
-        assert!(shown(cx, first, "first-run-next"));
+        assert!(shown(cx, first, "question-yes"));
+        let app = f.app.clone();
+        let (first, _) = open(cx, move |window, cx| {
+            cx.new(|cx| FirstRunView::new(app, Screen::Calibrating, window, cx))
+        });
+        assert!(shown(cx, first, "onboarding-title"));
         let app = f.app.clone();
         let (popover, _) = open(cx, move |window, cx| {
             cx.new(|cx| PopoverView::new(app, window, cx))
@@ -1947,6 +2149,7 @@ fn balanced_and_original_clear_what_a_preset_set(cx: &mut TestAppContext) {
         cx,
     );
     click(cx, window, "preset-web");
+    click(cx, window, "options-toggle");
     // The controls show the preset's values.
     cx.read(|cx| {
         let v = view.read(cx);
@@ -2044,6 +2247,7 @@ fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
 
     // JPEG can't be transparent: White by default, and no Transparent choice.
     click(cx, window, "to-jpeg");
+    click(cx, window, "options-toggle");
     assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
     cx.read(|cx| assert_eq!(view.read(cx).conversion_options(), Options::default()));
     click(cx, window, "background");
@@ -2113,6 +2317,7 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
     if targets.iter().any(|t| t.id == "png") {
         // PDF pages render on white unless Transparent is picked.
         click(cx, window, "to-png");
+        click(cx, window, "options-toggle");
         assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
         click(cx, window, "background");
         assert!(shown(cx, window, "background-transparent"));
@@ -2130,6 +2335,7 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
     }
     // GIF from video takes no background color; a still frame does.
     click(cx, window, "to-gif");
+    click(cx, window, "options-toggle");
     assert!(!shown(cx, window, "background"));
     if targets.iter().any(|t| t.id == "jpeg") {
         click(cx, window, "to-jpeg");
@@ -2163,6 +2369,7 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
     let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
     if targets.iter().any(|t| t.id == "webp") {
         click(cx, window, "to-webp");
+        click(cx, window, "options-toggle");
         assert_eq!(
             label(cx, window, "background").as_deref(),
             Some("Automatic")
@@ -2196,6 +2403,7 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
         return;
     }
     click(cx, window, "to-mp4");
+    click(cx, window, "options-toggle");
     // Defaults change nothing.
     assert_eq!(label(cx, window, "codec").as_deref(), Some("H.264"));
     assert_eq!(
@@ -2297,50 +2505,56 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
             assert!(fits(cx, settings, last), "{tab:?}");
         }
 
+        // Onboarding at its smallest size: sign in, waiting, a key with an
+        // error, and a question.
         let app = f.app.clone();
         cx.update(|cx| {
             super::show(
                 size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
                 "first run",
                 cx,
-                |window, cx| cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx)),
-            )
-        });
-        let (first, _) = window_of::<FirstRunView>(cx);
-        assert!(
-            fits(cx, first, "finder-preview"),
-            "first run, Finder preview"
-        );
-        assert!(fits(cx, first, "first-run-next"), "first run, Finder");
-        first
-            .update(cx, |_, window, _| window.remove_window())
-            .unwrap();
-
-        let app = f.app.clone();
-        cx.update(|cx| {
-            super::show(
-                size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
-                "first run",
-                cx,
-                |window, cx| cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx)),
+                |window, cx| cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx)),
             )
         });
         let (first, view) = window_of::<FirstRunView>(cx);
-        assert!(fits(cx, first, "first-run-next"), "first run, trial");
-        // Waiting for the browser, then a link the app ignored.
-        click(cx, first, "sign-in");
-        assert!(fits(cx, first, "sign-in-cancel"), "first run, waiting");
+        for id in [
+            "onboarding-google",
+            "onboarding-email",
+            "onboarding-key-link",
+            "privacy",
+        ] {
+            assert!(fits(cx, first, id), "onboarding, {id}");
+        }
+        click(cx, first, "onboarding-google");
+        assert!(fits(cx, first, "onboarding-cancel"), "onboarding, waiting");
+        click(cx, first, "onboarding-cancel");
         cx.update(|cx| super::route(auth_link("not_ours", "code=x"), cx));
-        assert!(fits(cx, first, "account-notice"), "first run, notice");
-        assert!(fits(cx, first, "first-run-next"), "first run, notice");
-        click(cx, first, "sign-in-cancel");
-        click(cx, first, "plan-key");
-        click(cx, first, "first-run-next");
+        assert!(fits(cx, first, "privacy"), "onboarding, notice");
+        click(cx, first, "onboarding-key-link");
+        click(cx, first, "onboarding-activate");
         cx.read(|cx| assert!(view.read(cx).error.is_some()));
         assert!(
-            fits(cx, first, "first-run-next"),
-            "first run, key and error"
+            fits(cx, first, "onboarding-back"),
+            "onboarding, key and error"
         );
+        first
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+        let app = f.app.clone();
+        cx.update(|cx| {
+            super::show(
+                size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
+                "first run",
+                cx,
+                |window, cx| {
+                    cx.new(|cx| {
+                        FirstRunView::new(app, Screen::Question(Question::Documents), window, cx)
+                    })
+                },
+            )
+        });
+        let (first, _) = window_of::<FirstRunView>(cx);
+        assert!(fits(cx, first, "question-no"), "onboarding, question");
         first
             .update(cx, |_, window, _| window.remove_window())
             .unwrap();
@@ -2421,7 +2635,10 @@ fn the_icons_the_windows_draw_are_bundled() {
     // button) answer with Hugeicons too.
     for path in ["icons/loader.svg", "icons/close.svg", "icons/check.svg"] {
         let svg = assets.load(path).unwrap().unwrap();
-        assert!(String::from_utf8_lossy(&svg).contains("stroke-width=\"1.5\""), "{path}");
+        assert!(
+            String::from_utf8_lossy(&svg).contains("stroke-width=\"1.5\""),
+            "{path}"
+        );
     }
     assert!(assets.load("icons/google-g.svg").unwrap().is_some());
 }
@@ -2547,6 +2764,7 @@ fn text_fields_have_room_for_a_whole_line(cx: &mut TestAppContext) {
     let (settings, _) = f.settings(SettingsTab::Presets, cx);
     let (quick, _) = f.quick(cli(vec![f.png("a.png")], None, None), cx);
     click(cx, quick, "to-webp");
+    click(cx, quick, "file-name-edit");
     let fields = [
         (settings, "preset-name", theme::FIELD_HEIGHT),
         (settings, "preset-quality", theme::FIELD_HEIGHT),
@@ -2670,10 +2888,7 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
     let f = Fixture::licensed(cx, None, None);
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
-    if super::first_run::first_step() == Step::Finder {
-        click(cx, window, "first-run-back");
-    }
-    click(cx, window, "plan-key");
+    click(cx, window, "onboarding-key-link");
     let input = cx.read(|cx| view.read(cx).key.clone());
     set_input(
         cx,
@@ -2681,43 +2896,36 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
         &input,
         &license_key(concat!("old", "@", "example.com"), "2025-01-01"),
     );
-    click(cx, window, "first-run-next");
+    click(cx, window, "onboarding-activate");
     assert!(f.dir.path().join("license.key").exists(), "the key is kept");
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("License saved")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Your license is saved")
     );
     assert_eq!(
-        label(cx, window, "first-run-next").as_deref(),
-        Some("Open convt")
-    );
-    assert_eq!(
-        label(cx, window, "first-run-renew").as_deref(),
+        label(cx, window, "onboarding-primary").as_deref(),
         Some("Renew")
     );
-    click(cx, window, "first-run-renew");
+    click(cx, window, "onboarding-primary");
     assert_eq!(
         cx.opened_url().as_deref(),
         Some(convt_license::client::BUY_URL)
     );
-    for name in ["first-run-next", "first-run-renew"] {
-        assert!(fits(cx, window, name), "{name}");
-    }
+    assert!(fits(cx, window, "onboarding-not-now"));
 
     // A key that covers this build is ready.
-    click(cx, window, "first-run-back");
+    click(cx, window, "onboarding-key-link");
     set_input(
         cx,
         window,
         &input,
         &license_key(concat!("new", "@", "example.com"), "2027-10-01"),
     );
-    click(cx, window, "first-run-next");
+    click(cx, window, "onboarding-activate");
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("You're set")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have a convt license")
     );
-    assert!(!shown(cx, window, "first-run-renew"));
 }
 
 #[gpui_kit::test]
@@ -3152,13 +3360,22 @@ fn only_the_download_button_reaches_the_installer() {
     };
     assert_eq!(uses("install_documents"), ["pack.rs"]);
     assert_eq!(uses("ureq"), Vec::<&str>::new());
-    // The definition, and the one call in the button's click handler.
+    // The definition, and the one call in `start_install`.
     assert_eq!(uses("download_pack("), ["model.rs", "ui/pack.rs"]);
+    // Which only the Download button's click and onboarding's Yes call.
+    assert_eq!(
+        uses("start_install("),
+        ["ui/first_run.rs", "ui/pack.rs", "ui/pack.rs"]
+    );
     // A Windows checkout may have CRLF line endings.
-    let button = include_str!("pack.rs").replace("\r\n", "\n");
-    let button = button.split("fn download_button").nth(1).unwrap();
+    let pack = include_str!("pack.rs").replace("\r\n", "\n");
+    let button = pack.split("fn download_button").nth(1).unwrap();
     let button = &button[..button.find("\n}\n").unwrap()];
-    assert!(button.contains(".on_click(") && button.contains("download_pack(cx)"));
+    assert!(button.contains(".on_click(") && button.contains("start_install(&app, cx)"));
+    let first_run = include_str!("first_run.rs").replace("\r\n", "\n");
+    let answer = first_run.split("fn answer").nth(1).unwrap();
+    let answer = &answer[..answer.find("\n    }\n").unwrap()];
+    assert!(answer.contains("if yes") && answer.contains("start_install(&self.app, cx)"));
     // `backend.install(` runs inside download_pack's worker thread only.
     assert_eq!(uses("backend.install("), ["model.rs"]);
     let model = include_str!("../model.rs").replace("\r\n", "\n");
@@ -3735,18 +3952,19 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
         let (settings, _) = f.settings(SettingsTab::License, cx);
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
-            cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
+            cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
         });
-        // Signed out.
-        assert!(shown(cx, settings, "sign-in") && shown(cx, first, "sign-in"));
+        // Signed out (the second pass starts where the first failed).
+        assert!(shown(cx, settings, "sign-in"));
+        assert!(shown(cx, first, "onboarding-google") || shown(cx, first, "onboarding-retry"));
         assert!(shown(cx, settings, "refresh-note"));
         // Waiting.
         click(cx, settings, "sign-in");
-        assert!(shown(cx, settings, "sign-in-cancel") && shown(cx, first, "sign-in-cancel"));
+        assert!(shown(cx, settings, "sign-in-cancel") && shown(cx, first, "onboarding-cancel"));
         // Failed.
         let state = query(&cx.opened_url().unwrap(), "state");
         cx.update(|cx| super::route(auth_link(&state, "error=denied"), cx));
-        assert!(shown(cx, first, "sign-in"));
+        assert!(shown(cx, first, "onboarding-retry"));
         assert_eq!(label(cx, settings, "sign-in").as_deref(), Some("Try again"));
         cx.update(|cx| {
             cx.windows()

@@ -7,9 +7,7 @@ use gpui_kit::*;
 
 use super::theme::IconName;
 
-use super::theme::{self, Button, Clickable, Palette, size, space, styled, text_button};
-use convt_license::Plan;
-use convt_license::client;
+use super::theme::{self, Button, Clickable, Palette, size, space, styled};
 
 use crate::account::{Refresh, SignIn};
 use crate::model::AppState;
@@ -36,70 +34,6 @@ fn on_app(
 ) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     let app = app.clone();
     move |_, _, cx| app.update(cx, |s, cx| f(s, cx))
-}
-
-/// The sign-in line under the plan cards in first run: one row, so the
-/// window keeps its size.
-pub fn compact(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
-    let state = app.read(cx);
-    let account = &state.account;
-    let row = div().flex().items_center().gap(px(space::MD));
-    let row = match (&account.sign_in, account.email()) {
-        (SignIn::Waiting, _) => row
-            .child(line(
-                "account-status",
-                "Waiting for your browser…",
-                p.secondary,
-            ))
-            .child(
-                text_button("sign-in-reopen", "Open again", p.green_text, 12.)
-                    .on_click(on_app(app, AppState::reopen_sign_in)),
-            )
-            .child(
-                text_button("sign-in-cancel", "Cancel", p.secondary, 12.)
-                    .on_click(on_app(app, AppState::cancel_sign_in)),
-            ),
-        (SignIn::Finishing, _) => {
-            row.child(line("account-status", "Finishing sign-in…", p.secondary))
-        }
-        (SignIn::Failed(e), _) => row
-            .child(line("account-status", e.clone(), p.error).flex_1())
-            .child(
-                text_button("sign-in", "Try again", p.green_text, 12.)
-                    .on_click(on_app(app, AppState::start_sign_in)),
-            ),
-        (SignIn::Idle, Some(email)) => {
-            let pro = match (&state.license, &account.refresh) {
-                (client::State::Licensed(l), _) if l.plan == Plan::Pro => {
-                    format!(" · Pro until {}", l.updates_until)
-                }
-                (_, Refresh::Running) => " · fetching your key…".into(),
-                _ => String::new(),
-            };
-            row.child(line(
-                "account-status",
-                format!("Signed in as {email}{pro}"),
-                p.secondary,
-            ))
-        }
-        (SignIn::Idle, None) => row
-            .child(styled(size::SMALL, p.secondary).child("Have Pro?"))
-            .child(
-                text_button("sign-in", "Sign in with convt.app", p.green_text, 12.)
-                    .on_click(on_app(app, AppState::start_sign_in)),
-            ),
-    };
-    let notice = account
-        .notice
-        .clone()
-        .map(|n| line("account-notice", n, p.secondary));
-    div()
-        .flex()
-        .flex_col()
-        .min_w(px(0.))
-        .gap(px(4.))
-        .child(row)
-        .children(notice)
 }
 
 /// The account section of the License tab.

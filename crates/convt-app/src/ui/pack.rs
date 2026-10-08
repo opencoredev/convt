@@ -1,9 +1,10 @@
 //! The document pack in the windows: the card Quick convert shows for
 //! documents nothing can convert yet, and the Documents row in Settings.
 //!
-//! The Download button is the only way to start a download: its click
-//! handler, [`download_button`], is the one caller of
-//! `AppState::download_pack`. Opening a window or showing a card never does.
+//! A click is the only way to start a download: the Download button
+//! ([`download_button`]) or Yes on onboarding's documents question, both
+//! through [`start_install`], the one caller of `AppState::download_pack`.
+//! Opening a window or showing a card never does.
 
 use super::theme::IconName;
 use gpui_kit::component::tooltip::Tooltip;
@@ -23,15 +24,20 @@ fn download_label(verb: &str, offer: &pack::Offer) -> String {
     }
 }
 
-/// The button that starts the download, the only caller of
-/// `AppState::download_pack`.
+/// Starts downloading and installing the pack. Call it only from a click
+/// that asks for it.
+pub(super) fn start_install(app: &Entity<AppState>, cx: &mut App) {
+    app.update(cx, |s, cx| s.download_pack(cx))
+}
+
+/// The button that starts the download.
 fn download_button(app: &Entity<AppState>, label: String, p: &Palette) -> theme::Clickable {
     let app = app.clone();
     Button::primary("pack-download", label)
         .icon(IconName::Download)
         .small()
         .build(p)
-        .on_click(move |_, _, cx| app.update(cx, |s, cx| s.download_pack(cx)))
+        .on_click(move |_, _, cx| start_install(&app, cx))
 }
 
 fn cancel_button(app: &Entity<AppState>, p: &Palette) -> theme::Clickable {

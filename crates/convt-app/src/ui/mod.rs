@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 
 use convt_core::Preset;
 use convt_license::client::{BUY_URL, DOWNLOAD_URL, State};
-use theme::IconName;
 use gpui_kit::*;
+use theme::IconName;
 
 pub use about::AboutView;
 pub use first_run::FirstRunView;
@@ -105,6 +105,26 @@ const GOOGLE_G: (&str, &[u8]) = (
     include_bytes!("../../assets/icons/google-g.svg"),
 );
 
+/// Onboarding's dithered glow and bloom (`assets/onboarding/generate.py`).
+const ONBOARDING: &[(&str, &[u8])] = &[
+    (
+        "onboarding/glow-light.png",
+        include_bytes!("../../assets/onboarding/glow-light.png"),
+    ),
+    (
+        "onboarding/glow-dark.png",
+        include_bytes!("../../assets/onboarding/glow-dark.png"),
+    ),
+    (
+        "onboarding/bloom-light.png",
+        include_bytes!("../../assets/onboarding/bloom-light.png"),
+    ),
+    (
+        "onboarding/bloom-dark.png",
+        include_bytes!("../../assets/onboarding/bloom-dark.png"),
+    ),
+];
+
 /// The Lucide paths gpui-kit's components load, and the Hugeicon each gets.
 const COMPONENT_ICONS: &[(&str, &str)] = &[
     ("icons/loader.svg", "loading"),
@@ -127,6 +147,7 @@ impl Assets {
         ICONS
             .iter()
             .chain(std::iter::once(&GOOGLE_G))
+            .chain(ONBOARDING)
             .find(|(p, _)| *p == path)
             .map(|(_, bytes)| *bytes)
     }
@@ -146,6 +167,7 @@ impl AssetSource for Assets {
             ICONS
                 .iter()
                 .chain(std::iter::once(&GOOGLE_G))
+                .chain(ONBOARDING)
                 .filter(|(p, _)| p.starts_with(path))
                 .map(|(p, _)| SharedString::from(*p)),
         );
@@ -319,17 +341,27 @@ pub(super) fn quick_height() -> Pixels {
         })
 }
 
-/// The first-run window's size.
-pub(super) const FIRST_RUN_SIZE: (f32, f32) = (460., 520.);
+/// The smallest onboarding window; it opens at three quarters of the
+/// primary display, centered.
+pub(super) const FIRST_RUN_SIZE: (f32, f32) = (900., 640.);
+
+/// Three quarters of the primary display, no smaller than [`FIRST_RUN_SIZE`].
+pub(super) fn first_run_size(cx: &App) -> Size<Pixels> {
+    let display = cx
+        .primary_display()
+        .map(|d| d.bounds().size)
+        .unwrap_or(size(px(FIRST_RUN_SIZE.0), px(FIRST_RUN_SIZE.1)));
+    size(
+        (display.width * 0.75).max(px(FIRST_RUN_SIZE.0)).round(),
+        (display.height * 0.75).max(px(FIRST_RUN_SIZE.1)).round(),
+    )
+}
 
 fn open_first_run(cx: &mut App) {
     let app = model::shared(cx);
-    show(
-        size(px(FIRST_RUN_SIZE.0), px(FIRST_RUN_SIZE.1)),
-        "Welcome to convt",
-        cx,
-        |window, cx| cx.new(|cx| FirstRunView::new(app, first_run::first_step(), window, cx)),
-    );
+    show(first_run_size(cx), "Welcome to convt", cx, |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, first_run::Screen::Account, window, cx))
+    });
 }
 
 /// Opens Settings on `tab`.

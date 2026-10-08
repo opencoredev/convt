@@ -1,77 +1,111 @@
-//! The first-run window: turn on the Finder menu (macOS only), start the
-//! trial or enter a license, and a last word on how to convert. It shows
-//! until the last step is finished, and only in builds that check licenses.
-//! Closing mid-setup shows it again. Skipping the Finder step still leaves
-//! a recover card on Activity until the extension is on.
+//! The onboarding window: sign in (or enter a key), see what the account
+//! allows, answer one question per screen, then a short "Setting convt up"
+//! moment before the main window opens. It shows until that last moment ends,
+//! and only in builds that check licenses; closing it earlier shows it again.
 //!
-//! The plan step also offers an optional convt.app sign-in for Pro
-//! subscribers, so their key renews itself (see `crate::account`). The trial
-//! and a Desktop key never need it: starting the trial opens no browser.
-//! A machine that already has a license (a key, or a sign-in that fetched
-//! one) sees it on the plan step instead of the choice.
+//! The look is calm on purpose: lots of room, the mark and one line, pill
+//! buttons, and a dithered green glow rising from the bottom edge
+//! (`assets/onboarding`, drawn by its `generate.py`) that breathes slowly
+//! unless the system asks for reduced motion.
+//!
+//! Signing in goes through convt.app in the browser (`crate::account`). What
+//! comes back decides the next screen: Pro and a running trial continue; an
+//! account that can still start its trial starts it through checkout; a
+//! lapsed one can buy or use a key. Nothing here starts a local trial.
 
-use convt_license::License;
+use std::time::Duration;
+
 use convt_license::client::{BUY_URL, State};
-use super::theme::IconName;
+use gpui_kit::component::Sizable;
 use gpui_kit::component::input::InputState;
+use gpui_kit::component::spinner::Spinner;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::LICENSE_PRICE;
-use super::theme::{
-    self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text, text_button,
-};
+use super::theme::{self, IconName, Palette, icon, radius, styled, text};
+use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::finder::EXTENSION_SETTINGS;
-use crate::model::AppState;
+use crate::model::{AppState, PackPhase};
 
+/// How long the "Setting convt up" moment lasts before the main window opens.
+pub const CALIBRATE: Duration = Duration::from_millis(1800);
+
+/// The site's terms and privacy pages, linked under the sign-in buttons.
+const TERMS_URL: &str = "https://convt.app/terms";
+const PRIVACY_URL: &str = "https://convt.app/privacy";
+
+/// Where onboarding is. The account screens are one place: what they show
+/// follows the sign-in and the account ([`Stage`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Step {
-    Finder,
-    Plan,
-    Done,
-}
-
-impl Step {
-    /// This step's place among the steps this platform shows.
-    fn number(self) -> usize {
-        let skipped = usize::from(first_step() != Step::Finder);
-        let n = match self {
-            Step::Finder => 1,
-            Step::Plan => 2,
-            Step::Done => 3,
-        };
-        n - skipped
-    }
-
-    /// How many steps this platform shows: the Finder step is macOS only.
-    fn count() -> usize {
-        if first_step() == Step::Finder { 3 } else { 2 }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Plan {
-    Trial,
+pub enum Screen {
+    Account,
+    /// "I have a license key".
     Key,
+    Question(Question),
+    /// The last moment, then the main window.
+    Calibrating,
 }
 
-/// Where first run starts: the Finder step exists only on macOS.
-pub fn first_step() -> Step {
-    if cfg!(target_os = "macos") {
-        Step::Finder
-    } else {
-        Step::Plan
+/// The questions, one per screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Question {
+    /// Install the document pack.
+    Documents,
+    /// Turn on the Finder menu (macOS only).
+    Finder,
+}
+
+impl Question {
+    fn title(self) -> &'static str {
+        match self {
+            Question::Documents => "Convert PDFs and documents too?",
+            Question::Finder => "Add convt to Finder?",
+        }
     }
+}
+
+/// What the account screen shows, from the sign-in flow, the license on
+/// this computer and what the account allows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stage {
+    /// Nothing yet: the sign-in buttons.
+    SignIn,
+    /// The browser is open on convt.app.
+    Waiting,
+    /// The link came back and the app is finishing.
+    Finishing,
+    Failed(String),
+    /// Signed in, and the account's answer hasn't come yet.
+    Checking,
+    /// Signed in, and asking the account failed.
+    CheckFailed(String),
+    Pro,
+    /// A desktop license key, without Pro.
+    Licensed,
+    /// A saved key whose updates ended before this build.
+    NotCovered {
+        until: String,
+    },
+    Trial {
+        ends_on: String,
+    },
+    CanStartTrial,
+    /// The trial checkout is open in the browser.
+    AwaitingTrial,
+    Lapsed,
 }
 
 pub struct FirstRunView {
     app: Entity<AppState>,
-    pub(super) step: Step,
-    pub(super) plan: Plan,
-    /// System Settings was opened from the Finder step.
-    opened_settings: bool,
+    pub(super) screen: Screen,
+    /// The button pressed last, for Try again.
+    pub(super) provider: Provider,
+    /// The highlighted tile of a question: true for Yes.
+    pub(super) yes: bool,
     pub(super) key: Entity<InputState>,
     pub(super) error: Option<String>,
+    focus: FocusHandle,
+    _finish: Option<Task<()>>,
     _observe: Subscription,
     _appearance: Subscription,
 }
@@ -79,666 +113,815 @@ pub struct FirstRunView {
 impl FirstRunView {
     pub fn new(
         app: Entity<AppState>,
-        step: Step,
+        screen: Screen,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        Self {
+        let focus = cx.focus_handle();
+        window.focus(&focus, cx);
+        let mut view = Self {
             _observe: cx.observe(&app, |_, _, cx| cx.notify()),
             _appearance: theme::observe_appearance(window, cx),
             app,
-            step,
-            plan: Plan::Trial,
-            opened_settings: false,
-            key: cx.new(|cx| InputState::new(window, cx).placeholder("License key")),
+            screen,
+            provider: Provider::Google,
+            yes: true,
+            key: cx.new(|cx| InputState::new(window, cx).placeholder("Paste your license key")),
             error: None,
+            focus,
+            _finish: None,
+        };
+        if screen == Screen::Calibrating {
+            view.calibrate(window, cx);
+        }
+        view
+    }
+
+    /// What the account screen shows now.
+    pub(super) fn stage(&self, cx: &App) -> Stage {
+        let state = self.app.read(cx);
+        let account = &state.account;
+        let licensed = match &state.license {
+            State::Licensed(license) => Some(license.plan),
+            _ => None,
+        };
+        if let State::NotCovered(license) = &state.license
+            && account.session.is_none()
+        {
+            return Stage::NotCovered {
+                until: license.updates_until.clone(),
+            };
+        }
+        if account.session.is_none() {
+            return match (&account.sign_in, licensed) {
+                (SignIn::Waiting, _) => Stage::Waiting,
+                (SignIn::Finishing, _) => Stage::Finishing,
+                (_, Some(convt_license::Plan::Pro)) => Stage::Pro,
+                (_, Some(convt_license::Plan::Desktop)) => Stage::Licensed,
+                (SignIn::Failed(e), None) => Stage::Failed(e.clone()),
+                (SignIn::Idle, None) => Stage::SignIn,
+            };
+        }
+        match &account.access {
+            Some(Access::Pro) => Stage::Pro,
+            Some(Access::Trial { ends_on }) => Stage::Trial {
+                ends_on: ends_on.clone(),
+            },
+            Some(Access::CanStartTrial { .. }) if account.awaiting_trial => Stage::AwaitingTrial,
+            Some(Access::CanStartTrial { .. }) => Stage::CanStartTrial,
+            Some(Access::Lapsed) => Stage::Lapsed,
+            None => match (licensed, &account.refresh) {
+                (Some(convt_license::Plan::Pro), _) => Stage::Pro,
+                (Some(convt_license::Plan::Desktop), _) => Stage::Licensed,
+                (None, Refresh::Failed(e)) => Stage::CheckFailed(e.clone()),
+                (None, _) => Stage::Checking,
+            },
         }
     }
 
-    fn back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        match self.step {
-            // "Skip for now".
-            Step::Finder => self.step = Step::Plan,
-            Step::Plan if cfg!(target_os = "macos") => self.step = Step::Finder,
-            Step::Plan => {}
-            Step::Done => self.step = Step::Plan,
+    /// The questions this computer gets, in order.
+    fn questions(&self, cx: &App) -> Vec<Question> {
+        let state = self.app.read(cx);
+        let mut out = Vec::new();
+        let pack_busy = matches!(state.pack.phase, PackPhase::Working(_));
+        if state.pack.offer.configured && !state.documents_supported() && !pack_busy {
+            out.push(Question::Documents);
         }
+        if cfg!(target_os = "macos") && state.finder_on != Some(true) {
+            out.push(Question::Finder);
+        }
+        out
+    }
+
+    fn go(&mut self, screen: Screen, window: &mut Window, cx: &mut Context<Self>) {
+        self.screen = screen;
         self.error = None;
-        let _ = window;
+        self.yes = true;
+        if screen == Screen::Calibrating {
+            self.calibrate(window, cx);
+        }
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
-    pub(super) fn next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let finder_on = self.app.read(cx).finder_on;
-        match self.step {
-            Step::Finder if !self.opened_settings && finder_on != Some(true) => {
-                cx.open_url(EXTENSION_SETTINGS);
-                self.opened_settings = true;
+    /// From the account screen to the first question, or straight on.
+    pub(super) fn continue_from_account(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let next = match self.questions(cx).first() {
+            Some(q) => Screen::Question(*q),
+            None => Screen::Calibrating,
+        };
+        self.go(next, window, cx);
+    }
+
+    fn not_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.continue_from_account(window, cx);
+    }
+
+    /// Answers the question on screen and moves to the next one.
+    pub(super) fn answer(&mut self, yes: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Screen::Question(question) = self.screen else {
+            return;
+        };
+        if yes {
+            match question {
+                // A click on Yes is the user asking for the download, as the
+                // Download button is.
+                Question::Documents => super::pack::start_install(&self.app, cx),
+                Question::Finder => cx.open_url(EXTENSION_SETTINGS),
             }
-            Step::Finder => self.step = Step::Plan,
-            Step::Plan if self.licensed(cx).is_some() => self.step = Step::Done,
-            Step::Plan => match self.plan {
-                Plan::Trial => self.step = Step::Done,
-                Plan::Key => {
-                    let key = self.key.read(cx).value().trim().to_string();
-                    if key.is_empty() {
-                        self.error = Some("Paste your license key first.".into());
-                    } else {
-                        match self.app.update(cx, |s, cx| s.activate(&key, cx)) {
-                            Ok(_) => {
-                                self.error = None;
-                                self.step = Step::Done;
-                            }
-                            Err(e) => self.error = Some(e),
-                        }
-                    }
-                }
-            },
-            Step::Done => {
-                // Finish first run only here, so closing earlier still shows
-                // it on the next launch. Open the main window first, so the
-                // app never sees its last window close and quits.
-                self.app.update(cx, |s, cx| {
-                    s.update_settings(|s| s.first_run_done = true, cx)
-                });
-                super::show_main(cx);
-                window.remove_window();
+        }
+        let questions = self.questions(cx);
+        let next = questions
+            .iter()
+            .skip_while(|q| **q != question)
+            .nth(1)
+            .or_else(|| {
+                // The pack question drops out of the list once its download
+                // starts; what follows it is still next.
+                (question == Question::Documents)
+                    .then(|| questions.iter().find(|q| **q != Question::Documents))
+                    .flatten()
+            })
+            .copied();
+        let next = match next {
+            Some(q) if q != question => Screen::Question(q),
+            _ => Screen::Calibrating,
+        };
+        self.go(next, window, cx);
+    }
+
+    fn calibrate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self._finish = Some(cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(CALIBRATE).await;
+            let _ = this.update_in(cx, |this, window, cx| this.finish(window, cx));
+        }));
+    }
+
+    /// Ends onboarding: only here, so closing earlier shows it again. The
+    /// main window opens first, so the app never sees its last window close.
+    pub(super) fn finish(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        super::show_main(cx);
+        window.remove_window();
+    }
+
+    fn sign_in(&mut self, provider: Provider, cx: &mut Context<Self>) {
+        self.provider = provider;
+        self.error = None;
+        self.app
+            .update(cx, |s, cx| s.start_sign_in_with(provider, cx));
+    }
+
+    fn activate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let key = self.key.read(cx).value().trim().to_string();
+        if key.is_empty() {
+            self.error = Some("Paste your license key first.".into());
+            cx.notify();
+            return;
+        }
+        match self.app.update(cx, |s, cx| s.activate(&key, cx)) {
+            Ok(_) => self.go(Screen::Account, window, cx),
+            Err(e) => {
+                self.error = Some(e);
+                cx.notify();
+            }
+        }
+    }
+
+    fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let Screen::Question(_) = self.screen else {
+            return;
+        };
+        match event.keystroke.key.as_str() {
+            "left" | "up" => self.yes = true,
+            "right" | "down" => self.yes = false,
+            "tab" => self.yes = !self.yes,
+            "enter" | "space" => {
+                let yes = self.yes;
+                self.answer(yes, window, cx);
                 return;
             }
+            _ => return,
         }
         cx.notify();
     }
 
-    /// The license this machine already has, which makes the trial moot.
-    fn licensed(&self, cx: &App) -> Option<License> {
-        match &self.app.read(cx).license {
-            State::Licensed(license) => Some(license.clone()),
-            _ => None,
+    fn account_screen(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+        let stage = self.stage(cx);
+        let email = self.app.read(cx).account.email().map(str::to_string);
+        let signed_in = email.map(|email| {
+            let line = SharedString::from(format!("Signed in as {email}"));
+            div()
+                .id("account-status")
+                .test_support()
+                .aria_label(line.clone())
+                .child(styled(theme::size::SMALL, p.tertiary).child(line))
+        });
+        match stage {
+            Stage::SignIn => self.sign_in_buttons(p, cx),
+            Stage::Waiting => column()
+                .child(spinner(p))
+                .child(heading("Finish signing in in your browser", p))
+                .child(line("convt.app is open in your browser.", p))
+                .child(
+                    actions()
+                        .child(
+                            pill("onboarding-reopen", "Open again", Pill::Soft, p).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.app.update(cx, |s, cx| s.reopen_sign_in(cx))
+                                }),
+                            ),
+                        )
+                        .child(link("onboarding-cancel", "Cancel", p).on_click(cx.listener(
+                            |this, _, _, cx| this.app.update(cx, |s, cx| s.cancel_sign_in(cx)),
+                        ))),
+                ),
+            Stage::Finishing => column()
+                .child(spinner(p))
+                .child(heading("Signing you in…", p)),
+            Stage::Failed(e) => column()
+                .child(heading("Sign-in didn't finish", p))
+                .child(super::error_text(e, p))
+                .child(
+                    actions()
+                        .child(
+                            pill("onboarding-retry", "Try again", Pill::Strong, p).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    let provider = this.provider;
+                                    this.sign_in(provider, cx)
+                                }),
+                            ),
+                        )
+                        .child(self.key_link(p, cx)),
+                ),
+            Stage::Checking => column()
+                .child(spinner(p))
+                .child(heading("Checking your account…", p))
+                .children(signed_in),
+            Stage::CheckFailed(e) => column()
+                .child(heading("Couldn't reach your account", p))
+                .child(super::error_text(e, p))
+                .child(
+                    actions().child(
+                        pill("onboarding-retry", "Try again", Pill::Strong, p).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.app.update(cx, |s, cx| s.refresh_license(cx))
+                            }),
+                        ),
+                    ),
+                ),
+            Stage::Pro => self
+                .welcome(
+                    "You have convt Pro",
+                    "Every format, on this computer and in the Cloud.",
+                    p,
+                    cx,
+                )
+                .children(signed_in),
+            Stage::Licensed => self
+                .welcome(
+                    "You have a convt license",
+                    "convt converts on this computer, for good.",
+                    p,
+                    cx,
+                )
+                .children(signed_in),
+            Stage::NotCovered { until } => column()
+                .child(heading("Your license is saved", p))
+                .child(line(
+                    &format!(
+                        "It covers versions released up to {until}. This one is newer, so renew to convert with it."
+                    ),
+                    p,
+                ))
+                .child(
+                    pill("onboarding-primary", "Renew", Pill::Brand, p)
+                        .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                )
+                .child(self.secondary_links(p, cx)),
+            Stage::Trial { ends_on } => self
+                .welcome(
+                    "Your free trial is on",
+                    &format!("Every Pro feature until {}.", friendly_date(&ends_on)),
+                    p,
+                    cx,
+                )
+                .children(signed_in),
+            Stage::CanStartTrial => column()
+                .child(heading("Start your 7-day free trial", p))
+                .child(line(
+                    "Checkout opens in your browser. You won't be charged until the trial ends, and you can cancel before then.",
+                    p,
+                ))
+                .child(
+                    pill("onboarding-primary", "Start free trial", Pill::Brand, p)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.app.update(cx, |s, cx| s.start_trial(cx))
+                        })),
+                )
+                .child(self.secondary_links(p, cx))
+                .children(signed_in),
+            Stage::AwaitingTrial => column()
+                .child(spinner(p))
+                .child(heading("Finish checkout in your browser", p))
+                .child(line("This updates on its own once your trial starts.", p))
+                .child(
+                    actions()
+                        .child(
+                            pill("onboarding-reopen", "Open checkout again", Pill::Soft, p)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.app.update(cx, |s, cx| s.start_trial(cx))
+                                })),
+                        )
+                        .child(self.not_now_link(p, cx)),
+                ),
+            Stage::Lapsed => column()
+                .child(heading("Your Pro plan has ended", p))
+                .child(line("Get convt Pro to keep converting, or use a license key.", p))
+                .child(
+                    pill("onboarding-primary", "Get convt Pro", Pill::Brand, p)
+                        .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                )
+                .child(self.secondary_links(p, cx))
+                .children(signed_in),
         }
     }
 
-    fn pick_plan(&mut self, plan: Plan, cx: &mut Context<Self>) {
-        self.plan = plan;
-        self.error = None;
-        cx.notify();
+    /// The title, one line and Continue.
+    fn welcome(&self, title: &str, body: &str, p: &Palette, cx: &mut Context<Self>) -> Div {
+        column()
+            .child(
+                div()
+                    .size(px(44.))
+                    .rounded_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(p.green_tint)
+                    .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                    .child(icon(IconName::Check, 22., p.green)),
+            )
+            .child(heading(title, p))
+            .child(line(body, p))
+            .child(
+                pill("onboarding-primary", "Continue", Pill::Strong, p).on_click(
+                    cx.listener(|this, _, window, cx| this.continue_from_account(window, cx)),
+                ),
+            )
     }
 
-    /// A picture of the System Settings pane, so the user knows what to look
-    /// for. It is drawn, not a control: nothing in it reacts to the pointer.
-    fn finder_art(&self, on: Option<bool>, p: &Palette) -> impl IntoElement {
-        let on = on == Some(true);
-        let caption = if on {
-            "It's on. Come back here and continue."
-        } else {
-            "This picture isn't a switch."
-        };
-        let dot = |color: u32| div().size(px(8.)).rounded(px(4.)).bg(rgb(color));
-        div()
-            .id("finder-preview")
-            .test_support()
-            .aria_label("Preview of System Settings. This picture is not a switch.")
-            .occlude()
-            .cursor_default()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .rounded(px(radius::CARD))
-            .overflow_hidden()
-            .bg(p.surface)
-            .border_1()
-            .border_color(p.border)
+    fn sign_in_buttons(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+        let notice = self.app.read(cx).account.notice.clone();
+        column()
+            .child(
+                text(17., 24., p.secondary)
+                    .font_weight(FontWeight::MEDIUM)
+                    .child("Sign in or create your account"),
+            )
+            .child(div().h(px(14.)))
+            .child(
+                pill("onboarding-google", "Continue with Google", Pill::Strong, p)
+                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Google, cx))),
+            )
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .h(px(30.))
-                    .px(px(space::MD))
-                    .bg(p.recessed)
-                    .border_b_1()
-                    .border_color(p.hairline)
-                    .child(dot(0xFF5F57))
-                    .child(dot(0xFEBC2E))
-                    .child(dot(0x28C840))
-                    .child(
-                        styled(size::CAPTION, p.tertiary)
-                            .flex_1()
-                            .pl(px(6.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .child("System Settings"),
-                    )
-                    .child(
-                        div()
-                            .id("finder-preview-badge")
-                            .test_support()
-                            .aria_label("Preview")
-                            .child(theme::badge("PREVIEW", Tone::Neutral, p)),
-                    ),
+                    .gap(px(14.))
+                    .w(px(PILL_WIDTH))
+                    .child(div().flex_1().h(px(1.)).bg(p.hairline))
+                    .child(styled(theme::size::SMALL, p.tertiary).child("or"))
+                    .child(div().flex_1().h(px(1.)).bg(p.hairline)),
             )
+            .child(
+                pill("onboarding-email", "Continue with Email", Pill::Soft, p)
+                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Email, cx))),
+            )
+            .children(notice.map(|n| super::error_text(n, p)))
+            .child(div().h(px(6.)))
+            .child(self.key_link(p, cx))
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap(px(10.))
-                    .p(px(14.))
+                    .flex_wrap()
+                    .justify_center()
+                    .items_center()
+                    .gap(px(4.))
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(styled(size::SMALL, p.secondary).child("General"))
-                            .child(icon(IconName::ChevronRight, 11., p.tertiary))
-                            .child(
-                                styled(size::SMALL, p.text)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child("Login Items & Extensions"),
-                            ),
+                        styled(theme::size::CAPTION, p.tertiary)
+                            .child("By continuing, you agree to the"),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(icon(IconName::ArrowDown, 11., p.tertiary))
-                            .child(styled(size::CAPTION, p.tertiary).child("Scroll to Extensions")),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .px(px(space::MD))
-                            .py(px(10.))
-                            .rounded(px(8.))
-                            .bg(p.recessed)
-                            .border_1()
-                            .border_color(if on { p.green_border } else { p.border })
-                            .child(theme::mark(22., p))
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .flex_1()
-                                    .child(
-                                        styled(size::BODY, p.text)
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .child("convt"),
-                                    )
-                                    .child(
-                                        styled(size::CAPTION, p.secondary)
-                                            .child("Finder extension"),
-                                    ),
-                            )
-                            .child(
-                                // Illustrated only: not theme::switch, no pointer, no click.
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .w(px(28.))
-                                    .h(px(16.))
-                                    .p(px(2.))
-                                    .rounded(px(8.))
-                                    .opacity(0.75)
-                                    .when(on, |d| d.justify_end())
-                                    .bg(if on { p.green } else { p.toggle_off })
-                                    .child(div().size(px(12.)).rounded(px(6.)).bg(rgb(0xFFFFFF))),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("finder-preview-caption")
-                            .test_support()
-                            .aria_label(caption)
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .children(on.then(|| icon(IconName::CircleCheck, 12., p.green)))
-                            .child(
-                                styled(size::CAPTION, if on { p.green_text } else { p.tertiary })
-                                    .child(caption),
-                            ),
-                    ),
+                    .child(underlined("terms", "Terms", TERMS_URL, p))
+                    .child(styled(theme::size::CAPTION, p.tertiary).child("and"))
+                    .child(underlined("privacy", "Privacy Policy", PRIVACY_URL, p)),
             )
     }
 
-    /// The plan step for a machine that has a license: it, selected, in
-    /// place of the trial and the key field.
-    fn licensed_art(&self, license: &License, p: &Palette, cx: &App) -> Div {
-        let (title, about) = match license.plan {
-            convt_license::Plan::Pro => (
-                "convt Pro",
-                format!("Paid through {}", license.updates_until),
-            ),
-            convt_license::Plan::Desktop => (
-                "convt license",
-                format!("Updates through {}", license.updates_until),
-            ),
+    fn key_link(&self, p: &Palette, cx: &mut Context<Self>) -> theme::Clickable {
+        link("onboarding-key-link", "I have a license key", p)
+            .on_click(cx.listener(|this, _, window, cx| this.go(Screen::Key, window, cx)))
+    }
+
+    fn not_now_link(&self, p: &Palette, cx: &mut Context<Self>) -> theme::Clickable {
+        link("onboarding-not-now", "Not now", p)
+            .on_click(cx.listener(|this, _, window, cx| this.not_now(window, cx)))
+    }
+
+    fn secondary_links(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+        actions()
+            .child(self.key_link(p, cx))
+            .child(div().size(px(3.)).rounded_full().bg(p.tertiary))
+            .child(self.not_now_link(p, cx))
+    }
+
+    fn key_screen(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+        column()
+            .child(heading("Enter your license key", p))
+            .child(line("It's in the email you got with your purchase.", p))
+            .child(
+                div()
+                    .w(px(PILL_WIDTH))
+                    .child(theme::field(&self.key, "onboarding-key")),
+            )
+            .children(self.error.clone().map(|e| super::error_text(e, p)))
+            .child(
+                pill("onboarding-activate", "Activate", Pill::Strong, p)
+                    .on_click(cx.listener(|this, _, window, cx| this.activate(window, cx))),
+            )
+            .child(
+                link("onboarding-back", "Back", p).on_click(
+                    cx.listener(|this, _, window, cx| this.go(Screen::Account, window, cx)),
+                ),
+            )
+    }
+
+    fn question_screen(&self, question: Question, p: &Palette, cx: &mut Context<Self>) -> Div {
+        let state = self.app.read(cx);
+        let detail = match question {
+            Question::Documents => match state.pack.offer.download {
+                Some(bytes) => format!(
+                    "Word, Excel, PowerPoint and more. A one-time {} download.",
+                    super::human_size(bytes)
+                ),
+                None => "Word, Excel, PowerPoint and more. A one-time download.".to_string(),
+            },
+            Question::Finder => {
+                "Right-click any file in Finder to convert it. System Settings opens to turn it on."
+                    .to_string()
+            }
         };
-        let email = self.app.read(cx).account.email().map(str::to_string);
-        div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .gap(px(space::SM))
-            .child(
-                div()
-                    .id("plan-licensed")
-                    .test_support()
-                    .aria_label(title)
-                    .aria_selected(true)
-                    .flex()
-                    .items_start()
-                    .gap(px(space::MD))
-                    .p(px(14.))
-                    .rounded(px(radius::CARD))
-                    .bg(p.green_tint)
-                    .shadow(vec![theme::inset_ring(p.green, 1.5)])
-                    .child(
-                        div()
-                            .pt(px(1.))
-                            .child(icon(IconName::CircleCheck, 16., p.green)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .gap(px(3.))
-                            .child(
-                                styled(size::BODY, p.text)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(title),
-                            )
-                            .child(styled(size::SMALL, p.secondary).child(about)),
-                    ),
-            )
-            .children(email.map(|email| {
-                let signed_in = SharedString::from(format!("Signed in as {email}"));
-                div()
-                    .id("account-status")
-                    .test_support()
-                    .aria_label(signed_in.clone())
-                    .px(px(2.))
-                    .pt(px(6.))
-                    .child(styled(size::SMALL, p.secondary).child(signed_in))
-            }))
-    }
-
-    fn plan_art(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
-        let card = |id: &'static str, plan: Plan, title: &'static str, about: AnyElement| {
-            let on = self.plan == plan;
-            theme::clickable(id, title)
+        let (yes_icon, yes_label, no_label) = match question {
+            Question::Documents => (IconName::Document, "Yes, add them", "Not now"),
+            Question::Finder => (IconName::FolderOpen, "Yes, add it", "Not now"),
+        };
+        let tile = |id: &'static str, yes: bool, glyph: IconName, label: &'static str| {
+            let on = self.yes == yes;
+            theme::clickable(id, label)
                 .aria_selected(on)
                 .flex()
-                .items_start()
-                .gap(px(space::MD))
-                .p(px(14.))
-                .rounded(px(radius::CARD))
-                .map(|d| {
-                    if on {
-                        d.bg(p.green_tint)
-                            .shadow(vec![theme::inset_ring(p.green, 1.5)])
-                    } else {
-                        d.bg(p.surface)
-                            .shadow(vec![theme::inset_ring(p.border, 1.)])
-                            .hover(|s| s.bg(p.recessed))
-                    }
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(12.))
+                .w(px(176.))
+                .h(px(136.))
+                .rounded(px(radius::PANEL + 2.))
+                .bg(p.surface)
+                .shadow(if on {
+                    vec![
+                        theme::inset_ring(p.green, 2.),
+                        theme::shadow(p.shadow_soft, 8., 24.),
+                    ]
+                } else {
+                    vec![
+                        theme::inset_ring(p.border, 1.),
+                        theme::shadow(p.shadow_soft, 2., 6.),
+                    ]
                 })
-                .on_click(cx.listener(move |this, _, _, cx| this.pick_plan(plan, cx)))
-                .child(div().pt(px(1.)).child(theme::radio(on, p)))
+                .hover(|s| s.bg(p.recessed))
+                .on_click(cx.listener(move |this, _, window, cx| this.answer(yes, window, cx)))
+                .child(icon(glyph, 30., if on { p.green } else { p.secondary }))
                 .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .flex_1()
-                        .gap(px(3.))
-                        .child(
-                            styled(size::BODY, p.text)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(title),
-                        )
-                        .child(about),
+                    styled(theme::size::BODY, p.text)
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(label),
                 )
         };
-        let extra = super::account::compact(&self.app, p, cx);
-        let about = |line: &'static str| {
-            styled(size::SMALL, p.secondary)
-                .child(line)
-                .into_any_element()
-        };
-        // The key field takes the place of the description, so the window
-        // keeps its size.
-        let key_about = if self.plan == Plan::Key {
-            div()
-                .pt(px(4.))
-                .child(theme::field(&self.key, "first-run-key"))
-                .into_any_element()
-        } else {
-            about("Paste the key from your receipt.")
-        };
-        div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .gap(px(space::SM))
-            .child(card(
-                "plan-trial",
-                Plan::Trial,
-                "Start 7-day trial",
-                about("Every feature, no card, no account."),
-            ))
-            .child(card("plan-key", Plan::Key, "I have a license", key_about))
-            .child(div().px(px(2.)).pt(px(6.)).child(extra))
+        column()
+            .child(heading(question.title(), p))
+            .child(line(&detail, p))
+            .child(div().h(px(8.)))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(16.))
+                    .child(tile("question-yes", true, yes_icon, yes_label))
+                    .child(tile("question-no", false, IconName::Close, no_label)),
+            )
+            .child(
+                styled(theme::size::CAPTION, p.tertiary)
+                    .pt(px(6.))
+                    .child("Use the arrow keys and Return"),
+            )
     }
 
-    /// A file's right-click menu with convt's submenu, as the file manager
-    /// draws it.
-    fn done_art(&self, p: &Palette) -> Div {
-        let item = |label: &'static str| {
-            div()
-                .px(px(8.))
-                .py(px(3.))
-                .child(styled(size::SMALL, p.secondary).child(label))
+    fn calibrating(&self, p: &Palette, cx: &App) -> AnyElement {
+        let words = "Setting convt up…";
+        let (base, bright) = (p.secondary, p.text);
+        let still = cx.reduce_motion();
+        let label = div()
+            .id("onboarding-title")
+            .test_support()
+            .aria_label(words);
+        if still {
+            return label
+                .child(
+                    text(17., 24., base)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(words),
+                )
+                .into_any_element();
+        }
+        // A band of light sweeps across the words, letter by letter.
+        label
+            .with_animation(
+                "shimmer",
+                Animation::new(Duration::from_millis(1400)).repeat(),
+                move |d, t| {
+                    let n = words.chars().count() as f32;
+                    let centre = -3. + t * (n + 6.);
+                    let mut runs = Vec::new();
+                    for (i, (at, ch)) in words.char_indices().enumerate() {
+                        let k = (-((i as f32 - centre) / 2.2).powi(2)).exp();
+                        let color = mix(base, bright, k);
+                        runs.push((
+                            at..at + ch.len_utf8(),
+                            HighlightStyle {
+                                color: Some(color),
+                                ..Default::default()
+                            },
+                        ));
+                    }
+                    d.child(
+                        text(17., 24., base)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(StyledText::new(words).with_highlights(runs)),
+                    )
+                },
+            )
+            .into_any_element()
+    }
+
+    /// The dithered glow behind every screen, and the bloom that fills the
+    /// window while convt sets up.
+    fn backdrop(&self, p: &Palette, cx: &App) -> Div {
+        let theme = if p.dark { "dark" } else { "light" };
+        let still = cx.reduce_motion();
+        let calibrating = self.screen == Screen::Calibrating;
+        let glow = img(SharedString::from(format!("onboarding/glow-{theme}.png")))
+            .absolute()
+            .bottom_0()
+            .left(relative(0.5))
+            .ml(px(-GLOW.0 / 2.))
+            .w(px(GLOW.0))
+            .h(px(GLOW.1));
+        let glow = if still {
+            glow.into_any_element()
+        } else {
+            // A slow drift and breath, about one cycle every seven seconds.
+            glow.with_animation(
+                "glow",
+                Animation::new(Duration::from_secs(7)).repeat(),
+                |img, t| {
+                    let wave = (1. - (t * std::f32::consts::TAU).cos()) / 2.;
+                    let sway = (t * std::f32::consts::TAU).sin();
+                    img.opacity(0.78 + 0.22 * wave)
+                        .mb(px(-14. + 14. * wave))
+                        .ml(px(-GLOW.0 / 2. + 24. * sway))
+                },
+            )
+            .into_any_element()
         };
-        let menu = |w: f32| {
-            div()
-                .flex()
-                .flex_col()
-                .w(px(w))
-                .p(px(5.))
-                .rounded(px(8.))
-                .bg(p.overlay)
-                .shadow(vec![
-                    theme::inset_ring(p.border, 1.),
-                    theme::shadow(p.shadow_soft, 6., 16.),
-                ])
-        };
-        let separator = || div().h(px(1.)).my(px(4.)).mx(px(4.)).bg(p.hairline);
-        // The light --green in both appearances: white on it is 5.4:1.
-        let highlight = rgb(0x127A47);
+        let bloom = calibrating.then(|| {
+            let bloom = img(SharedString::from(format!("onboarding/bloom-{theme}.png")))
+                .absolute()
+                .bottom_0()
+                .left(relative(0.5))
+                .ml(px(-BLOOM.0 / 2.))
+                .w(px(BLOOM.0))
+                .h(px(BLOOM.1));
+            if still {
+                bloom.into_any_element()
+            } else {
+                // Rises and brightens over the first half, then holds.
+                bloom
+                    .with_animation(
+                        "bloom",
+                        Animation::new(CALIBRATE.mul_f32(0.55)).with_easing(ease_out_quint()),
+                        |img, t| img.opacity(t).mb(px(-180. * (1. - t))),
+                    )
+                    .into_any_element()
+            }
+        });
         div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .gap(px(10.))
-            .p(px(space::LG))
-            .rounded(px(radius::CARD))
-            .bg(p.recessed)
-            .border_1()
-            .border_color(p.border)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .w(px(26.))
-                            .h(px(20.))
-                            .rounded(px(4.))
-                            .bg(linear_gradient(
-                                135.,
-                                linear_color_stop(rgb(0xF4A261), 0.),
-                                linear_color_stop(rgb(0x3A7BD5), 1.),
-                            ))
-                            .shadow(vec![theme::inset_ring(p.thumb_border, 1.)]),
-                    )
-                    .child(mono(11., 14., p.text).child("IMG_2041.heic")),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_start()
-                    .child(
-                        menu(196.)
-                            .child(item("Open"))
-                            // Finder's wording on macOS, the file managers' elsewhere.
-                            .child(item(if cfg!(target_os = "macos") {
-                                "Get Info"
-                            } else {
-                                "Properties"
-                            }))
-                            .child(separator())
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .px(px(8.))
-                                    .py(px(3.))
-                                    .rounded(px(4.))
-                                    .bg(highlight)
-                                    .child(
-                                        text(12., 17., rgb(0xFFFFFF).into())
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .child("Convert with convt"),
-                                    )
-                                    .child(icon(IconName::ChevronRight, 11., rgb(0xFFFFFF).into())),
-                            ),
-                    )
-                    .child(
-                        menu(132.)
-                            .ml(px(-4.))
-                            .mt(px(38.))
-                            .child(item("JPEG"))
-                            .child(item("PNG"))
-                            .child(
-                                div()
-                                    .px(px(8.))
-                                    .py(px(3.))
-                                    .rounded(px(4.))
-                                    .bg(p.hover)
-                                    .child(styled(size::SMALL, p.text).child("WebP")),
-                            )
-                            .child(separator())
-                            .child(item("More options…")),
-                    ),
-            )
+            .absolute()
+            .inset_0()
+            .overflow_hidden()
+            .child(glow)
+            .children(bloom)
+    }
+}
+
+/// The glow's and the bloom's size: the PNGs' pixel size, drawn unscaled.
+const GLOW: (f32, f32) = (2400., 720.);
+const BLOOM: (f32, f32) = (2400., 1500.);
+
+const PILL_WIDTH: f32 = 340.;
+
+#[derive(Clone, Copy, PartialEq)]
+enum Pill {
+    /// Ink on the page: the main sign-in button.
+    Strong,
+    /// A soft gray fill, for the second way in.
+    Soft,
+    /// The brand green, for a purchase or trial.
+    Brand,
+}
+
+/// A full-width rounded button, as on the sign-in screen.
+fn pill(id: &'static str, label: &'static str, look: Pill, p: &Palette) -> theme::Clickable {
+    let (bg, fg) = match look {
+        Pill::Strong if p.dark => (p.text, p.window),
+        Pill::Strong => (rgb(0x111312).into(), rgb(0xFFFFFF).into()),
+        Pill::Soft => (
+            if p.dark {
+                p.hover
+            } else {
+                rgb(0xF0F2F1).into()
+            },
+            p.text,
+        ),
+        Pill::Brand => (rgb(0x127A47).into(), rgb(0xFFFFFF).into()),
+    };
+    let lead = match id {
+        "onboarding-google" => Some(theme::google_mark(16.).into_any_element()),
+        "onboarding-email" => Some(icon(IconName::Mail, 16., fg).into_any_element()),
+        _ => None,
+    };
+    theme::clickable(id, label)
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(px(10.))
+        .w(px(PILL_WIDTH))
+        .h(px(42.))
+        .rounded_full()
+        .bg(bg)
+        .when(look == Pill::Soft, |d| {
+            d.shadow(vec![theme::inset_ring(p.border, 1.)])
+        })
+        .when(look != Pill::Soft, |d| {
+            d.shadow(vec![theme::shadow(p.shadow_soft, 2., 8.)])
+        })
+        .hover(|s| s.opacity(0.9))
+        .children(lead)
+        .child(
+            text(14., 18., fg)
+                .font_weight(FontWeight::MEDIUM)
+                .child(label),
+        )
+}
+
+fn link(id: &'static str, label: &'static str, p: &Palette) -> theme::Clickable {
+    theme::text_button(id, label, p.secondary, 13.)
+}
+
+fn underlined(
+    id: &'static str,
+    label: &'static str,
+    url: &'static str,
+    p: &Palette,
+) -> theme::Clickable {
+    theme::clickable(id, label)
+        .child(
+            styled(theme::size::CAPTION, p.secondary)
+                .underline()
+                .hover(|s| s.text_color(p.text))
+                .child(label),
+        )
+        .on_click(move |_, _, cx| cx.open_url(url))
+}
+
+fn column() -> Div {
+    div().flex().flex_col().items_center().gap(px(14.))
+}
+
+fn actions() -> Div {
+    div().flex().items_center().justify_center().gap(px(16.))
+}
+
+fn heading(title: &str, p: &Palette) -> impl IntoElement + use<> {
+    let title = SharedString::from(title.to_string());
+    div()
+        .id("onboarding-title")
+        .test_support()
+        .aria_label(title.clone())
+        .child(
+            text(24., 30., p.text)
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_center()
+                .child(title),
+        )
+}
+
+fn line(body: &str, p: &Palette) -> Div {
+    text(14., 21., p.secondary)
+        .max_w(px(380.))
+        .text_center()
+        .child(SharedString::from(body.to_string()))
+}
+
+fn spinner(p: &Palette) -> impl IntoElement {
+    Spinner::new().with_size(px(22.)).color(p.green)
+}
+
+fn mix(a: Hsla, b: Hsla, t: f32) -> Hsla {
+    let (a, b) = (a.to_rgb(), b.to_rgb());
+    Rgba {
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        a: 1.,
+    }
+    .into()
+}
+
+/// "2026-10-15" as "October 15".
+fn friendly_date(day: &str) -> String {
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    let mut parts = day.split('-');
+    let (_, month, d) = (parts.next(), parts.next(), parts.next());
+    match (
+        month.and_then(|m| m.parse::<usize>().ok()),
+        d.and_then(|d| d.parse::<u32>().ok()),
+    ) {
+        (Some(m @ 1..=12), Some(d)) => format!("{} {d}", MONTHS[m - 1]),
+        _ => day.to_string(),
     }
 }
 
 impl Render for FirstRunView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let _ = window;
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
-        let n = self.step.number();
-        let steps = div()
-            .flex()
-            .items_center()
-            .gap(px(5.))
-            .children((1..=Step::count()).map(|i| {
-                div()
-                    .h(px(6.))
-                    .w(px(if i == n { 18. } else { 6. }))
-                    .rounded(px(3.))
-                    .bg(if i <= n { p.green } else { p.track })
-            }));
-        // A saved key whose updates ended before this build can't convert.
-        let not_covered = match &self.app.read(cx).license {
-            State::NotCovered(license) if self.step == Step::Done => {
-                Some(license.updates_until.clone())
-            }
-            _ => None,
+        let content = match self.screen {
+            Screen::Account => self.account_screen(&p, cx).into_any_element(),
+            Screen::Key => self.key_screen(&p, cx).into_any_element(),
+            Screen::Question(q) => self.question_screen(q, &p, cx).into_any_element(),
+            Screen::Calibrating => self.calibrating(&p, cx),
         };
-        let finder_on = self.app.read(cx).finder_on;
-        let licensed = self.licensed(cx).filter(|_| self.step == Step::Plan);
-        let (title, body, back, next) = match self.step {
-            Step::Finder if finder_on == Some(true) => (
-                "The Finder menu is on",
-                "Right-click a file in Finder to see Convert with convt. You can turn it off in System Settings.".to_string(),
-                None,
-                "Continue",
-            ),
-            Step::Finder => (
-                "Turn on the Finder menu",
-                "Open System Settings, scroll down to Extensions, and turn on convt. Then come back here.".to_string(),
-                Some("Skip for now"),
-                if self.opened_settings {
-                    "Continue"
-                } else {
-                    "Open System Settings"
-                },
-            ),
-            Step::Plan if let Some(license) = &licensed => match license.plan {
-                convt_license::Plan::Pro => (
-                    "You have Pro",
-                    "convt and Cloud conversion are unlocked on this computer.".to_string(),
-                    cfg!(target_os = "macos").then_some("Back"),
-                    "Continue",
-                ),
-                convt_license::Plan::Desktop => (
-                    "You have a license",
-                    "convt is unlocked on this computer.".to_string(),
-                    cfg!(target_os = "macos").then_some("Back"),
-                    "Continue",
-                ),
-            },
-            Step::Plan => (
-                "Try it or unlock it",
-                format!(
-                    "The trial runs for 7 days with every feature. A {LICENSE_PRICE} license keeps convt working for good, with a year of updates."
-                ),
-                cfg!(target_os = "macos").then_some("Back"),
-                "Continue",
-            ),
-            Step::Done if let Some(until) = &not_covered => (
-                "License saved",
-                format!(
-                    "It covers builds released up to {until}. This build is newer, so it can't convert until you renew."
-                ),
-                Some("Back"),
-                "Open convt",
-            ),
-            Step::Done => (
-                "You're set",
-                if cfg!(target_os = "macos") {
-                    "Right-click a file in Finder and pick a format, or drop files on the convt window.".to_string()
-                } else {
-                    "Right-click a file in your file manager and pick a format, or drop files on the convt window.".to_string()
-                },
-                Some("Back"),
-                "Start converting",
-            ),
-        };
-        let art = match self.step {
-            Step::Finder => self.finder_art(finder_on, &p).into_any_element(),
-            Step::Plan => match &licensed {
-                Some(license) => self.licensed_art(license, &p, cx).into_any_element(),
-                None => self.plan_art(&p, cx).into_any_element(),
-            },
-            Step::Done => self.done_art(&p).into_any_element(),
-        };
-        let step_label = format!("STEP {n} OF {}", Step::count());
-        let next_button = match self.step {
-            Step::Finder if !self.opened_settings && finder_on != Some(true) => {
-                Button::primary("first-run-next", next).icon(IconName::ExternalLink)
-            }
-            _ => Button::primary("first-run-next", next),
-        };
+        let calibrating = self.screen == Screen::Calibrating;
         div()
             .id("first-run")
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(|this, e, window, cx| this.key_down(e, window, cx)))
+            .relative()
             .flex()
             .flex_col()
             .size_full()
+            .overflow_hidden()
             .bg(p.window)
             .font_family(theme::SANS)
             .text_color(p.text)
+            .child(self.backdrop(&p, cx))
             .child(
                 div()
-                    .flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .justify_between()
-                    .h(px(52.))
-                    // The traffic lights sit at the left of a transparent title bar.
-                    .pl(px(if theme::transparent_titlebar() {
-                        84.
-                    } else {
-                        28.
-                    }))
-                    .pr(px(28.))
-                    .child(theme::lockup(13., &p))
-                    .child(steps),
-            )
-            .child(
-                div()
+                    .relative()
                     .flex()
                     .flex_col()
-                    .gap(px(6.))
-                    .px(px(28.))
-                    .pt(px(14.))
-                    .child(
-                        div()
-                            .id("step")
-                            .test_support()
-                            .aria_label(SharedString::from(step_label))
-                            .child(
-                                mono(11., 14., p.tertiary)
-                                    .child(format!("Step {n} of {}", Step::count())),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("first-run-title")
-                            .test_support()
-                            .aria_label(SharedString::from(title))
-                            .child(
-                                styled(size::DISPLAY, p.text)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(title),
-                            ),
-                    )
-                    // An error takes the place of the description, so the
-                    // window keeps its size.
-                    .child(match self.error.clone() {
-                        Some(e) => super::error_text(e, &p).into_any_element(),
-                        None => div()
-                            .id("first-run-body")
-                            .test_support()
-                            .aria_label(SharedString::from(body.clone()))
-                            .child(text(13., 19., p.secondary).child(body))
-                            .into_any_element(),
-                    })
-                    .children(not_covered.is_some().then(|| {
-                        div().flex().pt(px(2.)).child(
-                            text_button("first-run-renew", "Renew", p.green_text, 12.)
-                                .on_click(|_, _, cx| cx.open_url(BUY_URL)),
-                        )
-                    })),
-            )
-            .child(
-                div()
-                    .flex()
                     .flex_1()
-                    .min_h_0()
-                    .px(px(28.))
-                    .pt(px(space::XL))
-                    .pb(px(space::LG))
-                    .child(art),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_shrink_0()
                     .items_center()
-                    .justify_between()
-                    .px(px(28.))
-                    .py(px(14.))
-                    .bg(p.recessed)
-                    .border_t_1()
-                    .border_color(p.hairline)
-                    .child(match back {
-                        Some(label) => Button::ghost("first-run-back", label)
-                            .build(&p)
-                            .on_click(cx.listener(|this, _, window, cx| this.back(window, cx)))
-                            .into_any_element(),
-                        None => div().into_any_element(),
-                    })
-                    .child(
-                        next_button
-                            .build(&p)
-                            .on_click(cx.listener(|this, _, window, cx| this.next(window, cx))),
-                    ),
+                    .justify_center()
+                    .gap(px(36.))
+                    // Sit a little above the middle, as the eye expects.
+                    .pb(px(if calibrating { 0. } else { 96. }))
+                    .px(px(32.))
+                    .when(!calibrating, |d| d.child(theme::lockup(30., &p)))
+                    .child(content),
             )
     }
 }

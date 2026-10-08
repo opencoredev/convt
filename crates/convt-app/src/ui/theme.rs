@@ -350,11 +350,45 @@ impl IconName {
     pub const ALL: [IconName; 39] = {
         use IconName::*;
         [
-            ArrowDown, ArrowRight, Ban, Bot, Calendar, Check, ChevronDown, ChevronRight,
-            ChevronsUpDown, CircleAlert, CircleCheck, CircleUser, CircleX, Close, Cloud, Computer,
-            Document, Download, Edit, ExternalLink, Folder, FolderOpen, Google, HardDrive, Inbox,
-            Info, Key, Loader, Mail, Minus, Plus, RefreshCw, RotateCw, Settings, Sparkles, Star,
-            TriangleAlert, WindowMaximize, WindowRestore,
+            ArrowDown,
+            ArrowRight,
+            Ban,
+            Bot,
+            Calendar,
+            Check,
+            ChevronDown,
+            ChevronRight,
+            ChevronsUpDown,
+            CircleAlert,
+            CircleCheck,
+            CircleUser,
+            CircleX,
+            Close,
+            Cloud,
+            Computer,
+            Document,
+            Download,
+            Edit,
+            ExternalLink,
+            Folder,
+            FolderOpen,
+            Google,
+            HardDrive,
+            Inbox,
+            Info,
+            Key,
+            Loader,
+            Mail,
+            Minus,
+            Plus,
+            RefreshCw,
+            RotateCw,
+            Settings,
+            Sparkles,
+            Star,
+            TriangleAlert,
+            WindowMaximize,
+            WindowRestore,
         ]
     };
 
@@ -775,16 +809,6 @@ pub fn checkbox(
         .child(text(13., 16., p.text).child(label))
 }
 
-/// A radio dot, for choices drawn as cards.
-pub fn radio(on: bool, p: &Palette) -> Div {
-    let dot = div().size(px(16.)).flex_shrink_0().rounded(px(8.));
-    if on {
-        dot.bg(c(0xFFFFFF)).shadow(vec![inset_ring(p.green, 5.)])
-    } else {
-        dot.bg(p.surface).shadow(vec![inset_ring(p.mark_off, 1.5)])
-    }
-}
-
 /// A 4px progress bar. `fraction` is 0 to 1.
 pub fn progress(fraction: f32, track: Hsla, fill: Hsla) -> Div {
     let fraction = fraction.clamp(0., 1.);
@@ -930,71 +954,6 @@ pub fn segmented(
     p: &Palette,
     on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
 ) -> Div {
-    let choices: Vec<Segment> = choices
-        .iter()
-        .map(|(key, label)| Segment::new(key, label.clone()))
-        .collect();
-    segments(id, &choices, selected, p, &[], on_pick)
-}
-
-/// One choice of [`segmented_with`].
-#[derive(Clone)]
-pub struct Segment {
-    pub key: &'static str,
-    pub label: SharedString,
-    /// Why the choice can't be picked now; shown on hover.
-    pub disabled: Option<SharedString>,
-}
-
-impl Segment {
-    pub fn new(key: &'static str, label: impl Into<SharedString>) -> Self {
-        Self {
-            key,
-            label: label.into(),
-            disabled: None,
-        }
-    }
-
-    pub fn disabled(mut self, reason: Option<impl Into<SharedString>>) -> Self {
-        self.disabled = reason.map(Into::into);
-        self
-    }
-}
-
-/// [`segmented`] with choices that can be disabled. A disabled choice is
-/// dimmed, ignores clicks and says why in a note above it while hovered, so
-/// the note never covers the label it explains (GPUI's own tooltip follows
-/// the pointer and, near a window's bottom edge, lands on the control).
-pub fn segmented_with(
-    id: &str,
-    choices: &[Segment],
-    selected: &str,
-    p: &Palette,
-    window: &mut Window,
-    cx: &mut App,
-    on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
-) -> Div {
-    let hovers: Vec<(&'static str, Entity<bool>, bool)> = choices
-        .iter()
-        .filter(|segment| segment.disabled.is_some())
-        .map(|segment| {
-            let key = SharedString::from(format!("{id}-{}-hover", segment.key));
-            let state = window.use_keyed_state(key, cx, |_, _| false);
-            let on = *state.read(cx);
-            (segment.key, state, on)
-        })
-        .collect();
-    segments(id, choices, selected, p, &hovers, on_pick)
-}
-
-fn segments(
-    id: &str,
-    choices: &[Segment],
-    selected: &str,
-    p: &Palette,
-    hovers: &[(&'static str, Entity<bool>, bool)],
-    on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
-) -> Div {
     div()
         .flex()
         .flex_shrink_0()
@@ -1003,15 +962,11 @@ fn segments(
         .rounded(px(radius::CONTROL + 1.))
         .bg(if p.dark { p.recessed } else { p.track })
         .when(p.dark, |d| d.shadow(vec![inset_ring(p.border, 1.)]))
-        .children(choices.iter().map(|segment| {
-            let (key, label) = (segment.key, segment.label.clone());
+        .children(choices.iter().map(|(key, label)| {
+            let key = *key;
             let on = key == selected;
-            let reason = segment.disabled.clone();
-            let off = reason.is_some();
-            let hover = hovers.iter().find(|(k, ..)| *k == key).cloned();
             let on_pick = on_pick.clone();
-            let element_id = SharedString::from(format!("{id}-{key}"));
-            clickable(element_id.clone(), label.clone())
+            clickable(SharedString::from(format!("{id}-{key}")), label.clone())
                 .aria_selected(on)
                 .flex()
                 .items_center()
@@ -1022,61 +977,175 @@ fn segments(
                     d.bg(if p.dark { p.selected } else { p.surface })
                         .shadow(raise(p))
                 })
-                .when(!on && !off, |d| d.hover(|s| s.bg(p.hover)))
-                .when(off, |d| d.cursor_default())
-                .when_some(hover.zip(reason), |d, ((_, state, shown), reason)| {
-                    let note = shown.then(|| {
-                        // Drawn over the window's other content, its bottom
-                        // left corner 8px above the choice's top left.
-                        div().absolute().top_0().left_0().child(deferred(
-                            anchored()
-                                .anchor(Anchor::BottomLeft)
-                                .snap_to_window_with_margin(px(8.))
-                                // Padding, not margin: `anchored` sizes to
-                                // its child's box and ignores margins.
-                                .child(
-                                    div().pb(px(8.)).child(
-                                        div()
-                                            .id(SharedString::from(format!("{element_id}-reason")))
-                                            .test_support()
-                                            .aria_label(reason.clone())
-                                            .px(px(8.))
-                                            .py(px(5.))
-                                            .rounded(px(radius::SM + 1.))
-                                            .bg(p.overlay)
-                                            .shadow(vec![
-                                                inset_ring(p.border, 1.),
-                                                shadow(p.shadow_soft, 4., 12.),
-                                            ])
-                                            .child(
-                                                styled(size::SMALL, p.text)
-                                                    .whitespace_nowrap()
-                                                    .child(reason),
-                                            ),
-                                    ),
-                                ),
-                        ))
-                    });
-                    d.relative()
-                        .on_hover(move |hovered, _, cx| {
-                            state.update(cx, |s, cx| {
-                                if *s != *hovered {
-                                    *s = *hovered;
-                                    cx.notify();
-                                }
-                            })
-                        })
-                        .children(note)
-                })
-                .when(!off, |d| {
-                    d.on_click(move |_, window, cx| on_pick(key, window, cx))
-                })
+                .when(!on, |d| d.hover(|s| s.bg(p.hover)))
+                .on_click(move |_, window, cx| on_pick(key, window, cx))
                 .child(
                     text(12., 16., if on { p.text } else { p.secondary })
                         .font_weight(FontWeight::MEDIUM)
                         .whitespace_nowrap()
+                        .child(label.clone()),
+                )
+        }))
+}
+
+/// Keeps a hover flag in step with the pointer.
+fn hover_setter(state: Entity<bool>) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+    move |hovered, _, cx| {
+        state.update(cx, |s, cx| {
+            if *s != *hovered {
+                *s = *hovered;
+                cx.notify();
+            }
+        })
+    }
+}
+
+/// Why a choice can't be picked, drawn over the window's other content with
+/// its bottom left corner 8px above the choice's top left, so it never covers
+/// the label it explains. Tests read it by `{element_id}-reason`.
+fn reason_note(element_id: &SharedString, reason: SharedString, p: &Palette) -> AnyElement {
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .child(deferred(
+            anchored()
+                .anchor(Anchor::BottomLeft)
+                .snap_to_window_with_margin(px(8.))
+                // Padding, not margin: `anchored` sizes to its child's box
+                // and ignores margins.
+                .child(
+                    div().pb(px(8.)).child(
+                        div()
+                            .id(SharedString::from(format!("{element_id}-reason")))
+                            .test_support()
+                            .aria_label(reason.clone())
+                            .px(px(8.))
+                            .py(px(5.))
+                            .rounded(px(radius::SM + 1.))
+                            .bg(p.overlay)
+                            .shadow(vec![
+                                inset_ring(p.border, 1.),
+                                shadow(p.shadow_soft, 4., 12.),
+                            ])
+                            .child(
+                                styled(size::SMALL, p.text)
+                                    .whitespace_nowrap()
+                                    .child(reason),
+                            ),
+                    ),
+                ),
+        ))
+        .into_any_element()
+}
+
+/// One choice of [`tiles`].
+pub struct Tile {
+    pub key: &'static str,
+    pub icon: IconName,
+    pub title: SharedString,
+    pub line: SharedString,
+    /// Why the choice can't be picked now; shown above it on hover.
+    pub disabled: Option<SharedString>,
+}
+
+/// Side-by-side choices drawn as cards, each with a large icon, a title and
+/// one line, such as where a conversion runs. The picked one has a green
+/// ring. A disabled one is dimmed, ignores clicks and says why in a note
+/// above it while hovered, so the note never covers the label it explains
+/// (GPUI's own tooltip follows the pointer and, near a window's bottom edge,
+/// lands on the control). Ids are `{id}-{key}`.
+pub fn tiles(
+    id: &str,
+    choices: &[Tile],
+    selected: &str,
+    p: &Palette,
+    window: &mut Window,
+    cx: &mut App,
+    on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
+) -> Div {
+    div()
+        .flex()
+        .gap(px(space::MD))
+        .children(choices.iter().map(|tile| {
+            let key = tile.key;
+            let on = key == selected;
+            let element_id = SharedString::from(format!("{id}-{key}"));
+            let hover = tile.disabled.as_ref().map(|_| {
+                let state = window.use_keyed_state(
+                    SharedString::from(format!("{element_id}-hover")),
+                    cx,
+                    |_, _| false,
+                );
+                let shown = *state.read(cx);
+                (state, shown)
+            });
+            let off = tile.disabled.is_some();
+            let on_pick = on_pick.clone();
+            let (tile_bg, tile_ring, glyph) = if on {
+                (p.green_tint, p.green_border, p.green_text)
+            } else {
+                (p.chip, p.chip_border, p.secondary)
+            };
+            clickable(element_id.clone(), tile.title.clone())
+                .aria_selected(on)
+                .flex()
+                .flex_1()
+                .items_center()
+                .gap(px(space::MD))
+                .p(px(space::MD))
+                .rounded(px(radius::CARD))
+                .bg(p.surface)
+                .shadow(if on {
+                    vec![inset_ring(p.green, 1.5)]
+                } else {
+                    let mut s = raise(p);
+                    s.push(inset_ring(p.border, 1.));
+                    s
+                })
+                .when(!on && !off, |d| d.hover(|s| s.bg(p.recessed)))
+                .when(off, |d| d.cursor_default())
+                .when_some(
+                    hover.zip(tile.disabled.clone()),
+                    |d, ((state, shown), reason)| {
+                        d.relative()
+                            .on_hover(hover_setter(state))
+                            .children(shown.then(|| reason_note(&element_id, reason, p)))
+                    },
+                )
+                .when(!off, |d| {
+                    d.on_click(move |_, window, cx| on_pick(key, window, cx))
+                })
+                .child(
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .items_center()
+                        .justify_center()
+                        .size(px(36.))
+                        .rounded(px(9.))
+                        .bg(tile_bg)
+                        .shadow(vec![inset_ring(tile_ring, 1.)])
                         .when(off, |d| d.opacity(0.5))
-                        .child(label),
+                        .child(icon(tile.icon, 20., glyph)),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .min_w_0()
+                        .gap(px(1.))
+                        .when(off, |d| d.opacity(0.5))
+                        .child(
+                            styled(size::BODY, p.text)
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(tile.title.clone()),
+                        )
+                        .child(
+                            styled(size::SMALL, p.secondary)
+                                .truncate()
+                                .child(tile.line.clone()),
+                        ),
                 )
         }))
 }
