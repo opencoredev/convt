@@ -1,6 +1,6 @@
 //! macOS glue: the Finder extension's target list and request inbox, files
-//! opened with convt, the check that the extension is on, and the Services
-//! menu entry.
+//! opened with convt, the check that the extension is on, the Services
+//! menu entry, and hiding from the Dock.
 //!
 //! The Finder Sync extension is sandboxed and runs from its own executable, so
 //! probing tools there would give different targets than the app. Instead the
@@ -248,6 +248,25 @@ fn parse_pluginkit(out: &str) -> Option<bool> {
         None
     } else {
         Some(marks.contains(&'+'))
+    }
+}
+
+/// Shows or hides the Dock icon (and the app's menu bar menus). convt hides
+/// from the Dock while no window is open and the menu bar item keeps it
+/// running, and comes back when a window opens.
+pub fn show_in_dock(show: bool) {
+    use objc::runtime::{BOOL, Object};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    // NSApplicationActivationPolicyRegular and ...Accessory.
+    let policy: i64 = if show { 0 } else { 1 };
+    // SAFETY: called on the main thread, where GPUI runs every App callback.
+    unsafe {
+        let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+        let current: i64 = msg_send![app, activationPolicy];
+        if current != policy {
+            let _: BOOL = msg_send![app, setActivationPolicy: policy];
+        }
     }
 }
 

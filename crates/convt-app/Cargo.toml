@@ -19,6 +19,8 @@ dirs.workspace = true
 ed25519-dalek.workspace = true
 futures.workspace = true
 gpui-kit.workspace = true
+# Decodes the tray icons; already built for the engines.
+image.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -29,6 +31,16 @@ ureq = { version = "=3.1.4", default-features = false, features = ["rustls"] }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The tray icon, as a StatusNotifierItem over D-Bus. tray-icon would need GTK
+# here, which GPUI doesn't run; ksni needs neither and reports a desktop with
+# no tray, so the app can quit with its last window there.
+ksni = { version = "=0.3.6", default-features = false, features = ["async-io", "blocking"] }
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+# The menu bar item on macOS and the notification area icon on Windows.
+tray-icon = { version = "=0.26.1", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }
@@ -45,5 +57,4 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-cli
 base64.workspace = true
 ed25519-dalek.workspace = true
 gpui-kit = { workspace = true, features = ["test-support"] }
-image.workspace = true
 tempfile.workspace = true
