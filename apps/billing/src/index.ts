@@ -13,6 +13,7 @@ import {
   createBillingService,
   emitAnalytics,
   currentProKey,
+  currentProAccess,
   createPolarProvider,
   loadCatalog,
   loadSigningKey,
@@ -196,6 +197,9 @@ export class BillingRpc extends WorkerEntrypoint<Env> implements Rpc {
   /** P8: the Pro key the desktop app renews to. A read; issuance stays with ingest. */
   currentProKey(userId: string) {
     return this.service.withCtx((c) => currentProKey(c.db, userId));
+  }
+  async currentProAccess(userId: string) {
+    return this.service.withCtx((c) => currentProAccess(c, userId));
   }
   async requestDeletion(userId: string) {
     const d = await this.service.requestDeletion(userId);
