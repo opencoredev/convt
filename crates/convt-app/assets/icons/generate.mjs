@@ -16,43 +16,43 @@ const VERSION = "4.3.5";
 
 // The file name the app loads, and the Hugeicons export it comes from.
 const ICONS = {
-  "add": "Add01Icon",
+  add: "Add01Icon",
   "alert-circle": "AlertCircleIcon",
   "alert-triangle": "Alert02Icon",
   "arrow-down": "ArrowDown02Icon",
   "arrow-right": "ArrowRight02Icon",
-  "calendar": "Calendar03Icon",
-  "cancel": "Cancel01Icon",
+  calendar: "Calendar03Icon",
+  cancel: "Cancel01Icon",
   "cancel-circle": "CancelCircleIcon",
-  "check": "Tick02Icon",
+  check: "Tick02Icon",
   "check-circle": "CheckmarkCircle02Icon",
   "chevron-down": "ArrowDown01Icon",
   "chevron-right": "ArrowRight01Icon",
   "chevrons-up-down": "UnfoldMoreIcon",
-  "cloud": "CloudIcon",
-  "computer": "ComputerIcon",
-  "document": "File02Icon",
-  "download": "Download04Icon",
-  "edit": "PencilEdit02Icon",
+  cloud: "CloudIcon",
+  computer: "ComputerIcon",
+  document: "File02Icon",
+  download: "Download04Icon",
+  edit: "PencilEdit02Icon",
   "external-link": "LinkSquare02Icon",
-  "folder": "Folder01Icon",
+  folder: "Folder01Icon",
   "folder-open": "Folder02Icon",
-  "google": "GoogleIcon",
+  google: "GoogleIcon",
   "hard-drive": "HardDriveIcon",
-  "inbox": "InboxIcon",
-  "info": "InformationCircleIcon",
-  "key": "Key01Icon",
-  "loading": "Loading03Icon",
-  "mail": "Mail01Icon",
+  inbox: "InboxIcon",
+  info: "InformationCircleIcon",
+  key: "Key01Icon",
+  loading: "Loading03Icon",
+  mail: "Mail01Icon",
   "magic-wand": "MagicWand01Icon",
-  "minus": "MinusSignIcon",
-  "refresh": "RefreshIcon",
-  "restore": "Copy02Icon",
-  "rotate": "RotateClockwiseIcon",
-  "settings": "Settings02Icon",
-  "sparkles": "SparklesIcon",
-  "square": "SquareIcon",
-  "star": "StarIcon",
+  minus: "MinusSignIcon",
+  refresh: "RefreshIcon",
+  restore: "Copy02Icon",
+  rotate: "RotateClockwiseIcon",
+  settings: "Settings02Icon",
+  sparkles: "SparklesIcon",
+  square: "SquareIcon",
+  star: "StarIcon",
   "user-circle": "UserCircleIcon",
 };
 
@@ -63,7 +63,9 @@ try {
   execFileSync("npm", ["pack", `@hugeicons/core-free-icons@${VERSION}`, "--silent"], { cwd: work });
   const tarball = readdirSync(work).find((f) => f.endsWith(".tgz"));
   execFileSync("tar", ["xzf", tarball], { cwd: work });
-  const pkg = createRequire(join(work, "package", "package.json"))(join(work, "package", "dist", "cjs", "index.js"));
+  const pkg = createRequire(join(work, "package", "package.json"))(
+    join(work, "package", "dist", "cjs", "index.js"),
+  );
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out);
   const attr = (k) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
