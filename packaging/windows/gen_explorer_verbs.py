@@ -150,6 +150,10 @@ def generate() -> str:
     return render(associations(parse_formats(FORMATS_RS.read_text())))
 
 
+def normalize(text: str) -> str:
+    return text.replace("\r\n", "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if explorer-verbs.wxs is stale")
@@ -157,12 +161,12 @@ def main(argv: list[str] | None = None) -> int:
     text = generate()
     if args.check:
         current = OUT.read_text() if OUT.exists() else ""
-        if current != text:
-            print(f"{OUT} is stale; run packaging/windows/gen-explorer-verbs.py", file=sys.stderr)
+        if normalize(current) != normalize(text):
+            print(f"{OUT} is stale; run packaging/windows/gen_explorer_verbs.py", file=sys.stderr)
             return 1
         print(f"{OUT}: up to date")
         return 0
-    OUT.write_text(text)
+    OUT.write_text(text, newline="\n")
     print(f"wrote {OUT}")
     return 0
 
