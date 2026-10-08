@@ -58,7 +58,7 @@ pub fn scrub(input: &str) -> String {
             cleaned.push_str(&rest[..i]);
             let tail = &rest[i..];
             let end = tail
-                .find(|c: char| c == ')' || c == ']' || c == '"' || c == '\n' || c == '\r')
+                .find(|c: char| [')', ']', '"', '\n', '\r'].contains(&c))
                 .unwrap_or(tail.len());
             cleaned.push_str("<PATH>");
             rest = &tail[end..];
