@@ -110,9 +110,18 @@ fn open_window<V: Render>(
 /// - Files with a target, from the command line or the Finder menu, convert
 ///   in place with no window. Links never do: any web page can open one.
 /// - Other files open Quick convert, and no files open the main window.
+/// - While an update installs, files convert nothing; a notification says
+///   to try again once convt restarts.
 pub fn route(request: Request, cx: &mut App) {
     let app = model::shared(cx);
-    if let Some(reply) = request.auth {
+    if !request.files.is_empty() && request.auth.is_none() && app.read(cx).installing() {
+        cx.show_system_notification(SystemNotification {
+            tag: "convt-update".into(),
+            title: "convt is updating".into(),
+            body: model::INSTALLING.into(),
+            actions: Vec::new(),
+        });
+    } else if let Some(reply) = request.auth {
         // A link the app didn't ask for is dropped inside; the window that
         // comes forward says so.
         let _ = app.update(cx, |s, cx| s.finish_sign_in(reply, cx));

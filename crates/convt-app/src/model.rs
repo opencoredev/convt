@@ -253,6 +253,8 @@ pub struct AppState {
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
     /// The update download and install, when this install updates itself.
     pub(crate) updater: crate::update::Updater,
+    /// Runs the day's renewal and update check while convt runs.
+    pub(crate) _daily_checks: Option<Task<()>>,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in a background menu).
     /// Explorer requests that ask to show progress are tracked like normal
@@ -273,6 +275,10 @@ pub struct AppState {
     _automations: Option<Task<()>>,
     _drain: Task<()>,
 }
+
+/// Why a conversion can't start while an update installs.
+pub const INSTALLING: &str =
+    "convt is installing an update and restarts in a moment. Convert again after it does.";
 
 /// The app's one [`AppState`].
 pub struct Shared(pub Entity<AppState>);
@@ -343,6 +349,7 @@ impl AppState {
             _update_task: None,
             update_manifest: None,
             updater: Default::default(),
+            _daily_checks: None,
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]
@@ -405,6 +412,10 @@ impl AppState {
         silent: bool,
         cx: &mut Context<Self>,
     ) -> Result<Vec<JobId>, String> {
+        // Quitting after the install would stop them.
+        if self.installing() {
+            return Err(INSTALLING.into());
+        }
         if let Some(reason) = self.documents_locked()
             && files
                 .iter()

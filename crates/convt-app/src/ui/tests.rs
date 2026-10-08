@@ -3338,7 +3338,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     let current = pro_key("pro@example.com", "2026-10-15");
     let f = Fixture::signed_in(cx, Some(&current), "pro@example.com");
     // Offline at launch: one try, the key stays, the failure shows in Settings.
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     wait_until(cx, "the refresh failed", |cx| {
         matches!(
             f.app.read(cx).account.refresh,
@@ -3361,7 +3361,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     cx.read(|cx| assert!(f.app.read(cx).account.session.is_some()));
 
     // A second launch the same day asks nothing.
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     cx.run_until_parked();
     assert_eq!(f.api.calls(), (0, 1, 0));
     // A launch on a later day asks again.
@@ -3370,7 +3370,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
             s.update_settings(|s| s.license_checked = Some("2026-01-01".into()), cx)
         })
     });
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     wait_until(cx, "the second launch's refresh", |_| f.api.calls().1 == 2);
 
     // Refresh license asks whenever clicked, and stores the next period's key.
@@ -3434,7 +3434,7 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
         Some("2026-09-30"),
         Some(&license_key("a@b.c", "2027-10-01")),
     );
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     assert!(!shown(cx, settings, "refresh-license"));
@@ -3480,7 +3480,7 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
             s.update_settings(|s| s.license_checked = None, cx);
-            s.renew_on_launch(cx)
+            s.renew_if_due(cx)
         })
     });
     cx.run_until_parked();
@@ -3644,7 +3644,7 @@ fn wait_for_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 }
 
 fn launch_check(f: &Fixture, cx: &mut TestAppContext) {
-    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates_if_due(cx)));
 }
 
 fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
@@ -4053,15 +4053,22 @@ impl download::Source for TestDownloads {
     }
 }
 
-/// Records what it would have installed, and fails when told to.
+/// Records what it would have installed, fails when told to, and can be
+/// held mid-install.
 #[derive(Default)]
 struct TestInstaller {
     installed: Mutex<Vec<PathBuf>>,
     fail: Mutex<Option<String>>,
+    hold: Arc<AtomicBool>,
+    started: AtomicUsize,
 }
 
 impl Installer for TestInstaller {
     fn install(&self, file: &Path) -> Result<(), String> {
+        self.started.fetch_add(1, Ordering::SeqCst);
+        while self.hold.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
         if let Some(why) = self.fail.lock().unwrap().take() {
             return Err(why);
         }
@@ -4148,6 +4155,8 @@ fn a_covered_update_downloads_then_restarts_to_update(cx: &mut TestAppContext) {
     );
     assert!(fits(cx, main, "update-card"));
     assert!(shown(cx, settings, "update-restart"));
+    // Restart to update is the thing to do; Check now would only hide it.
+    assert!(!shown(cx, settings, "check-updates"));
 
     // Checking again finds the same version: the verified file is reused.
     assert!(matches!(
@@ -4286,4 +4295,162 @@ fn a_license_change_that_still_covers_keeps_the_download(cx: &mut TestAppContext
     });
     assert!(matches!(f.update(cx), Update::NotCovered { .. }));
     assert_eq!(downloads.opened(), 1);
+}
+
+/// Serves `manifest_for(5, …)` with 9.2.0 newer than this build.
+fn serve_9_2(f: &Fixture) {
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+}
+
+/// Checks and waits for the download to be Ready; returns its path.
+fn ready(f: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    serve_9_2(f);
+    manual_check(f, cx);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { path, .. } = f.update(cx) else {
+        unreachable!()
+    };
+    path
+}
+
+#[gpui_kit::test]
+fn a_stopped_download_never_touches_the_next_one(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    // The first attempt reads other bytes of the same size, so anything it
+    // wrote into the second attempt's file would break the checksum.
+    let mut other = NEW_APPIMAGE.to_vec();
+    other.reverse();
+    *downloads.body.lock().unwrap() = other;
+    downloads.hold.store(true, Ordering::SeqCst);
+    serve_9_2(&f);
+    manual_check(&f, cx);
+    wait_until(
+        cx,
+        "the first attempt is half way",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    // Off and on again while the first attempt is still held mid-read.
+    click(cx, settings, "update-checks");
+    assert_eq!(f.update(cx), Update::Idle);
+    *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+    click(cx, settings, "update-checks");
+    wait_until(
+        cx,
+        "the second attempt is half way",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    assert_eq!(downloads.opened(), 2);
+    // Both readers go on at once.
+    downloads.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { path, .. } = f.update(cx) else {
+        unreachable!()
+    };
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    // The stopped attempt removes its own part file and nothing else.
+    let folder = f.dir.path().join("updates/9.2.0");
+    wait_until(cx, "only the verified file is left", |_| {
+        std::fs::read_dir(&folder).unwrap().count() == 1
+    });
+    cx.run_until_parked();
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+}
+
+#[gpui_kit::test]
+fn a_ready_file_changed_on_disk_is_not_installed(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (_, installer) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    let mut tampered = NEW_APPIMAGE.to_vec();
+    tampered[1] ^= 1;
+    std::fs::write(&path, tampered).unwrap();
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install was refused", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    assert!(installer.installed.lock().unwrap().is_empty());
+    assert!(!path.exists(), "the changed file is deleted");
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("didn't match the signed list"), "{card}");
+    // Try again downloads it afresh.
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+}
+
+#[gpui_kit::test]
+fn a_failed_check_keeps_restart_to_update(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    let path = ready(&f, cx);
+    // The periodic check runs while an update waits, and convt.app is down.
+    f.releases.serve(Err(FetchError::Offline));
+    assert_eq!(
+        manual_check(&f, cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path
+        }
+    );
+    let (main, _) = f.main(cx);
+    assert!(shown(cx, main, "update-restart"));
+}
+
+#[gpui_kit::test]
+fn the_running_app_checks_again_every_few_hours(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(
+        cx,
+        Some(&pro_key("pro@example.com", "2027-10-01")),
+        "pro@example.com",
+    );
+    f.releases
+        .serve(Ok(manifest(1, &[("0.1.0", "2026-10-01")], &update_key())));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_daily_checks(cx)));
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    wait_until(cx, "the launch renewal", |_| f.api.calls().1 == 1);
+    assert_eq!(f.releases.fetches(), 1);
+
+    // Later the same day: the timer fires and asks nothing.
+    cx.executor().advance_clock(crate::update::DAILY_CHECKS);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 1);
+    assert_eq!(f.api.calls().1, 1);
+
+    // The next day (as the settings record it): both ask once more, without
+    // a restart, on the next tick only.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(
+                |s| {
+                    s.update_checked = Some("2026-01-01".into());
+                    s.license_checked = Some("2026-01-01".into());
+                },
+                cx,
+            )
+        })
+    });
+    cx.executor()
+        .advance_clock(crate::update::DAILY_CHECKS - Duration::from_secs(60));
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 1);
+    cx.executor().advance_clock(Duration::from_secs(60));
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert_eq!(f.releases.fetches(), 2);
+    wait_until(cx, "the second renewal", |_| f.api.calls().1 == 2);
 }

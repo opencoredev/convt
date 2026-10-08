@@ -251,4 +251,114 @@ fn the_quit_key_quits_from_any_window(cx: &mut TestAppContext) {
     let (window, _) = f.settings(SettingsTab::General, cx);
     cx.simulate_keystrokes(window, key);
     assert_eq!(quits(cx), 2);
+    let png = f.png("quick.png");
+    let (window, _) = f.quick(cli(vec![png], None, None), cx);
+    cx.simulate_keystrokes(window, key);
+    assert_eq!(quits(cx), 3);
+}
+
+/// Starts "Restart to update" with the installer held mid-install.
+fn installing(f: &Fixture, cx: &mut TestAppContext) -> Arc<TestInstaller> {
+    let (_, installer) = f.self_installing(cx);
+    installer.hold.store(true, Ordering::SeqCst);
+    ready(f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.restart_to_update(cx)));
+    wait_until(cx, "the install started", |_| {
+        installer.started.load(Ordering::SeqCst) == 1
+    });
+    assert!(cx.read(|cx| f.app.read(cx).installing()));
+    installer
+}
+
+#[gpui_kit::test]
+fn quitting_waits_for_an_install_to_finish(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    background(&f, cx, true);
+    let installer = installing(&f, cx);
+    // Every way of quitting: the key, the tray, and the last window closing
+    // with no tray.
+    let key = if cfg!(target_os = "macos") {
+        "cmd-q"
+    } else {
+        "ctrl-q"
+    };
+    let (window, _) = f.main(cx);
+    cx.simulate_keystrokes(window, key);
+    send(cx, Event::Quit);
+    assert_eq!(quits(cx), 0, "not while the install runs");
+    // Turning update checks off doesn't stop it either.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.set_update_checks(false, cx)));
+    assert!(cx.read(|cx| f.app.read(cx).installing()));
+    installer.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    assert_eq!(quits(cx), 1, "one quit, once it's done");
+}
+
+#[gpui_kit::test]
+fn a_quit_asked_for_during_a_failed_install_still_quits(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    background(&f, cx, true);
+    let installer = installing(&f, cx);
+    *installer.fail.lock().unwrap() = Some("convt can't write to /opt/apps.".into());
+    send(cx, Event::Quit);
+    assert_eq!(quits(cx), 0);
+    installer.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the install failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(quits(cx), 1);
+
+    // Without a quit asked for, a failed install keeps convt running.
+    let g = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let installer = installing(&g, cx);
+    *installer.fail.lock().unwrap() = Some("no".into());
+    installer.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the second install failed", |cx| {
+        matches!(g.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(quits(cx), 1);
+    // And quitting works normally again.
+    send(cx, Event::Quit);
+    assert_eq!(quits(cx), 2);
+}
+
+#[gpui_kit::test]
+fn conversions_wait_while_an_update_installs(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    background(&f, cx, true);
+    let installer = installing(&f, cx);
+    let jobs = f.jobs(cx);
+    // A Finder or command-line conversion: refused with a notification,
+    // and no window opens.
+    let png = f.png("late.png");
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.update(|cx| super::super::route(cli(vec![png.clone()], Some("jpeg"), None), cx));
+    cx.update(|cx| super::super::route(cli(vec![png.clone()], None, None), cx));
+    cx.run_until_parked();
+    assert_eq!(f.jobs(cx), jobs);
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows);
+    let shown = cx.shown_system_notifications();
+    assert!(
+        shown
+            .iter()
+            .any(|n| n.body.contains("installing an update")),
+        "{:?}",
+        shown.iter().map(|n| n.body.to_string()).collect::<Vec<_>>()
+    );
+    // Add files, Quick convert, automations and Retry all queue through here.
+    let refused = cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            let to = convt_core::format_by_id("jpeg").unwrap();
+            s.convert(std::slice::from_ref(&png), to, &Options::default(), cx)
+        })
+    });
+    assert_eq!(refused, Err(crate::model::INSTALLING.to_string()));
+    installer.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    // Nothing was running, so it quits for the relaunch.
+    assert_eq!(quits(cx), 1);
 }

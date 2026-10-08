@@ -1,15 +1,30 @@
 //! Installs a downloaded, verified update and starts the new version once
 //! this process has quit.
 //!
-//! - macOS: the disk image is mounted read-only, its `convt.app` must pass
-//!   `codesign --verify --deep --strict` and carry the running app's Team ID,
-//!   and it replaces the running bundle with two renames (rolled back if the
-//!   second fails). A shell waits for this process, then `open`s the bundle.
-//! - Windows: a hidden PowerShell waits for this process, runs the MSI with
-//!   `/passive` (the MSI is per-user and upgrades in place), then starts
-//!   convt again.
+//! The installer re-checks the file's SHA-256 against the signed manifest
+//! first (the caller does, in `update.rs`); that hash is the trust root.
+//!
+//! - macOS: the disk image is mounted read-only, and its `convt.app` must
+//!   pass `codesign --verify --deep --strict`. When the running app is
+//!   signed with a Team ID, the check also requires an Apple-issued
+//!   certificate chain whose leaf carries that Team ID. A running app with
+//!   no Team ID (ad-hoc signed, as a build from source is) has nothing to
+//!   compare against, so it relies on the hash and the signature check
+//!   alone. The bundle replaces the running one with two renames (rolled
+//!   back if the second fails). A shell waits for this process to exit, then
+//!   `open`s the bundle.
+//! - Windows: a hidden PowerShell waits, with no time limit, for this
+//!   process to exit, runs the MSI with `/passive` (the MSI is per-user and
+//!   upgrades in place), then starts convt again. If it can't tell that
+//!   convt exited, it installs nothing.
 //! - Linux: the AppImage named by `$APPIMAGE` is replaced with a rename in
 //!   its own folder, and a shell starts it once this process has quit.
+//!
+//! The shells on macOS and Linux wait by reading a pipe whose only write end
+//! this process holds; it closes when the process exits, however it exits.
+//! The staging and backup copies have fixed hidden names next to the
+//! target, and leftovers from an interrupted update are swept first. The
+//! app never quits while an install runs (`menu::quit` waits for it).
 //!
 //! Anything else (the deb, rpm and tarball, an app running from its disk
 //! image or a folder convt can't write to) keeps the download page.
@@ -65,21 +80,48 @@ pub fn path_refusal(bundle: &Path) -> Option<&'static str> {
 }
 
 /// The Team ID `codesign -dv` printed, if the code is signed with one.
+/// Only letters and digits count, so it can go into a code requirement.
 pub fn team_id(codesign_output: &str) -> Option<String> {
     codesign_output
         .lines()
         .find_map(|l| l.trim().strip_prefix("TeamIdentifier="))
         .map(str::trim)
-        .filter(|t| !t.is_empty() && *t != "not set")
+        .filter(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_alphanumeric()))
         .map(str::to_string)
 }
 
-/// A free sibling path for `path`, hidden, with `tag` in its name.
+/// The `codesign -R` requirement an update must meet: signed through
+/// Apple's certificate chain, with `team` on the leaf certificate.
+pub fn team_requirement(team: &str) -> String {
+    format!("=anchor apple generic and certificate leaf[subject.OU] = \"{team}\"")
+}
+
+/// The hidden sibling of `path` with `tag` in its name. Fixed, so a later
+/// update finds and removes what an interrupted one left.
 fn sibling(path: &Path, tag: &str) -> PathBuf {
     let name = path
         .file_name()
         .map_or("convt".into(), |n| n.to_string_lossy().into_owned());
-    path.with_file_name(format!(".{name}.{tag}-{}", std::process::id()))
+    path.with_file_name(format!(".{name}.{tag}"))
+}
+
+/// Deletes the staging and backup copies earlier updates of `path` left
+/// next to it: `.<name>.new*` and `.<name>.old*`.
+pub fn sweep(path: &Path) {
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return;
+    };
+    let name = name.to_string_lossy();
+    let prefixes = [format!(".{name}.new"), format!(".{name}.old")];
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let file = entry.file_name();
+        let file = file.to_string_lossy();
+        if prefixes.iter().any(|p| file.starts_with(p.as_str()))
+            && let Err(e) = remove_any(&entry.path())
+        {
+            tracing::warn!(error = %e, path = %entry.path().display(), "couldn't delete an old update copy");
+        }
+    }
 }
 
 fn remove_any(path: &Path) -> io::Result<()> {
@@ -116,6 +158,7 @@ pub fn swap_in(current: &Path, staged: &Path) -> io::Result<()> {
 /// first, made executable, then renamed over it, so `target` is always
 /// either the old file or the whole new one.
 pub fn replace_file(target: &Path, new: &Path) -> io::Result<()> {
+    sweep(target);
     let staged = sibling(target, "new");
     remove_any(&staged)?;
     let result = (|| {
@@ -158,22 +201,27 @@ pub fn read_only(path: &Path) -> bool {
     ok && (st.f_flag & libc::ST_RDONLY) != 0
 }
 
-/// The shell that waits for `pid` to exit (for at most two minutes) and then
-/// runs `then` with the given arguments. Arguments travel as positional
-/// parameters, never through the script text.
+/// The shell that waits for this process to exit and then runs `then` with
+/// the given arguments. Arguments travel as positional parameters, never
+/// through the script text.
+///
+/// The shell reads its standard input, a pipe, until it ends. The returned
+/// writer is the pipe's only write end: keep it open until this process
+/// exits (`std::mem::forget` after spawning), and the pipe ends exactly then.
+/// Both ends are close-on-exec, so no other child ever holds the write end.
 #[cfg(unix)]
-pub fn after_exit(pid: u32, then: &str, args: &[&std::ffi::OsStr]) -> std::process::Command {
-    let script = format!(
-        "i=0; while kill -0 \"$1\" 2>/dev/null; do i=$((i+1)); [ \"$i\" -gt 600 ] && exit 0; \
-         sleep 0.2; done; shift; exec {then} \"$@\""
-    );
+pub fn after_exit(
+    then: &str,
+    args: &[&std::ffi::OsStr],
+) -> io::Result<(std::process::Command, io::PipeWriter)> {
+    let (reader, writer) = io::pipe()?;
+    let script = format!("cat >/dev/null; exec {then} \"$@\" </dev/null");
     let mut cmd = std::process::Command::new("/bin/sh");
     cmd.arg("-c")
         .arg(script)
         .arg("sh")
-        .arg(pid.to_string())
         .args(args)
-        .stdin(std::process::Stdio::null())
+        .stdin(reader)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     {
@@ -181,7 +229,18 @@ pub fn after_exit(pid: u32, then: &str, args: &[&std::ffi::OsStr]) -> std::proce
         // Its own process group, so a signal to convt's group can't take it too.
         cmd.process_group(0);
     }
-    cmd
+    Ok((cmd, writer))
+}
+
+/// Spawns an [`after_exit`] shell and keeps its pipe open until this process
+/// exits.
+#[cfg(unix)]
+fn spawn_after_exit(mut cmd: std::process::Command, writer: io::PipeWriter) -> io::Result<()> {
+    cmd.spawn()?;
+    // Drops this process's copy of the read end.
+    drop(cmd);
+    std::mem::forget(writer);
+    Ok(())
 }
 
 /// A PowerShell literal: single quotes, with inner ones doubled.
@@ -190,14 +249,17 @@ pub fn ps_quote(s: &str) -> String {
 }
 
 /// The PowerShell script that installs `msi` once `pid` has exited and then
-/// starts convt again: from the folder the MSI records, else `exe`.
+/// starts convt again: from the folder the MSI records, else `exe`. It waits
+/// as long as convt runs, and installs nothing unless convt has exited.
 pub fn windows_script(pid: u32, msi: &Path, exe: &Path) -> String {
     // Windows paths can't contain double quotes, so quoting the MSI path for
     // msiexec's command line is safe.
     let args = format!("/i \"{}\" /passive /norestart", msi.display());
     format!(
-        "$ErrorActionPreference = 'SilentlyContinue'\n\
-         Wait-Process -Id {pid} -Timeout 120\n\
+        "$ErrorActionPreference = 'Stop'\n\
+         $p = Get-Process -Id {pid} -ErrorAction SilentlyContinue\n\
+         if ($p) {{ $p.WaitForExit(); if (-not $p.HasExited) {{ exit 1 }} }}\n\
+         $ErrorActionPreference = 'SilentlyContinue'\n\
          Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\msiexec.exe') -ArgumentList {args} -Wait\n\
          $exe = {exe}\n\
          $dir = (Get-ItemProperty -Path 'HKCU:\\Software\\Convt' -Name InstallFolder).InstallFolder\n\
@@ -314,15 +376,27 @@ mod platform {
         if !new.join("Contents/Info.plist").is_file() {
             return Err("The update's disk image has no convt.app.".into());
         }
-        run(Command::new("/usr/bin/codesign")
-            .args(["--verify", "--deep", "--strict"])
-            .arg(&new))
-        .map_err(|e| format!("The update's signature didn't check out. {e}"))?;
-        if let Some(team) = team_of(&bundle)
-            && team_of(&new).as_deref() != Some(team.as_str())
+        let team = team_of(&bundle);
+        let mut verify = Command::new("/usr/bin/codesign");
+        verify.args(["--verify", "--deep", "--strict"]);
+        if let Some(team) = &team {
+            // Apple's chain with this Team ID on the leaf, checked by
+            // codesign itself rather than by reading its output.
+            verify.arg(format!("-R{}", team_requirement(team)));
+        }
+        run(verify.arg(&new)).map_err(|e| {
+            if team.is_some() && e.contains("requirement") {
+                "The update is signed by someone else, so it wasn't installed.".to_string()
+            } else {
+                format!("The update's signature didn't check out. {e}")
+            }
+        })?;
+        if let Some(team) = &team
+            && team_of(&new).as_ref() != Some(team)
         {
             return Err("The update is signed by someone else, so it wasn't installed.".into());
         }
+        sweep(&bundle);
         let staged = sibling(&bundle, "new");
         remove_any(&staged).map_err(|e| e.to_string())?;
         if let Err(e) = run(Command::new("/usr/bin/ditto").arg(&new).arg(&staged)) {
@@ -334,8 +408,8 @@ mod platform {
             let _ = remove_any(&staged);
             return Err(format!("The update couldn't replace convt. {e}"));
         }
-        after_exit(std::process::id(), "/usr/bin/open", &[bundle.as_os_str()])
-            .spawn()
+        after_exit("/usr/bin/open", &[bundle.as_os_str()])
+            .and_then(|(cmd, writer)| spawn_after_exit(cmd, writer))
             .map_err(|e| format!("convt was updated but couldn't restart; open it again. {e}"))?;
         Ok(())
     }
@@ -416,13 +490,14 @@ mod platform {
         let target = appimage()?;
         replace_file(&target, file)
             .map_err(|e| format!("The update couldn't replace convt. {e}"))?;
-        let mut cmd = after_exit(std::process::id(), "", &[target.as_os_str()]);
+        let restart =
+            |e: io::Error| format!("convt was updated but couldn't restart; open it again. {e}");
+        let (mut cmd, writer) = after_exit("", &[target.as_os_str()]).map_err(restart)?;
         // The new AppImage's runtime sets its own; don't hand it ours.
         for var in ["APPIMAGE", "APPDIR", "ARGV0", "OWD", "LD_LIBRARY_PATH"] {
             cmd.env_remove(var);
         }
-        cmd.spawn()
-            .map_err(|e| format!("convt was updated but couldn't restart; open it again. {e}"))?;
+        spawn_after_exit(cmd, writer).map_err(restart)?;
         Ok(())
     }
 }
@@ -479,6 +554,12 @@ mod tests {
         assert_eq!(team_id(signed).as_deref(), Some("AB12CD34EF"));
         assert_eq!(team_id("Identifier=x\nTeamIdentifier=not set\n"), None);
         assert_eq!(team_id("code object is not signed at all"), None);
+        // Nothing that could change a code requirement gets through.
+        assert_eq!(team_id("TeamIdentifier=AB\" or true or \"x"), None);
+        assert_eq!(
+            team_requirement("AB12CD34EF"),
+            r#"=anchor apple generic and certificate leaf[subject.OU] = "AB12CD34EF""#
+        );
     }
 
     fn bundle(dir: &Path, name: &str, version: &str) -> PathBuf {
@@ -525,6 +606,26 @@ mod tests {
         assert_eq!(names(dir.path()), ["convt.app"]);
     }
 
+    #[test]
+    fn leftovers_from_interrupted_updates_are_swept() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = bundle(dir.path(), "convt.app", "old");
+        // Fixed names, and the per-process names older builds used.
+        assert_eq!(sibling(&current, "new"), dir.path().join(".convt.app.new"));
+        assert_eq!(sibling(&current, "old"), dir.path().join(".convt.app.old"));
+        bundle(dir.path(), ".convt.app.new", "half copied");
+        bundle(dir.path(), ".convt.app.old-4242", "older");
+        fs::write(dir.path().join(".convt.app.new-17"), b"x").unwrap();
+        // Other apps' files and similar names stay.
+        bundle(dir.path(), "Other.app", "other");
+        fs::write(dir.path().join(".convt.apples"), b"x").unwrap();
+        sweep(&current);
+        assert_eq!(
+            names(dir.path()),
+            [".convt.apples", "Other.app", "convt.app"]
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn an_appimage_is_replaced_whole_and_stays_executable() {
@@ -557,21 +658,34 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn the_relaunch_waits_for_the_process_to_exit() {
+    fn the_relaunch_waits_until_the_pipe_closes() {
+        use std::time::{Duration, Instant};
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("ran");
-        let mut sleeper = std::process::Command::new("sleep")
-            .arg("1")
+        let (mut relaunch, writer) = after_exit("touch", &[out.as_os_str()]).unwrap();
+        let mut child = relaunch.spawn().unwrap();
+        drop(relaunch);
+        // A child started afterwards, like a conversion's FFmpeg, must not
+        // hold the write end and keep the helper waiting.
+        let mut other = std::process::Command::new("sleep")
+            .arg("30")
             .spawn()
             .unwrap();
-        let started = std::time::Instant::now();
-        let mut relaunch = after_exit(sleeper.id(), "touch", &[out.as_os_str()]);
-        relaunch.stdout(std::process::Stdio::null());
-        let mut child = relaunch.spawn().unwrap();
-        sleeper.wait().unwrap();
-        child.wait().unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(!out.exists(), "ran before this process let go");
+        assert!(child.try_wait().unwrap().is_none());
+        // What exiting does: the last write end closes.
+        let closed = Instant::now();
+        drop(writer);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while child.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "the helper kept waiting");
+            std::thread::sleep(Duration::from_millis(10));
+        }
         assert!(out.is_file());
-        assert!(started.elapsed() >= std::time::Duration::from_millis(900));
+        assert!(closed.elapsed() < Duration::from_secs(10));
+        let _ = other.kill();
+        let _ = other.wait();
     }
 
     #[test]
@@ -581,7 +695,15 @@ mod tests {
             Path::new(r"C:\Users\O'Neil\AppData\Local\convt\updates\9.2.0\convt.msi"),
             Path::new(r"C:\Users\O'Neil\AppData\Local\convt\convt-app.exe"),
         );
-        assert!(script.contains("Wait-Process -Id 4242"));
+        assert!(script.contains("Get-Process -Id 4242"));
+        assert!(script.contains("WaitForExit()"));
+        assert!(script.contains("if (-not $p.HasExited) { exit 1 }"));
+        assert!(!script.contains("-Timeout"));
+        // Stop on any error before msiexec runs.
+        assert!(
+            script.find("'Stop'").unwrap() < script.find("msiexec").unwrap()
+                && script.find("HasExited").unwrap() < script.find("msiexec").unwrap()
+        );
         assert!(script.contains(
             r#"-ArgumentList '/i "C:\Users\O''Neil\AppData\Local\convt\updates\9.2.0\convt.msi" /passive /norestart'"#
         ));

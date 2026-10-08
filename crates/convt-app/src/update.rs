@@ -1,5 +1,8 @@
-//! The update check: at most once a UTC day at launch, and from "Check now"
-//! in Settings, while update checks are on (the default). It downloads the
+//! The update check: at most once a UTC day, and from "Check now" in
+//! Settings, while update checks are on (the default). convt keeps running
+//! in the background, so it checks at launch and then every
+//! [`DAILY_CHECKS`] whether the day's check (and the day's license renewal,
+//! `account.rs`) is due; each still asks at most once a UTC day. It downloads the
 //! signed manifest, verifies it with `convt_update` against the key this
 //! build trusts, refuses anything older than the highest manifest sequence it
 //! accepted before, and picks the newest build this machine's license covers.
@@ -8,8 +11,9 @@
 //! when this install can replace itself ([`install::supported`]: the disk
 //! image on macOS, the MSI on Windows, an AppImage on Linux). The download
 //! must match the manifest's size and SHA-256 ([`download`]); then the app
-//! offers "Restart to update", which installs it and starts the new version
-//! ([`install`]). Other installs (deb, rpm, the tarball, an app convt can't
+//! offers "Restart to update", which checks the file again, installs it and
+//! starts the new version ([`install`]). While it installs, new conversions
+//! are refused and quitting waits for the install to finish. Other installs (deb, rpm, the tarball, an app convt can't
 //! replace) open the download page instead. A newer build the license
 //! doesn't cover offers the purchase page. A failed check (offline, a bad
 //! signature, a rollback) is silent except for a line in Settings.
@@ -31,6 +35,10 @@ use gpui_kit::{Context, Task};
 
 use crate::account::{VERSION, background};
 use crate::model::AppState;
+
+/// How often the running app looks whether the day's update check and
+/// license renewal are due.
+pub const DAILY_CHECKS: Duration = Duration::from_secs(3 * 60 * 60);
 
 /// Why the manifest couldn't be fetched.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,15 +151,16 @@ impl UpdateConfig {
             .and_then(|k| convt_license::parse_public_key(&k))
             .or_else(convt_update::public_key);
         let target = install_target();
-        let install = match (
-            install::supported(target.1),
-            convt_engines::paths::data_dir(),
-        ) {
-            (Ok(()), Some(data)) => Some(SelfInstall {
-                source: Arc::new(download::Http::new()),
-                dir: data.join("updates"),
-                installer: Arc::new(install::System),
-            }),
+        let install = match (install::supported(target.1), updates_dir()) {
+            (Ok(()), Some(dir)) => {
+                // Nothing downloads yet; drop what earlier launches left.
+                download::prune(&dir, VERSION);
+                Some(SelfInstall {
+                    source: Arc::new(download::Http::new()),
+                    dir,
+                    installer: Arc::new(install::System),
+                })
+            }
             (Err(why), _) => {
                 tracing::info!(%why, "updates open the download page");
                 None
@@ -165,6 +174,15 @@ impl UpdateConfig {
             install,
         }
     }
+}
+
+/// Where downloads go: the machine's own data folder (Local, not Roaming,
+/// on Windows), so an installer never syncs to other computers.
+fn updates_dir() -> Option<PathBuf> {
+    std::env::var_os("CONVT_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(|| dirs::data_local_dir().map(|d| d.join("convt")))
+        .map(|d| d.join("updates"))
 }
 
 /// The platform and artifact kind of this install, as the manifest names them.
@@ -211,6 +229,7 @@ pub enum Update {
         path: PathBuf,
     },
     /// Installing after "Restart to update"; the app quits when it's done.
+    /// Conversions are refused meanwhile and quitting waits.
     Installing {
         version: String,
     },
@@ -285,13 +304,15 @@ impl Update {
     }
 }
 
-/// The self-update in progress: the artifact the last selection picked, and
-/// the download running for it.
+/// The self-update in progress: the artifact the last selection picked, the
+/// download running for it, and the install.
 #[derive(Default)]
 pub struct Updater {
     artifact: Option<Artifact>,
     cancel: Option<Arc<AtomicBool>>,
     task: Option<Task<()>>,
+    /// Never dropped part-way: its end lets a waiting quit through.
+    install: Option<Task<()>>,
     /// Why "Restart to update" waited, such as running conversions.
     pub notice: Option<String>,
 }
@@ -360,8 +381,36 @@ fn updates_until(state: &State) -> String {
 }
 
 impl AppState {
-    /// The launch check: once a UTC day, only while update checks are on.
-    pub fn check_updates_on_launch(&mut self, cx: &mut Context<Self>) {
+    /// Runs the day's license renewal and update check if they are due, now
+    /// and then every [`DAILY_CHECKS`] for as long as convt runs.
+    pub fn start_daily_checks(&mut self, cx: &mut Context<Self>) {
+        self.daily_checks(cx);
+        self._daily_checks = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(DAILY_CHECKS).await;
+                if this.update(cx, |s, cx| s.daily_checks(cx)).is_err() {
+                    break;
+                }
+            }
+        }));
+    }
+
+    fn daily_checks(&mut self, cx: &mut Context<Self>) {
+        // One of the two network calls the app makes by itself: while signed
+        // in, at most once a day, ask convt.app for the current Pro key.
+        self.renew_if_due(cx);
+        // The other: when update checks are on, at most once a day, fetch the
+        // signed list of releases.
+        self.check_updates_if_due(cx);
+    }
+
+    /// Whether an update is installing: conversions wait, and so does quitting.
+    pub fn installing(&self) -> bool {
+        matches!(self.update, Update::Installing { .. })
+    }
+
+    /// The day's check: once a UTC day, only while update checks are on.
+    pub fn check_updates_if_due(&mut self, cx: &mut Context<Self>) {
         let today = date::from_days(today());
         if self.settings.update_checks
             && self.settings.update_checked.as_deref() != Some(today.as_str())
@@ -374,7 +423,8 @@ impl AppState {
     /// The day is recorded before the request and the accepted sequence
     /// before the result shows; if either can't be saved, nothing is accepted,
     /// so a restart can neither repeat the day's request nor replay an older
-    /// manifest.
+    /// manifest. A check that fails while an update is ready keeps "Restart
+    /// to update".
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {
         if !self.settings.update_checks
             || matches!(
@@ -395,19 +445,21 @@ impl AppState {
             cx.notify();
             return;
         }
+        let ready = matches!(self.update, Update::Ready { .. }).then(|| self.update.clone());
         self.update = Update::Checking;
         let fetch = self.update_config.fetch.clone();
         let minimum = self.settings.update_sequence;
         self._update_task = Some(background(
             cx,
             move || fetch_verified(&*fetch, &key, minimum, now_unix()),
-            |state, result, cx| {
+            move |state, result, cx| {
+                let failed = |note| ready.clone().unwrap_or(Update::Failed(note));
                 state.update = match result {
-                    Err(note) => Update::Failed(note),
+                    Err(note) => failed(note),
                     Ok((bytes, sequence)) => {
                         let seq = sequence.max(state.settings.update_sequence);
                         match state.save_settings_now(|s| s.update_sequence = seq, cx) {
-                            Err(e) => Update::Failed(format!(
+                            Err(e) => failed(format!(
                                 "The list of releases was ignored because settings couldn't be saved: {e}"
                             )),
                             Ok(()) => {
@@ -540,19 +592,22 @@ impl AppState {
         cx.notify();
     }
 
-    /// "Restart to update": installs the ready update off the UI thread,
-    /// then quits so the helper can start the new version. Waits while
-    /// conversions run, since quitting would stop them.
+    /// "Restart to update": checks the file against the manifest once more
+    /// and installs it off the UI thread, then quits so the helper can start
+    /// the new version. Waits while conversions run, since quitting would
+    /// stop them; while it installs, new conversions are refused and a quit
+    /// waits for the install to end.
     pub fn restart_to_update(&mut self, cx: &mut Context<Self>) {
         let Update::Ready { version, path } = self.update.clone() else {
             return;
         };
-        let Some(installer) = self
-            .update_config
-            .install
-            .as_ref()
-            .map(|i| i.installer.clone())
-        else {
+        let (Some(installer), Some(artifact)) = (
+            self.update_config
+                .install
+                .as_ref()
+                .map(|i| i.installer.clone()),
+            self.updater.artifact.clone(),
+        ) else {
             return;
         };
         if self.queue.active() > 0 {
@@ -565,15 +620,25 @@ impl AppState {
         self.update = Update::Installing {
             version: version.clone(),
         };
-        self.updater.task = Some(background(
+        crate::menu::install_started(cx);
+        self.updater.install = Some(background(
             cx,
-            move || installer.install(&path),
+            move || {
+                // The file sat on disk since it was checked; check it again.
+                download::check(&path, &artifact).map_err(|e| e.plain())?;
+                installer.install(&path)
+            },
             move |state, result, cx| {
+                let quit = crate::menu::install_ended(cx);
                 match result {
-                    Ok(()) => cx.quit(),
+                    // The helper starts the new version once this one exits.
+                    Ok(()) => crate::menu::quit(cx),
                     Err(why) => {
                         tracing::warn!(%why, "update install failed");
                         state.update = Update::InstallFailed { version, why };
+                        if quit {
+                            crate::menu::quit(cx);
+                        }
                     }
                 }
                 cx.notify();
@@ -587,7 +652,8 @@ impl AppState {
         self.update_settings(|s| s.update_checks = on, cx);
         if on {
             self.check_updates(cx);
-        } else {
+        } else if !self.installing() {
+            // An install already running finishes.
             self._update_task = None;
             self.updater.stop();
             self.update = Update::Idle;

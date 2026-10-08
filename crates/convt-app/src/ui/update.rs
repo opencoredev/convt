@@ -268,9 +268,14 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
             ),
         }
     };
+    // Ready too: Restart to update is the thing to do, and a check would
+    // only hide it for a moment.
     let busy = matches!(
         state.update,
-        Update::Checking | Update::Downloading { .. } | Update::Installing { .. }
+        Update::Checking
+            | Update::Downloading { .. }
+            | Update::Ready { .. }
+            | Update::Installing { .. }
     );
     div()
         .flex()

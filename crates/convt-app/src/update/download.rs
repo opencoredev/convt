@@ -3,14 +3,19 @@
 //! anything uses it. The signed manifest is the trust root: the server and
 //! the URL only carry bytes, so a redirect or a swapped file fails the check.
 //!
-//! The bytes go to a `.part` file that is renamed only once both checks
-//! pass. A file already downloaded for the same version is checked again and
-//! reused.
+//! Each attempt writes to its own `.part` file, created fresh, which is
+//! renamed only once both checks pass, so an attempt that was stopped but
+//! is still reading can never write into another attempt's file. A file
+//! already downloaded for the same version is checked again and reused, and
+//! the installer checks it once more right before it installs ([`check`]).
+//! A download that receives nothing for [`IDLE`] fails instead of hanging.
 
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use convt_update::Artifact;
 use sha2::{Digest, Sha256};
@@ -21,6 +26,8 @@ use crate::account::VERSION;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     Offline,
+    /// Nothing arrived for [`IDLE`].
+    Stalled,
     Status(u16),
     /// The server sent more or fewer bytes than the manifest says.
     Size,
@@ -34,6 +41,9 @@ impl Error {
     pub fn plain(&self) -> String {
         match self {
             Error::Offline => "The download stopped. Check your internet connection.".into(),
+            Error::Stalled => {
+                "The download stalled. Check your internet connection and try again.".into()
+            }
             Error::Status(s) => format!("The download server answered with HTTP {s}."),
             Error::Size | Error::Checksum => {
                 "The download didn't match the signed list of releases, so it was deleted.".into()
@@ -148,9 +158,73 @@ fn verified(path: &Path, artifact: &Artifact) -> bool {
         && sha256_file(path).is_ok_and(|h| h == artifact.sha256)
 }
 
+/// Checks `path` against the artifact's size and SHA-256 once more, right
+/// before it is installed, and deletes it if it changed since the download.
+pub fn check(path: &Path, artifact: &Artifact) -> Result<(), Error> {
+    if verified(path, artifact) {
+        return Ok(());
+    }
+    let _ = fs::remove_file(path);
+    Err(Error::Checksum)
+}
+
+/// How long a download may receive nothing before it fails.
+pub const IDLE: Duration = Duration::from_secs(60);
+
+/// Deletes what launches before this one left in `dir`: the downloads of
+/// `running` and every older version, and unfinished `.part` files. Runs at
+/// launch, before any download starts.
+pub fn prune(dir: &Path, running: &str) {
+    let Ok(running) = semver::Version::parse(running) else {
+        return;
+    };
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let old = name
+            .to_str()
+            .and_then(|n| semver::Version::parse(n).ok())
+            .is_some_and(|v| v <= running);
+        if old && path.is_dir() {
+            if let Err(e) = fs::remove_dir_all(&path) {
+                tracing::warn!(error = %e, path = %path.display(), "couldn't delete an old update");
+            }
+        } else if path.is_dir() {
+            for part in fs::read_dir(&path).into_iter().flatten().flatten() {
+                if part.path().extension().is_some_and(|e| e == "part") {
+                    let _ = fs::remove_file(part.path());
+                }
+            }
+        }
+    }
+}
+
+/// Creates a `.part` file next to `path` that no other attempt uses.
+fn create_part(path: &Path) -> Result<(PathBuf, File), Error> {
+    static ATTEMPT: AtomicU64 = AtomicU64::new(0);
+    create_part_counting(path, &ATTEMPT)
+}
+
+fn part_name(path: &Path, n: u64) -> PathBuf {
+    let name = path.file_name().expect("a file name").to_string_lossy();
+    path.with_file_name(format!("{name}.{}-{n}.part", std::process::id()))
+}
+
+fn create_part_counting(path: &Path, attempt: &AtomicU64) -> Result<(PathBuf, File), Error> {
+    loop {
+        let part = part_name(path, attempt.fetch_add(1, Ordering::Relaxed));
+        match OpenOptions::new().write(true).create_new(true).open(&part) {
+            Ok(file) => return Ok((part, file)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(disk(e)),
+        }
+    }
+}
+
 /// Downloads `artifact` for `version` into `dir` and returns the verified
 /// file. Other versions' downloads in `dir` are deleted first. `progress`
-/// gets the bytes so far; `cancelled` is polled between reads.
+/// gets the bytes so far; `cancelled` is polled between reads and while
+/// waiting for them.
 pub fn fetch(
     source: &dyn Source,
     artifact: &Artifact,
@@ -158,6 +232,18 @@ pub fn fetch(
     dir: &Path,
     progress: &dyn Fn(u64),
     cancelled: &dyn Fn() -> bool,
+) -> Result<PathBuf, Error> {
+    fetch_within(source, artifact, version, dir, progress, cancelled, IDLE)
+}
+
+fn fetch_within(
+    source: &dyn Source,
+    artifact: &Artifact,
+    version: &str,
+    dir: &Path,
+    progress: &dyn Fn(u64),
+    cancelled: &dyn Fn() -> bool,
+    idle: Duration,
 ) -> Result<PathBuf, Error> {
     let path = destination(dir, version, artifact);
     if verified(&path, artifact) {
@@ -179,16 +265,16 @@ pub fn fetch(
     }
     let parent = path.parent().expect("a version folder");
     fs::create_dir_all(parent).map_err(disk)?;
-    let part = parent.join(format!(
-        "{}.part",
-        path.file_name().unwrap().to_string_lossy()
-    ));
-    let result = stream(source, artifact, &part, progress, cancelled);
+    let reader = source.open(&artifact.url)?;
+    let (part, file) = create_part(&path)?;
+    let result = stream(reader, file, artifact, progress, cancelled, idle)
+        // A stopped attempt never replaces the file a newer one may own.
+        .and_then(|()| match cancelled() {
+            true => Err(Error::Cancelled),
+            false => fs::rename(&part, &path).map_err(disk),
+        });
     match result {
-        Ok(()) => {
-            fs::rename(&part, &path).map_err(disk)?;
-            Ok(path)
-        }
+        Ok(()) => Ok(path),
         Err(e) => {
             let _ = fs::remove_file(&part);
             Err(e)
@@ -196,38 +282,65 @@ pub fn fetch(
     }
 }
 
+/// How often a download waiting for bytes looks at `cancelled`.
+const POLL: Duration = Duration::from_millis(100);
+
+/// Reads `reader` on its own thread, so a read that blocks can't hold up a
+/// cancel or the idle limit. Only this function writes to `file`.
 fn stream(
-    source: &dyn Source,
+    mut reader: Box<dyn Read + Send>,
+    mut file: File,
     artifact: &Artifact,
-    part: &Path,
     progress: &dyn Fn(u64),
     cancelled: &dyn Fn() -> bool,
+    idle: Duration,
 ) -> Result<(), Error> {
-    let mut reader = source.open(&artifact.url)?;
-    let mut file = File::create(part).map_err(disk)?;
+    let (tx, rx) = mpsc::sync_channel::<io::Result<Vec<u8>>>(4);
+    std::thread::Builder::new()
+        .name("convt-update-read".into())
+        .spawn(move || {
+            let mut buf = vec![0; 1 << 16];
+            loop {
+                let chunk = match reader.read(&mut buf) {
+                    Ok(0) => return,
+                    Ok(n) => Ok(buf[..n].to_vec()),
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(e) => Err(e),
+                };
+                let failed = chunk.is_err();
+                if tx.send(chunk).is_err() || failed {
+                    return;
+                }
+            }
+        })
+        .map_err(disk)?;
     let mut hasher = Sha256::new();
-    let mut buf = vec![0; 1 << 16];
     let mut total = 0u64;
+    let mut last = Instant::now();
     loop {
         if cancelled() {
             return Err(Error::Cancelled);
         }
-        let n = match reader.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(e) => {
+        let chunk = match rx.recv_timeout(POLL.min(idle)) {
+            Ok(Ok(chunk)) => chunk,
+            Ok(Err(e)) => {
                 tracing::debug!(error = %e, "update download broke off");
                 return Err(Error::Offline);
             }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) if last.elapsed() >= idle => {
+                return Err(Error::Stalled);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
         };
-        total += n as u64;
+        last = Instant::now();
+        total += chunk.len() as u64;
         // Never write a byte past the signed size.
         if total > artifact.size {
             return Err(Error::Size);
         }
-        hasher.update(&buf[..n]);
-        file.write_all(&buf[..n]).map_err(disk)?;
+        hasher.update(&chunk);
+        file.write_all(&chunk).map_err(disk)?;
         progress(total);
     }
     if total != artifact.size {
@@ -406,6 +519,130 @@ mod tests {
         assert!(leftovers(dir.path()).is_empty());
         run(&source, &a, dir.path()).unwrap();
         assert_eq!(leftovers(dir.path()), ["9.2.0/convt-linux-x86_64.AppImage"]);
+    }
+
+    /// Reads nothing until `release` is set, then serves `body`.
+    struct Blocked {
+        body: io::Cursor<Vec<u8>>,
+        release: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl Read for Blocked {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            while !self.release.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            self.body.read(buf)
+        }
+    }
+
+    struct BlockedSource(Vec<u8>, std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+    impl Source for BlockedSource {
+        fn open(&self, _: &str) -> Result<Box<dyn Read + Send>, Error> {
+            Ok(Box::new(Blocked {
+                body: io::Cursor::new(self.0.clone()),
+                release: self.1.clone(),
+            }))
+        }
+    }
+
+    #[test]
+    fn a_stalled_download_fails_and_a_cancel_does_not_wait_for_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = b"a new convt".to_vec();
+        let a = artifact(&body);
+        let release = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let source = BlockedSource(body.clone(), release.clone());
+        let started = Instant::now();
+        let result = fetch_within(
+            &source,
+            &a,
+            "9.2.0",
+            dir.path(),
+            &|_| {},
+            &|| false,
+            Duration::from_millis(200),
+        );
+        assert_eq!(result, Err(Error::Stalled));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(leftovers(dir.path()).is_empty());
+
+        // A cancel stops a download whose read is blocked.
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let started = Instant::now();
+        let result = std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(Duration::from_millis(50));
+                cancel.store(true, Ordering::SeqCst);
+            });
+            fetch(&source, &a, "9.2.0", dir.path(), &|_| {}, &|| {
+                cancel.load(Ordering::SeqCst)
+            })
+        });
+        assert_eq!(result, Err(Error::Cancelled));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(leftovers(dir.path()).is_empty());
+        release.store(true, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn each_attempt_writes_its_own_part_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("convt.AppImage");
+        let (a, _fa) = create_part(&path).unwrap();
+        let (b, _fb) = create_part(&path).unwrap();
+        assert_ne!(a, b);
+        // A file that already has the next name is skipped, never opened.
+        let counter = AtomicU64::new(0);
+        let taken = part_name(&path, 0);
+        fs::write(&taken, b"stale").unwrap();
+        let (c, _fc) = create_part_counting(&path, &counter).unwrap();
+        assert_eq!(c, part_name(&path, 1));
+        assert_eq!(fs::read(&taken).unwrap(), b"stale");
+        for p in [&a, &b, &c] {
+            assert!(p.to_string_lossy().ends_with(".part"), "{}", p.display());
+            assert_eq!(p.parent(), Some(dir.path()));
+        }
+    }
+
+    #[test]
+    fn a_file_changed_after_the_download_is_refused_and_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = b"a new convt".to_vec();
+        let a = artifact(&body);
+        let path = run(&Fake::new(Ok(body)), &a, dir.path()).unwrap();
+        assert_eq!(check(&path, &a), Ok(()));
+        fs::write(&path, b"a new convX").unwrap();
+        assert_eq!(check(&path, &a), Err(Error::Checksum));
+        assert!(!path.exists());
+        assert_eq!(check(&path, &a), Err(Error::Checksum));
+    }
+
+    #[test]
+    fn launch_prunes_this_and_older_versions_and_part_files() {
+        let dir = tempfile::tempdir().unwrap();
+        for (folder, file) in [
+            ("0.1.0", "convt.AppImage"),
+            ("0.2.0", "convt.AppImage"),
+            ("0.3.0", "convt.AppImage"),
+            ("0.3.0", "convt.AppImage.1-0.part"),
+            ("notes", "keep.txt"),
+        ] {
+            fs::create_dir_all(dir.path().join(folder)).unwrap();
+            fs::write(dir.path().join(folder).join(file), b"x").unwrap();
+        }
+        prune(dir.path(), "0.2.0");
+        assert_eq!(
+            {
+                let mut v = leftovers(dir.path());
+                v.sort();
+                v
+            },
+            ["0.3.0/convt.AppImage", "notes/keep.txt"]
+        );
+        // A missing folder is fine.
+        prune(&dir.path().join("missing"), "0.2.0");
     }
 
     #[test]

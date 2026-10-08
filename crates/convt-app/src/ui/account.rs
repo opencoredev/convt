@@ -14,7 +14,7 @@ use crate::model::AppState;
 
 /// What the automatic license refresh sends, for Settings and first run.
 pub const REFRESH_NOTE: &str = "While you're signed in, convt asks convt.app for your current Pro key \
-     once a day at launch and when you click Refresh license. It sends this computer's sign-in \
+     at most once a day and when you click Refresh license. It sends this computer's sign-in \
      token and the app version, never your files.";
 
 /// A line of text tests can read by `id`.

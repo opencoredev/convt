@@ -127,12 +127,10 @@ fn run(primary: instance::Primary, first: Request) {
         cx.set_global(Shared(state.clone()));
         tray::init(&state, tray::platform::spawn, cx);
         cx.on_window_closed(last_window_closed).detach();
-        // One of the two network calls the app makes by itself: while signed in, at
-        // most once a day, ask convt.app for the current Pro key.
-        state.update(cx, |s, cx| s.renew_on_launch(cx));
-        // The other: when update checks are on, at most once a day, fetch the
-        // signed list of releases.
-        state.update(cx, |s, cx| s.check_updates_on_launch(cx));
+        // The two network calls the app makes by itself, each at most once a
+        // UTC day: the Pro key renewal and the update check. Looked at now
+        // and every few hours, since convt keeps running in the background.
+        state.update(cx, |s, cx| s.start_daily_checks(cx));
 
         primary.listen(move |req| drop(tx.unbounded_send(req)));
         cx.spawn(async move |cx| {

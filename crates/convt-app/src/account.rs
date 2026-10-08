@@ -8,8 +8,8 @@
 //! next to the license key.
 //!
 //! While signed in, the app asks convt.app for the account's current Pro key
-//! at launch, at most once a UTC day, and when the user clicks Refresh
-//! license. Apart from the update check (`crate::update`), that is the only
+//! at most once a UTC day (checked at launch and every few hours while it
+//! runs), and when the user clicks Refresh license. Apart from the update check (`crate::update`), that is the only
 //! network call the app makes on its own. A key
 //! that comes back is stored without asking, but only when it covers newer
 //! builds than the stored one ([`Licensing::offer_key`]). Offline, or when
@@ -288,9 +288,10 @@ impl AppState {
         cx.notify();
     }
 
-    /// The launch check: asks for the current Pro key if signed in and not
-    /// yet asked today (UTC).
-    pub fn renew_on_launch(&mut self, cx: &mut Context<Self>) {
+    /// The day's renewal: asks for the current Pro key if signed in and not
+    /// yet asked today (UTC). Runs at launch and then periodically
+    /// (`AppState::start_daily_checks`).
+    pub fn renew_if_due(&mut self, cx: &mut Context<Self>) {
         let today = date::from_days(today());
         if self.account.session.is_some()
             && self.settings.license_checked.as_deref() != Some(today.as_str())
