@@ -528,23 +528,16 @@ fn cloud_and_local_jobs_share_the_queue() {
     ));
 }
 
-/// The whole path through [`AppState`]: access, consent, the Activity list,
-/// history and Retry.
-mod app {
-    use std::time::Instant;
+/// Test stand-ins for the parts of the app cloud jobs don't use.
+mod app_support {
+    use std::path::PathBuf;
 
-    use convt_core::{Options, Registry};
-    use convt_license::client::{self, KeyStore};
-    use ed25519_dalek::SigningKey;
-    use gpui_kit::{AppContext as _, Entity, TestAppContext};
+    use convt_core::Registry;
 
-    use super::*;
-    use crate::history::Outcome;
-    use crate::model::{AppState, Paths};
     use crate::pack;
-    use crate::update::{Fetch, FetchError, UpdateConfig};
+    use crate::update::{Fetch, FetchError};
 
-    struct NoPacks;
+    pub struct NoPacks;
 
     impl pack::Backend for NoPacks {
         fn offer(&self) -> pack::Offer {
@@ -571,13 +564,30 @@ mod app {
         }
     }
 
-    struct NoUpdates;
+    pub struct NoUpdates;
 
     impl Fetch for NoUpdates {
         fn fetch(&self) -> Result<Vec<u8>, FetchError> {
             Err(FetchError::Offline)
         }
     }
+}
+
+/// The whole path through [`AppState`]: access, consent, the Activity list,
+/// history and Retry.
+mod app {
+    use std::time::Instant;
+
+    use convt_core::Options;
+    use convt_license::client::{self, KeyStore};
+    use ed25519_dalek::SigningKey;
+    use gpui_kit::{AppContext as _, Entity, TestAppContext};
+
+    use super::app_support::*;
+    use super::*;
+    use crate::history::Outcome;
+    use crate::model::{AppState, Paths};
+    use crate::update::UpdateConfig;
 
     fn key(plan: Plan) -> String {
         let license = License {
@@ -802,5 +812,187 @@ mod app {
             assert!(e.message.contains("50 GB"), "{}", e.message);
             assert!(matches!(&s.recent[0].outcome, Outcome::Failed(m) if m.contains("50 GB")));
         });
+    }
+}
+
+/// Against a real local stack (test-convt-web and test-convt-server): the
+/// site, convt-server, a worker and MinIO. Ignored unless asked for:
+///
+/// ```sh
+/// CONVT_E2E_ACCOUNT_URL=http://localhost:3000 CONVT_E2E_DEVICE_TOKEN=cvd_... \
+/// CONVT_E2E_DESKTOP_TOKEN=cvd_... CONVT_E2E_INPUT=/tmp/photo.png \
+/// CONVT_E2E_SLOW_INPUT=/tmp/long.mp4 \
+///   cargo test -p convt-app live -- --ignored --nocapture
+/// ```
+///
+/// The Pro device's key comes from /api/device/license and must verify with
+/// the key this build embeds (`.convt-dev/license.pub`).
+mod live {
+    use std::time::Instant;
+
+    use convt_core::Options;
+    use convt_license::client::{self, KeyStore};
+    use gpui_kit::{AppContext as _, Entity, TestAppContext};
+
+    use super::app_support::*;
+    use super::*;
+    use crate::model::{AppState, Paths};
+    use crate::update::UpdateConfig;
+
+    fn env(name: &str) -> String {
+        std::env::var(name).unwrap_or_else(|_| panic!("set {name}"))
+    }
+
+    fn live_app(
+        cx: &mut TestAppContext,
+        token: &str,
+        key: Option<String>,
+    ) -> (tempfile::TempDir, Entity<AppState>) {
+        let url = env("CONVT_E2E_ACCOUNT_URL");
+        let dir = tempfile::tempdir().unwrap();
+        if let Some(key) = key {
+            std::fs::write(dir.path().join("license.key"), key).unwrap();
+        }
+        let session = Session {
+            email: String::new(),
+            token: token.into(),
+        };
+        std::fs::write(
+            dir.path().join("account.json"),
+            serde_json::to_string(&session).unwrap(),
+        )
+        .unwrap();
+        let paths = Paths {
+            settings: None,
+            history: Some(dir.path().join("history.db")),
+            presets: None,
+            license: client::Config {
+                enforce: true,
+                public_key: convt_license::public_key(),
+                build_date: "2026-10-01".into(),
+                trial_file: Some(dir.path().join("trial")),
+                store: KeyStore::File(dir.path().join("license.key")),
+            },
+            account_url: url.clone(),
+            account_api: Arc::new(account::Http::new(&url)),
+            update: UpdateConfig {
+                key: None,
+                fetch: Arc::new(NoUpdates),
+                target: ("linux-x86_64", "AppImage"),
+            },
+        };
+        cx.executor().allow_parking();
+        let app = cx.update(|cx| {
+            let app = cx.new(|cx| AppState::new(Arc::new(NoPacks), paths, cx));
+            app.update(cx, |s, cx| {
+                s.set_cloud_api(Arc::new(Http::new()), Duration::from_millis(500));
+                s.update_settings(|s| s.cloud_consent = true, cx);
+            });
+            app
+        });
+        (dir, app)
+    }
+
+    fn finish(cx: &mut TestAppContext, app: &Entity<AppState>, id: crate::jobs::JobId) -> Status {
+        let deadline = Instant::now() + Duration::from_secs(180);
+        loop {
+            cx.run_until_parked();
+            let status = cx.read(|cx| app.read(cx).entry(id).unwrap().status.clone());
+            if status.is_finished() {
+                return status;
+            }
+            assert!(Instant::now() < deadline, "timed out; last {status:?}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    #[gpui_kit::test]
+    #[ignore = "needs the local web, API, worker and storage stack"]
+    fn converts_on_the_local_cloud(cx: &mut TestAppContext) {
+        let url = env("CONVT_E2E_ACCOUNT_URL");
+        let token = env("CONVT_E2E_DEVICE_TOKEN");
+        let input = PathBuf::from(env("CONVT_E2E_INPUT"));
+        // The app's own renewal call fetches the Pro key it then checks.
+        let key = account::Api::current_key(&account::Http::new(&url), &token, "0.0.0")
+            .expect("renewal")
+            .expect("a Pro key");
+        let (dir, app) = live_app(cx, &token, Some(key));
+        let access = cx.read(|cx| app.read(cx).cloud_access());
+        eprintln!("access with the Pro device: {access:?}");
+        assert_eq!(access, CloudAccess::Ready);
+        let out = dir.path().join("out");
+        std::fs::create_dir(&out).unwrap();
+        let webp = format_by_id("webp").unwrap();
+        let started = Instant::now();
+        let ids = app
+            .update(cx, |s, cx| {
+                s.convert_in_cloud(
+                    std::slice::from_ref(&input),
+                    webp,
+                    &Options::default(),
+                    Output::Dir(out.clone()),
+                    cx,
+                )
+            })
+            .unwrap();
+        let status = finish(cx, &app, ids[0]);
+        eprintln!("converted in {:?}: {status:?}", started.elapsed());
+        let Status::Done(files) = status else {
+            panic!("not converted")
+        };
+        let kept = std::env::temp_dir().join("convt-cloud-e2e-result.webp");
+        std::fs::copy(&files[0], &kept).unwrap();
+        eprintln!("copied the result to {}", kept.display());
+        assert_eq!(files[0].file_name().unwrap(), "photo.webp");
+        assert!(std::fs::read(&files[0]).unwrap().starts_with(b"RIFF"));
+
+        // Stop while the cloud converts a long video: cancelled here and on
+        // the server.
+        let slow = PathBuf::from(env("CONVT_E2E_SLOW_INPUT"));
+        let ids = app
+            .update(cx, |s, cx| {
+                s.convert_in_cloud(
+                    &[slow],
+                    format_by_id("webm").unwrap(),
+                    &Options::default(),
+                    Output::Dir(out.clone()),
+                    cx,
+                )
+            })
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        // No progress means uploaded and started: the cloud is converting.
+        while cx.read(|cx| app.read(cx).entry(ids[0]).unwrap().status.clone())
+            != Status::Running(None)
+        {
+            assert!(Instant::now() < deadline, "never started");
+            cx.run_until_parked();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        std::thread::sleep(Duration::from_secs(2));
+        app.update(cx, |s, _| s.cancel(ids[0]));
+        let status = finish(cx, &app, ids[0]);
+        eprintln!("after Stop: {status:?}");
+        assert_eq!(status, Status::Cancelled);
+        assert_eq!(std::fs::read_dir(&out).unwrap().count(), 1);
+
+        // A signed-in account without Pro is refused by convt.app.
+        let desktop = env("CONVT_E2E_DESKTOP_TOKEN");
+        let (_d, app) = live_app(cx, &desktop, None);
+        let access = cx.read(|cx| app.read(cx).cloud_access());
+        eprintln!("access with the Desktop-only device: {access:?}");
+        assert_eq!(access, CloudAccess::NeedsPro);
+        let job = Job {
+            output: Output::Dir(out.clone()),
+            ..Job::new(&input, webp)
+        };
+        let cloud = Cloud {
+            api: Arc::new(Http::new()),
+            credentials: Credentials::new(Arc::new(account::Http::new(&url)), desktop),
+            poll: Duration::from_millis(500),
+        };
+        let e = run(&cloud, &job, &|_| {}, &Cancel::new()).unwrap_err();
+        eprintln!("Desktop-only device: {} ({})", e.message, e.kind);
+        assert_eq!(e.kind, "cloud_pro");
     }
 }
