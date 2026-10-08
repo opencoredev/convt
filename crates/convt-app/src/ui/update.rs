@@ -1,12 +1,14 @@
 //! The update check as the windows show it: a card in the main window's
-//! sidebar when a newer build is out, and the Update checks row in Settings.
-//! Failures appear only in Settings.
+//! sidebar when a newer build is out, downloading or ready to install, and
+//! the Update checks row in Settings. Failed checks appear only in Settings;
+//! a failed download or install shows in both, with the download page as the
+//! way out.
 
 use convt_license::client::{DOWNLOAD_URL, State};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::theme::{self, Clickable, Palette, mono, text, text_button};
+use super::theme::{self, Clickable, Palette, mono, primary_button, text, text_button};
 use crate::model::AppState;
 use crate::update::Update;
 
@@ -23,24 +25,89 @@ fn open(url: String) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     move |_, _, cx| cx.open_url(&url)
 }
 
+fn act(
+    app: &Entity<AppState>,
+    f: fn(&mut AppState, &mut Context<AppState>),
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let app = app.clone();
+    move |_, _, cx| app.update(cx, f)
+}
+
+fn downloading(version: &str, percent: u8) -> String {
+    format!("Downloading convt {version}… {percent}%")
+}
+
+/// The buttons a state offers, shared by the card and Settings. Empty for
+/// states with nothing to do.
+fn actions(app: &Entity<AppState>, state: &AppState, p: &Palette) -> Vec<Clickable> {
+    let self_install = state.update_config.install.is_some();
+    match &state.update {
+        Update::Available { .. } if self_install => vec![
+            text_button("update-install", "Update", p.green, 12.)
+                .on_click(act(app, AppState::download_update)),
+        ],
+        Update::Available { .. } => vec![
+            text_button("update-download", "Download", p.green, 12.)
+                .on_click(open(DOWNLOAD_URL.to_string())),
+        ],
+        Update::Ready { .. } => vec![
+            primary_button("update-restart", "Restart to update", 12., false)
+                .on_click(act(app, AppState::restart_to_update)),
+        ],
+        Update::InstallFailed { .. } => vec![
+            text_button("update-retry", "Try again", p.green, 12.)
+                .on_click(act(app, AppState::download_update)),
+            text_button("update-download", "Download instead", p.secondary, 12.)
+                .on_click(open(DOWNLOAD_URL.to_string())),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 /// The sidebar card: only when a newer build is out.
 pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Clickable> {
-    let (title, detail, button, url) = match &app.read(cx).update {
+    let state = app.read(cx);
+    let (title, detail, buttons) = match &state.update {
         Update::Available { version, .. } => (
-            "Update available",
+            "Update available".to_string(),
             format!("convt {version}"),
-            text_button("update-download", "Download", p.green, 12.),
-            DOWNLOAD_URL.to_string(),
+            actions(app, state, p),
+        ),
+        Update::Downloading { version, percent } => (
+            "Update available".to_string(),
+            downloading(version, *percent),
+            Vec::new(),
+        ),
+        Update::Ready { version, .. } => (
+            format!("convt {version} is ready"),
+            state
+                .updater
+                .notice
+                .clone()
+                .unwrap_or_else(|| "Restarting takes a few seconds.".into()),
+            actions(app, state, p),
+        ),
+        Update::Installing { version } => (
+            format!("Installing convt {version}…"),
+            "convt restarts when it's done.".to_string(),
+            Vec::new(),
+        ),
+        Update::InstallFailed { version, why } => (
+            format!("convt {version} didn't install"),
+            why.clone(),
+            actions(app, state, p),
         ),
         Update::NotCovered {
             version,
             purchase_url,
             ..
         } => (
-            "New version",
+            "New version".to_string(),
             format!("convt {version} needs a renewed license"),
-            text_button("update-renew", "Renew to update", p.green, 12.),
-            purchase_url.clone(),
+            vec![
+                text_button("update-renew", "Renew to update", p.green, 12.)
+                    .on_click(open(purchase_url.clone())),
+            ],
         ),
         _ => return None,
     };
@@ -64,11 +131,20 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
                     .child(title),
             )
             .child(text(12., 16., p.secondary).child(detail))
-            .child(
-                div()
-                    .flex()
-                    .child(button.font_weight(FontWeight::MEDIUM).on_click(open(url))),
-            ),
+            .when(!buttons.is_empty(), |d| {
+                d.child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap(px(12.))
+                        .children(
+                            buttons
+                                .into_iter()
+                                .map(|b| b.font_weight(FontWeight::MEDIUM)),
+                        ),
+                )
+            }),
     )
 }
 
@@ -92,22 +168,22 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         let app = app.clone();
         move |_, _, cx| app.update(cx, |s, cx| s.check_updates(cx))
     });
-    let (status, action): (Clickable, Option<Clickable>) = if !on {
+    let (status, action): (Clickable, Vec<Clickable>) = if !on {
         (
             line(
                 "update-status",
                 "Off. convt won't look for new versions.",
                 p.secondary,
             ),
-            None,
+            Vec::new(),
         )
     } else {
         match &state.update {
-            Update::Idle => (line("update-status", last, p.secondary), None),
-            Update::Checking => (line("update-status", "Checking…", p.secondary), None),
+            Update::Idle => (line("update-status", last, p.secondary), Vec::new()),
+            Update::Checking => (line("update-status", "Checking…", p.secondary), Vec::new()),
             Update::UpToDate => (
                 line("update-status", "convt is up to date.", p.secondary),
-                None,
+                Vec::new(),
             ),
             Update::Available {
                 version,
@@ -120,12 +196,40 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                 }
                 (
                     line("update-status", message, p.green),
-                    Some(
-                        text_button("update-download", "Download", p.green, 12.)
-                            .on_click(open(DOWNLOAD_URL.to_string())),
-                    ),
+                    actions(app, state, p),
                 )
             }
+            Update::Downloading { version, percent } => (
+                line("update-status", downloading(version, *percent), p.secondary),
+                Vec::new(),
+            ),
+            Update::Ready { version, .. } => (
+                line(
+                    "update-status",
+                    match &state.updater.notice {
+                        Some(notice) => format!("convt {version} is ready. {notice}"),
+                        None => format!("convt {version} is ready to install."),
+                    },
+                    p.green,
+                ),
+                actions(app, state, p),
+            ),
+            Update::Installing { version } => (
+                line(
+                    "update-status",
+                    format!("Installing convt {version}…"),
+                    p.secondary,
+                ),
+                Vec::new(),
+            ),
+            Update::InstallFailed { version, why } => (
+                line(
+                    "update-status",
+                    format!("convt {version} didn't install. {why}"),
+                    p.text,
+                ),
+                actions(app, state, p),
+            ),
             Update::NotCovered {
                 version,
                 date,
@@ -148,10 +252,10 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                     },
                     p.text,
                 ),
-                Some(
+                vec![
                     text_button("update-renew", "Renew", p.green, 12.)
                         .on_click(open(purchase_url.clone())),
-                ),
+                ],
             ),
             // Quiet: a note, never an alert.
             Update::Failed(why) => (
@@ -160,10 +264,14 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                     format!("Couldn't check for updates. {why} {last}"),
                     p.tertiary,
                 ),
-                None,
+                Vec::new(),
             ),
         }
     };
+    let busy = matches!(
+        state.update,
+        Update::Checking | Update::Downloading { .. } | Update::Installing { .. }
+    );
     div()
         .flex()
         .flex_col()
@@ -182,10 +290,9 @@ pub fn settings_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         .child(
             div()
                 .flex()
+                .items_center()
                 .gap(px(14.))
                 .children(action)
-                .when(on && state.update != Update::Checking, |d| {
-                    d.child(check_now)
-                }),
+                .when(on && !busy, |d| d.child(check_now)),
         )
 }
