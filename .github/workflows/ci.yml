@@ -72,6 +72,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxcb1-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libasound2-dev libzstd-dev
+      - name: Homebrew cask style
+        if: runner.os == 'macOS' && matrix.suite == 'core'
+        run: bash scripts/release/check-homebrew-cask.sh
       - run: cargo fmt --all --check
         if: runner.os == 'Linux'
       - name: Clippy (core)
