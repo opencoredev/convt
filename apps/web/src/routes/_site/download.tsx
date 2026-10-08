@@ -73,7 +73,7 @@ function DownloadPage() {
           <p>
             The app, the right-click menu and the{" "}
             <code className="font-mono text-[15px]">convt</code> command line tool in one install.
-            Every download starts a 7-day free trial. Older versions and checksums are on{" "}
+            Sign in from the app to start your 7-day free trial. Older versions and checksums are on{" "}
             <TextLink href={`${GITHUB_URL}/releases`}>GitHub releases</TextLink>.
           </p>
         </PageHeader>

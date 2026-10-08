@@ -20,7 +20,7 @@ export function Pricing({
         <h2 className="text-[34px]/[40px] font-medium tracking-[-0.035em] text-ink md:text-[44px]/[48px]">
           Buy it once, or go Pro.
         </h2>
-        <p className="text-[17px]/[26px] text-ink-2">Both plans start with a 7-day free trial.</p>
+        <p className="text-[17px]/[26px] text-ink-2">convt Pro starts with a 7-day free trial.</p>
       </div>
       <div className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
         <DesktopPlan launched={launched} />
