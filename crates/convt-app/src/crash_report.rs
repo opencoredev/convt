@@ -66,10 +66,27 @@ pub fn scrub(input: &str) -> String {
         cleaned.push_str(rest);
         out = cleaned;
     }
-    // User supplied filenames are commonly present without an absolute root.
+    // Redact credentials before the filename heuristic: domains and JWT dots
+    // must not be mistaken for harmless file extensions.
     let mut words = Vec::new();
+    let mut redact_next = false;
     for word in out.split_whitespace() {
-        if word.contains('/')
+        let trimmed = word.trim_matches(|c: char| ",;)]}".contains(c));
+        if redact_next {
+            words.push("[token]".to_string());
+            redact_next = false;
+        } else if trimmed.eq_ignore_ascii_case("bearer")
+            || trimmed.eq_ignore_ascii_case("authorization")
+        {
+            words.push(trimmed.to_string());
+            redact_next = true;
+        } else if is_email(trimmed) {
+            words.push("[email]".to_string());
+        } else if is_license_key(trimmed) {
+            words.push("[license-key]".to_string());
+        } else if is_credential(trimmed) {
+            words.push("[token]".to_string());
+        } else if word.contains('/')
             || word.contains('\\')
             || (word
                 .rsplit_once('.')
@@ -82,6 +99,71 @@ pub fn scrub(input: &str) -> String {
     }
     let _ = &re;
     words.join(" ")
+}
+
+fn is_email(value: &str) -> bool {
+    let Some((local, domain)) = value.rsplit_once('@') else {
+        return false;
+    };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+fn is_credential(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    let keyed = [
+        "token=",
+        "token:",
+        "key=",
+        "key:",
+        "secret=",
+        "secret:",
+        "api_key=",
+        "api_key:",
+        "apikey=",
+        "apikey:",
+        "authorization=",
+        "authorization:",
+    ];
+    if keyed.iter().any(|prefix| lower.starts_with(prefix)) {
+        return true;
+    }
+    if (value.matches('.').count() == 2)
+        && value
+            .split('.')
+            .all(|part| part.len() >= 3 && part.chars().all(is_token_char))
+    {
+        return true;
+    }
+    if (value.len() >= 32 && value.chars().all(|c| c.is_ascii_hexdigit()))
+        || (value.len() >= 32
+            && value
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+/=_-".contains(c)))
+    {
+        return true;
+    }
+    false
+}
+
+fn is_license_key(value: &str) -> bool {
+    let candidate = value.split_once('=').map_or(value, |(name, candidate)| {
+        if name.eq_ignore_ascii_case("license") || name.eq_ignore_ascii_case("license_key") {
+            candidate
+        } else {
+            value
+        }
+    });
+    candidate.starts_with("cvt_")
+        || candidate.starts_with("convt_")
+        || (candidate.len() >= 19
+            && candidate.matches('-').count() >= 3
+            && candidate
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-'))
+}
+
+fn is_token_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '-' || c == '_'
 }
 
 fn do_not_track() -> bool {
@@ -291,5 +373,26 @@ mod tests {
     #[test]
     fn scrub_keeps_crate_location() {
         assert!(scrub("crates/convt-app/src/main.rs:42").contains("<PATH>"));
+    }
+
+    #[test]
+    fn scrub_redacts_email_license_and_tokens_in_stack_frames() {
+        let email = ["user", "@", "example.test"].concat();
+        let license = ["cvt", "_", "live", "_", "ABCDEFGHIJKLMNOP"].concat();
+        let bearer_secret = ["bearer", "-", "secret"].concat();
+        let key_secret = ["key", "-", "secret"].concat();
+        let jwt = ["aaa", ".", "bbb", ".", "ccc"].concat();
+        let stack = format!(
+            "at crates/convt-app/src/main.rs:42 user={email} license={license} Bearer {bearer_secret} token={key_secret} jwt={jwt}"
+        );
+        let scrubbed = scrub(&stack);
+        assert!(scrubbed.contains("[email]"));
+        assert!(scrubbed.contains("[license-key]"));
+        assert!(scrubbed.matches("[token]").count() >= 3);
+        assert!(!scrubbed.contains(&email));
+        assert!(!scrubbed.contains(&license));
+        assert!(!scrubbed.contains(&bearer_secret));
+        assert!(!scrubbed.contains(&key_secret));
+        assert!(!scrubbed.contains(&jwt));
     }
 }
