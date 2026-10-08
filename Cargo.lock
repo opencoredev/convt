@@ -1505,12 +1505,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
  "tray-icon",
  "ureq",
+ "url",
  "windows-sys 0.61.2",
 ]
 

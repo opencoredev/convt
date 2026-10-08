@@ -11,6 +11,7 @@ name = "convt-app"
 path = "src/main.rs"
 
 [dependencies]
+base64.workspace = true
 convt-core.workspace = true
 convt-engines.workspace = true
 convt-license = { workspace = true, features = ["client"] }
@@ -24,10 +25,12 @@ image.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ureq = { version = "=3.1.4", default-features = false, features = ["rustls"] }
+url = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
@@ -54,7 +57,6 @@ objc = "0.2.7"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
 
 [dev-dependencies]
-base64.workspace = true
 ed25519-dalek.workspace = true
 gpui-kit = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true

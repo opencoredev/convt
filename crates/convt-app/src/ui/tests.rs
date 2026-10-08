@@ -32,7 +32,9 @@ use crate::model::{AppState, PackPhase, Paths, Shared};
 use crate::pack::{self, Failure, FailureKind};
 use crate::request::{Request, Source};
 use crate::tray::{self, Indicator};
-use crate::update::{Fetch, FetchError, Update, UpdateConfig};
+use crate::update::download;
+use crate::update::install::Installer;
+use crate::update::{Fetch, FetchError, SelfInstall, Update, UpdateConfig};
 
 mod background;
 
@@ -407,6 +409,7 @@ impl Fixture {
                 key: Some(update_key().verifying_key()),
                 fetch: releases.clone(),
                 target: ("linux-x86_64", "AppImage"),
+                install: None,
             },
         };
         // Conversions run on real job threads that wake the UI.
@@ -3578,8 +3581,23 @@ fn update_key() -> SigningKey {
 /// bumps on every release. Builds meant to be newer use 9.x so a version bump
 /// never turns them into downgrades; 0.1.0 stays older than any real version.
 fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8> {
+    manifest_for(sequence, builds, key, b"x")
+}
+
+/// [`manifest`] whose AppImage is `installer`: its size and SHA-256.
+fn manifest_for(
+    sequence: u64,
+    builds: &[(&str, &str)],
+    key: &SigningKey,
+    installer: &[u8],
+) -> Vec<u8> {
     use base64::Engine as _;
     use ed25519_dalek::Signer as _;
+    use sha2::Digest as _;
+    let sha256: String = sha2::Sha256::digest(installer)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -3588,9 +3606,9 @@ fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8>
     let artifact = |platform: &str, kind: &str| convt_update::Artifact {
         platform: platform.into(),
         kind: kind.into(),
-        url: "https://downloads.convt.test/convt".into(),
-        size: 1,
-        sha256: "a".repeat(64),
+        url: "https://downloads.convt.test/convt-linux-x86_64.AppImage".into(),
+        size: installer.len() as u64,
+        sha256: sha256.clone(),
     };
     let m = convt_update::Manifest {
         schema_version: 1,
@@ -3847,6 +3865,21 @@ fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
             purchase_url: "https://convt.test/pricing".into(),
         },
         Update::Failed("convt.app couldn't be reached.".into()),
+        Update::Downloading {
+            version: "9.2.0".into(),
+            percent: 42,
+        },
+        Update::Ready {
+            version: "9.2.0".into(),
+            path: "/tmp/convt.AppImage".into(),
+        },
+        Update::Installing {
+            version: "9.2.0".into(),
+        },
+        Update::InstallFailed {
+            version: "9.2.0".into(),
+            why: download::Error::Checksum.plain(),
+        },
     ];
     for dark in [false, true] {
         cx.update(|cx| theme::set_dark(dark, cx));
@@ -3860,7 +3893,10 @@ fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
                 })
             });
             assert!(shown(cx, settings, "update-status"), "{state:?}");
-            let card = matches!(state, Update::Available { .. } | Update::NotCovered { .. });
+            let card = !matches!(
+                state,
+                Update::Idle | Update::Checking | Update::UpToDate | Update::Failed(_)
+            );
             assert_eq!(shown(cx, main, "update-card"), card, "{state:?}");
             if card {
                 assert!(fits(cx, main, "update-card"), "{state:?}");
@@ -3965,4 +4001,289 @@ fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppCo
         !status.contains("keeps working") && status.contains("renew to convert again"),
         "{status}"
     );
+}
+
+/// A scripted installer host: serves `body` for any URL, counts requests,
+/// and can hold a download part-way so tests can see it in progress.
+#[derive(Default)]
+struct TestDownloads {
+    opened: AtomicUsize,
+    body: Mutex<Vec<u8>>,
+    hold: Arc<AtomicBool>,
+}
+
+impl TestDownloads {
+    fn opened(&self) -> usize {
+        self.opened.load(Ordering::SeqCst)
+    }
+}
+
+/// Hands out half the bytes, then waits while held.
+struct HeldReader {
+    body: std::io::Cursor<Vec<u8>>,
+    hold: Arc<AtomicBool>,
+}
+
+impl std::io::Read for HeldReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = self.body.get_ref().len() as u64;
+        if self.body.position() >= len / 2 {
+            while self.hold.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        let end = if self.body.position() < len / 2 {
+            (len / 2 - self.body.position()) as usize
+        } else {
+            buf.len()
+        };
+        let end = end.clamp(1, buf.len());
+        self.body.read(&mut buf[..end])
+    }
+}
+
+impl download::Source for TestDownloads {
+    fn open(&self, url: &str) -> Result<Box<dyn std::io::Read + Send>, download::Error> {
+        assert!(url.starts_with("https://"), "{url}");
+        self.opened.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(HeldReader {
+            body: std::io::Cursor::new(self.body.lock().unwrap().clone()),
+            hold: self.hold.clone(),
+        }))
+    }
+}
+
+/// Records what it would have installed, and fails when told to.
+#[derive(Default)]
+struct TestInstaller {
+    installed: Mutex<Vec<PathBuf>>,
+    fail: Mutex<Option<String>>,
+}
+
+impl Installer for TestInstaller {
+    fn install(&self, file: &Path) -> Result<(), String> {
+        if let Some(why) = self.fail.lock().unwrap().take() {
+            return Err(why);
+        }
+        self.installed.lock().unwrap().push(file.to_path_buf());
+        Ok(())
+    }
+}
+
+/// The installer bytes the self-update tests serve.
+const NEW_APPIMAGE: &[u8] = b"\x7fELF a newer convt, as an AppImage";
+
+impl Fixture {
+    /// Makes this install one that updates itself, downloading into the
+    /// fixture directory from a scripted host.
+    fn self_installing(&self, cx: &mut TestAppContext) -> (Arc<TestDownloads>, Arc<TestInstaller>) {
+        let downloads = Arc::new(TestDownloads::default());
+        *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+        let installer = Arc::new(TestInstaller::default());
+        let dir = self.dir.path().join("updates");
+        cx.update(|cx| {
+            self.app.update(cx, |s, _| {
+                s.update_config.install = Some(SelfInstall {
+                    source: downloads.clone(),
+                    dir,
+                    installer: installer.clone(),
+                })
+            })
+        });
+        (downloads, installer)
+    }
+
+    fn update(&self, cx: &mut TestAppContext) -> Update {
+        cx.read(|cx| self.app.read(cx).update.clone())
+    }
+}
+
+#[gpui_kit::test]
+fn a_covered_update_downloads_then_restarts_to_update(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    let builds = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
+    f.releases
+        .serve(Ok(manifest_for(5, &builds, &update_key(), NEW_APPIMAGE)));
+    downloads.hold.store(true, Ordering::SeqCst);
+    launch_check(&f, cx);
+    wait_until(
+        cx,
+        "half downloaded",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(
+        card.starts_with("Update available: Downloading convt 9.2.0… 5"),
+        "{card}"
+    );
+    assert!(!shown(cx, main, "update-restart"));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("Downloading convt 9.2.0…")
+    );
+    // No second check while downloading.
+    assert!(!shown(cx, settings, "check-updates"));
+
+    downloads.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { version, path } = f.update(cx) else {
+        unreachable!()
+    };
+    assert_eq!(version, "9.2.0");
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    assert!(path.starts_with(f.dir.path().join("updates/9.2.0")));
+    assert_eq!(
+        label(cx, main, "update-card").as_deref(),
+        Some("convt 9.2.0 is ready: Restarting takes a few seconds.")
+    );
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("convt 9.2.0 is ready to install.")
+    );
+    assert!(fits(cx, main, "update-card"));
+    assert!(shown(cx, settings, "update-restart"));
+
+    // Checking again finds the same version: the verified file is reused.
+    assert!(matches!(
+        manual_check(&f, cx),
+        Update::Downloading { .. } | Update::Ready { .. }
+    ));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+
+    click(cx, main, "update-restart");
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    assert_eq!(*installer.installed.lock().unwrap(), [path]);
+    cx.run_until_parked();
+    // The app quits for the helper; it stays Installing until it does.
+    assert_eq!(
+        f.update(cx),
+        Update::Installing {
+            version: "9.2.0".into()
+        }
+    );
+    assert_eq!(f.releases.fetches(), 2);
+}
+
+#[gpui_kit::test]
+fn a_bad_download_or_install_falls_back_to_the_download_page(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    // The host serves something other than the signed bytes.
+    *downloads.body.lock().unwrap() = b"\x7fELF something else".to_vec();
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("didn't match the signed list"), "{card}");
+    assert!(fits(cx, main, "update-card"));
+    // Nothing unverified stays on disk.
+    let leftovers: Vec<_> = std::fs::read_dir(f.dir.path().join("updates/9.2.0"))
+        .unwrap()
+        .collect();
+    assert!(leftovers.is_empty());
+    click(cx, main, "update-download");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(convt_license::client::DOWNLOAD_URL)
+    );
+
+    // Try again with the right bytes.
+    *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+
+    // The install itself can fail too, and says why.
+    *installer.fail.lock().unwrap() = Some("convt can't write to /opt/apps.".into());
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("convt 9.2.0 didn't install. convt can't write to /opt/apps.")
+    );
+    assert!(shown(cx, settings, "update-download"));
+    assert!(installer.installed.lock().unwrap().is_empty());
+}
+
+#[gpui_kit::test]
+fn update_checks_off_stop_the_download(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    downloads.hold.store(true, Ordering::SeqCst);
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    assert!(matches!(f.update(cx), Update::Downloading { .. }));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "update-checks");
+    assert_eq!(f.update(cx), Update::Idle);
+    downloads.hold.store(false, Ordering::SeqCst);
+    // The cancelled download leaves nothing, and nothing turns Ready.
+    wait_until(cx, "the partial file is gone", |_| {
+        std::fs::read_dir(f.dir.path().join("updates/9.2.0"))
+            .map_or(true, |mut d| d.next().is_none())
+    });
+    cx.run_until_parked();
+    assert_eq!(f.update(cx), Update::Idle);
+}
+
+#[gpui_kit::test]
+fn a_license_change_that_still_covers_keeps_the_download(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2028-10-01"), cx)
+            })
+            .unwrap();
+    });
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+    // A key whose updates ended before 9.2.0 turns it into a renewal.
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2026-10-02"), cx)
+            })
+            .unwrap();
+    });
+    assert!(matches!(f.update(cx), Update::NotCovered { .. }));
+    assert_eq!(downloads.opened(), 1);
 }

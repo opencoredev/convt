@@ -1,0 +1,600 @@
+//! Installs a downloaded, verified update and starts the new version once
+//! this process has quit.
+//!
+//! - macOS: the disk image is mounted read-only, its `convt.app` must pass
+//!   `codesign --verify --deep --strict` and carry the running app's Team ID,
+//!   and it replaces the running bundle with two renames (rolled back if the
+//!   second fails). A shell waits for this process, then `open`s the bundle.
+//! - Windows: a hidden PowerShell waits for this process, runs the MSI with
+//!   `/passive` (the MSI is per-user and upgrades in place), then starts
+//!   convt again.
+//! - Linux: the AppImage named by `$APPIMAGE` is replaced with a rename in
+//!   its own folder, and a shell starts it once this process has quit.
+//!
+//! Anything else (the deb, rpm and tarball, an app running from its disk
+//! image or a folder convt can't write to) keeps the download page.
+
+// Each platform uses some of these helpers; the tests run all of them everywhere.
+#![allow(dead_code)]
+
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+/// Puts a verified update in place, or hands it to a helper that will, and
+/// arranges for the new version to start after this process exits. Runs off
+/// the UI thread; the caller quits on `Ok`. Tests use their own.
+pub trait Installer: Send + Sync {
+    fn install(&self, file: &Path) -> Result<(), String>;
+}
+
+/// The installer for this platform.
+pub struct System;
+
+impl Installer for System {
+    fn install(&self, file: &Path) -> Result<(), String> {
+        platform::install(file)
+    }
+}
+
+/// Whether this install can update itself with an artifact of `kind`, and
+/// if not, why. Checked before downloading and again before installing.
+pub fn supported(kind: &str) -> Result<(), String> {
+    platform::supported(kind)
+}
+
+/// The `.app` bundle an executable runs from: the nearest ancestor named
+/// `*.app`.
+pub fn bundle_of(exe: &Path) -> Option<PathBuf> {
+    exe.ancestors()
+        .skip(1)
+        .find(|p| p.extension().is_some_and(|e| e == "app"))
+        .map(Path::to_path_buf)
+}
+
+/// Why a bundle at this path can't be replaced in place, judged from the
+/// path alone: macOS runs a downloaded app that wasn't moved from a
+/// randomized read-only copy. [`read_only`] catches a disk image.
+pub fn path_refusal(bundle: &Path) -> Option<&'static str> {
+    bundle
+        .to_string_lossy()
+        .contains("/AppTranslocation/")
+        .then_some(
+            "convt is running from a temporary copy macOS made. Move it to Applications first.",
+        )
+}
+
+/// The Team ID `codesign -dv` printed, if the code is signed with one.
+pub fn team_id(codesign_output: &str) -> Option<String> {
+    codesign_output
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("TeamIdentifier="))
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && *t != "not set")
+        .map(str::to_string)
+}
+
+/// A free sibling path for `path`, hidden, with `tag` in its name.
+fn sibling(path: &Path, tag: &str) -> PathBuf {
+    let name = path
+        .file_name()
+        .map_or("convt".into(), |n| n.to_string_lossy().into_owned());
+    path.with_file_name(format!(".{name}.{tag}-{}", std::process::id()))
+}
+
+fn remove_any(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.is_dir() => fs::remove_dir_all(path),
+        Ok(_) => fs::remove_file(path),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Replaces `current` with `staged`, which must be in the same folder: the
+/// current one moves aside, the staged one takes its name, and the old one
+/// is deleted. If the second rename fails the first is undone, so `current`
+/// is never left missing.
+pub fn swap_in(current: &Path, staged: &Path) -> io::Result<()> {
+    let backup = sibling(current, "old");
+    remove_any(&backup)?;
+    fs::rename(current, &backup)?;
+    if let Err(e) = fs::rename(staged, current) {
+        if let Err(undo) = fs::rename(&backup, current) {
+            tracing::error!(error = %undo, backup = %backup.display(), "couldn't restore convt after a failed update");
+        }
+        return Err(e);
+    }
+    // The running process keeps its open files; the old copy can go.
+    if let Err(e) = remove_any(&backup) {
+        tracing::warn!(error = %e, "couldn't delete the old convt");
+    }
+    Ok(())
+}
+
+/// Replaces the file at `target` with a copy of `new`: copied next to it
+/// first, made executable, then renamed over it, so `target` is always
+/// either the old file or the whole new one.
+pub fn replace_file(target: &Path, new: &Path) -> io::Result<()> {
+    let staged = sibling(target, "new");
+    remove_any(&staged)?;
+    let result = (|| {
+        fs::copy(new, &staged)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&staged, fs::Permissions::from_mode(0o755))?;
+        }
+        fs::File::open(&staged)?.sync_all()?;
+        fs::rename(&staged, target)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&staged);
+    }
+    result
+}
+
+/// Whether this user may create files in `dir`.
+#[cfg(unix)]
+pub fn writable(dir: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c` is a valid NUL-terminated path for the duration of the call.
+    unsafe { libc::access(c.as_ptr(), libc::W_OK) == 0 }
+}
+
+/// Whether `path` is on a read-only file system, such as a mounted disk image.
+#[cfg(unix)]
+pub fn read_only(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` is a valid path and `st` a writable statvfs.
+    let ok = unsafe { libc::statvfs(c.as_ptr(), &mut st) } == 0;
+    ok && (st.f_flag & libc::ST_RDONLY) != 0
+}
+
+/// The shell that waits for `pid` to exit (for at most two minutes) and then
+/// runs `then` with the given arguments. Arguments travel as positional
+/// parameters, never through the script text.
+#[cfg(unix)]
+pub fn after_exit(pid: u32, then: &str, args: &[&std::ffi::OsStr]) -> std::process::Command {
+    let script = format!(
+        "i=0; while kill -0 \"$1\" 2>/dev/null; do i=$((i+1)); [ \"$i\" -gt 600 ] && exit 0; \
+         sleep 0.2; done; shift; exec {then} \"$@\""
+    );
+    let mut cmd = std::process::Command::new("/bin/sh");
+    cmd.arg("-c")
+        .arg(script)
+        .arg("sh")
+        .arg(pid.to_string())
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    {
+        use std::os::unix::process::CommandExt;
+        // Its own process group, so a signal to convt's group can't take it too.
+        cmd.process_group(0);
+    }
+    cmd
+}
+
+/// A PowerShell literal: single quotes, with inner ones doubled.
+pub fn ps_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+/// The PowerShell script that installs `msi` once `pid` has exited and then
+/// starts convt again: from the folder the MSI records, else `exe`.
+pub fn windows_script(pid: u32, msi: &Path, exe: &Path) -> String {
+    // Windows paths can't contain double quotes, so quoting the MSI path for
+    // msiexec's command line is safe.
+    let args = format!("/i \"{}\" /passive /norestart", msi.display());
+    format!(
+        "$ErrorActionPreference = 'SilentlyContinue'\n\
+         Wait-Process -Id {pid} -Timeout 120\n\
+         Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\msiexec.exe') -ArgumentList {args} -Wait\n\
+         $exe = {exe}\n\
+         $dir = (Get-ItemProperty -Path 'HKCU:\\Software\\Convt' -Name InstallFolder).InstallFolder\n\
+         if ($dir) {{ $c = Join-Path $dir 'convt-app.exe'; if (Test-Path -LiteralPath $c) {{ $exe = $c }} }}\n\
+         Start-Process -FilePath $exe\n",
+        args = ps_quote(&args),
+        exe = ps_quote(&exe.display().to_string()),
+    )
+}
+
+/// `script` as `-EncodedCommand` takes it: base64 of UTF-16LE, so no
+/// command-line quoting is involved.
+pub fn encoded(script: &str) -> String {
+    use base64::Engine as _;
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::*;
+    use std::process::Command;
+
+    fn running_bundle() -> Result<PathBuf, String> {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = fs::canonicalize(&exe).unwrap_or(exe);
+        bundle_of(&exe).ok_or_else(|| "convt isn't running from an app bundle.".to_string())
+    }
+
+    fn check(bundle: &Path) -> Result<(), String> {
+        if let Some(why) = path_refusal(bundle) {
+            return Err(why.into());
+        }
+        if read_only(bundle) {
+            return Err(
+                "convt is running from its disk image or a read-only disk. Drag it to Applications first."
+                    .into(),
+            );
+        }
+        let parent = bundle.parent().ok_or("convt's folder couldn't be found.")?;
+        if !writable(parent) {
+            return Err(format!(
+                "convt can't write to {}, where it's installed.",
+                parent.display()
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn supported(kind: &str) -> Result<(), String> {
+        if kind != "dmg" {
+            return Err("This kind of install updates from the download page.".into());
+        }
+        check(&running_bundle()?)
+    }
+
+    fn run(cmd: &mut Command) -> Result<std::process::Output, String> {
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(out)
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
+    }
+
+    fn team_of(bundle: &Path) -> Option<String> {
+        let out = Command::new("/usr/bin/codesign")
+            .arg("-dv")
+            .arg(bundle)
+            .output()
+            .ok()?;
+        team_id(&String::from_utf8_lossy(&out.stderr))
+    }
+
+    /// Mounted read-only at a private folder; detached when dropped.
+    struct Mount(PathBuf);
+
+    impl Drop for Mount {
+        fn drop(&mut self) {
+            let detach = |force: bool| {
+                let mut cmd = Command::new("/usr/bin/hdiutil");
+                cmd.arg("detach").arg(&self.0).arg("-quiet");
+                if force {
+                    cmd.arg("-force");
+                }
+                cmd.status().is_ok_and(|s| s.success())
+            };
+            if !detach(false) && !detach(true) {
+                tracing::warn!(mount = %self.0.display(), "couldn't detach the update image");
+            }
+            let _ = fs::remove_dir(&self.0);
+        }
+    }
+
+    pub fn install(dmg: &Path) -> Result<(), String> {
+        let bundle = running_bundle()?;
+        check(&bundle)?;
+        let point = std::env::temp_dir().join(format!("convt-update-{}", std::process::id()));
+        let _ = fs::remove_dir(&point);
+        fs::create_dir(&point).map_err(|e| e.to_string())?;
+        run(Command::new("/usr/bin/hdiutil")
+            .args([
+                "attach",
+                "-nobrowse",
+                "-readonly",
+                "-noautoopen",
+                "-mountpoint",
+            ])
+            .arg(&point)
+            .arg(dmg))
+        .map_err(|e| format!("The update's disk image couldn't be opened. {e}"))?;
+        let mount = Mount(point);
+        let new = mount.0.join("convt.app");
+        if !new.join("Contents/Info.plist").is_file() {
+            return Err("The update's disk image has no convt.app.".into());
+        }
+        run(Command::new("/usr/bin/codesign")
+            .args(["--verify", "--deep", "--strict"])
+            .arg(&new))
+        .map_err(|e| format!("The update's signature didn't check out. {e}"))?;
+        if let Some(team) = team_of(&bundle)
+            && team_of(&new).as_deref() != Some(team.as_str())
+        {
+            return Err("The update is signed by someone else, so it wasn't installed.".into());
+        }
+        let staged = sibling(&bundle, "new");
+        remove_any(&staged).map_err(|e| e.to_string())?;
+        if let Err(e) = run(Command::new("/usr/bin/ditto").arg(&new).arg(&staged)) {
+            let _ = remove_any(&staged);
+            return Err(format!("The update couldn't be copied. {e}"));
+        }
+        drop(mount);
+        if let Err(e) = swap_in(&bundle, &staged) {
+            let _ = remove_any(&staged);
+            return Err(format!("The update couldn't replace convt. {e}"));
+        }
+        after_exit(std::process::id(), "/usr/bin/open", &[bundle.as_os_str()])
+            .spawn()
+            .map_err(|e| format!("convt was updated but couldn't restart; open it again. {e}"))?;
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+mod platform {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    pub fn supported(kind: &str) -> Result<(), String> {
+        if kind == "msi" {
+            Ok(())
+        } else {
+            Err("This kind of install updates from the download page.".into())
+        }
+    }
+
+    pub fn install(msi: &Path) -> Result<(), String> {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let script = windows_script(std::process::id(), msi, &exe);
+        let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+        let powershell = Path::new(&root).join("System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+        Command::new(powershell)
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-WindowStyle",
+                "Hidden",
+            ])
+            .arg("-EncodedCommand")
+            .arg(encoded(&script))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP)
+            .spawn()
+            .map_err(|e| format!("The installer couldn't be started. {e}"))?;
+        Ok(())
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+mod platform {
+    use super::*;
+
+    fn appimage() -> Result<PathBuf, String> {
+        let path = std::env::var_os("APPIMAGE")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute() && p.is_file())
+            .ok_or("convt isn't running as an AppImage.")?;
+        let dir = path
+            .parent()
+            .ok_or("The AppImage's folder couldn't be found.")?;
+        if !writable(dir) {
+            return Err(format!(
+                "convt can't write to {}, where the AppImage is.",
+                dir.display()
+            ));
+        }
+        Ok(path)
+    }
+
+    pub fn supported(kind: &str) -> Result<(), String> {
+        if kind != "AppImage" {
+            return Err("This kind of install updates from the download page.".into());
+        }
+        appimage().map(drop)
+    }
+
+    pub fn install(file: &Path) -> Result<(), String> {
+        let target = appimage()?;
+        replace_file(&target, file)
+            .map_err(|e| format!("The update couldn't replace convt. {e}"))?;
+        let mut cmd = after_exit(std::process::id(), "", &[target.as_os_str()]);
+        // The new AppImage's runtime sets its own; don't hand it ours.
+        for var in ["APPIMAGE", "APPDIR", "ARGV0", "OWD", "LD_LIBRARY_PATH"] {
+            cmd.env_remove(var);
+        }
+        cmd.spawn()
+            .map_err(|e| format!("convt was updated but couldn't restart; open it again. {e}"))?;
+        Ok(())
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+mod platform {
+    use super::*;
+
+    pub fn supported(_: &str) -> Result<(), String> {
+        Err("This platform updates from the download page.".into())
+    }
+
+    pub fn install(_: &Path) -> Result<(), String> {
+        Err("This platform updates from the download page.".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut v: Vec<_> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn finds_the_bundle_and_refuses_temporary_copies() {
+        assert_eq!(
+            bundle_of(Path::new(
+                "/Applications/convt.app/Contents/MacOS/convt-app"
+            )),
+            Some(PathBuf::from("/Applications/convt.app"))
+        );
+        assert_eq!(bundle_of(Path::new("/usr/bin/convt-app")), None);
+        assert!(path_refusal(Path::new("/Applications/convt.app")).is_none());
+        assert!(path_refusal(Path::new("/Users/a/Applications/convt.app")).is_none());
+        assert!(
+            path_refusal(Path::new(
+                "/private/var/folders/x/T/AppTranslocation/1234/d/convt.app"
+            ))
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn reads_the_team_id() {
+        let signed = "Executable=/Applications/convt.app/Contents/MacOS/convt-app\n\
+                      Identifier=app.convt.desktop\nTeamIdentifier=AB12CD34EF\nSealed Resources version=2";
+        assert_eq!(team_id(signed).as_deref(), Some("AB12CD34EF"));
+        assert_eq!(team_id("Identifier=x\nTeamIdentifier=not set\n"), None);
+        assert_eq!(team_id("code object is not signed at all"), None);
+    }
+
+    fn bundle(dir: &Path, name: &str, version: &str) -> PathBuf {
+        let b = dir.join(name);
+        fs::create_dir_all(b.join("Contents/MacOS")).unwrap();
+        fs::write(b.join("Contents/version"), version).unwrap();
+        b
+    }
+
+    #[test]
+    fn a_bundle_swap_replaces_the_old_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = bundle(dir.path(), "convt.app", "old");
+        let staged = bundle(dir.path(), ".convt.app.new", "new");
+        swap_in(&current, &staged).unwrap();
+        assert_eq!(
+            fs::read_to_string(current.join("Contents/version")).unwrap(),
+            "new"
+        );
+        assert_eq!(names(dir.path()), ["convt.app"]);
+    }
+
+    #[test]
+    fn a_failed_bundle_swap_puts_the_old_one_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = bundle(dir.path(), "convt.app", "old");
+        // Nothing staged: the second rename fails.
+        let missing = dir.path().join(".convt.app.new");
+        assert!(swap_in(&current, &missing).is_err());
+        assert_eq!(
+            fs::read_to_string(current.join("Contents/version")).unwrap(),
+            "old"
+        );
+        assert_eq!(names(dir.path()), ["convt.app"]);
+        // A stale backup from an earlier try doesn't get in the way.
+        let stale = sibling(&current, "old");
+        fs::create_dir(&stale).unwrap();
+        let staged = bundle(dir.path(), ".convt.app.new", "new");
+        swap_in(&current, &staged).unwrap();
+        assert_eq!(
+            fs::read_to_string(current.join("Contents/version")).unwrap(),
+            "new"
+        );
+        assert_eq!(names(dir.path()), ["convt.app"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_appimage_is_replaced_whole_and_stays_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("convt.AppImage");
+        fs::write(&target, b"old").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let new = cache.path().join("convt-linux-x86_64.AppImage");
+        fs::write(&new, b"new appimage").unwrap();
+        fs::set_permissions(&new, fs::Permissions::from_mode(0o644)).unwrap();
+        replace_file(&target, &new).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"new appimage");
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        assert_eq!(names(dir.path()), ["convt.AppImage"]);
+        // The verified download stays where it was.
+        assert!(new.is_file());
+
+        // A copy that fails leaves the old file and no stray copy.
+        assert!(replace_file(&target, &cache.path().join("missing")).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"new appimage");
+        assert_eq!(names(dir.path()), ["convt.AppImage"]);
+        assert!(writable(dir.path()));
+        assert!(!read_only(dir.path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_relaunch_waits_for_the_process_to_exit() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("ran");
+        let mut sleeper = std::process::Command::new("sleep")
+            .arg("1")
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let mut relaunch = after_exit(sleeper.id(), "touch", &[out.as_os_str()]);
+        relaunch.stdout(std::process::Stdio::null());
+        let mut child = relaunch.spawn().unwrap();
+        sleeper.wait().unwrap();
+        child.wait().unwrap();
+        assert!(out.is_file());
+        assert!(started.elapsed() >= std::time::Duration::from_millis(900));
+    }
+
+    #[test]
+    fn the_windows_script_quotes_paths() {
+        let script = windows_script(
+            4242,
+            Path::new(r"C:\Users\O'Neil\AppData\Local\convt\updates\9.2.0\convt.msi"),
+            Path::new(r"C:\Users\O'Neil\AppData\Local\convt\convt-app.exe"),
+        );
+        assert!(script.contains("Wait-Process -Id 4242"));
+        assert!(script.contains(
+            r#"-ArgumentList '/i "C:\Users\O''Neil\AppData\Local\convt\updates\9.2.0\convt.msi" /passive /norestart'"#
+        ));
+        assert!(script.contains(r"$exe = 'C:\Users\O''Neil\AppData\Local\convt\convt-app.exe'"));
+        // Base64 of UTF-16LE, decodable back to the script.
+        use base64::Engine as _;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded(&script))
+            .unwrap();
+        let units: Vec<u16> = bytes
+            .chunks(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        assert_eq!(String::from_utf16(&units).unwrap(), script);
+    }
+}

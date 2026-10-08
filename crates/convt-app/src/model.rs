@@ -251,6 +251,8 @@ pub struct AppState {
     /// The last manifest accepted this session, to select again when the
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
+    /// The update download and install, when this install updates itself.
+    pub(crate) updater: crate::update::Updater,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in a background menu).
     /// Explorer requests that ask to show progress are tracked like normal
@@ -340,6 +342,7 @@ impl AppState {
             update: Update::Idle,
             _update_task: None,
             update_manifest: None,
+            updater: Default::default(),
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]

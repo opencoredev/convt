@@ -51,6 +51,16 @@ The website consumes [manifest.schema.json](../packaging/release/manifest.schema
 
 The envelope contains `payload` and `signature`, both unpadded base64url. Payload is the exact JSON byte sequence. Signatures cover the ASCII bytes of `convt-update-v1\n` followed by the base64url payload. This domain separates update signatures from license signatures. No JSON canonicalization is needed because verifiers authenticate the encoded bytes before parsing.
 
+## How the app installs an update
+
+The desktop app fetches `update-manifest.json` through `https://convt.app/updates/manifest.json`, verifies it against the embedded update key, and picks the newest build its license covers. If the install can replace itself, it downloads that build's artifact in the background, from the URL in the manifest, and keeps it only if the byte count and SHA-256 match the signed record. Then it offers "Restart to update". So every artifact URL must keep serving exactly the bytes the manifest names; re-signing or re-uploading an artifact means a new manifest.
+
+- macOS (`dmg`): the image is mounted read-only, its `convt.app` must pass `codesign --verify --deep --strict` and carry the running app's Team ID, and it replaces the running bundle in place. The disk image must keep `convt.app` at its root. An app running from the image, from an App Translocation copy or from a folder the user can't write falls back to the download page.
+- Windows (`msi`): `msiexec /i <msi> /passive /norestart` runs after the app quits, then the app starts again from the `InstallFolder` the MSI records under `HKCU\Software\Convt`. This relies on the per-user scope and `MajorUpgrade` in `packaging/windows/convt.wxs`; keep the `UpgradeCode`.
+- Linux (`AppImage`): the file named by `$APPIMAGE` is replaced by a rename in its own folder. The deb, rpm and tarball still open the download page; their users update through the package manager or by hand.
+
+The code is `crates/convt-app/src/update.rs` and `crates/convt-app/src/update/`.
+
 ## Signing and publishing
 
 Compare unsigned artifacts first. `scripts/release/sign-linux.sh UNSIGNED SIGNED` signs copies with `debsigs` and `rpmsign`, using `CONVT_REPO_SIGNING_KEY_ID`. Regenerate checksums and manifests from signed copies because signatures change bytes. The apt layout has pool packages, Packages, Packages.gz and Release; sign Release into InRelease and Release.gpg. The dnf template signs packages, creates deterministic repodata with `createrepo_c`, then signs repomd.xml. Homebrew and winget manifests are rendered only when the matching Mac or Windows artifact exists. Their unfilled templates live in `packaging/release`. The tap users install is `Casks/convt.rb` in this repository (`brew tap opencoredev/convt https://github.com/opencoredev/convt`). After a successful GitHub release, the `Update Homebrew cask` job rewrites that file from `release-manifest.json` and pushes it. The job is `continue-on-error: true`, so a tap or branch-protection failure never blocks publication. Set repository secret `HOMEBREW_TAP_TOKEN` (a PAT that can write `opencoredev/homebrew-tap`) to also publish `brew install --cask opencoredev/tap/convt`.

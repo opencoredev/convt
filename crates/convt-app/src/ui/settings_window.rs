@@ -813,7 +813,9 @@ pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
         "network-updates",
         "Update checks: while they're on, once a day at launch and when you click Check now, \
          convt downloads the signed list of releases from convt.app. The request carries the \
-         app version and nothing about your files.",
+         app version and nothing about your files. When a new version your license covers is \
+         out, convt downloads its installer from the release's host (GitHub) and checks it \
+         against that list before offering to restart.",
     ),
     (
         "network-refresh",
