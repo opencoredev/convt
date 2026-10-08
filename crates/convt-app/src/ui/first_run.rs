@@ -77,7 +77,8 @@ pub enum Stage {
     Failed(String),
     /// Signed in, and the account's answer hasn't come yet.
     Checking,
-    /// Signed in, and asking the account failed.
+    /// Signed in, and asking the account failed or didn't say what it
+    /// allows: Retry, or use a key. Never a dead end.
     CheckFailed(String),
     Pro,
     /// A desktop license key, without Pro.
@@ -104,6 +105,9 @@ pub struct FirstRunView {
     pub(super) yes: bool,
     pub(super) key: Entity<InputState>,
     pub(super) error: Option<String>,
+    /// Onboarding asked the account itself, for a launch that didn't (the
+    /// launch check runs once a UTC day).
+    asked: bool,
     focus: FocusHandle,
     _finish: Option<Task<()>>,
     _observe: Subscription,
@@ -120,7 +124,10 @@ impl FirstRunView {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         let mut view = Self {
-            _observe: cx.observe(&app, |_, _, cx| cx.notify()),
+            _observe: cx.observe(&app, |this, _, cx| {
+                this.ask_account(cx);
+                cx.notify()
+            }),
             _appearance: theme::observe_appearance(window, cx),
             app,
             screen,
@@ -128,12 +135,14 @@ impl FirstRunView {
             yes: true,
             key: cx.new(|cx| InputState::new(window, cx).placeholder("Paste your license key")),
             error: None,
+            asked: false,
             focus,
             _finish: None,
         };
         if screen == Screen::Calibrating {
             view.calibrate(window, cx);
         }
+        view.ask_account(cx);
         view
     }
 
@@ -173,10 +182,33 @@ impl FirstRunView {
             None => match (licensed, &account.refresh) {
                 (Some(convt_license::Plan::Pro), _) => Stage::Pro,
                 (Some(convt_license::Plan::Desktop), _) => Stage::Licensed,
+                (None, Refresh::Running) => Stage::Checking,
+                // [`Self::ask_account`] is about to ask.
+                (None, Refresh::Idle) if !self.asked => Stage::Checking,
                 (None, Refresh::Failed(e)) => Stage::CheckFailed(e.clone()),
-                (None, _) => Stage::Checking,
+                (None, _) => Stage::CheckFailed(
+                    "convt.app didn't say what this account includes. Try again in a moment."
+                        .into(),
+                ),
             },
         }
+    }
+
+    /// Asks convt.app what a signed-in account allows when nothing has
+    /// asked yet, once: the launch check skips a day it already asked, and
+    /// onboarding can't wait on an answer that isn't coming.
+    fn ask_account(&mut self, cx: &mut Context<Self>) {
+        let account = &self.app.read(cx).account;
+        if self.asked
+            || self.screen != Screen::Account
+            || account.session.is_none()
+            || account.access.is_some()
+            || account.refresh != Refresh::Idle
+        {
+            return;
+        }
+        self.asked = true;
+        self.app.update(cx, |s, cx| s.refresh_license(cx));
     }
 
     /// The questions this computer gets, in order.
@@ -200,6 +232,7 @@ impl FirstRunView {
         if screen == Screen::Calibrating {
             self.calibrate(window, cx);
         }
+        self.ask_account(cx);
         window.focus(&self.focus, cx);
         cx.notify();
     }
@@ -211,6 +244,17 @@ impl FirstRunView {
             None => Screen::Calibrating,
         };
         self.go(next, window, cx);
+    }
+
+    /// Opens the same trial checkout again, for a closed tab. Only the first
+    /// press starts the trial flow.
+    fn reopen_checkout(&mut self, cx: &mut Context<Self>) {
+        let account = &self.app.read(cx).account;
+        if account.awaiting_trial
+            && let Some(Access::CanStartTrial { checkout_url }) = &account.access
+        {
+            cx.open_url(checkout_url);
+        }
     }
 
     fn not_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -377,20 +421,15 @@ impl FirstRunView {
                 .child(heading("Checking your account…", p))
                 .children(signed_in),
             Stage::CheckFailed(e) => column()
-                .child(heading("Couldn't reach your account", p))
+                .child(heading("Couldn't reach convt.app", p))
                 .child(super::error_text(e, p))
                 .child(
-                    actions().child(
-                        pill("onboarding-retry", "Try again", Pill::Strong, p)
-                                .w_auto()
-                                .min_w(px(160.))
-                                .px(px(24.)).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.app.update(cx, |s, cx| s.refresh_license(cx))
-                            }),
-                        ),
-                    ),
-                ),
+                    pill("onboarding-retry", "Retry", Pill::Strong, p).on_click(cx.listener(
+                        |this, _, _, cx| this.app.update(cx, |s, cx| s.refresh_license(cx)),
+                    )),
+                )
+                .child(self.key_link(p, cx))
+                .children(signed_in),
             Stage::Pro => self
                 .welcome(
                     "You have convt Pro",
@@ -453,9 +492,7 @@ impl FirstRunView {
                                 .w_auto()
                                 .min_w(px(160.))
                                 .px(px(24.))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.app.update(cx, |s, cx| s.start_trial(cx))
-                                })),
+                                .on_click(cx.listener(|this, _, _, cx| this.reopen_checkout(cx))),
                         )
                         .child(self.not_now_link(p, cx)),
                 ),

@@ -26,7 +26,7 @@ use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
 use super::{AboutView, Open, PopoverView, menus, theme};
-use crate::account::{Access, Provider, SignIn};
+use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::cloud::CloudAccess;
 use crate::history::Outcome;
 use crate::jobs::JobId;
@@ -1635,13 +1635,34 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
             })
         })
     };
-    // No answer from the account yet.
+    // No answer from the account: onboarding asks, once.
     set(cx, None);
+    wait_until(cx, "the account answered", |cx| {
+        f.app.read(cx).account.refresh != Refresh::Running
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Couldn't reach convt.app")
+    );
+    assert!(!shown(cx, window, "onboarding-primary"));
+    // And says so while it waits.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.refresh = Refresh::Running;
+            cx.notify();
+        })
+    });
     assert_eq!(
         label(cx, window, "onboarding-title").as_deref(),
         Some("Checking your account…")
     );
-    assert!(!shown(cx, window, "onboarding-primary"));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.refresh = Refresh::Failed("Offline.".into());
+            cx.notify();
+        })
+    });
 
     let checkout = "https://checkout.example.com/trial";
     for (access, title, primary) in [
@@ -1691,6 +1712,15 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
         label(cx, window, "onboarding-title").as_deref(),
         Some("Finish checkout in your browser")
     );
+    // "Open checkout again" opens the same page; it doesn't start over.
+    cx.update(|cx| cx.open_url("about:blank"));
+    click(cx, window, "onboarding-reopen");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    cx.read(|cx| {
+        assert!(f.app.read(cx).account.awaiting_trial);
+        assert_eq!(view.read(cx).stage(cx), Stage::AwaitingTrial);
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
     // Lapsed buys.
     set(cx, Some(Access::Lapsed));
     click(cx, window, "onboarding-primary");
@@ -1698,6 +1728,77 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
     // "Not now" goes on without a plan.
     click(cx, window, "onboarding-not-now");
     cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+#[gpui_kit::test]
+fn a_signed_in_relaunch_never_waits_on_the_account_forever(cx: &mut TestAppContext) {
+    // Signed in, no key here, and the launch check already ran today, so
+    // nothing else is going to ask.
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(
+                |s| {
+                    s.first_run_done = false;
+                    s.license_checked = Some(today());
+                },
+                cx,
+            );
+            s.renew_on_launch(cx);
+        })
+    });
+    assert_eq!(f.api.calls(), (0, 0, 0));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    let settled = |cx: &mut TestAppContext| {
+        wait_until(cx, "the account answered", |cx| {
+            f.app.read(cx).account.refresh != Refresh::Running
+        })
+    };
+
+    // Offline: say so, with Retry and the key as ways on.
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 1, 0), "onboarding asked the account");
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Couldn't reach convt.app")
+    );
+    assert!(shown(cx, window, "onboarding-retry"));
+    assert!(shown(cx, window, "onboarding-key-link"));
+    assert_eq!(
+        label(cx, window, "account-status").as_deref(),
+        Some("Signed in as pro-tester")
+    );
+    // Drawing again doesn't ask again.
+    cx.update(|cx| f.app.update(cx, |_, cx| cx.notify()));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 1, 0));
+
+    // An answer that doesn't say what the account allows is no dead end
+    // either.
+    f.api.answer_key(Ok(None));
+    click(cx, window, "onboarding-retry");
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 2, 0));
+    cx.read(|cx| assert!(matches!(view.read(cx).stage(cx), Stage::CheckFailed(_))));
+    assert!(shown(cx, window, "onboarding-retry"));
+    // "I have a license key" is the other way on.
+    click(cx, window, "onboarding-key-link");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Key));
+    click(cx, window, "onboarding-back");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Account));
+    assert_eq!(f.api.calls(), (0, 2, 0), "going back didn't ask again");
+
+    // Retry with convt.app back.
+    f.api
+        .answer_key(Ok(Some(pro_key("pro-tester", "2027-10-01"))));
+    click(cx, window, "onboarding-retry");
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 3, 0));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have convt Pro")
+    );
 }
 
 #[gpui_kit::test]
