@@ -4450,7 +4450,10 @@ fn the_running_app_checks_again_every_few_hours(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(f.releases.fetches(), 1);
     cx.executor().advance_clock(Duration::from_secs(60));
+    cx.run_until_parked();
+    // The state still reads UpToDate from the first check until the new one
+    // starts, so wait for the fetch before waiting for its result.
+    wait_until(cx, "the second check", |_| f.releases.fetches() == 2);
     assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
-    assert_eq!(f.releases.fetches(), 2);
     wait_until(cx, "the second renewal", |_| f.api.calls().1 == 2);
 }

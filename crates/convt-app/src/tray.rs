@@ -57,6 +57,7 @@ pub enum Event {
     /// Quit convt.
     Quit,
     /// The icon went away by itself: the Linux tray host stopped.
+    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     Lost,
 }
 

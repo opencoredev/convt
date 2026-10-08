@@ -355,7 +355,14 @@ mod platform {
     }
 
     pub fn install(dmg: &Path) -> Result<(), String> {
-        let bundle = running_bundle()?;
+        install_bundle(dmg, &running_bundle()?, true)
+    }
+
+    /// Replaces `bundle` with the convt.app on `dmg`, and with `relaunch`
+    /// opens it once this process exits. Separate from [`install`] so a test
+    /// can update a copy instead of the running app.
+    pub(super) fn install_bundle(dmg: &Path, bundle: &Path, relaunch: bool) -> Result<(), String> {
+        let bundle = bundle.to_path_buf();
         check(&bundle)?;
         let point = std::env::temp_dir().join(format!("convt-update-{}", std::process::id()));
         let _ = fs::remove_dir(&point);
@@ -407,6 +414,9 @@ mod platform {
         if let Err(e) = swap_in(&bundle, &staged) {
             let _ = remove_any(&staged);
             return Err(format!("The update couldn't replace convt. {e}"));
+        }
+        if !relaunch {
+            return Ok(());
         }
         after_exit("/usr/bin/open", &[bundle.as_os_str()])
             .and_then(|(cmd, writer)| spawn_after_exit(cmd, writer))
@@ -718,5 +728,59 @@ mod tests {
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         assert_eq!(String::from_utf16(&units).unwrap(), script);
+    }
+
+    /// Updates a copy of an installed convt.app from a real release disk
+    /// image, through the same hdiutil, codesign, ditto and swap steps as
+    /// Restart to update, without relaunching. Run on a Mac:
+    /// `CONVT_TEST_BUNDLE=/Applications/convt.app CONVT_TEST_DMG=<dmg> cargo test
+    /// -p convt-app updates_a_copy_of_the_app -- --ignored`
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "needs an installed convt.app and a release disk image"]
+    fn updates_a_copy_of_the_app() {
+        let bundle = PathBuf::from(std::env::var("CONVT_TEST_BUNDLE").unwrap());
+        let dmg = PathBuf::from(std::env::var("CONVT_TEST_DMG").unwrap());
+        let dir = tempfile::tempdir_in(std::env::var("HOME").unwrap()).unwrap();
+        let copy = dir.path().join("convt.app");
+        let ditto = std::process::Command::new("/usr/bin/ditto")
+            .arg(&bundle)
+            .arg(&copy)
+            .status()
+            .unwrap();
+        assert!(ditto.success());
+        let version = |app: &Path| {
+            let out = std::process::Command::new("/usr/bin/defaults")
+                .arg("read")
+                .arg(app.join("Contents/Info.plist"))
+                .arg("CFBundleShortVersionString")
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        let before = version(&copy);
+        platform::install_bundle(&dmg, &copy, false).unwrap();
+        let after = version(&copy);
+        eprintln!("updated a copy from {before} to {after}");
+        assert_ne!(before, after);
+        assert_eq!(
+            names(dir.path()),
+            ["convt.app"],
+            "no staging or backup left"
+        );
+        let verify = std::process::Command::new("/usr/bin/codesign")
+            .args(["--verify", "--deep", "--strict"])
+            .arg(&copy)
+            .status()
+            .unwrap();
+        assert!(verify.success());
+        let mounts = std::process::Command::new("/usr/bin/hdiutil")
+            .arg("info")
+            .output()
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(&mounts.stdout).contains("convt-update-"),
+            "the disk image is detached"
+        );
     }
 }
