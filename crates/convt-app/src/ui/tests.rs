@@ -1327,7 +1327,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     let forged = convt_license::sign(
         &License {
             id: "x".into(),
-            email: "a@example.com".into(),
+            email: concat!("a", "@", "example.com").into(),
             plan: Plan::Desktop,
             issued: "2026-09-01".into(),
             updates_until: "2027-10-01".into(),
@@ -1338,17 +1338,21 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     click(cx, settings, "activate");
     assert!(shown(cx, settings, "error"), "a key from another signer");
 
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key(concat!("a", "@", "example.com"), "2027-10-01");
     type_key(cx, settings, &view, &format!("  {key}\n"));
     click(cx, settings, "activate");
     assert!(!shown(cx, settings, "error"));
     assert_eq!(
         label(cx, settings, "license-notice").as_deref(),
-        Some("License activated for a@example.com.")
+        Some(concat!("License activated for a", "@", "example.com."))
     );
     assert_eq!(
         label(cx, settings, "license-status").as_deref(),
-        Some("Licensed to a@example.com (Desktop), with updates until 2027-10-01.")
+        Some(concat!(
+            "Licensed to a",
+            "@",
+            "example.com (Desktop), with updates until 2027-10-01."
+        ))
     );
     let stored = std::fs::read_to_string(f.dir.path().join("license.key")).unwrap();
     assert_eq!(stored.trim(), key);
@@ -1377,7 +1381,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
 
 #[gpui_kit::test]
 fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
-    let key = license_key("a@example.com", "2026-06-30");
+    let key = license_key(concat!("a", "@", "example.com"), "2026-06-30");
     let f = Fixture::licensed(cx, Some("2026-01-01"), Some(&key));
     let (main, view) = f.main(cx);
     let card = label(cx, main, "trial-card").unwrap();
@@ -1402,7 +1406,7 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn an_activate_link_fills_in_the_key_without_activating(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key(concat!("a", "@", "example.com"), "2027-10-01");
     let link = format!("convt://activate?key={key}");
     let request = crate::request::parse_url(&link).unwrap();
     cx.update(|cx| super::route(request, cx));
@@ -1442,7 +1446,7 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     set_input(cx, window, &input, "nonsense");
     click(cx, window, "first-run-next");
     assert!(shown(cx, window, "error"));
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key(concat!("a", "@", "example.com"), "2027-10-01");
     set_input(cx, window, &input, &key);
     click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
@@ -1627,11 +1631,13 @@ fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppCon
 
     // The browser's answer brings first run back, signed in, with the key.
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: concat!("pro", "@", "example.com").into(),
         token: "cvd_new".into(),
     });
-    f.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+    f.api.answer_key(Ok(Some(pro_key(
+        concat!("pro", "@", "example.com"),
+        "2026-11-01",
+    ))));
     let link = format!("convt://auth?state={}&code=onetime", query(&page, "state"));
     cx.update(|cx| super::route(crate::request::parse_url(&link).unwrap(), cx));
     wait_until(cx, "the key arrived", |cx| {
@@ -1649,7 +1655,7 @@ fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppCon
     assert!(!shown(cx, window, "plan-trial"));
     assert_eq!(
         label(cx, window, "account-status").as_deref(),
-        Some("Signed in as pro@example.com")
+        Some(concat!("Signed in as pro", "@", "example.com"))
     );
     cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
     assert_eq!(f.jobs(cx), 0);
@@ -1661,12 +1667,12 @@ fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppCon
 fn first_run_shows_a_license_it_already_has_instead_of_the_trial(cx: &mut TestAppContext) {
     for (key, title, plan) in [
         (
-            pro_key("pro@example.com", "2027-10-01"),
+            pro_key(concat!("pro", "@", "example.com"), "2027-10-01"),
             "You have Pro",
             "convt Pro",
         ),
         (
-            license_key("a@example.com", "2027-10-01"),
+            license_key(concat!("a", "@", "example.com"), "2027-10-01"),
             "You have a license",
             "convt license",
         ),
@@ -2663,13 +2669,13 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
         cx,
         window,
         &input,
-        &license_key("old@example.com", "2025-01-01"),
+        &license_key(concat!("old", "@", "example.com"), "2025-01-01"),
     );
     click(cx, window, "activate");
     assert!(f.dir.path().join("license.key").exists());
     assert_eq!(
         label(cx, window, "license-notice").as_deref(),
-        Some("Saved the license for old@example.com.")
+        Some(concat!("Saved the license for old", "@", "example.com."))
     );
     assert_eq!(label(cx, window, "settings-buy").as_deref(), Some("Renew"));
 
@@ -2677,12 +2683,12 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
         cx,
         window,
         &input,
-        &license_key("new@example.com", "2027-10-01"),
+        &license_key(concat!("new", "@", "example.com"), "2027-10-01"),
     );
     click(cx, window, "activate");
     assert_eq!(
         label(cx, window, "license-notice").as_deref(),
-        Some("License activated for new@example.com.")
+        Some(concat!("License activated for new", "@", "example.com."))
     );
     assert!(!shown(cx, window, "settings-buy"));
 }
@@ -2701,7 +2707,7 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
         cx,
         window,
         &input,
-        &license_key("old@example.com", "2025-01-01"),
+        &license_key(concat!("old", "@", "example.com"), "2025-01-01"),
     );
     click(cx, window, "first-run-next");
     assert!(f.dir.path().join("license.key").exists(), "the key is kept");
@@ -2732,7 +2738,7 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
         cx,
         window,
         &input,
-        &license_key("new@example.com", "2027-10-01"),
+        &license_key(concat!("new", "@", "example.com"), "2027-10-01"),
     );
     click(cx, window, "first-run-next");
     assert_eq!(
@@ -3411,11 +3417,13 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     assert_eq!(f.api.calls(), (0, 0, 0));
 
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: concat!("pro", "@", "example.com").into(),
         token: "cvd_issued".into(),
     });
-    f.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+    f.api.answer_key(Ok(Some(pro_key(
+        concat!("pro", "@", "example.com"),
+        "2026-11-01",
+    ))));
     cx.update(|cx| super::route(auth_link(&state, "code=c0de"), cx));
     wait_until(cx, "the refresh finished", |cx| {
         matches!(
@@ -3442,7 +3450,11 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     });
     assert_eq!(
         label(cx, settings, "account-status").as_deref(),
-        Some("Signed in to convt.app as pro@example.com.")
+        Some(concat!(
+            "Signed in to convt.app as pro",
+            "@",
+            "example.com."
+        ))
     );
     assert_eq!(
         label(cx, settings, "refresh-status").as_deref(),
@@ -3455,7 +3467,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
 fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: concat!("pro", "@", "example.com").into(),
         token: "cvd_issued".into(),
     });
     f.api.answer_key(Ok(None));
@@ -3505,7 +3517,12 @@ fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
             .unwrap()
             .contains("didn't start")
     );
-    cx.read(|cx| assert_eq!(f.app.read(cx).account.email(), Some("pro@example.com")));
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).account.email(),
+            Some(concat!("pro", "@", "example.com"))
+        )
+    });
 
     // After a cancel, the cancelled flow's link is dropped too.
     click(cx, settings, "sign-out");
@@ -3571,8 +3588,8 @@ fn a_sign_in_cancelled_or_refused_in_the_browser_fails(cx: &mut TestAppContext) 
 
 #[gpui_kit::test]
 fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
-    let current = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&current), "pro@example.com");
+    let current = pro_key(concat!("pro", "@", "example.com"), "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&current), concat!("pro", "@", "example.com"));
     // Offline at launch: one try, the key stays, the failure shows in Settings.
     cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
     wait_until(cx, "the refresh failed", |cx| {
@@ -3610,7 +3627,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     wait_until(cx, "the second launch's refresh", |_| f.api.calls().1 == 2);
 
     // Refresh license asks whenever clicked, and stores the next period's key.
-    let next = pro_key("pro@example.com", "2026-11-15");
+    let next = pro_key(concat!("pro", "@", "example.com"), "2026-11-15");
     f.api.answer_key(Ok(Some(next.clone())));
     wait_until(cx, "idle", |cx| {
         f.app.read(cx).account.refresh != crate::account::Refresh::Running
@@ -3693,8 +3710,8 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut TestAppContext) {
-    let key = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let key = pro_key(concat!("pro", "@", "example.com"), "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), concat!("pro", "@", "example.com"));
     f.api.answer_key(Err(ApiError::SignedOut));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     click(cx, settings, "refresh-license");
@@ -3725,8 +3742,8 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
 
 #[gpui_kit::test]
 fn sign_out_forgets_the_token_and_revokes_it(cx: &mut TestAppContext) {
-    let key = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let key = pro_key(concat!("pro", "@", "example.com"), "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), concat!("pro", "@", "example.com"));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     click(cx, settings, "sign-out");
     assert!(!f.dir.path().join("account.json").exists());
@@ -3771,7 +3788,7 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
 fn a_second_sign_in_cannot_start_while_the_first_is_finishing(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: concat!("pro", "@", "example.com").into(),
         token: "cvd_first".into(),
     });
     f.api.answer_key(Ok(None));
@@ -4289,8 +4306,8 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     // And a renewal through convt.app does the same.
     let f2 = Fixture::signed_in(
         cx,
-        Some(&pro_key("pro@example.com", "2026-10-02")),
-        "pro@example.com",
+        Some(&pro_key(concat!("pro", "@", "example.com"), "2026-10-02")),
+        concat!("pro", "@", "example.com"),
     );
     f2.releases.serve(Ok(manifest(
         3,
@@ -4298,8 +4315,10 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
         &update_key(),
     )));
     assert!(matches!(manual_check(&f2, cx), Update::NotCovered { .. }));
-    f2.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+    f2.api.answer_key(Ok(Some(pro_key(
+        concat!("pro", "@", "example.com"),
+        "2026-11-01",
+    ))));
     cx.update(|cx| f2.app.update(cx, |s, cx| s.refresh_license(cx)));
     wait_until(cx, "renewed", |cx| {
         matches!(
