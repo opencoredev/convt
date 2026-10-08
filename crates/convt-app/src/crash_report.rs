@@ -36,38 +36,27 @@ pub fn logs_dir() -> Option<PathBuf> {
 }
 
 /// Removes user paths while retaining useful crate-relative source locations.
+/// Spaces inside a folder name are part of the path, not a delimiter.
 pub fn scrub(input: &str) -> String {
-    let home = std::env::var_os("HOME").map(|p| PathBuf::from(p).to_string_lossy().into_owned());
     let mut out = input.to_string();
-    if let Some(home) = home {
+    if let Some(home) =
+        std::env::var_os("HOME").map(|p| PathBuf::from(p).to_string_lossy().into_owned())
+        && !home.is_empty()
+    {
         out = out.replace(&home, "<HOME>");
     }
-    let re = |s: String, pat: &str, replacement: &str| {
-        let mut out = String::with_capacity(s.len());
-        for part in s.split(pat) {
-            if !out.is_empty() {
-                out.push_str(replacement);
-            }
-            out.push_str(part);
-        }
-        out
-    };
     // Common absolute path roots and drive paths. This intentionally errs on
     // the side of removing a path rather than leaking a user's identity.
-    for root in ["/Users/", "/home/", "C:\\Users\\"] {
-        let mut rest = out.as_str();
-        let mut cleaned = String::new();
-        while let Some(i) = rest.find(root) {
-            cleaned.push_str(&rest[..i]);
-            let tail = &rest[i..];
-            let end = tail
-                .find(|c: char| c.is_whitespace() || c == ')' || c == ']' || c == '"')
-                .unwrap_or(tail.len());
-            cleaned.push_str("<PATH>");
-            rest = &tail[end..];
-        }
-        cleaned.push_str(rest);
-        out = cleaned;
+    for root in [
+        "<HOME>/",
+        "<HOME>\\",
+        "/Users/",
+        "/home/",
+        "C:\\Users\\",
+        "C:/Users/",
+        "~/",
+    ] {
+        out = replace_rooted_paths(&out, root);
     }
     // User supplied filenames are commonly present without an absolute root.
     let mut words = Vec::new();
@@ -83,8 +72,51 @@ pub fn scrub(input: &str) -> String {
             words.push(word.to_string());
         }
     }
-    let _ = &re;
     words.join(" ")
+}
+
+fn replace_rooted_paths(input: &str, root: &str) -> String {
+    let mut rest = input;
+    let mut cleaned = String::new();
+    while let Some(i) = rest.find(root) {
+        cleaned.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let end = path_extent(tail);
+        cleaned.push_str("<PATH>");
+        rest = &tail[end..];
+    }
+    cleaned.push_str(rest);
+    cleaned
+}
+
+/// How far a rooted path extends. Spaces stay inside the path; we stop at
+/// punctuation that typically ends a path in a log line (`: `, `)`, `"`).
+fn path_extent(tail: &str) -> usize {
+    let mut end = 0;
+    let mut chars = tail.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            ')' | ']' | '"' | '\'' | ',' | ';' | '\n' | '\r' | '\t' => return i,
+            ':' => match chars.peek() {
+                Some((_, ' ')) | None => return i,
+                _ => end = i + c.len_utf8(),
+            },
+            ' ' => match chars.peek() {
+                None => return i,
+                Some((_, next))
+                    if matches!(
+                        *next,
+                        '(' | ')' | ']' | '"' | '\'' | ',' | ';' | '\n' | '\r'
+                    ) =>
+                {
+                    return i;
+                }
+                _ => end = i + 1,
+            },
+            _ => end = i + c.len_utf8(),
+        }
+    }
+    end
 }
 
 fn do_not_track() -> bool {
@@ -361,6 +393,64 @@ mod tests {
             assert!(!x.contains(".jpg") && !x.contains(".png") && !x.contains(".pdf"));
         }
     }
+
+    #[test]
+    fn scrubs_macos_paths_with_spaces_in_folder_names() {
+        let folder = format!("{} {}", "Private", "Client");
+        let user = "alex";
+        let path = format!("/Users/{user}/{folder}/shot.png");
+        let out = scrub(&format!("could not read {path}: denied"));
+        assert!(!out.contains(user), "{out}");
+        assert!(!out.contains("Private"), "{out}");
+        assert!(!out.contains("Client"), "{out}");
+        assert!(!out.contains("shot"), "{out}");
+        assert!(out.contains("<PATH>"), "{out}");
+        assert!(out.contains("denied"), "{out}");
+        let dir_only = scrub(&format!("unreadable /Users/{user}/{folder}"));
+        assert!(
+            !dir_only.contains("Private") && !dir_only.contains("Client"),
+            "{dir_only}"
+        );
+    }
+
+    #[test]
+    fn scrubs_windows_paths_with_spaces_in_folder_names() {
+        let folder = format!("{} {}", "My", "Documents");
+        let user = "blake";
+        let path = format!("C:\\Users\\{user}\\{folder}\\x.png");
+        let out = scrub(&format!("could not read {path}: denied"));
+        assert!(!out.contains(user), "{out}");
+        assert!(!out.contains("My"), "{out}");
+        assert!(!out.contains("Documents"), "{out}");
+        assert!(!out.contains(".png"), "{out}");
+        assert!(out.contains("<PATH>"), "{out}");
+        assert!(out.contains("denied"), "{out}");
+        let dir_only = scrub(&format!("unreadable C:\\Users\\{user}\\{folder}"));
+        assert!(
+            !dir_only.contains("My") && !dir_only.contains("Documents"),
+            "{dir_only}"
+        );
+    }
+
+    #[test]
+    fn scrubs_linux_paths_with_spaces_in_folder_names() {
+        let folder = format!("{} {}", "Work", "Files");
+        let user = "casey";
+        let path = format!("/home/{user}/{folder}/notes.pdf");
+        let out = scrub(&format!("could not read {path}: denied"));
+        assert!(!out.contains(user), "{out}");
+        assert!(!out.contains("Work"), "{out}");
+        assert!(!out.contains("Files"), "{out}");
+        assert!(!out.contains("notes"), "{out}");
+        assert!(out.contains("<PATH>"), "{out}");
+        assert!(out.contains("denied"), "{out}");
+        let dir_only = scrub(&format!("unreadable /home/{user}/{folder}"));
+        assert!(
+            !dir_only.contains("Work") && !dir_only.contains("Files"),
+            "{dir_only}"
+        );
+    }
+
     #[test]
     fn scrub_keeps_crate_location() {
         assert!(scrub("crates/convt-app/src/main.rs:42").contains("<PATH>"));

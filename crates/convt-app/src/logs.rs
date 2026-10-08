@@ -430,7 +430,7 @@ mod tests {
         let addr = format!("{}@{}", "someone", "convt.test");
         let secret = format!("{}={}", "token", "api-secret");
         store.push(format!(
-            "opened /Users/someone/holiday.png {addr} {secret} Bearer hunter2"
+            "opened /Users/someone/holiday.png: {addr} {secret} Bearer hunter2"
         ));
         let recent = store.recent().join("\n");
         let file = std::fs::read_to_string(log_file(dir.path())).unwrap();
