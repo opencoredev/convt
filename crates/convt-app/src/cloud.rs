@@ -428,11 +428,12 @@ pub fn run(cloud: &Cloud, job: &Job, progress: &dyn Fn(Option<f32>), cancel: &Ca
             Ok(published)
         }
         Err(e) => {
-            if e.kind == "cancelled" || matches!(e.kind, "cloud_offline" | "io") {
-                // Best effort: a job left behind expires in 24 hours anyway.
-                if let Err(c) = session.call(|api, c| api.cancel(c, &id)) {
-                    tracing::info!(job = %id, error = ?c, "cloud job not cancelled");
-                }
+            // Whatever stopped it here, the job may still be queued or
+            // running on the server and holding storage, so cancel it. Best
+            // effort: cancelling a finished job is harmless, and one left
+            // behind expires in 24 hours anyway.
+            if let Err(c) = session.call(|api, c| api.cancel(c, &id)) {
+                tracing::info!(job = %id, error = ?c, "cloud job not cancelled");
             }
             tracing::info!(job = %id, kind = e.kind, "cloud job stopped");
             Err(e)

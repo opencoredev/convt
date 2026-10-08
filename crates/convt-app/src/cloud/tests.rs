@@ -379,6 +379,23 @@ fn a_blip_while_polling_is_ridden_out() {
 }
 
 #[test]
+fn a_job_that_fails_while_polling_is_cancelled_on_the_server() {
+    // An answer the app gives up on leaves the job queued there, holding
+    // storage, unless the app cancels it.
+    let fake = Arc::new(Fake::default());
+    fake.statuses
+        .lock()
+        .unwrap()
+        .push_back(Err(CloudError::Refused {
+            status: 409,
+            code: "conflict".into(),
+        }));
+    let (_dir, file) = input();
+    assert!(run_quietly(&cloud(fake.clone(), None), &webp(&file), &Cancel::new()).is_err());
+    assert_eq!(fake.calls().last().unwrap(), "cancel job_1");
+}
+
+#[test]
 fn files_the_cloud_cant_take_never_leave() {
     let (dir, file) = input();
     let fake = Arc::new(Fake::default());
