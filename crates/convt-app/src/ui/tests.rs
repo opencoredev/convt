@@ -2228,7 +2228,7 @@ fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext
     assert!(!shown(cx, main, "window-close"));
     assert!(shown(cx, main, "defaults"));
 
-    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar));
+    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
     let app = f.app.clone();
     let (main, _) = cx.update(|cx| {
         let options = super::window_options(size(px(1040.), px(640.)), "convt", cx);
@@ -2270,6 +2270,48 @@ fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext
         cx.update_window(main, |_, _, _| ()).is_err(),
         "Close removes the window"
     );
+}
+
+#[gpui_kit::test]
+fn the_title_bar_moves_the_window_only_for_a_held_drag(cx: &mut TestAppContext) {
+    use gpui_kit::{Modifiers, MouseButton, VisualTestContext};
+    let f = Fixture::new(cx);
+    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
+    let (main, _) = f.main(cx);
+    let bounds = |cx: &mut TestAppContext, name: &str| {
+        cx.update_window(main, |_, window, cx| {
+            window.render_frame(cx);
+            window.find(id(name)).bounds()
+        })
+        .unwrap()
+    };
+    let moves =
+        |cx: &mut TestAppContext| cx.read(|cx| cx.global::<super::chrome::ForceTitleBar>().moves);
+    let bar = bounds(cx, "title-bar");
+    let on_bar = point(bar.left() + px(200.), bar.center().y);
+    let below = point(on_bar.x, bar.bottom() + px(120.));
+    let close = bounds(cx, "window-close").center();
+    let mut w = VisualTestContext::from_window(main, cx);
+    let none = Modifiers::default();
+
+    // A fast drag whose first motion already left the bar still moves.
+    w.simulate_mouse_down(on_bar, MouseButton::Left, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    w.simulate_mouse_up(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
+
+    // A press whose release the bar never saw doesn't move on a later hover.
+    let mut w = VisualTestContext::from_window(main, cx);
+    w.simulate_mouse_down(on_bar, MouseButton::Left, none);
+    w.simulate_mouse_move(on_bar, None, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
+
+    // A press on a window button never starts a drag.
+    let mut w = VisualTestContext::from_window(main, cx);
+    w.simulate_mouse_down(close, MouseButton::Left, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
 }
 
 #[test]

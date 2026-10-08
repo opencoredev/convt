@@ -28,16 +28,20 @@ pub struct Chrome {
     view: AnyView,
     /// GPUI reads a window's title back only on macOS, so this keeps it.
     title: Option<SharedString>,
-    /// A press on the bar that hasn't moved yet. The first move after it hands
-    /// the drag to the compositor; a press that doesn't move stays a click, so
-    /// a double click still reaches the bar.
+    /// A press on the bar that hasn't moved yet. The first move after it,
+    /// anywhere in the window, hands the drag to the compositor; a press that
+    /// doesn't move stays a click, so a double click still reaches the bar.
     pressed: bool,
 }
 
 /// Set in tests to draw the bar: the test platform always reports
-/// server-side decorations.
+/// server-side decorations. It can't move windows either, so the bar counts
+/// the moves it would start here.
 #[cfg(test)]
-pub struct ForceTitleBar;
+#[derive(Default)]
+pub struct ForceTitleBar {
+    pub moves: usize,
+}
 
 #[cfg(test)]
 impl Global for ForceTitleBar {}
@@ -79,21 +83,19 @@ impl Chrome {
             .border_color(p.chrome_border)
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _, _, _| this.pressed = true),
+                cx.listener(|this, _, _, cx| {
+                    this.pressed = true;
+                    cx.notify();
+                }),
             )
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(|this, _, _, _| this.pressed = false),
+                cx.listener(|this, _, _, cx| {
+                    this.pressed = false;
+                    cx.notify();
+                }),
             )
-            .on_mouse_down_out(cx.listener(|this, _, _, _| this.pressed = false))
-            .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, window, _| {
-                // A release the bar never saw (the press moved focus away)
-                // must not leave a move armed for the next hover.
-                let held = e.pressed_button == Some(MouseButton::Left);
-                if std::mem::take(&mut this.pressed) && held {
-                    window.start_window_move();
-                }
-            }))
+            .when(self.pressed, |d| d.child(self.drag_watch(cx)))
             .on_click(|e, window, _| {
                 if e.standard_click() && e.click_count() == 2 {
                     window.zoom_window();
@@ -152,6 +154,47 @@ impl Chrome {
                 }),
             )
     }
+}
+
+impl Chrome {
+    /// Watches the first move after a press anywhere in the window, so a fast
+    /// drag whose first motion already left the bar still moves the window.
+    fn drag_watch(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let chrome = cx.entity().downgrade();
+        canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                window.on_mouse_event(move |e: &MouseMoveEvent, phase, window, cx| {
+                    if phase != DispatchPhase::Capture {
+                        return;
+                    }
+                    let Ok(armed) = chrome.update(cx, |this, cx| {
+                        cx.notify();
+                        std::mem::take(&mut this.pressed)
+                    }) else {
+                        return;
+                    };
+                    // A release the bar never saw (the press moved focus
+                    // away) must not leave a move armed for the next hover.
+                    if armed && e.pressed_button == Some(MouseButton::Left) {
+                        start_window_move(window, cx);
+                    }
+                });
+            },
+        )
+        .absolute()
+        .size_0()
+    }
+}
+
+#[cfg_attr(not(test), allow(unused_variables))]
+fn start_window_move(window: &Window, cx: &mut App) {
+    #[cfg(test)]
+    if cx.has_global::<ForceTitleBar>() {
+        cx.global_mut::<ForceTitleBar>().moves += 1;
+        return;
+    }
+    window.start_window_move();
 }
 
 impl Render for Chrome {
