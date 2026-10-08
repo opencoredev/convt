@@ -65,6 +65,7 @@ export async function currentProAccess(
   const live = await proSubscription(ctx.db, userId, ctx.clock());
   if (live?.status === "trialing" && live.trial_ends_at && live.trial_ends_at > ctx.clock())
     return { kind: "trial", endsOn: live.trial_ends_at.toISOString().slice(0, 10) };
+  if (live?.status === "trialing") return { kind: "lapsed" };
   if (live?.status === "unpaid" || live?.status === "incomplete") return { kind: "lapsed" };
   if (live) return { kind: "pro" };
   const deleting = await rows<{ x: number }>(

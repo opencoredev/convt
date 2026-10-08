@@ -61,6 +61,15 @@ describe("trials", () => {
     expect(after[0].n).toBe(before[0].n);
   });
 
+  test("a trial that ended before payment is lapsed", async () => {
+    const { u } = await startPro(testMailbox("ended-trial"));
+    await h.deliverAll();
+    await h.q(
+      sql`update subscriptions set trial_ends_at = now() - interval '1 day', status = 'trialing' where user_id = ${u.id}`,
+    );
+    expect(await h.service.currentProAccess(u.id)).toEqual({ kind: "lapsed" });
+  });
+
   test("a trialing subscription and its $0 paid order issue nothing; conversion issues one key and one email", async () => {
     const { subId } = await startPro("trial1@convt.test");
     await h.deliverAll();
