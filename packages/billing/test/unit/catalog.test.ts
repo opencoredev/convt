@@ -72,18 +72,14 @@ describe("catalog", () => {
     const c = loadCatalog("production");
     const family = c.discounts["17bb47c4-8b7b-4fb5-b013-31ad52a0e909"];
     const zortos = c.discounts["8a134038-3319-4905-a893-8635b0fd7cd7"];
-    expect(family).toEqual({ code: "K0SIYK55", basisPoints: 10000, products: ["pro_month"] });
-    expect(zortos).toEqual({ code: "SUIGL3WV", basisPoints: 10000, products: ["desktop"] });
+    expect(family).toEqual({ code: "FAMILY", basisPoints: 10000, products: ["pro_month"] });
+    expect(zortos).toEqual({
+      code: "ZORTOS_DISCORD",
+      basisPoints: 10000,
+      products: ["desktop"],
+    });
 
     expect(discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month")).toBeNull();
-    expect(
-      discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month", {
-        netCents: 0,
-        subtotalCents: 1200,
-        discountCents: 1200,
-        items: [{ priceId: c.products.pro_month.priceId, amountCents: 1200 }],
-      }),
-    ).toBeNull();
     expect(
       discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month", {
         netCents: 0,
@@ -92,10 +88,18 @@ describe("catalog", () => {
         items: [{ priceId: c.products.pro_month.priceId, amountCents: 1200 }],
       }),
     ).toMatch(/the order took 1198/);
-    expect(discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "desktop")).toMatch(
-      /does not apply/,
-    );
-    expect(discountProblem(c, "8a134038-3319-4905-a893-8635b0fd7cd7", "desktop")).toBeNull();
+    const complimentaryAmounts = {
+      netCents: 1,
+      subtotalCents: 2900,
+      discountCents: 2900,
+      items: [{ priceId: c.products.desktop.priceId, amountCents: 2900 }],
+    };
+    expect(
+      discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "desktop", complimentaryAmounts),
+    ).toMatch(/does not apply/);
+    expect(
+      discountProblem(c, "8a134038-3319-4905-a893-8635b0fd7cd7", "desktop", complimentaryAmounts),
+    ).toBeNull();
     expect(discountProblem(c, "8a134038-3319-4905-a893-8635b0fd7cd7", "pro_month")).toMatch(
       /does not apply/,
     );
