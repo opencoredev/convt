@@ -1,6 +1,11 @@
 //! The conversion queue. [`Runner`] runs jobs on worker threads with the same
 //! limits as the CLI (a concurrency cap, one video at a time) and reports
 //! [`Update`]s over a channel. [`Queue`] is the UI's view of every job.
+//!
+//! Cloud jobs ([`Runner::submit_cloud`]) share the queue, the updates and
+//! Stop, but run [`crate::cloud::run`] instead of the registry. They mostly
+//! wait on the network, so they have their own small limit and don't hold
+//! back local conversions.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -10,9 +15,13 @@ use std::time::{Duration, Instant};
 use convt_core::{Cancel, Category, Error, Format, Job, Registry, format_by_extension};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 
+use crate::cloud::Cloud;
 use crate::history::Setup;
 
 pub type JobId = u64;
+
+/// How many cloud jobs upload, wait and download at once.
+const CLOUD_CONCURRENCY: usize = 3;
 
 /// A finished job's error, kept as text so it can be shown and stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,12 +57,16 @@ struct Pending {
     id: JobId,
     job: Job,
     video: bool,
+    /// Set for a job that runs on convt's cloud.
+    cloud: Option<Arc<Cloud>>,
 }
 
 #[derive(Default)]
 struct State {
     queue: VecDeque<Pending>,
     running: HashMap<JobId, Cancel>,
+    /// How many of `running` are cloud jobs.
+    cloud_running: usize,
     video_running: bool,
     concurrency: usize,
 }
@@ -85,11 +98,23 @@ impl Runner {
 
     pub fn submit(&self, id: JobId, job: Job) {
         let video = is_video(&job);
-        self.state
-            .lock()
-            .unwrap()
-            .queue
-            .push_back(Pending { id, job, video });
+        self.state.lock().unwrap().queue.push_back(Pending {
+            id,
+            job,
+            video,
+            cloud: None,
+        });
+        self.pump();
+    }
+
+    /// Queues a job that runs on convt's cloud.
+    pub fn submit_cloud(&self, id: JobId, job: Job, cloud: Arc<Cloud>) {
+        self.state.lock().unwrap().queue.push_back(Pending {
+            id,
+            job,
+            video: false,
+            cloud: Some(cloud),
+        });
         self.pump();
     }
 
@@ -121,39 +146,56 @@ impl Runner {
     /// Starts as many queued jobs as the limits allow.
     fn pump(&self) {
         let mut state = self.state.lock().unwrap();
-        while state.running.len() < state.concurrency {
+        loop {
+            let local_free = state.running.len() - state.cloud_running < state.concurrency;
+            let cloud_free = state.cloud_running < CLOUD_CONCURRENCY;
             let video_busy = state.video_running;
-            let Some(i) = state.queue.iter().position(|p| !(p.video && video_busy)) else {
+            let Some(i) = state.queue.iter().position(|p| match p.cloud {
+                Some(_) => cloud_free,
+                None => local_free && !(p.video && video_busy),
+            }) else {
                 break;
             };
-            let Pending { id, job, video } = state.queue.remove(i).expect("index from position");
+            let pending = state.queue.remove(i).expect("index from position");
             let cancel = Cancel::new();
-            state.running.insert(id, cancel.clone());
-            state.video_running |= video;
+            state.running.insert(pending.id, cancel.clone());
+            state.video_running |= pending.video;
+            state.cloud_running += usize::from(pending.cloud.is_some());
             let this = self.clone();
             std::thread::Builder::new()
-                .name(format!("convt-job-{id}"))
-                .spawn(move || this.work(id, job, video, cancel))
+                .name(format!("convt-job-{}", pending.id))
+                .spawn(move || this.work(pending, cancel))
                 .expect("spawn job thread");
         }
     }
 
-    fn work(&self, id: JobId, job: Job, video: bool, cancel: Cancel) {
+    fn work(&self, pending: Pending, cancel: Cancel) {
+        let Pending {
+            id,
+            job,
+            video,
+            cloud,
+        } = pending;
         let tx = &self.tx;
         let _ = tx.unbounded_send(Update::Started(id));
-        let registry = self.registry.lock().unwrap().clone();
-        let result = registry
-            .run(
-                &job,
-                &|p| drop(tx.unbounded_send(Update::Progress(id, p))),
-                &cancel,
-            )
-            .map_err(|e| JobError::from(&e));
+        let progress = |p| drop(tx.unbounded_send(Update::Progress(id, p)));
+        let result = match &cloud {
+            Some(cloud) => crate::cloud::run(cloud, &job, &progress, &cancel),
+            None => {
+                let registry = self.registry.lock().unwrap().clone();
+                registry
+                    .run(&job, &progress, &cancel)
+                    .map_err(|e| JobError::from(&e))
+            }
+        };
         {
             let mut state = self.state.lock().unwrap();
             state.running.remove(&id);
             if video {
                 state.video_running = false;
+            }
+            if cloud.is_some() {
+                state.cloud_running -= 1;
             }
         }
         let _ = tx.unbounded_send(Update::Finished(id, result));
@@ -212,6 +254,15 @@ pub struct Queue {
 impl Queue {
     /// Adds a job and returns the id to submit it under.
     pub fn add(&mut self, job: &Job) -> JobId {
+        self.add_as(job, false)
+    }
+
+    /// Adds a job that runs on convt's cloud.
+    pub fn add_cloud(&mut self, job: &Job) -> JobId {
+        self.add_as(job, true)
+    }
+
+    fn add_as(&mut self, job: &Job, cloud: bool) -> JobId {
         self.next_id += 1;
         self.entries.push(Entry {
             id: self.next_id,
@@ -221,6 +272,7 @@ impl Queue {
             setup: Setup {
                 options: job.options.clone(),
                 output: job.output.clone(),
+                cloud,
             },
             started: None,
         });
