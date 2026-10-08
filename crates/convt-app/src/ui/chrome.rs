@@ -86,9 +86,11 @@ impl Chrome {
                 cx.listener(|this, _, _, _| this.pressed = false),
             )
             .on_mouse_down_out(cx.listener(|this, _, _, _| this.pressed = false))
-            .on_mouse_move(cx.listener(|this, _, window, _| {
-                if this.pressed {
-                    this.pressed = false;
+            .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, window, _| {
+                // A release the bar never saw (the press moved focus away)
+                // must not leave a move armed for the next hover.
+                let held = e.pressed_button == Some(MouseButton::Left);
+                if std::mem::take(&mut this.pressed) && held {
                     window.start_window_move();
                 }
             }))
