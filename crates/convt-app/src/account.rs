@@ -382,6 +382,8 @@ impl AppState {
         self.account.trial_poll_started = None;
         self.update_settings(|s| s.trial_cache = None, cx);
         self.licensing.set_account_trial(None);
+        self.account.access = None;
+        self.license = self.licensing.state();
         // Best effort: the dashboard can sign this computer out too.
         let api = self.account.api.clone();
         self.account._sign_in_task = Some(background(

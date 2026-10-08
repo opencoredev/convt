@@ -4198,6 +4198,31 @@ fn sign_out_forgets_the_token_and_revokes_it(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn signing_out_ends_the_account_trial_on_screen(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    // No local trial was ever started on this computer.
+    std::fs::remove_file(f.dir.path().join("trial")).unwrap();
+    let ends_on = convt_license::date::from_days(client::today() + 5);
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.licensing
+            .set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T12:00:00Z")));
+        s.license = s.licensing.state();
+        cx.notify();
+    });
+    let (main, _) = f.main(cx);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    let status = label(cx, settings, "license-status").unwrap();
+    assert!(status.starts_with("Pro trial"), "{status}");
+
+    click(cx, settings, "sign-out");
+    let signed_out = Some("Sign in to start your free trial.".to_string());
+    assert_eq!(label(cx, settings, "license-status"), signed_out);
+    assert_eq!(label(cx, main, "trial-card"), signed_out);
+    cx.read(|cx| assert!(!f.app.read(cx).license.allows_conversion()));
+}
+
+#[gpui_kit::test]
 fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     for dark in [false, true] {
