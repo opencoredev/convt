@@ -177,6 +177,20 @@ Use `file://` only: loopback HTTP works in the engines' unit tests alone, and ne
 
 Video rows and the Quick convert header show a frame from about a second in, grabbed by `src/thumbs.rs` with the FFmpeg the engines find (`convt_engines::ffmpeg::ffmpeg_path`), on one worker thread, and cached in memory, re-checked for changes on the worker. Rendering only reads the cache: metadata, the mount check and FFmpeg all run on the worker. The cache and its queue are bounded, and FFmpeg is killed when the app quits (and, on Linux, by the kernel if the app dies). Network shares (NFS, SMB, sshfs, GVfs; on Windows UNC paths and mapped network drives) keep the extension badge, as do videos FFmpeg can't read and any video until its frame is ready; local disks and USB drives get frames. The unit tests in `thumbs.rs` make a fade-in clip and check that the frame isn't black. The Windows and macOS mount checks are unverified.
 
+### Title bar under GNOME on Wayland
+
+Under bare Xvfb GPUI uses X11 and server-side decorations, and with no window manager there is no title bar at all; that shows nothing about the drawn one. GNOME's compositor has no server-side decorations, so on Wayland GPUI falls back to client-side ones and `src/ui/chrome.rs` draws the title bar. To see it, run GNOME Shell nested on your Xvfb display and the app as its Wayland client, after the Xvfb and private-bus steps above:
+
+```sh
+MUTTER_DEBUG_DUMMY_MODE_SPECS=1360x960 gnome-shell --nested --wayland --no-x11 --wayland-display convt-wl >"$work/shell.log" 2>&1 &
+echo $! >> "$work/pids"; sleep 6
+xdotool mousemove 700 500 click 1; xdotool key Escape   # leave the overview
+WAYLAND_DISPLAY=convt-wl DISPLAY= ./target/debug/convt-app >"$work/app.log" 2>&1 &
+echo $! > "$work/app.pid"; echo $! >> "$work/pids"
+```
+
+Capture the whole nested screen with `x11grab` at `$DISPLAY+0,0`; xdotool input reaches the nested windows. The shell starts the real `xdg-desktop-portal` on the private bus, and it has no Settings interface there, so the app stays light: kill that portal (match its `DBUS_SESSION_BUS_ADDRESS` to your bus first), start `fake-portal.py`, and relaunch the app for dark. GNOME won't raise a running window for a second launch (it shows "convt is ready" instead), so relaunch rather than un-minimize. Check dragging the bar, double-clicking it, the right-click window menu, the buttons and edge resizing. A compositor with server-side decorations (sway) must show its own bar and none from convt.
+
 ### Drive it
 
 Use `xdotool`. Find windows with `xdotool search --name ''` and `getwindowname`, and their position with `getwindowgeometry --shell`; GPUI windows open at fixed spots (main window at 122,130, Settings at 332,150, Quick convert at 342,170, first run at 412,190 on a 1280x900 screen). `xdotool type` fills text fields. Scroll with button 5. Move the pointer to a corner before a screenshot so no hover state shows.

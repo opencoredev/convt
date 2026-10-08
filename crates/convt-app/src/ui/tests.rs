@@ -15,8 +15,9 @@ use ed25519_dalek::SigningKey;
 use gpui_kit::component::input::InputState;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, Bounds, ClipboardEntry, ElementId, Entity, ImageFormat,
-    Render, SharedString, TestAppContext, Window, WindowBounds, WindowOptions, point, px, size,
+    AnyWindowHandle, App, AppContext as _, Bounds, ClipboardEntry, Decorations, ElementId, Entity,
+    ImageFormat, Render, SharedString, TestAppContext, Tiling, Window, WindowBounds, WindowOptions,
+    point, px, size,
 };
 use tempfile::TempDir;
 
@@ -512,7 +513,7 @@ fn open<V: Render>(
             })),
             ..Default::default()
         };
-        let (handle, view) = gpui_kit::open_window(options, cx, build).expect("open a test window");
+        let (handle, view) = super::open_window(options, cx, build).expect("open a test window");
         (handle, view)
     })
 }
@@ -2274,6 +2275,12 @@ fn the_icons_the_windows_draw_are_bundled() {
         IconName::Settings,
         IconName::Star,
         IconName::TriangleAlert,
+        IconName::ChevronDown,
+        // The title bar Linux windows draw (`chrome.rs`).
+        IconName::Minus,
+        IconName::WindowMaximize,
+        IconName::WindowRestore,
+        IconName::Close,
     ] {
         let path = icon.path();
         assert!(
@@ -2281,6 +2288,113 @@ fn the_icons_the_windows_draw_are_bundled() {
             "{path} is missing, so it would draw empty"
         );
     }
+}
+
+#[test]
+fn only_linux_windows_left_undecorated_draw_a_title_bar() {
+    use super::chrome::draws_title_bar;
+    assert!(!draws_title_bar(Decorations::Server));
+    assert_eq!(
+        draws_title_bar(Decorations::Client {
+            tiling: Tiling::default()
+        }),
+        cfg!(target_os = "linux")
+    );
+}
+
+#[gpui_kit::test]
+fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    // Without client-side decorations, which the test platform never
+    // reports, the window draws no bar.
+    let (main, _) = f.main(cx);
+    assert!(!shown(cx, main, "window-close"));
+    assert!(shown(cx, main, "defaults"));
+
+    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
+    let app = f.app.clone();
+    let (main, _) = cx.update(|cx| {
+        let options = super::window_options(size(px(1040.), px(640.)), "convt", cx);
+        super::open_window(options, cx, |window, cx| {
+            cx.new(|cx| MainView::new(app, window, cx))
+        })
+        .unwrap()
+    });
+    assert_eq!(label(cx, main, "window-title").as_deref(), Some("convt"));
+    assert_eq!(
+        label(cx, main, "window-minimize").as_deref(),
+        Some("Minimize")
+    );
+    assert_eq!(
+        label(cx, main, "window-maximize").as_deref(),
+        Some("Maximize")
+    );
+    assert_eq!(label(cx, main, "window-close").as_deref(), Some("Close"));
+    assert!(
+        shown(cx, main, "defaults"),
+        "the window's own view still shows"
+    );
+    let bounds = |cx: &mut TestAppContext, name: &str| {
+        cx.update_window(main, |_, window, cx| {
+            window.render_frame(cx);
+            window.find(id(name)).bounds()
+        })
+        .unwrap()
+    };
+    let bar = bounds(cx, "title-bar");
+    assert_eq!(bar.size.height, px(super::chrome::TITLE_BAR_HEIGHT));
+    assert!(
+        bounds(cx, "defaults").top() >= bar.bottom(),
+        "the view starts below the bar"
+    );
+
+    click(cx, main, "window-close");
+    assert!(
+        cx.update_window(main, |_, _, _| ()).is_err(),
+        "Close removes the window"
+    );
+}
+
+#[gpui_kit::test]
+fn the_title_bar_moves_the_window_only_for_a_held_drag(cx: &mut TestAppContext) {
+    use gpui_kit::{Modifiers, MouseButton, VisualTestContext};
+    let f = Fixture::new(cx);
+    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
+    let (main, _) = f.main(cx);
+    let bounds = |cx: &mut TestAppContext, name: &str| {
+        cx.update_window(main, |_, window, cx| {
+            window.render_frame(cx);
+            window.find(id(name)).bounds()
+        })
+        .unwrap()
+    };
+    let moves =
+        |cx: &mut TestAppContext| cx.read(|cx| cx.global::<super::chrome::ForceTitleBar>().moves);
+    let bar = bounds(cx, "title-bar");
+    let on_bar = point(bar.left() + px(200.), bar.center().y);
+    let below = point(on_bar.x, bar.bottom() + px(120.));
+    let close = bounds(cx, "window-close").center();
+    let mut w = VisualTestContext::from_window(main, cx);
+    let none = Modifiers::default();
+
+    // A fast drag whose first motion already left the bar still moves.
+    w.simulate_mouse_down(on_bar, MouseButton::Left, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    w.simulate_mouse_up(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
+
+    // A press whose release the bar never saw doesn't move on a later hover.
+    let mut w = VisualTestContext::from_window(main, cx);
+    w.simulate_mouse_down(on_bar, MouseButton::Left, none);
+    w.simulate_mouse_move(on_bar, None, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
+
+    // A press on a window button never starts a drag.
+    let mut w = VisualTestContext::from_window(main, cx);
+    w.simulate_mouse_down(close, MouseButton::Left, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
 }
 
 #[test]
