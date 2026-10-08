@@ -318,6 +318,68 @@ pub(super) fn installed_notice(p: &Palette) -> impl IntoElement + use<> {
         )
 }
 
+/// Activity's line for a document download that runs in the background,
+/// such as one onboarding started: its progress, then a plain failure with
+/// the way to try again. Nothing once it's installed or never started.
+pub(super) fn activity_notice(pack: &PackState, p: &Palette) -> Option<AnyElement> {
+    match &pack.phase {
+        PackPhase::Working(step) => Some(
+            div()
+                .id("activity-pack")
+                .test_support()
+                .aria_label("Adding document support")
+                .child(theme::callout(
+                    IconName::Document,
+                    Tone::Neutral,
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(space::SM))
+                        .child(theme::callout_words(
+                            "Adding document support",
+                            "Word, Excel and PowerPoint files convert once it's done.",
+                            p,
+                        ))
+                        .child(progress(step, &pack.offer, p)),
+                    p,
+                ))
+                .into_any_element(),
+        ),
+        PackPhase::Failed(f) if f.kind != FailureKind::Cancelled => {
+            let (title, body) = pack::plain_failure(f, &pack.offer);
+            Some(
+                div()
+                    .id("activity-pack")
+                    .test_support()
+                    .aria_label(SharedString::from(title.clone()))
+                    .child(theme::callout(
+                        IconName::TriangleAlert,
+                        Tone::Error,
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(space::LG))
+                            .child(theme::callout_words(title, body, p).flex_1().min_w_0())
+                            .child(
+                                Button::secondary(
+                                    "activity-pack-settings",
+                                    "Try again in Settings",
+                                )
+                                .small()
+                                .build(p)
+                                .on_click(|_, _, cx| {
+                                    super::show_settings(super::SettingsTab::General, cx)
+                                }),
+                            ),
+                        p,
+                    ))
+                    .into_any_element(),
+            )
+        }
+        _ => None,
+    }
+}
+
 /// A click in the Remove flow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Remove {

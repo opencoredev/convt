@@ -22,13 +22,18 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::theme::{self, IconName, Palette, icon, radius, styled, text};
+use super::theme::{self, IconName, Look, Palette, icon, styled, text};
 use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::finder::EXTENSION_SETTINGS;
 use crate::model::{AppState, PackPhase};
+use crate::pack;
 
-/// How long the "Setting convt up" moment lasts before the main window opens.
-pub const CALIBRATE: Duration = Duration::from_millis(1800);
+/// How long the "Setting convt up" moment lasts before the main window
+/// opens, its fade included. Nothing it lists takes longer: the document
+/// download, the one slow thing, carries on in the background.
+pub const CALIBRATE: Duration = Duration::from_millis(2300);
+/// The last part of [`CALIBRATE`], while the screen fades out.
+const FADE: Duration = Duration::from_millis(300);
 
 /// The site's terms and privacy pages, linked under the sign-in buttons.
 const TERMS_URL: &str = "https://convt.app/terms";
@@ -103,6 +108,9 @@ pub struct FirstRunView {
     pub(super) provider: Provider,
     /// The highlighted tile of a question: true for Yes.
     pub(super) yes: bool,
+    /// Yes was the answer to the documents question, so the setup step
+    /// follows the download.
+    pub(super) documents_chosen: bool,
     pub(super) key: Entity<InputState>,
     pub(super) error: Option<String>,
     /// Onboarding asked the account itself, for a launch that didn't (the
@@ -136,6 +144,7 @@ impl FirstRunView {
             screen,
             provider: Provider::Google,
             yes: true,
+            documents_chosen: false,
             key: cx.new(|cx| InputState::new(window, cx).placeholder("Paste your license key")),
             error: None,
             asked: false,
@@ -273,7 +282,10 @@ impl FirstRunView {
             match question {
                 // A click on Yes is the user asking for the download, as the
                 // Download button is.
-                Question::Documents => super::pack::start_install(&self.app, cx),
+                Question::Documents => {
+                    self.documents_chosen = true;
+                    super::pack::start_install(&self.app, cx)
+                }
                 Question::Finder => cx.open_url(EXTENSION_SETTINGS),
             }
         }
@@ -385,7 +397,7 @@ impl FirstRunView {
                 .child(
                     actions()
                         .child(
-                            pill("onboarding-reopen", "Open again", Pill::Soft, p)
+                            pill("onboarding-reopen", "Open again", Look::Secondary, p)
                                 .w_auto()
                                 .min_w(px(160.))
                                 .px(px(24.)).on_click(
@@ -407,7 +419,7 @@ impl FirstRunView {
                 .child(
                     actions()
                         .child(
-                            pill("onboarding-retry", "Try again", Pill::Strong, p)
+                            pill("onboarding-retry", "Try again", Look::Primary, p)
                                 .w_auto()
                                 .min_w(px(160.))
                                 .px(px(24.)).on_click(
@@ -427,7 +439,7 @@ impl FirstRunView {
                 .child(heading("Couldn't reach convt.app", p))
                 .child(problem(e, p))
                 .child(
-                    pill("onboarding-retry", "Retry", Pill::Strong, p).on_click(cx.listener(
+                    pill("onboarding-retry", "Retry", Look::Primary, p).on_click(cx.listener(
                         |this, _, _, cx| this.app.update(cx, |s, cx| s.refresh_license(cx)),
                     )),
                 )
@@ -458,7 +470,7 @@ impl FirstRunView {
                     p,
                 ))
                 .child(
-                    pill("onboarding-primary", "Renew", Pill::Brand, p)
+                    pill("onboarding-primary", "Renew", Look::Brand, p)
                         .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                 )
                 .child(self.secondary_links(p, cx)),
@@ -477,7 +489,7 @@ impl FirstRunView {
                     p,
                 ))
                 .child(
-                    pill("onboarding-primary", "Start free trial", Pill::Brand, p)
+                    pill("onboarding-primary", "Start free trial", Look::Brand, p)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.app.update(cx, |s, cx| s.start_trial(cx))
                         })),
@@ -491,7 +503,7 @@ impl FirstRunView {
                 .child(
                     actions()
                         .child(
-                            pill("onboarding-reopen", "Open checkout again", Pill::Soft, p)
+                            pill("onboarding-reopen", "Open checkout again", Look::Secondary, p)
                                 .w_auto()
                                 .min_w(px(160.))
                                 .px(px(24.))
@@ -503,7 +515,7 @@ impl FirstRunView {
                 .child(heading("Your Pro plan has ended", p))
                 .child(line("Get convt Pro to keep converting, or use a license key.", p))
                 .child(
-                    pill("onboarding-primary", "Get convt Pro", Pill::Brand, p)
+                    pill("onboarding-primary", "Get convt Pro", Look::Brand, p)
                         .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                 )
                 .child(self.secondary_links(p, cx))
@@ -528,7 +540,7 @@ impl FirstRunView {
             .child(heading(title, p))
             .child(line(body, p))
             .child(
-                pill("onboarding-primary", "Continue", Pill::Strong, p).on_click(
+                pill("onboarding-primary", "Continue", Look::Primary, p).on_click(
                     cx.listener(|this, _, window, cx| this.continue_from_account(window, cx)),
                 ),
             )
@@ -544,8 +556,13 @@ impl FirstRunView {
             )
             .child(div().h(px(14.)))
             .child(
-                pill("onboarding-google", "Continue with Google", Pill::Strong, p)
-                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Google, cx))),
+                pill(
+                    "onboarding-google",
+                    "Continue with Google",
+                    Look::Primary,
+                    p,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Google, cx))),
             )
             .child(
                 div()
@@ -558,8 +575,13 @@ impl FirstRunView {
                     .child(div().flex_1().h(px(1.)).bg(p.control_border)),
             )
             .child(
-                pill("onboarding-email", "Continue with Email", Pill::Soft, p)
-                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Email, cx))),
+                pill(
+                    "onboarding-email",
+                    "Continue with Email",
+                    Look::Secondary,
+                    p,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Email, cx))),
             )
             .children(notice.map(|n| problem(n, p)))
             .child(div().h(px(6.)))
@@ -609,7 +631,7 @@ impl FirstRunView {
             )
             .children(self.error.clone().map(|e| problem(e, p)))
             .child(
-                pill("onboarding-activate", "Activate", Pill::Strong, p)
+                pill("onboarding-activate", "Activate", Look::Primary, p)
                     .on_click(cx.listener(|this, _, window, cx| this.activate(window, cx))),
             )
             .child(
@@ -639,37 +661,8 @@ impl FirstRunView {
             Question::Finder => (IconName::FolderOpen, "Yes, add it", "Not now"),
         };
         let tile = |id: &'static str, yes: bool, glyph: IconName, label: &'static str| {
-            let on = self.yes == yes;
-            theme::clickable(id, label)
-                .aria_selected(on)
-                .flex()
-                .flex_col()
-                .items_center()
-                .justify_center()
-                .gap(px(12.))
-                .w(px(176.))
-                .h(px(136.))
-                .rounded(px(radius::PANEL + 2.))
-                .bg(p.surface)
-                .shadow(if on {
-                    vec![
-                        theme::inset_ring(p.green, 2.),
-                        theme::shadow(p.shadow_soft, 8., 24.),
-                    ]
-                } else {
-                    vec![
-                        theme::inset_ring(p.border, 1.),
-                        theme::shadow(p.shadow_soft, 2., 6.),
-                    ]
-                })
-                .hover(|s| s.bg(p.recessed))
+            theme::choice_tile(id, label, glyph, self.yes == yes, p)
                 .on_click(cx.listener(move |this, _, window, cx| this.answer(yes, window, cx)))
-                .child(icon(glyph, 30., if on { p.green } else { p.secondary }))
-                .child(
-                    styled(theme::size::BODY, p.text)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(label),
-                )
         };
         column()
             .child(heading(question.title(), p))
@@ -689,56 +682,81 @@ impl FirstRunView {
             )
     }
 
-    fn calibrating(&self, p: &Palette, cx: &App) -> AnyElement {
-        let words = "Setting convt up…";
-        // Over the bloom: a muted green-gray, and the light sweeping across
-        // it. Opaque, because the text runs take no partial alpha.
-        let (base, bright): (Hsla, Hsla) = if p.dark {
-            (rgb(0x8FBFA4).into(), rgb(0xFFFFFF).into())
-        } else {
-            (rgb(0x3F6B55).into(), rgb(0x06140D).into())
-        };
-        let still = cx.reduce_motion();
-        let label = div()
-            .id("onboarding-title")
-            .test_support()
-            .aria_label(words);
-        if still {
-            return label
-                .child(
-                    text(17., 24., base)
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(words),
-                )
-                .into_any_element();
+    /// What the setup step lists, in order, each with its state now.
+    pub(super) fn setup_steps(&self, cx: &App) -> Vec<SetupStep> {
+        let state = self.app.read(cx);
+        let mut steps = Vec::new();
+        if state.account.session.is_some() {
+            steps.push(SetupStep::ready("account", "Signed in"));
+        } else if matches!(state.license, State::Licensed(_) | State::NotCovered(_)) {
+            steps.push(SetupStep::ready("account", "License key added"));
         }
-        // A band of light sweeps across the words, letter by letter.
-        label
-            .with_animation(
-                "shimmer",
-                Animation::new(Duration::from_millis(1400)).repeat(),
-                move |d, t| {
-                    let n = words.chars().count() as f32;
-                    let centre = -3. + t * (n + 6.);
-                    let mut runs = Vec::new();
-                    for (i, (at, ch)) in words.char_indices().enumerate() {
-                        let k = (-((i as f32 - centre) / 2.2).powi(2)).exp();
-                        let color = mix(base, bright, k);
-                        runs.push((
-                            at..at + ch.len_utf8(),
-                            HighlightStyle {
-                                color: Some(color),
-                                ..Default::default()
-                            },
-                        ));
+        let plan = match self.stage(cx) {
+            Stage::Trial { ends_on } => {
+                Some(format!("Free trial on until {}", friendly_date(&ends_on)))
+            }
+            Stage::Pro => Some("convt Pro".to_string()),
+            Stage::Licensed => Some("convt license".to_string()),
+            _ => None,
+        };
+        steps.extend(plan.map(|label| SetupStep::ready("plan", label)));
+        if self.documents_chosen {
+            let pack = &state.pack;
+            let documents = match &pack.phase {
+                _ if state.documents_supported() => {
+                    SetupStep::ready("documents", "Document support is ready")
+                }
+                PackPhase::Working(step) => {
+                    let fraction = match step {
+                        pack::Progress::Download { bytes, total } => total
+                            .filter(|t| *t >= *bytes && *t > 0)
+                            .or(pack.offer.download)
+                            .map(|total| *bytes as f32 / total as f32),
+                        _ => Some(1.),
+                    };
+                    SetupStep {
+                        key: "documents",
+                        label: "Adding document support…".into(),
+                        status: StepStatus::Working(fraction),
                     }
-                    d.child(
-                        text(17., 24., base)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(StyledText::new(words).with_highlights(runs)),
-                    )
+                }
+                PackPhase::Failed(f) if f.kind == pack::FailureKind::Cancelled => SetupStep {
+                    key: "documents",
+                    label: "Document support stopped".into(),
+                    status: StepStatus::Failed("Download it from Settings any time.".into()),
                 },
-            )
+                _ => SetupStep {
+                    key: "documents",
+                    label: "Couldn't add document support".into(),
+                    status: StepStatus::Failed("Try again in Settings.".into()),
+                },
+            };
+            steps.push(documents);
+        }
+        if cfg!(target_os = "macos") {
+            steps.push(SetupStep::ready("finder", "Right-click menu in Finder"));
+        }
+        steps
+    }
+
+    fn calibrating(&self, p: &Palette, cx: &App) -> AnyElement {
+        let steps = self.setup_steps(cx);
+        let still = cx.reduce_motion();
+        let p = *p;
+        let content = div()
+            .id("setup")
+            .flex()
+            .flex_col()
+            .items_center()
+            .w(px(360.));
+        if still {
+            return setup_content(content, &steps, 1., &p, true).into_any_element();
+        }
+        let total = CALIBRATE.as_secs_f32();
+        content
+            .with_animation("setup", Animation::new(CALIBRATE), move |d, t| {
+                setup_content(d, &steps, t * total, &p, false)
+            })
             .into_any_element()
     }
 
@@ -783,15 +801,17 @@ impl FirstRunView {
                 .w(px(BLOOM.0))
                 .h(px(BLOOM.1));
             if still {
-                bloom.into_any_element()
+                bloom.opacity(BLOOM_STRENGTH).into_any_element()
             } else {
-                // Rises and brightens over the first half, then holds.
+                // Rises and brightens over the first half, holds, and
+                // fades with the rest of the screen.
+                let total = CALIBRATE.as_secs_f32();
                 bloom
-                    .with_animation(
-                        "bloom",
-                        Animation::new(CALIBRATE.mul_f32(0.55)).with_easing(ease_out_quint()),
-                        move |img, t| img.opacity(t).mt(px(top + 160. * (1. - t))),
-                    )
+                    .with_animation("bloom", Animation::new(CALIBRATE), move |img, t| {
+                        let rise = ease_out_quint()((t * total / 1.2).min(1.));
+                        img.opacity(BLOOM_STRENGTH * rise * fade_out(t * total))
+                            .mt(px(top + 160. * (1. - rise)))
+                    })
                     .into_any_element()
             }
         });
@@ -811,64 +831,25 @@ pub(super) fn breath(t: f32) -> f32 {
     0.78 + 0.22 * wave
 }
 
-/// The glow's and the bloom's size: the PNGs' pixel size, drawn unscaled.
-const GLOW: (f32, f32) = (2400., 540.);
+use theme::GLOW;
+/// How strongly the bloom shows behind the setup step: enough to feel the
+/// glow gather, never so much that it muddies the words over it.
+const BLOOM_STRENGTH: f32 = 0.55;
+/// The bloom's size: the PNG's pixel size, drawn unscaled.
 const BLOOM: (f32, f32) = (2400., 1500.);
 
 const PILL_WIDTH: f32 = 340.;
 
-#[derive(Clone, Copy, PartialEq)]
-enum Pill {
-    /// Ink on the page: the main sign-in button.
-    Strong,
-    /// A soft gray fill, for the second way in.
-    Soft,
-    /// The brand green, for a purchase or trial.
-    Brand,
-}
-
-/// A full-width rounded button, as on the sign-in screen.
-fn pill(id: &'static str, label: &'static str, look: Pill, p: &Palette) -> theme::Clickable {
-    let (bg, fg) = match look {
-        Pill::Strong if p.dark => (p.text, p.window),
-        Pill::Strong => (rgb(0x111312).into(), rgb(0xFFFFFF).into()),
-        Pill::Soft => (
-            if p.dark {
-                p.hover
-            } else {
-                rgb(0xF0F2F1).into()
-            },
-            p.text,
-        ),
-        Pill::Brand => (rgb(0x127A47).into(), rgb(0xFFFFFF).into()),
+/// A wide pill, as on the sign-in screen: the app's [`theme::Button`] at its
+/// large size.
+fn pill(id: &'static str, label: &'static str, look: Look, p: &Palette) -> theme::Clickable {
+    let button = theme::Button::new(id, label, look).large();
+    let button = match id {
+        "onboarding-google" => button.google(),
+        "onboarding-email" => button.icon(IconName::Mail),
+        _ => button,
     };
-    let lead = match id {
-        "onboarding-google" => Some(theme::google_mark(16.).into_any_element()),
-        "onboarding-email" => Some(icon(IconName::Mail, 16., fg).into_any_element()),
-        _ => None,
-    };
-    theme::clickable(id, label)
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(px(10.))
-        .w(px(PILL_WIDTH))
-        .h(px(42.))
-        .rounded_full()
-        .bg(bg)
-        .when(look == Pill::Soft, |d| {
-            d.shadow(vec![theme::inset_ring(p.border, 1.)])
-        })
-        .when(look != Pill::Soft, |d| {
-            d.shadow(vec![theme::shadow(p.shadow_soft, 2., 8.)])
-        })
-        .hover(|s| s.opacity(0.9))
-        .children(lead)
-        .child(
-            text(14., 18., fg)
-                .font_weight(FontWeight::MEDIUM)
-                .child(label),
-        )
+    button.build(p).w(px(PILL_WIDTH))
 }
 
 fn link(id: &'static str, label: &'static str, p: &Palette) -> theme::Clickable {
@@ -944,6 +925,252 @@ fn mix(a: Hsla, b: Hsla, t: f32) -> Hsla {
         a: 1.,
     }
     .into()
+}
+
+/// One line of the setup step.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct SetupStep {
+    pub key: &'static str,
+    pub label: String,
+    pub status: StepStatus,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum StepStatus {
+    /// Settles to a check as the list reaches it.
+    Ready,
+    /// Still going, with how far when known: the document download.
+    Working(Option<f32>),
+    /// Didn't work; the note says where to go next.
+    Failed(String),
+}
+
+impl SetupStep {
+    fn ready(key: &'static str, label: impl Into<String>) -> Self {
+        Self {
+            key,
+            label: label.into(),
+            status: StepStatus::Ready,
+        }
+    }
+}
+
+/// When the `i`th line appears and when it settles, in seconds.
+fn step_times(i: usize) -> (f32, f32) {
+    let shown = 0.25 + 0.12 * i as f32;
+    (shown, 0.75 + 0.35 * i as f32)
+}
+
+/// 1 until the fade begins, then down to 0 at the end of [`CALIBRATE`].
+fn fade_out(at: f32) -> f32 {
+    let (end, fade) = (CALIBRATE.as_secs_f32(), FADE.as_secs_f32());
+    ((end - at) / fade).clamp(0., 1.)
+}
+
+/// The setup step `at` seconds in: the breathing mark, the heading with its
+/// sheen, and the list settling line by line. `still` draws the end state
+/// with nothing moving.
+fn setup_content(
+    d: Stateful<Div>,
+    steps: &[SetupStep],
+    at: f32,
+    p: &Palette,
+    still: bool,
+) -> Stateful<Div> {
+    let ease = |x: f32| ease_out_quint()(x.clamp(0., 1.));
+    // One slow breath over the whole moment.
+    let breath = if still {
+        0.
+    } else {
+        (1. - (at / CALIBRATE.as_secs_f32() * std::f32::consts::TAU).cos()) / 2.
+    };
+    let halo = div()
+        .absolute()
+        .size(px(112.))
+        .rounded_full()
+        .bg(p.green_tint)
+        .shadow(vec![
+            theme::inset_ring(p.green_border, 1.),
+            BoxShadow {
+                color: p.green.opacity(0.10 + 0.14 * breath),
+                offset: point(px(0.), px(0.)),
+                blur_radius: px(24. + 20. * breath),
+                spread_radius: px(2. + 6. * breath),
+                inset: false,
+            },
+        ]);
+    let mark = div()
+        .relative()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(112.))
+        .child(halo)
+        .child(theme::mark(48., p));
+    let lines = steps.iter().enumerate().map(|(i, step)| {
+        let (shown, settles) = step_times(i);
+        let appear = if still { 1. } else { ease((at - shown) / 0.35) };
+        let settled = still || at >= settles;
+        setup_line(step, settled, at, p)
+            .opacity(appear)
+            .mt(px(4. * (1. - appear)))
+    });
+    let list = (!steps.is_empty()).then(|| {
+        div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .mt(px(28.))
+            .py(px(6.))
+            .rounded(px(theme::radius::PANEL))
+            .bg(p.surface)
+            .shadow({
+                let mut s = vec![theme::inset_ring(p.border, 1.)];
+                s.extend(theme::soft(p));
+                s
+            })
+            .children(lines)
+    });
+    d.opacity(if still { 1. } else { fade_out(at) })
+        .child(mark)
+        .child(div().h(px(22.)))
+        .child(shimmer_heading("Setting convt up…", at, p, still))
+        .child(
+            text(14., 21., p.secondary)
+                .pt(px(6.))
+                .text_center()
+                .child("This only takes a moment."),
+        )
+        .children(list)
+}
+
+/// A line of the setup list: what it is, then a spinner that settles into a
+/// check, live progress, or what went wrong. Tests read it by
+/// `setup-step-{key}`.
+fn setup_line(step: &SetupStep, settled: bool, at: f32, p: &Palette) -> theme::Clickable {
+    let working = matches!(step.status, StepStatus::Working(_));
+    let ending = at >= (CALIBRATE - FADE).as_secs_f32() - 0.4;
+    let label: SharedString = if working && ending {
+        "Document support continues in the background".into()
+    } else {
+        step.label.clone().into()
+    };
+    let glyph = match (&step.status, settled) {
+        (StepStatus::Ready, true) => div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(20.))
+            .rounded_full()
+            .bg(p.green)
+            .child(icon(
+                IconName::Check,
+                12.,
+                if p.dark {
+                    p.window
+                } else {
+                    rgb(0xFFFFFF).into()
+                },
+            ))
+            .into_any_element(),
+        (StepStatus::Failed(_), true) => {
+            icon(IconName::CircleAlert, 20., p.error).into_any_element()
+        }
+        _ => div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(20.))
+            .child(Spinner::new().with_size(px(15.)).color(p.green))
+            .into_any_element(),
+    };
+    let note = match (&step.status, settled) {
+        (StepStatus::Failed(note), true) => Some(
+            styled(theme::size::SMALL, p.secondary)
+                .child(SharedString::from(note.clone()))
+                .into_any_element(),
+        ),
+        (StepStatus::Working(Some(fraction)), _) => Some(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(
+                    div()
+                        .flex_1()
+                        .child(theme::progress(*fraction, p.track, p.green)),
+                )
+                .child(
+                    theme::mono(11., 14., p.secondary)
+                        .child(format!("{:.0}%", fraction.clamp(0., 1.) * 100.)),
+                )
+                .into_any_element(),
+        ),
+        _ => None,
+    };
+    let done = settled && step.status == StepStatus::Ready;
+    div()
+        .id(SharedString::from(format!("setup-step-{}", step.key)))
+        .test_support()
+        .aria_label(label.clone())
+        .flex()
+        .items_start()
+        .gap(px(12.))
+        .px(px(18.))
+        .py(px(10.))
+        .child(div().flex_shrink_0().pt(px(0.5)).child(glyph))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .gap(px(6.))
+                .child(
+                    text(14., 21., if done || working { p.text } else { p.secondary })
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(label),
+                )
+                .children(note),
+        )
+}
+
+/// The heading in ink with a band of green light sweeping across it. Ink
+/// and green both read well on the page, so every letter stays legible.
+fn shimmer_heading(words: &'static str, at: f32, p: &Palette, still: bool) -> impl IntoElement {
+    let base = p.text;
+    let bright = p.green_text;
+    let label = div()
+        .id("onboarding-title")
+        .test_support()
+        .aria_label(words);
+    let heading = |runs: Vec<(std::ops::Range<usize>, HighlightStyle)>| {
+        text(24., 30., base)
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_center()
+            .child(StyledText::new(words).with_highlights(runs))
+    };
+    if still {
+        return label.child(heading(Vec::new()));
+    }
+    // About one and a half passes over the moment.
+    let n = words.chars().count() as f32;
+    let centre = -4. + (at / 1.4).fract() * (n + 8.);
+    let runs = words
+        .char_indices()
+        .enumerate()
+        .map(|(i, (at, ch))| {
+            let k = (-((i as f32 - centre) / 2.4).powi(2)).exp();
+            (
+                at..at + ch.len_utf8(),
+                HighlightStyle {
+                    color: Some(mix(base, bright, k)),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
+    label.child(heading(runs))
 }
 
 /// "2026-10-15" as "October 15".

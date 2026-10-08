@@ -44,10 +44,12 @@ pub mod space {
 
 /// Corner radii, in pixels.
 pub mod radius {
-    pub const SM: f32 = 5.;
-    pub const CONTROL: f32 = 7.;
-    pub const CARD: f32 = 10.;
-    pub const PANEL: f32 = 14.;
+    pub const SM: f32 = 6.;
+    /// Text fields and selects. Buttons are pills.
+    pub const CONTROL: f32 = 9.;
+    pub const CARD: f32 = 12.;
+    /// Choice tiles and the larger cards.
+    pub const PANEL: f32 = 16.;
 }
 
 /// Type sizes and their line heights, in pixels.
@@ -519,27 +521,53 @@ pub fn clickable(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Cl
         .aria_label(label)
 }
 
-/// The top and bottom of the primary button's gradient.
-const PRIMARY_FILL: (u32, u32) = (0x127A47, 0x0F6B3E);
+/// The brand green as a button fill: white text on it is past 5.3:1.
+const BRAND_FILL: u32 = 0x127A47;
+/// Ink as a button fill in the light appearance.
+const INK_FILL: u32 = 0x111312;
+/// The soft gray of a secondary pill in the light appearance.
+const SOFT_FILL: (u32, u32) = (0xF0F2F1, 0xE7EAE8);
 
-/// How a [`Button`] looks.
+/// How a [`Button`] looks. Every button is a pill, as on the onboarding
+/// screens: one ink pill per window or card for its main action, soft gray
+/// pills beside it, quiet ghost buttons in rows, and the brand green only
+/// for buying or starting a trial.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Look {
-    /// The one main action of a window or card, in the brand green.
+    /// The one main action: ink on the page (light ink in dark mode).
     Primary,
-    /// A bordered button on the surface, such as Cancel.
+    /// A soft gray pill, such as Cancel or a second way on.
     Secondary,
-    /// Text that gains a background on hover, for row actions.
+    /// Text that gains a soft pill on hover, for row actions.
     Ghost,
+    /// The brand green, for a purchase or a trial.
+    Brand,
 }
 
-/// A button: a look, a label, an optional leading icon and two heights.
+/// A button's height.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Height {
+    /// 28px, in rows, cards and the popover.
+    Small,
+    /// 32px, the default in windows.
+    Regular,
+    /// 42px, the wide onboarding pills.
+    Large,
+}
+
+/// Something drawn before a button's label.
+enum Lead {
+    Icon(IconName),
+    Google,
+}
+
+/// A button: a look, a label, an optional leading icon and three heights.
 pub struct Button {
     id: ElementId,
     label: SharedString,
     look: Look,
-    icon: Option<IconName>,
-    small: bool,
+    lead: Option<Lead>,
+    height: Height,
     disabled: bool,
     loading: bool,
     color: Option<Hsla>,
@@ -551,8 +579,8 @@ impl Button {
             id: id.into(),
             label: label.into(),
             look,
-            icon: None,
-            small: false,
+            lead: None,
+            height: Height::Regular,
             disabled: false,
             loading: false,
             color: None,
@@ -571,14 +599,30 @@ impl Button {
         Self::new(id, label, Look::Ghost)
     }
 
+    pub fn brand(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self::new(id, label, Look::Brand)
+    }
+
     pub fn icon(mut self, icon: IconName) -> Self {
-        self.icon = Some(icon);
+        self.lead = Some(Lead::Icon(icon));
         self
     }
 
-    /// 26px tall instead of 30.
+    /// Google's four-color G before the label.
+    pub fn google(mut self) -> Self {
+        self.lead = Some(Lead::Google);
+        self
+    }
+
+    /// 28px tall instead of 32.
     pub fn small(mut self) -> Self {
-        self.small = true;
+        self.height = Height::Small;
+        self
+    }
+
+    /// 42px tall, as the onboarding pills.
+    pub fn large(mut self) -> Self {
+        self.height = Height::Large;
         self
     }
 
@@ -601,89 +645,83 @@ impl Button {
     }
 
     pub fn build(self, p: &Palette) -> Clickable {
-        let (h, pad, size) = if self.small {
-            (26., 10., 12.)
-        } else {
-            (30., 14., 13.)
+        let (h, pad, size, line, icon_size) = match self.height {
+            Height::Small => (28., 12., 12., 16., 13.),
+            Height::Regular => (32., 16., 13., 16., 14.),
+            Height::Large => (42., 24., 14., 18., 16.),
         };
-        let fg = match self.look {
-            Look::Primary => c(0xFFFFFF),
-            Look::Secondary => self.color.unwrap_or(p.text),
-            Look::Ghost => self.color.unwrap_or(p.secondary),
+        let (bg, hover_bg, fg) = match self.look {
+            Look::Primary if p.dark => (p.text, c(0xFFFFFF), p.window),
+            Look::Primary => (c(INK_FILL), c(0x2A2D2C), c(0xFFFFFF)),
+            Look::Brand => (c(BRAND_FILL), c(0x0F6B3E), c(0xFFFFFF)),
+            Look::Secondary if p.dark => (p.hover, p.selected, self.color.unwrap_or(p.text)),
+            Look::Secondary => (c(SOFT_FILL.0), c(SOFT_FILL.1), self.color.unwrap_or(p.text)),
+            Look::Ghost => (
+                transparent_black(),
+                p.hover,
+                self.color.unwrap_or(p.secondary),
+            ),
         };
-        let (hover_fg, ghost) = (self.color.unwrap_or(p.text), self.look == Look::Ghost);
+        let hover_fg = match self.look {
+            Look::Ghost => self.color.unwrap_or(p.text),
+            _ => fg,
+        };
         let still = self.disabled || self.loading;
         let base = clickable(self.id, self.label.clone())
             .flex()
             .flex_shrink_0()
             .items_center()
             .justify_center()
-            .gap(px(6.))
+            .gap(px(if self.height == Height::Large {
+                10.
+            } else {
+                6.
+            }))
             .h(px(h))
-            .px(px(if ghost { pad - 2. } else { pad }))
-            .rounded(px(radius::CONTROL));
+            .px(px(if self.look == Look::Ghost {
+                pad - 4.
+            } else {
+                pad
+            }))
+            .rounded_full()
+            .bg(bg)
+            .when(!still, |d| d.hover(|s| s.bg(hover_bg)));
         let base = match self.look {
-            // The web's `.btn-primary` ring and shadows. Its fill (#22A867 to
-            // #1B9259) gives white text about 3:1, so the fill starts at
-            // --green instead: at least 5.3:1, past the AA target of 4.5.
-            Look::Primary => base
-                .bg(linear_gradient(
-                    180.,
-                    linear_color_stop(c(PRIMARY_FILL.0), 0.),
-                    linear_color_stop(c(PRIMARY_FILL.1), 1.),
-                ))
-                .shadow(vec![
-                    BoxShadow {
-                        color: ca(0xFFFFFF47),
-                        offset: point(px(0.), px(1.)),
-                        blur_radius: px(0.),
-                        spread_radius: px(0.),
-                        inset: true,
-                    },
-                    inset_ring(c(0x157F4A), 1.),
-                    shadow(ca(0x0A3C2340), 1., 2.),
-                    shadow(ca(0x0A3C231F), 2., 6.),
-                ])
-                .when(!still, |d| d.hover(|s| s.opacity(0.92))),
-            Look::Secondary => base
-                .bg(p.surface)
-                .shadow({
-                    let mut s = raise(p);
-                    s.push(inset_ring(p.control_border, 1.));
-                    s
-                })
-                .when(!still, |d| d.hover(|s| s.bg(p.recessed))),
-            Look::Ghost => base.when(!still, |d| d.hover(|s| s.bg(p.hover))),
+            Look::Primary | Look::Brand if self.height == Height::Large => {
+                base.shadow(vec![shadow(p.shadow_soft, 2., 8.)])
+            }
+            Look::Primary | Look::Brand => base.shadow(vec![shadow(p.shadow_soft, 1., 3.)]),
+            Look::Secondary => base.shadow(vec![inset_ring(p.border, 1.)]),
+            Look::Ghost => base,
         };
-        let icon_color = if self.look == Look::Secondary {
-            p.secondary
-        } else {
-            fg
+        let icon_color = match self.look {
+            Look::Secondary | Look::Ghost if self.color.is_none() => p.secondary,
+            _ => fg,
         };
-        let icon_size = if self.small { 13. } else { 14. };
+        let lead = match self.lead {
+            Some(Lead::Google) => Some(google_mark(icon_size).into_any_element()),
+            Some(Lead::Icon(i)) => Some(icon(i, icon_size, icon_color).into_any_element()),
+            None => None,
+        };
         base.when(self.disabled, |d| d.opacity(0.45))
             .when(still, |d| d.cursor_default())
             .when(self.loading, |d| {
                 d.child(Spinner::new().with_size(px(icon_size)).color(icon_color))
             })
-            .when(!self.loading, |d| {
-                d.children(self.icon.map(|i| icon(i, icon_size, icon_color)))
-            })
+            .when(!self.loading, |d| d.children(lead))
             .child(
-                text(size, 16., fg)
-                    .font_weight(if self.look == Look::Primary {
-                        FontWeight::SEMIBOLD
-                    } else {
-                        FontWeight::MEDIUM
-                    })
+                text(size, line, fg)
+                    .font_weight(FontWeight::MEDIUM)
                     .whitespace_nowrap()
-                    .when(ghost && !still, |d| d.hover(|s| s.text_color(hover_fg)))
+                    .when(self.look == Look::Ghost && !still, |d| {
+                        d.hover(|s| s.text_color(hover_fg))
+                    })
                     .child(self.label),
             )
     }
 }
 
-/// The green call-to-action button, 30px tall.
+/// The ink pill, 32px tall: the one main action.
 pub fn primary_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -692,7 +730,7 @@ pub fn primary_button(
     Button::primary(id, label).build(p)
 }
 
-/// The bordered button, such as Cancel.
+/// The soft gray pill, such as Cancel.
 pub fn secondary_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -713,7 +751,7 @@ pub fn text_button(
         text(size, 16., color)
             .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
-            .hover(|s| s.opacity(0.75))
+            .hover(|s| s.opacity(0.7))
             .child(label),
     )
 }
@@ -949,10 +987,10 @@ pub fn segmented(
     div()
         .flex()
         .flex_shrink_0()
-        .p(px(2.))
+        .p(px(3.))
         .gap(px(2.))
-        .rounded(px(radius::CONTROL + 1.))
-        .bg(if p.dark { p.recessed } else { p.track })
+        .rounded_full()
+        .bg(if p.dark { p.recessed } else { c(SOFT_FILL.0) })
         .when(p.dark, |d| d.shadow(vec![inset_ring(p.border, 1.)]))
         .children(choices.iter().map(|(key, label)| {
             let key = *key;
@@ -964,10 +1002,13 @@ pub fn segmented(
                 .items_center()
                 .h(px(24.))
                 .px(px(12.))
-                .rounded(px(radius::SM + 1.))
+                .rounded_full()
                 .when(on, |d| {
-                    d.bg(if p.dark { p.selected } else { p.surface })
-                        .shadow(raise(p))
+                    d.bg(if p.dark { p.selected } else { p.surface }).shadow({
+                        let mut s = raise(p);
+                        s.push(shadow(p.shadow_soft, 1., 3.));
+                        s
+                    })
                 })
                 .when(!on, |d| d.hover(|s| s.bg(p.hover)))
                 .on_click(move |_, window, cx| on_pick(key, window, cx))
@@ -1031,6 +1072,59 @@ fn reason_note(element_id: &SharedString, reason: SharedString, p: &Palette) -> 
         .into_any_element()
 }
 
+/// The look of anything picked from a set (format cards, tiles, presets,
+/// the onboarding questions): a raised surface, and for the picked one a
+/// 2px ring in the brand green with a softer, deeper shadow. The ring is
+/// also what the keyboard moves.
+pub fn choice(el: Clickable, on: bool, corner: f32, p: &Palette) -> Clickable {
+    choice_look(el, on, true, corner, p)
+}
+
+/// [`choice`], with no hover for a choice that can't be picked.
+fn choice_look(el: Clickable, on: bool, enabled: bool, corner: f32, p: &Palette) -> Clickable {
+    el.rounded(px(corner))
+        .bg(p.surface)
+        .shadow(choice_shadow(on, p))
+        .when(!on && enabled, |d| d.hover(|s| s.bg(p.recessed)))
+}
+
+fn choice_shadow(on: bool, p: &Palette) -> Vec<BoxShadow> {
+    if on {
+        vec![inset_ring(p.green, 2.), shadow(p.shadow_soft, 4., 14.)]
+    } else {
+        let mut s = vec![inset_ring(p.border, 1.)];
+        s.extend(raise(p));
+        s
+    }
+}
+
+/// A large square choice with an icon over its label, as onboarding asks
+/// its questions.
+pub fn choice_tile(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    glyph: IconName,
+    on: bool,
+    p: &Palette,
+) -> Clickable {
+    let label = label.into();
+    choice(clickable(id, label.clone()), on, radius::PANEL, p)
+        .aria_selected(on)
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(12.))
+        .w(px(176.))
+        .h(px(136.))
+        .child(icon(glyph, 30., if on { p.green } else { p.secondary }))
+        .child(
+            styled(size::BODY, p.text)
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(label),
+        )
+}
+
 /// One choice of [`tiles`].
 pub struct Tile {
     pub key: &'static str,
@@ -1079,66 +1173,62 @@ pub fn tiles(
             } else {
                 (p.chip, p.chip_border, p.secondary)
             };
-            clickable(element_id.clone(), tile.title.clone())
-                .aria_selected(on)
-                .flex()
-                .flex_1()
-                .items_center()
-                .gap(px(space::MD))
-                .p(px(space::MD))
-                .rounded(px(radius::CARD))
-                .bg(p.surface)
-                .shadow(if on {
-                    vec![inset_ring(p.green, 1.5)]
-                } else {
-                    let mut s = raise(p);
-                    s.push(inset_ring(p.border, 1.));
-                    s
-                })
-                .when(!on && !off, |d| d.hover(|s| s.bg(p.recessed)))
-                .when(off, |d| d.cursor_default())
-                .when_some(
-                    hover.zip(tile.disabled.clone()),
-                    |d, ((state, shown), reason)| {
-                        d.relative()
-                            .on_hover(hover_setter(state))
-                            .children(shown.then(|| reason_note(&element_id, reason, p)))
-                    },
-                )
-                .when(!off, |d| {
-                    d.on_click(move |_, window, cx| on_pick(key, window, cx))
-                })
-                .child(
-                    div()
-                        .flex()
-                        .flex_shrink_0()
-                        .items_center()
-                        .justify_center()
-                        .size(px(36.))
-                        .rounded(px(9.))
-                        .bg(tile_bg)
-                        .shadow(vec![inset_ring(tile_ring, 1.)])
-                        .when(off, |d| d.opacity(0.5))
-                        .child(icon(tile.icon, 20., glyph)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .min_w_0()
-                        .gap(px(1.))
-                        .when(off, |d| d.opacity(0.5))
-                        .child(
-                            styled(size::BODY, p.text)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(tile.title.clone()),
-                        )
-                        .child(
-                            styled(size::SMALL, p.secondary)
-                                .truncate()
-                                .child(tile.line.clone()),
-                        ),
-                )
+            choice_look(
+                clickable(element_id.clone(), tile.title.clone()),
+                on,
+                !off,
+                radius::PANEL,
+                p,
+            )
+            .aria_selected(on)
+            .flex()
+            .flex_1()
+            .items_center()
+            .gap(px(space::MD))
+            .p(px(14.))
+            .when(off, |d| d.cursor_default())
+            .when_some(
+                hover.zip(tile.disabled.clone()),
+                |d, ((state, shown), reason)| {
+                    d.relative()
+                        .on_hover(hover_setter(state))
+                        .children(shown.then(|| reason_note(&element_id, reason, p)))
+                },
+            )
+            .when(!off, |d| {
+                d.on_click(move |_, window, cx| on_pick(key, window, cx))
+            })
+            .child(
+                div()
+                    .flex()
+                    .flex_shrink_0()
+                    .items_center()
+                    .justify_center()
+                    .size(px(38.))
+                    .rounded(px(10.))
+                    .bg(tile_bg)
+                    .shadow(vec![inset_ring(tile_ring, 1.)])
+                    .when(off, |d| d.opacity(0.5))
+                    .child(icon(tile.icon, 20., glyph)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .gap(px(1.))
+                    .when(off, |d| d.opacity(0.5))
+                    .child(
+                        styled(size::BODY, p.text)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(tile.title.clone()),
+                    )
+                    .child(
+                        styled(size::SMALL, p.secondary)
+                            .truncate()
+                            .child(tile.line.clone()),
+                    ),
+            )
         }))
 }
 
@@ -1204,7 +1294,23 @@ pub fn card(p: &Palette) -> Div {
         .bg(p.surface)
         .border_1()
         .border_color(p.border)
-        .when(!p.dark, |d| d.shadow(raise(p)))
+        .when(!p.dark, |d| d.shadow(soft(p)))
+}
+
+/// The soft resting shadow of cards: a hairline drop and a wide, faint one,
+/// as the onboarding tiles sit on the page.
+pub fn soft(p: &Palette) -> Vec<BoxShadow> {
+    let mut s = raise(p);
+    s.push(shadow(
+        if p.dark {
+            ca(0x00000040)
+        } else {
+            ca(0x0A1E140A)
+        },
+        4.,
+        14.,
+    ));
+    s
 }
 
 /// Rows in one card, with dividers between them, like grouped settings.
@@ -1376,6 +1482,28 @@ pub fn lockup(text_size: f32, p: &Palette) -> Div {
         )
 }
 
+/// The onboarding's dithered green glow (`assets/onboarding`), rising from
+/// the bottom of whatever holds it, at `strength` (0 to 1) of its full
+/// opacity. The holder needs `relative()` and `overflow_hidden()`. Used
+/// sparingly, where a quiet moment can take some warmth: onboarding, the
+/// empty Activity page, the License tab's status.
+pub fn glow(strength: f32, p: &Palette) -> Img {
+    img(SharedString::from(format!(
+        "onboarding/glow-{}.png",
+        if p.dark { "dark" } else { "light" }
+    )))
+    .absolute()
+    .bottom_0()
+    .left(relative(0.5))
+    .ml(px(-GLOW.0 / 2.))
+    .w(px(GLOW.0))
+    .h(px(GLOW.1))
+    .opacity(strength)
+}
+
+/// The glow PNGs' pixel size, drawn unscaled so the cells stay square.
+pub const GLOW: (f32, f32) = (2400., 540.);
+
 /// A thumbnail for a file: the image itself for pictures, a frame for video
 /// on a local disk (see `thumbs.rs`), and a colored badge with the extension
 /// for everything else, including pictures that can't be decoded and videos
@@ -1542,7 +1670,7 @@ pub fn file_manager_name() -> &'static str {
 
 #[cfg(test)]
 mod contrast {
-    use super::{Hsla, PRIMARY_FILL, Palette, c};
+    use super::{BRAND_FILL, Hsla, INK_FILL, Palette, SOFT_FILL, c};
 
     fn luminance(color: Hsla) -> f32 {
         let c = color.to_rgb();
@@ -1593,10 +1721,21 @@ mod contrast {
         }
     }
 
+    /// Every pill's label against its fill, resting and hovered.
     #[test]
-    fn white_on_primary_meets_aa() {
-        for fill in [PRIMARY_FILL.0, PRIMARY_FILL.1] {
+    fn button_labels_meet_aa() {
+        for fill in [BRAND_FILL, 0x0F6B3E, INK_FILL, 0x2A2D2C] {
             assert!(ratio(c(0xFFFFFF), c(fill)) >= 4.5, "{fill:06X}");
+        }
+        let (light, dark) = (Palette::light(), Palette::dark());
+        for fill in [SOFT_FILL.0, SOFT_FILL.1] {
+            assert!(ratio(light.text, c(fill)) >= 4.5, "{fill:06X}");
+        }
+        for fill in [dark.text, c(0xFFFFFF)] {
+            assert!(ratio(dark.window, fill) >= 4.5);
+        }
+        for fill in [dark.hover, dark.selected] {
+            assert!(ratio(dark.text, fill) >= 4.5);
         }
     }
 }

@@ -92,12 +92,18 @@ impl MainView {
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .h(px(30.))
-                .px(px(space::SM))
-                .rounded(px(radius::CONTROL))
+                .h(px(32.))
+                .px(px(space::MD))
+                .rounded_full()
                 .map(|d| {
-                    if selected {
+                    if selected && p.dark {
                         d.bg(p.selected)
+                    } else if selected {
+                        d.bg(p.surface).shadow({
+                            let mut s = vec![theme::inset_ring(p.border, 1.)];
+                            s.extend(theme::soft(p));
+                            s
+                        })
                     } else {
                         d.hover(|s| s.bg(p.hover))
                     }
@@ -235,8 +241,11 @@ impl MainView {
 
     /// What goes above the list: the way back to Finder setup.
     fn notices(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let finder_off = self.app.read(cx).finder_on == Some(false);
-        let mut notices = Vec::new();
+        let state = self.app.read(cx);
+        let finder_off = state.finder_on == Some(false);
+        let mut notices: Vec<AnyElement> = super::pack::activity_notice(&state.pack, p)
+            .into_iter()
+            .collect();
         if finder_off {
             notices.push(finder_setup_card(p).into_any_element());
         }
@@ -362,61 +371,69 @@ impl MainView {
                 .border_1()
                 .border_color(p.green_border.opacity(alpha))
         };
-        div().flex().flex_1().min_h_0().p(px(GUTTER)).child(
-            div()
-                .id("empty")
-                .test_support()
-                .aria_label("Nothing converted yet.")
-                .flex()
-                .flex_col()
-                .flex_1()
-                .items_center()
-                .justify_center()
-                .gap(px(space::XL))
-                .px(px(space::XXL))
-                .pb(px(40.))
-                .child(
-                    div()
-                        .relative()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .size(px(200.))
-                        .child(ring(200., 0.35))
-                        .child(ring(148., 0.6))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .size(px(96.))
-                                .rounded_full()
-                                .bg(p.green_tint)
-                                .shadow(vec![theme::inset_ring(p.green_border, 1.)])
-                                .child(theme::mark(44., p)),
-                        ),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .gap(px(6.))
-                        .max_w(px(400.))
-                        .child(
-                            text(17., 22., p.text)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("Drop files to convert"),
-                        )
-                        .child(styled(size::BODY, p.secondary).text_center().child(hint)),
-                )
-                .child(
-                    Button::secondary("empty-add-files", "Choose files…")
-                        .icon(IconName::FolderOpen)
-                        .build(p)
-                        .on_click(cx.listener(|this, _, _, cx| this.pick_files(cx))),
-                ),
-        )
+        div()
+            .relative()
+            .overflow_hidden()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .p(px(GUTTER))
+            .child(theme::glow(0.55, p))
+            .child(
+                div()
+                    .id("empty")
+                    .test_support()
+                    .aria_label("Nothing converted yet.")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(space::XL))
+                    .px(px(space::XXL))
+                    .pb(px(40.))
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(200.))
+                            .child(ring(200., 0.35))
+                            .child(ring(148., 0.6))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .size(px(96.))
+                                    .rounded_full()
+                                    .bg(p.green_tint)
+                                    .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                                    .child(theme::mark(44., p)),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap(px(6.))
+                            .max_w(px(400.))
+                            .child(
+                                text(17., 22., p.text)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Drop files to convert"),
+                            )
+                            .child(styled(size::BODY, p.secondary).text_center().child(hint)),
+                    )
+                    .child(
+                        Button::secondary("empty-add-files", "Choose files…")
+                            .icon(IconName::FolderOpen)
+                            .build(p)
+                            .on_click(cx.listener(|this, _, _, cx| this.pick_files(cx))),
+                    ),
+            )
     }
 
     fn automations(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -575,8 +592,10 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
         ),
         State::NotCovered(_) => ("Updates ended", String::new(), 1., true, "Renew".into()),
     };
-    let button = if ended {
+    let button = if matches!(state, State::SignInNeeded) {
         Button::primary("trial-buy", link)
+    } else if ended {
+        Button::brand("trial-buy", link)
     } else {
         Button::secondary("trial-buy", link)
     };
@@ -591,10 +610,16 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
             .flex_col()
             .gap(px(10.))
             .p(px(space::MD))
-            .rounded(px(radius::CARD))
+            .rounded(px(radius::PANEL))
             .bg(p.surface)
-            .border_1()
-            .border_color(if ended { p.error_border } else { p.border })
+            .shadow({
+                let mut s = vec![theme::inset_ring(
+                    if ended { p.error_border } else { p.border },
+                    1.,
+                )];
+                s.extend(theme::soft(p));
+                s
+            })
             .child(
                 div()
                     .flex()
@@ -756,7 +781,7 @@ fn active_row(
         )
         .child(status_cell(format!("status-{id}"), status, glyph, el))
         .child(action_cell(Some(
-            Button::ghost(
+            Button::secondary(
                 SharedString::from(format!("{}-{id}", action.to_lowercase())),
                 action,
             )
@@ -788,7 +813,7 @@ fn record_row(record: &Record, app: &Entity<AppState>, p: &Palette) -> impl Into
                 _ => None,
             };
             let show = outputs.first().cloned().map(|path| {
-                Button::ghost(SharedString::from(format!("show-{id}")), "Show")
+                Button::secondary(SharedString::from(format!("show-{id}")), "Show")
                     .small()
                     .build(p)
                     .on_click(move |_, _, cx| cx.reveal_path(&path))
@@ -865,7 +890,7 @@ fn retry(record: &Record, app: &Entity<AppState>, p: &Palette) -> Option<AnyElem
     let setup = record.setup.clone();
     let app = app.clone();
     Some(
-        Button::ghost(SharedString::from(format!("retry-{}", record.id)), "Retry")
+        Button::secondary(SharedString::from(format!("retry-{}", record.id)), "Retry")
             .icon(IconName::RotateCw)
             .small()
             .build(p)

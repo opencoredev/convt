@@ -5162,3 +5162,79 @@ fn addresses_show_masked(cx: &mut TestAppContext) {
         assert!(!label(cx, window, id).unwrap().contains(&address));
     }
 }
+
+/// Yes to documents shows the download as a live line of the setup step,
+/// never holds onboarding for it, and hands it to Activity in the main
+/// window.
+#[gpui_kit::test]
+fn the_setup_step_follows_the_document_download_into_the_background(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.hold.store(true, Ordering::SeqCst);
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    wait_until(cx, "the download started", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Working(_))
+    });
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Setting convt up…")
+    );
+    assert_eq!(
+        label(cx, window, "setup-step-plan").as_deref(),
+        Some("convt Pro")
+    );
+    assert_eq!(
+        label(cx, window, "setup-step-documents").as_deref(),
+        Some("Adding document support…")
+    );
+    // The download is still going when the moment ends; the main window
+    // opens anyway and shows it.
+    finish_onboarding(cx, &view);
+    let (main, _) = window_of::<MainView>(cx);
+    assert_eq!(
+        label(cx, main, "activity-pack").as_deref(),
+        Some("Adding document support")
+    );
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).documents_supported()
+    });
+    cx.run_until_parked();
+    assert!(!shown(cx, main, "activity-pack"));
+    assert_eq!(packs.installs(), 1);
+}
+
+/// A download that fails says so plainly, in the setup step and in
+/// Activity, with Settings as the way to try again.
+#[gpui_kit::test]
+fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "offline");
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        label(cx, window, "setup-step-documents").as_deref(),
+        Some("Couldn't add document support")
+    );
+    finish_onboarding(cx, &view);
+    let (main, _) = window_of::<MainView>(cx);
+    assert_eq!(
+        label(cx, main, "activity-pack").as_deref(),
+        Some("Couldn't download document support")
+    );
+    click(cx, main, "activity-pack-settings");
+    window_of::<SettingsView>(cx);
+}

@@ -629,55 +629,49 @@ impl QuickView {
         let cards = self.targets.formats.iter().map(|&format| {
             let on = self.to == Some(format);
             let weak = cx.entity().downgrade();
-            theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name)
-                .aria_selected(on)
-                .relative()
-                .flex()
-                .flex_col()
-                .min_w_0()
-                .gap(px(3.))
-                .px(px(space::MD))
-                .py(px(10.))
-                .rounded(px(radius::CARD))
-                .map(|d| {
-                    if on {
-                        d.bg(p.green_tint)
-                            .shadow(vec![theme::inset_ring(p.green, 1.5)])
-                    } else {
-                        d.bg(p.surface)
-                            .shadow(vec![theme::inset_ring(p.border, 1.)])
-                            .hover(|s| s.bg(p.recessed))
-                    }
-                })
-                .on_click(move |_, window, cx| {
-                    let _ = weak.update(cx, |this, cx| this.pick(format, window, cx));
-                })
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            mono(13., 16., p.text)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(format.name),
-                        )
-                        .children(on.then(|| {
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .size(px(16.))
-                                .rounded(px(8.))
-                                .bg(p.green)
-                                .child(icon(IconName::Check, 10., rgb(0xFFFFFF).into()))
-                        })),
-                )
-                .child(
-                    styled(size::CAPTION, if on { p.green_text } else { p.secondary })
-                        .truncate()
-                        .child(blurb(format, video_input)),
-                )
+            theme::choice(
+                theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name),
+                on,
+                radius::CARD,
+                p,
+            )
+            .aria_selected(on)
+            .relative()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .gap(px(3.))
+            .px(px(space::MD))
+            .py(px(10.))
+            .on_click(move |_, window, cx| {
+                let _ = weak.update(cx, |this, cx| this.pick(format, window, cx));
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        mono(13., 16., p.text)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(format.name),
+                    )
+                    .children(on.then(|| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(16.))
+                            .rounded(px(8.))
+                            .bg(p.green)
+                            .child(icon(IconName::Check, 10., rgb(0xFFFFFF).into()))
+                    })),
+            )
+            .child(
+                styled(size::CAPTION, if on { p.green_text } else { p.secondary })
+                    .truncate()
+                    .child(blurb(format, video_input)),
+            )
         });
         let presets: Vec<(String, String)> = self
             .app
@@ -713,13 +707,13 @@ impl QuickView {
                         .flex()
                         .items_center()
                         .gap(px(4.))
-                        .h(px(24.))
-                        .px(px(9.))
-                        .rounded(px(12.))
+                        .h(px(26.))
+                        .px(px(11.))
+                        .rounded_full()
                         .bg(if on { p.green_tint } else { p.surface })
                         .shadow(vec![theme::inset_ring(
-                            if on { p.green_border } else { p.control_border },
-                            1.,
+                            if on { p.green } else { p.border },
+                            if on { 1.5 } else { 1. },
                         )])
                         .when(!on, |d| d.hover(|s| s.bg(p.recessed)))
                         .tooltip(move |window, cx| Tooltip::new(about.clone()).build(window, cx))
@@ -1380,7 +1374,7 @@ impl QuickView {
                 .child(
                     Button::primary("close", "Close")
                         .build(p)
-                        .px(px(18.))
+                        .px(px(20.))
                         .on_click(|_, window, _| window.remove_window()),
                 );
         }
@@ -1397,7 +1391,7 @@ impl QuickView {
         let _ = window;
         bar.child(div().flex_1())
             .child(
-                Button::ghost("cancel", "Cancel")
+                Button::secondary("cancel", "Cancel")
                     .build(p)
                     .on_click(|_, window, _| window.remove_window()),
             )
@@ -1405,7 +1399,7 @@ impl QuickView {
                 Button::primary("convert", label)
                     .disabled(disabled)
                     .build(p)
-                    .px(px(18.))
+                    .px(px(20.))
                     .when(!disabled, |d| {
                         d.on_click(cx.listener(|this, _, _, cx| this.convert(cx)))
                     }),
