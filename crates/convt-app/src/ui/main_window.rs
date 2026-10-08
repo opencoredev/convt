@@ -204,15 +204,14 @@ impl MainView {
         let activity = self.page == Page::Activity;
         let any_finished =
             !state.recent.is_empty() || state.queue.entries.iter().any(|e| e.status.is_finished());
-        let active = state.queue.active();
         let (title, subtitle) = if activity {
             (
                 "Activity",
-                match (active, state.recent.len()) {
-                    (0, 0) => "Drop files anywhere in this window".to_string(),
-                    (0, 1) => "1 recent conversion".to_string(),
-                    (0, n) => format!("{n} recent conversions"),
-                    (n, _) => format!("{n} converting"),
+                match (state.queue.progress_line(), state.recent.len()) {
+                    (Some(line), _) => line,
+                    (None, 0) => "Drop files anywhere in this window".to_string(),
+                    (None, 1) => "1 recent conversion".to_string(),
+                    (None, n) => format!("{n} recent conversions"),
                 },
             )
         } else {

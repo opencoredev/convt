@@ -260,6 +260,21 @@ impl Queue {
             .count()
     }
 
+    /// "1 converting · 2 waiting", or `None` when nothing is left to do.
+    pub fn progress_line(&self) -> Option<String> {
+        let running = self
+            .entries
+            .iter()
+            .filter(|e| matches!(e.status, Status::Running(_)))
+            .count();
+        match (running, self.active() - running) {
+            (0, 0) => None,
+            (r, 0) => Some(format!("{r} converting")),
+            (0, w) => Some(format!("{w} waiting")),
+            (r, w) => Some(format!("{r} converting · {w} waiting")),
+        }
+    }
+
     /// Forgets finished jobs.
     pub fn clear_finished(&mut self) {
         self.entries.retain(|e| !e.status.is_finished());
@@ -410,5 +425,25 @@ mod tests {
         drain(&mut rx, &mut queue, 1);
         assert_eq!(queue.get(id).unwrap().status, Status::Cancelled);
         assert!(!dir.path().join("a.jpg").exists());
+    }
+
+    #[test]
+    fn progress_line_counts_running_and_waiting() {
+        let mut queue = Queue::default();
+        let job = Job::new(PathBuf::from("a.png"), format_by_id("jpeg").unwrap());
+        let ids: Vec<JobId> = (0..3).map(|_| queue.add(&job)).collect();
+        assert_eq!(queue.progress_line().as_deref(), Some("3 waiting"));
+        queue.apply(Update::Started(ids[0]));
+        assert_eq!(
+            queue.progress_line().as_deref(),
+            Some("1 converting · 2 waiting")
+        );
+        queue.apply(Update::Started(ids[1]));
+        queue.apply(Update::Started(ids[2]));
+        assert_eq!(queue.progress_line().as_deref(), Some("3 converting"));
+        for id in ids {
+            queue.apply(Update::Finished(id, Ok(Vec::new())));
+        }
+        assert_eq!(queue.progress_line(), None);
     }
 }

@@ -388,7 +388,7 @@ impl Render for PopoverView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
         let state = self.app.read(cx);
-        let active = state.queue.active();
+        let progress = state.queue.progress_line();
         let license = license_line(&state.license);
         let drop_bar = div()
             .id("drop-bar")
@@ -436,13 +436,7 @@ impl Render for PopoverView {
                     .pt(px(14.))
                     .pb(px(10.))
                     .child(theme::lockup(13., &p))
-                    .when(active > 0, |d| {
-                        d.child(theme::badge(
-                            format!("{active} converting"),
-                            theme::Tone::Green,
-                            &p,
-                        ))
-                    }),
+                    .children(progress.map(|line| theme::badge(line, theme::Tone::Green, &p))),
             )
             .child(div().flex().px(px(12.)).pb(px(10.)).child(drop_bar))
             .children(
