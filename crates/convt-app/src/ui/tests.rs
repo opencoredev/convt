@@ -1462,6 +1462,30 @@ fn the_first_conversion_starts_the_trial(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_sidebar_sign_in_button_opens_the_license_tab(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    // Shipped builds have no local trial; only tests keep it on by default.
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.license = s.licensing.state();
+        cx.notify();
+    });
+    let (main, _) = f.main(cx);
+    assert_eq!(
+        label(cx, main, "trial-card").as_deref(),
+        Some("Sign in to start your free trial.")
+    );
+    click(cx, main, "trial-buy");
+    let (_, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::License));
+    assert_eq!(
+        cx.opened_url(),
+        None,
+        "Sign in must not open the pricing page"
+    );
+}
+
+#[gpui_kit::test]
 fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-01-01"), None);
     let png = f.png("a.png");

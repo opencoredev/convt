@@ -555,7 +555,7 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
                 1 => "1 day left".to_string(),
                 n => format!("{n} days left"),
             },
-            0.,
+            ((TRIAL_DAYS - days_left) as f32 / TRIAL_DAYS as f32).clamp(0., 1.),
             false,
             format!("Buy license · {LICENSE_PRICE}"),
         ),
@@ -580,6 +580,8 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
     } else {
         Button::secondary("trial-buy", link)
     };
+    // Signing in starts from the License tab, which follows the flow.
+    let sign_in = matches!(state, State::SignInNeeded);
     Some(
         div()
             .id("trial-card")
@@ -610,13 +612,13 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
                 p.track,
                 if ended { p.error } else { p.green },
             ))
-            .child(
-                button
-                    .small()
-                    .build(p)
-                    .w_full()
-                    .on_click(|_, _, cx| cx.open_url(BUY_URL)),
-            ),
+            .child(button.small().build(p).w_full().on_click(move |_, _, cx| {
+                if sign_in {
+                    super::show_settings(SettingsTab::License, cx)
+                } else {
+                    cx.open_url(BUY_URL)
+                }
+            })),
     )
 }
 
