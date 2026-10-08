@@ -606,6 +606,38 @@ mod tests {
     }
 
     #[test]
+    fn an_account_trial_allows_conversion_through_its_end_date() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        let ends_on = date::from_days(today() + 2);
+        l.set_account_trial(Some(ends_on.clone()));
+        assert_eq!(
+            l.state_on(today() + 2),
+            State::AccountTrial {
+                ends_on: ends_on.clone(),
+                days_left: 1
+            }
+        );
+        assert!(l.begin_conversion().is_ok());
+        assert_eq!(
+            l.state_on(today() + 3),
+            State::Trial {
+                days_left: 7,
+                started: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_packaged_install_without_an_account_needs_sign_in() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        l.disable_local_trial();
+        assert_eq!(l.state(), State::SignInNeeded);
+        assert!(!l.state().allows_conversion());
+    }
+
+    #[test]
     fn an_ended_trial_blocks_conversions() {
         let f = Fixture::new();
         let trial = f.dir.path().join("data/trial");
