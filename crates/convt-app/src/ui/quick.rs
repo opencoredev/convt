@@ -1010,6 +1010,14 @@ impl QuickView {
 
     fn progress_section(&self, p: &Palette) -> Stateful<Div> {
         let now = std::time::Instant::now();
+        // The heading follows the jobs, as the footer's status does.
+        let title = if !self.finished() {
+            "Converting"
+        } else if self.entries().all(|e| matches!(e.status, Status::Done(_))) {
+            "Converted"
+        } else {
+            "Finished"
+        };
         let rows = self.entries().map(|entry| {
             let id = entry.id;
             let status = match &entry.status {
@@ -1092,11 +1100,23 @@ impl QuickView {
             .px(px(GUTTER))
             .pb(px(space::XL))
             .overflow_y_scroll()
-            .child(theme::section_label("Converting", p))
+            .child(
+                div()
+                    .id("jobs-title")
+                    .test_support()
+                    .aria_label(title)
+                    .child(theme::section_label(title, p)),
+            )
             .child(theme::group(rows.collect::<Vec<_>>(), p))
     }
 
-    fn footer(&self, asking: bool, p: &Palette, cx: &mut Context<Self>) -> Div {
+    fn footer(
+        &self,
+        asking: bool,
+        p: &Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let bar = div()
             .flex()
             .flex_shrink_0()

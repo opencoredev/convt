@@ -801,6 +801,11 @@ fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) 
         s.starts_with("Saved")
     });
     assert!(is_webp(&f.dir.path().join("renamed.webp")));
+    // The heading follows the job, as the footer does.
+    assert_eq!(
+        label(cx, window, "jobs-title").as_deref(),
+        Some("Converted")
+    );
     for done in ["show-in-folder", "open", "close"] {
         assert!(shown(cx, window, done), "{done} is missing");
     }
@@ -955,6 +960,7 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     click(cx, quick, "to-png");
     click(cx, quick, "convert");
     wait_until(cx, "the failure", |cx| f.app.read(cx).recent.len() == 1);
+    assert_eq!(label(cx, quick, "jobs-title").as_deref(), Some("Finished"));
     let record = cx.read(|cx| f.app.read(cx).recent[0].clone());
     assert!(matches!(record.outcome, Outcome::Failed(_)));
     assert_eq!(
