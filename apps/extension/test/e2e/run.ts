@@ -15,6 +15,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { sniff } from "../../src/shared/sniff.ts";
+import { freePort } from "../free-port.ts";
 
 const root = join(import.meta.dir, "../..");
 const dist = join(root, "dist-e2e");
@@ -192,7 +193,7 @@ await writeFile(
   join(profile, "Default/Preferences"),
   JSON.stringify({ download: { default_directory: downloads, prompt_for_download: false } }),
 );
-const port = 9400 + Math.floor(Math.random() * 500);
+const port = await freePort();
 const chrome = Bun.spawn(
   [
     await chromeBinary(),
@@ -663,6 +664,34 @@ try {
       "the access tab closes and the user is back on their page",
       !resumed.accessTabOpen && resumed.activeIsPage,
       JSON.stringify(resumed),
+    );
+  }
+
+  // 12b. Two "access granted" messages for one job save it once.
+  {
+    const jobId = crypto.randomUUID();
+    const started = Date.now();
+    await inExtension(`
+      const job = { id: ${JSON.stringify(jobId)}, srcUrl: ${JSON.stringify(`${pageOrigin}/photo.webp?once`)}, pageUrl: ${JSON.stringify(`${pageOrigin}/`)}, tabId: ${tabId}, frameId: 0, action: { kind: "save", target: "png" } };
+      await chrome.storage.session.set({ ["pending:" + job.id]: job });
+      await Promise.all([1, 2].map(() => chrome.runtime.sendMessage({ kind: "access-granted", jobId: job.id })));
+      return true;
+    `);
+    await focusExtensionTab();
+    // Give a second save, if there were one, time to land too.
+    await Bun.sleep(5000);
+    const counts = await inExtension<{ recent: number; downloads: number }>(`
+      const { recent } = await chrome.storage.local.get("recent");
+      const downloads = await chrome.downloads.search({ startedAfter: new Date(${started}).toISOString() });
+      return {
+        recent: (recent ?? []).filter((r) => r.jobId === ${JSON.stringify(jobId)}).length,
+        downloads: downloads.filter((d) => d.filename.includes("photo")).length,
+      };
+    `);
+    check(
+      "a doubled access grant saves the file once",
+      counts.recent === 1 && counts.downloads === 1,
+      JSON.stringify(counts),
     );
   }
 

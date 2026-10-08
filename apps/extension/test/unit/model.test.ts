@@ -282,6 +282,13 @@ describe("bytes", () => {
       "<svg>",
     );
     expect(parseDataUrl("data:image/png;base64,%%%")).toBeNull();
+    // Escaped base64 characters, and raw escaped bytes.
+    expect(parseDataUrl("data:image/png;base64,iVBORw%3D%3D")?.bytes).toEqual(
+      fromBase64("iVBORw=="),
+    );
+    expect([...(parseDataUrl("data:image/png,%89PNG%0D%0A")?.bytes ?? [])]).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a,
+    ]);
     expect(parseDataUrl("https://a.com")).toBeNull();
   });
 });

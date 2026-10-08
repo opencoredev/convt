@@ -47,8 +47,9 @@ export function addRecent(item: RecentItem): Promise<void> {
   });
 }
 
-export async function clearRecent(): Promise<void> {
-  await chrome.storage.local.set({ recent: [] });
+/** Call from the worker (the popup sends `clear-recent`), so it queues behind saves. */
+export function clearRecent(): Promise<void> {
+  return serialized(() => chrome.storage.local.set({ recent: [] }));
 }
 
 /** Counts finished conversions; returns the new total. */

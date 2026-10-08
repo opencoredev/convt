@@ -38,13 +38,22 @@ export async function transcodeOffscreen(
   await ensureDocument();
   const message: TranscodeRequest = { target: "offscreen", kind: "transcode", ...request };
   const failed: TranscodeResult = { ok: false, problem: "encode" };
+  let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<TranscodeResult>((resolve) => {
-    timer = setTimeout(() => resolve(failed), TRANSCODE_TIMEOUT_MS);
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve(failed);
+    }, TRANSCODE_TIMEOUT_MS);
   });
-  const answer = chrome.runtime
-    .sendMessage(message)
-    .then((response: unknown) => parseTranscodeResult(response) ?? failed);
+  const answer = chrome.runtime.sendMessage(message).then((response: unknown) => {
+    const result = parseTranscodeResult(response) ?? failed;
+    // Nobody will download a result that arrives after the deadline; free it now.
+    if (timedOut && result.ok && result.output.kind === "url") {
+      void releaseOffscreen(result.output.url);
+    }
+    return result;
+  });
   try {
     return await Promise.race([answer, timeout]);
   } finally {

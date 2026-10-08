@@ -19,6 +19,7 @@ import { baseName, outputName } from "../shared/naming.ts";
 import { qualityInfo } from "../shared/settings.ts";
 import {
   addRecent,
+  clearRecent,
   countConversion,
   getPending,
   getSettings,
@@ -323,7 +324,7 @@ function targetOf(job: Job): Target {
   return job.action.kind === "save" ? job.action.target : "png";
 }
 
-chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
+chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
   // The offscreen document's requests are for it, not us.
   const message = parseToBackground(raw);
   if (message === null) return false;
@@ -336,8 +337,17 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
       return false;
     case "access-granted":
       // Only convt's own access page sends this; content scripts in web pages never do.
-      if (isOwnPage(sender.url ?? "")) void resumeAfterAccess(message.jobId, sender.tab?.id);
+      if (isOwnPage(sender.url ?? "")) {
+        // Close the tab afterwards only if it's the access page itself.
+        const fromAccessPage = new URL(sender.url ?? "").searchParams.has("access");
+        void resumeAfterAccess(message.jobId, fromAccessPage ? sender.tab?.id : undefined);
+      }
       return false;
+    case "clear-recent":
+      if (!isOwnPage(sender.url ?? "")) return false;
+      // Answer once it's done, so the popup redraws an empty list.
+      void clearRecent().finally(() => sendResponse(true));
+      return true;
     case "test:run":
       if (__E2E__ && isOwnPage(sender.url ?? "")) void runJob(message.job);
       return false;
@@ -357,11 +367,25 @@ async function openAccessPage(jobId: JobId, from: chrome.tabs.Tab | undefined) {
 }
 
 /** The user granted access on the welcome page: go back to their tab and finish. */
+const resuming = new Set<JobId>();
+
 async function resumeAfterAccess(jobId: JobId, accessTabId: number | undefined) {
-  const job = await getPending(jobId);
-  // Resume only once the access is really there; otherwise leave the job waiting.
-  if (job === null || !(await hasAccess(job.srcUrl))) return;
-  await takePending(jobId);
+  // Two access pages, or a double click, mustn't save the file twice.
+  if (resuming.has(jobId)) return;
+  resuming.add(jobId);
+  try {
+    const pending = await getPending(jobId);
+    // Resume only once the access is really there; otherwise leave the job waiting.
+    if (pending === null || !(await hasAccess(pending.srcUrl))) return;
+    const job = await takePending(jobId);
+    if (job === null) return;
+    await resume(job, accessTabId);
+  } finally {
+    resuming.delete(jobId);
+  }
+}
+
+async function resume(job: Job, accessTabId: number | undefined) {
   await chrome.tabs.update(job.tabId, { active: true }).catch(() => {});
   if (accessTabId !== undefined) await chrome.tabs.remove(accessTabId).catch(() => {});
   // Same job id: the "needs access" toast turns into progress, then the saved file.

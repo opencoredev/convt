@@ -78,6 +78,14 @@ describe("sniff", () => {
     expect(sniff(enc("<!doctype html><html><body>Sign in</body></html>")).kind).toBe("unknown");
     expect(sniff(enc("")).kind).toBe("unknown");
   });
+
+  test("finds <svg> after a long comment header, but not inside a web page", () => {
+    const enc = (s: string) => new TextEncoder().encode(s);
+    const header = `<?xml version="1.0"?><!-- ${"x".repeat(5000)} -->`;
+    expect(sniff(enc(`${header}<svg viewBox="0 0 1 1"/>`)).kind).toBe("svg");
+    expect(sniff(enc('<!doctype html><body><svg class="icon"></svg>')).kind).toBe("unknown");
+    expect(sniff(enc("<!-- built -->\n<html><svg></svg></html>")).kind).toBe("unknown");
+  });
 });
 
 describe("svg sizing", () => {
@@ -95,6 +103,14 @@ describe("svg sizing", () => {
       width: 80,
       height: 40,
     });
+  });
+
+  test("converts absolute units to pixels", () => {
+    expect(svgIntrinsicSize('<svg width="2in" height="1in">')).toEqual({ width: 192, height: 96 });
+    expect(svgIntrinsicSize('<svg width="72pt" height="36pt">')).toEqual({ width: 96, height: 48 });
+    const cm = svgIntrinsicSize('<svg width="2.54cm" height="1.27cm">');
+    expect(cm?.width).toBeCloseTo(96);
+    expect(cm?.height).toBeCloseTo(48);
   });
 
   test("gives up on relative units with no viewBox", () => {

@@ -25,9 +25,33 @@ export function parseDataUrl(url: string): { mime: string; bytes: Uint8Array } |
   const payload = match[2] ?? "";
   const mime = meta.split(";")[0] || "text/plain";
   try {
-    if (/;base64$/i.test(meta)) return { mime, bytes: fromBase64(payload.replace(/\s+/g, "")) };
-    return { mime, bytes: new TextEncoder().encode(decodeURIComponent(payload)) };
+    // Percent escapes stand for raw bytes (%89 in a PNG), not UTF-8 text, and base64
+    // payloads may escape their own characters (%3D for =).
+    const bytes = percentDecode(payload);
+    if (/;base64$/i.test(meta)) {
+      let text = "";
+      for (const byte of bytes) text += String.fromCharCode(byte);
+      return { mime, bytes: fromBase64(text.replace(/\s+/g, "")) };
+    }
+    return { mime, bytes };
   } catch {
     return null;
   }
+}
+
+/** Decodes %XX escapes to bytes; other characters keep their UTF-8 bytes. */
+function percentDecode(text: string): Uint8Array {
+  const out: number[] = [];
+  const encoder = new TextEncoder();
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i] ?? "";
+    const hex = text.slice(i + 1, i + 3);
+    if (char === "%" && /^[0-9a-f]{2}$/i.test(hex)) {
+      out.push(Number.parseInt(hex, 16));
+      i += 2;
+    } else {
+      out.push(...encoder.encode(char));
+    }
+  }
+  return new Uint8Array(out);
 }

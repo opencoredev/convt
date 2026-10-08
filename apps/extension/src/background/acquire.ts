@@ -78,9 +78,18 @@ function checked(bytes: Uint8Array): Acquired {
   return { ok: true, bytes, sniffed };
 }
 
+/** A server that stops answering mustn't leave the toast on "Saving…". */
+const FETCH_DEADLINE_MS = 30_000;
+
 async function fetchFromWorker(url: string): Promise<Fetched> {
   try {
-    const response = await fetch(url, { credentials: "omit" });
+    // With access to the host, send its cookies, as the page did when it showed the
+    // image (some image hosts only serve signed-in users). Without access this is a
+    // CORS request, where cookies would turn an "allow everyone" answer into a refusal.
+    const response = await fetch(url, {
+      credentials: (await hasAccess(url)) ? "include" : "omit",
+      signal: AbortSignal.timeout(FETCH_DEADLINE_MS),
+    });
     if (!response.ok) return { ok: false, kind: "http", status: response.status };
     return await readCapped(response);
   } catch {
@@ -122,7 +131,7 @@ async function fetchInPage(job: Job): Promise<Fetched> {
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId: job.tabId, frameIds: [job.frameId] },
       func: pageFetch,
-      args: [job.srcUrl, MAX_BYTES],
+      args: [job.srcUrl, MAX_BYTES, FETCH_DEADLINE_MS],
     });
     return parsePageFetch(injection?.result);
   } catch {
@@ -152,19 +161,36 @@ function parsePageFetch(value: unknown): Fetched {
 async function pageFetch(
   url: string,
   maxBytes: number,
+  deadlineMs: number,
 ): Promise<{ ok: true; data: string } | { ok: false; status: number; tooLarge?: true }> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(deadlineMs) });
     if (!response.ok) return { ok: false, status: response.status };
-    // Stop before encoding something too big to send back; it would stall the page.
+    // Stop before buffering something too big to send back; it would stall the page.
     if (Number(response.headers.get("content-length") ?? 0) > maxBytes) {
+      await response.body?.cancel();
       return { ok: false, status: 0, tooLarge: true };
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length > maxBytes) return { ok: false, status: 0, tooLarge: true };
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    const reader = response.body?.getReader();
+    if (reader) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > maxBytes) {
+          await reader.cancel();
+          return { ok: false, status: 0, tooLarge: true };
+        }
+        chunks.push(value);
+      }
+    }
     let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    for (const chunk of chunks) {
+      for (let i = 0; i < chunk.length; i += 0x8000) {
+        binary += String.fromCharCode(...chunk.subarray(i, i + 0x8000));
+      }
     }
     return { ok: true, data: btoa(binary) };
   } catch {

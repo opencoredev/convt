@@ -7,7 +7,6 @@ import type { ToBackground } from "../shared/messages.ts";
 import { formatBytes } from "../shared/naming.ts";
 import { QUALITIES, qualityInfo, type Settings } from "../shared/settings.ts";
 import {
-  clearRecent,
   getLastFailure,
   getRecent,
   getSettings,
@@ -135,7 +134,8 @@ function recentSection(
 ): HTMLElement {
   const clear = h("button", { class: "btn btn-quiet btn-small", type: "button" }, ["Clear"]);
   clear.addEventListener("click", async () => {
-    await clearRecent();
+    const message: ToBackground = { kind: "clear-recent" };
+    await chrome.runtime.sendMessage(message);
     refresh();
   });
 

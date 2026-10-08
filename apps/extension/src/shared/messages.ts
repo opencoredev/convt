@@ -17,6 +17,8 @@ export type ToBackground =
   | { kind: "show-download"; downloadId: number }
   | { kind: "open-access"; jobId: JobId }
   | { kind: "access-granted"; jobId: JobId }
+  /** The popup's Clear, run in the worker so it can't race a save finishing. */
+  | { kind: "clear-recent" }
   /** Only handled in end-to-end test builds, where native menus can't be clicked. */
   | { kind: "test:run"; job: Job };
 
@@ -85,6 +87,8 @@ export function parseToBackground(value: unknown): ToBackground | null {
       const jobId = parseJobId(value.jobId);
       return jobId === null ? null : { kind: value.kind, jobId };
     }
+    case "clear-recent":
+      return { kind: "clear-recent" };
     case "test:run": {
       const job = parseJob(value.job);
       return job === null ? null : { kind: "test:run", job };

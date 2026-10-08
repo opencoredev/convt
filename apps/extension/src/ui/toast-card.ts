@@ -29,7 +29,11 @@ export function createCard(options: {
     fallback.hidden = false;
   });
   // The page already loaded this image, so it shows instantly from cache.
-  image.src = options.srcUrl;
+  if (options.srcUrl) image.src = options.srcUrl;
+  else {
+    image.hidden = true;
+    fallback.hidden = false;
+  }
 
   const chip = h("span", { class: "chip" }, [
     h("span", { class: "chip-icon", "data-icon": "working" }, [
@@ -66,6 +70,12 @@ export function createCard(options: {
   );
 
   const update: Card["update"] = (view) => {
+    // A huge data: image starts without a thumbnail and gets the converted preview later.
+    if (view.thumb && image.getAttribute("src") !== view.thumb) {
+      image.hidden = false;
+      fallback.hidden = true;
+      image.src = view.thumb;
+    }
     const copy = toastCopy(view, options.srcUrl);
     element.dataset.tone = copy.tone;
     // Failures interrupt. Progress and success are announced politely: by the card

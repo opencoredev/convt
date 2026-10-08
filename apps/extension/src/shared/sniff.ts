@@ -64,9 +64,15 @@ function isobmffKind(bytes: Uint8Array): SourceKind {
   return "unknown";
 }
 
+/** Enough for long comment or metadata headers before the <svg> tag. */
+const SVG_SCAN = 65_536;
+
 function looksLikeSvg(bytes: Uint8Array): boolean {
-  const head = ascii(bytes, 0, 2048).replace(/^﻿|^ï»¿/, "");
+  // Skip a byte order mark (U+FEFF, or its UTF-8 bytes read one by one).
+  const head = ascii(bytes, 0, SVG_SCAN).replace(/^(\uFEFF|\u00EF\u00BB\u00BF)/, "");
   if (!/^\s*</.test(head)) return false;
+  // A web page can contain inline <svg> icons; that doesn't make it an image.
+  if (/^\s*(<!--[\s\S]*?-->\s*)*<(!doctype\s+html|html|head|body)\b/i.test(head)) return false;
   return /<svg[\s>]/i.test(head);
 }
 
@@ -154,11 +160,23 @@ export function svgIntrinsicSize(text: string): Size | null {
   if (!tag) return null;
   const attr = (name: string) =>
     new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`, "i").exec(tag)?.[2]?.trim() ?? null;
+  // CSS pixels per absolute unit; em, ex and % depend on context, so they fall back
+  // to the viewBox.
+  const units: Record<string, number> = {
+    "": 1,
+    px: 1,
+    in: 96,
+    cm: 96 / 2.54,
+    mm: 96 / 25.4,
+    pt: 96 / 72,
+    pc: 16,
+  };
   const length = (value: string | null): number | null => {
     if (value === null) return null;
-    const match = /^([0-9]*\.?[0-9]+)\s*(px)?$/i.exec(value);
-    if (!match?.[1]) return null;
-    const n = Number(match[1]);
+    const match = /^([0-9]*\.?[0-9]+)\s*([a-z]*)$/i.exec(value);
+    const scale = units[(match?.[2] ?? "").toLowerCase()];
+    if (!match?.[1] || scale === undefined) return null;
+    const n = Number(match[1]) * scale;
     return n > 0 ? n : null;
   };
   const viewBox = attr("viewBox")

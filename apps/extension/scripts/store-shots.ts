@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { extname, join } from "node:path";
+import { freePort } from "../test/free-port.ts";
 
 const root = join(import.meta.dir, "..");
 const dist = join(root, "dist-e2e");
@@ -70,7 +71,7 @@ await writeFile(
   join(profile, "Default/Preferences"),
   JSON.stringify({ download: { default_directory: work, prompt_for_download: false } }),
 );
-const port = 9400 + Math.floor(Math.random() * 500);
+const port = await freePort();
 const chrome = Bun.spawn(
   [
     await chromeBinary(),
