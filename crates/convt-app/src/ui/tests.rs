@@ -200,7 +200,7 @@ impl crate::linux_menu::Backend for TestLinuxMenus {
     fn status(&self) -> crate::linux_menu::Status {
         self.status.lock().unwrap().clone()
     }
-    fn install(&self) -> Result<crate::linux_menu::Status, String> {
+    fn install_menus(&self) -> Result<crate::linux_menu::Status, String> {
         self.installs.fetch_add(1, Ordering::SeqCst);
         if self.fail_next.swap(false, Ordering::SeqCst) {
             return Err("the installer failed".into());
@@ -213,7 +213,7 @@ impl crate::linux_menu::Backend for TestLinuxMenus {
         *self.status.lock().unwrap() = status.clone();
         Ok(status)
     }
-    fn remove(&self) -> Result<crate::linux_menu::Status, String> {
+    fn remove_menus(&self) -> Result<crate::linux_menu::Status, String> {
         self.removes.fetch_add(1, Ordering::SeqCst);
         *self.status.lock().unwrap() = crate::linux_menu::Status::NotInstalled;
         Ok(crate::linux_menu::Status::NotInstalled)

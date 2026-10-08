@@ -30,8 +30,8 @@ impl Status {
 /// into a real home directory.
 pub trait Backend: Send + Sync {
     fn status(&self) -> Status;
-    fn install(&self) -> Result<Status, String>;
-    fn remove(&self) -> Result<Status, String>;
+    fn install_menus(&self) -> Result<Status, String>;
+    fn remove_menus(&self) -> Result<Status, String>;
 }
 
 /// Runs the shipped `install.py`.
@@ -42,12 +42,12 @@ impl Backend for Installer {
         probe()
     }
 
-    fn install(&self) -> Result<Status, String> {
+    fn install_menus(&self) -> Result<Status, String> {
         run_installer(&["--user", "--dolphin", "--nemo", "--thunar", "--nautilus"])?;
         Ok(probe())
     }
 
-    fn remove(&self) -> Result<Status, String> {
+    fn remove_menus(&self) -> Result<Status, String> {
         run_installer(&["--uninstall"])?;
         Ok(probe())
     }

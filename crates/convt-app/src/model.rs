@@ -667,9 +667,9 @@ impl AppState {
             .name("convt-linux-menu".into())
             .spawn(move || {
                 let result = if install {
-                    backend.install()
+                    backend.install_menus()
                 } else {
-                    backend.remove()
+                    backend.remove_menus()
                 };
                 let _ = tx.unbounded_send(result);
             })
