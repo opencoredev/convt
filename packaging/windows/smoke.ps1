@@ -50,6 +50,20 @@ if ($PeOnly) {
     return
 }
 
+function Remove-OwnedDir {
+    param([string]$Path, [string]$Parent, [string]$Prefix)
+    if (-not $Path) { return }
+    $Full = [System.IO.Path]::GetFullPath($Path)
+    $OwnedRoot = [System.IO.Path]::GetFullPath($Parent)
+    $Name = [System.IO.Path]::GetFileName($Full)
+    if (-not $Name.StartsWith($Prefix)) { return }
+    if ([System.IO.Path]::GetDirectoryName($Full) -ne $OwnedRoot) { return }
+    $Item = Get-Item -LiteralPath $Full -ErrorAction SilentlyContinue
+    if (-not $Item) { return }
+    if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return }
+    Remove-Item -LiteralPath $Full -Recurse -Force
+}
+
 $Msi = Get-Item "$Repo/packaging/out/windows/convt-*-windows-x86_64.msi" | Select-Object -First 1
 if (-not $Msi) { throw 'MSI is missing; run installer.ps1 first' }
 $Limit = 120MB
@@ -59,8 +73,14 @@ if ($Msi.Length -ge $Limit) {
 Write-Host ("MSI {0}: {1:N0} bytes ({2:N1} MiB)" -f $Msi.Name, $Msi.Length, ($Msi.Length / 1MB))
 $LessMsi = Get-ChildItem "$Repo/packaging/out/windows/work/lessmsi" -Recurse -Filter lessmsi.exe | Select-Object -First 1
 if (-not $LessMsi) { throw 'lessmsi.exe missing from the Windows build work directory' }
-$Extract = Join-Path $Repo 'packaging/out/windows/msi-extract'
-if (Test-Path $Extract) { throw "Output exists: $Extract" }
+$RunId = [guid]::NewGuid().ToString('N')
+$WindowsOut = Join-Path $Repo 'packaging/out/windows'
+$Extract = Join-Path $WindowsOut "msi-extract-$RunId"
+$Work = Join-Path $WindowsOut "smoke-$RunId"
+$SmokeHome = $null
+$Gui = $null
+if (Test-Path -LiteralPath $Extract) { throw "Output exists: $Extract" }
+try {
 New-Item -ItemType Directory -Force $Extract | Out-Null
 & $LessMsi.FullName x $Msi.FullName "$Extract\\"
 if ($LASTEXITCODE -ne 0) { throw 'lessmsi extraction failed' }
@@ -76,13 +96,12 @@ $Bin = $Convt.Directory.FullName
 $ExtractedApp = Join-Path $Bin 'convt-app.exe'
 if (-not (Test-Path -LiteralPath $ExtractedApp)) { throw 'Extracted MSI has no convt-app.exe' }
 Test-PeSubsystems -Gui $ExtractedApp -Cli $Convt.FullName
-$Work = Join-Path $Repo 'packaging/out/windows/smoke'
 New-Item -ItemType Directory -Force "$Work/in","$Work/out" | Out-Null
 # GitHub's workspace is on D:\, whose volume root is not a trusted pack
-# ancestor. Install into the per-user profile, matching production.
+# ancestor. Install into a unique per-run profile directory.
 if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is required to install the document pack' }
-$SmokeHome = Join-Path $env:LOCALAPPDATA 'convt-smoke'
-if (Test-Path -LiteralPath $SmokeHome) { Remove-Item -LiteralPath $SmokeHome -Recurse -Force }
+$SmokeHome = Join-Path $env:LOCALAPPDATA "convt-smoke-$RunId"
+if (Test-Path -LiteralPath $SmokeHome) { throw "Output exists: $SmokeHome" }
 New-Item -ItemType Directory -Force $SmokeHome | Out-Null
 $env:CONVT_LICENSE_STORE = 'file'
 $env:CONVT_CONFIG_DIR = Join-Path $SmokeHome 'cfg'
@@ -169,14 +188,15 @@ if ($Pdf.Length -lt 32 -or [System.Text.Encoding]::ASCII.GetString($PdfHead) -ne
 Write-Host ("{0}: {1} bytes" -f $Pdf.Name, $Pdf.Length)
 $Gui = Start-Process -FilePath $ExtractedApp -PassThru -WindowStyle Hidden
 if (-not $Gui) { throw 'convt-app.exe did not start' }
-try {
     Start-Sleep -Seconds 5
     if ($Gui.HasExited) {
         throw "convt-app.exe exited $($Gui.ExitCode) after launch"
     }
     Write-Host "convt-app.exe stayed running (pid $($Gui.Id))"
+    Write-Host 'Windows MSI smoke test passed'
 } finally {
     if ($Gui -and -not $Gui.HasExited) { Stop-Process -Id $Gui.Id -ErrorAction SilentlyContinue }
+    if ($SmokeHome) { Remove-OwnedDir -Path $SmokeHome -Parent $env:LOCALAPPDATA -Prefix 'convt-smoke-' }
+    Remove-OwnedDir -Path $Extract -Parent $WindowsOut -Prefix 'msi-extract-'
+    Remove-OwnedDir -Path $Work -Parent $WindowsOut -Prefix 'smoke-'
 }
-if (Test-Path -LiteralPath $SmokeHome) { Remove-Item -LiteralPath $SmokeHome -Recurse -Force }
-Write-Host 'Windows MSI smoke test passed'

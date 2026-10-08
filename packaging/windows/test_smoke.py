@@ -18,6 +18,10 @@ class SmokeScriptTest(unittest.TestCase):
         self.assertIn("%PDF-", SMOKE)
         self.assertIn("LOCALAPPDATA", SMOKE)
         self.assertIn("CONVT_DATA_DIR", SMOKE)
+        self.assertIn("NewGuid", SMOKE)
+        self.assertIn("convt-smoke-", SMOKE)
+        self.assertIn("msi-extract-", SMOKE)
+        self.assertIn("Remove-OwnedDir", SMOKE)
 
     def test_gui_launch_fails_when_the_app_exits(self) -> None:
         self.assertIn("convt-app.exe exited", SMOKE)

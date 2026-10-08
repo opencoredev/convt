@@ -8,6 +8,8 @@ from unittest import mock
 
 from document_pack import asset_name, checksum_name, public_url, publish
 
+BUILD = Path(__file__).resolve().parent.joinpath("build.ps1").read_text(encoding="utf-8")
+
 
 class DocumentPackNamingTest(unittest.TestCase):
     def test_asset_names_are_versioned_and_platform_specific(self) -> None:
@@ -56,6 +58,23 @@ class DocumentPackNamingTest(unittest.TestCase):
             )
             self.assertRegex(receipt["sha256"], r"^[a-f0-9]{64}$")
 
+    def test_publish_ignores_a_leftover_document_pack_url(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            archive = root / "documents.tar.gz"
+            archive.write_bytes(b"libreoffice-pack")
+            with mock.patch.dict(
+                os.environ,
+                {"CONVT_DOCUMENT_PACK_URL": "https://example.test/old.tar.gz"},
+                clear=True,
+            ):
+                receipt = publish(archive, "0.2.1", root)
+            self.assertEqual(
+                receipt["url"],
+                "https://github.com/opencoredev/convt/releases/download/v0.2.1/"
+                "convt-0.2.1-windows-x86_64-documents.tar.gz",
+            )
+
     def test_publish_writes_checksum_and_renames_the_archive(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -70,6 +89,13 @@ class DocumentPackNamingTest(unittest.TestCase):
             self.assertIn("convt-0.2.0-windows-x86_64-documents.tar.gz", checksum.read_text())
             self.assertEqual(receipt["size"], len(b"libreoffice-pack"))
             json.dumps(receipt)
+
+
+class BuildScriptTest(unittest.TestCase):
+    def test_restores_caller_document_pack_url(self) -> None:
+        self.assertIn("CallerPackUrl", BUILD)
+        self.assertIn("Remove-Item Env:CONVT_DOCUMENT_PACK_URL", BUILD)
+        self.assertIn("finally", BUILD)
 
 
 if __name__ == "__main__":

@@ -27,14 +27,18 @@ def checksum_name(version: str) -> str:
     return asset_name(version) + ".sha256"
 
 
-def public_url(version: str, repository: str | None = None) -> str:
-    if override := os.environ.get("CONVT_DOCUMENT_PACK_URL"):
-        return override
+def release_url(version: str, repository: str | None = None) -> str:
     repo = repository or os.environ.get("GITHUB_REPOSITORY") or "opencoredev/convt"
     if "/" not in repo or repo.startswith("/") or repo.endswith("/"):
         raise ValueError(f"expected owner/name repository, got {repo!r}")
     name = asset_name(version)
     return f"https://github.com/{repo}/releases/download/v{version}/{name}"
+
+
+def public_url(version: str, repository: str | None = None) -> str:
+    if override := os.environ.get("CONVT_DOCUMENT_PACK_URL"):
+        return override
+    return release_url(version, repository)
 
 
 def sha256_file(path: Path) -> str:
@@ -58,7 +62,7 @@ def publish(archive: Path, version: str, destination: Path) -> dict[str, object]
     checksum = destination / checksum_name(version)
     checksum.write_text(f"{digest}  {target.name}\n", encoding="utf-8")
     return {
-        "url": public_url(version),
+        "url": release_url(version),
         "name": target.name,
         "sha256": digest,
         "size": target.stat().st_size,

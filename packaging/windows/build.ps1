@@ -66,17 +66,26 @@ $DocumentsDir = Join-Path $Repo 'packaging/out/windows'
 $Documents = Join-Path $DocumentsDir 'documents.tar.gz'
 $Hash = python "$PSScriptRoot/build-document-pack.py" $Office.Directory.Parent.FullName "$Work/soffice.exe" $Documents
 if ($LASTEXITCODE -ne 0 -or $Hash -notmatch '^[a-f0-9]{64}$') { throw 'Document archive creation failed' }
+$CallerPackUrl = if (Test-Path Env:CONVT_DOCUMENT_PACK_URL) { $env:CONVT_DOCUMENT_PACK_URL } else { $null }
 $PublishedJson = python "$PSScriptRoot/document_pack.py" publish $Documents $Version $DocumentsDir
 if ($LASTEXITCODE -ne 0) { throw 'Document pack publish failed' }
 $Published = $PublishedJson | ConvertFrom-Json
 if ($Published.sha256 -ne $Hash) { throw "Document pack digest changed during publish: $($Published.sha256)" }
-$env:CONVT_DOCUMENT_PACK_SHA256 = $Hash
-$env:CONVT_DOCUMENT_PACK_URL = $Published.url
-$env:CONVT_DOCUMENT_PACK_VERSION = 'LibreOffice 25.8.7 Windows x64'
-$env:CONVT_DOCUMENT_PACK_SIZE = $Published.size.ToString()
-$env:CONVT_DOCUMENT_PACK_INSTALLED_SIZE = ((Get-ChildItem $Office.Directory.Parent.FullName -Recurse -File | Measure-Object Length -Sum).Sum).ToString()
-cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p convt-app
-if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
+try {
+    $env:CONVT_DOCUMENT_PACK_SHA256 = $Hash
+    $env:CONVT_DOCUMENT_PACK_URL = $Published.url
+    $env:CONVT_DOCUMENT_PACK_VERSION = 'LibreOffice 25.8.7 Windows x64'
+    $env:CONVT_DOCUMENT_PACK_SIZE = $Published.size.ToString()
+    $env:CONVT_DOCUMENT_PACK_INSTALLED_SIZE = ((Get-ChildItem $Office.Directory.Parent.FullName -Recurse -File | Measure-Object Length -Sum).Sum).ToString()
+    cargo build --locked --release --target x86_64-pc-windows-msvc -p convt-cli -p convt-app
+    if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
+} finally {
+    if ($null -eq $CallerPackUrl) {
+        Remove-Item Env:CONVT_DOCUMENT_PACK_URL -ErrorAction SilentlyContinue
+    } else {
+        $env:CONVT_DOCUMENT_PACK_URL = $CallerPackUrl
+    }
+}
 Copy-Item target/x86_64-pc-windows-msvc/release/convt.exe,target/x86_64-pc-windows-msvc/release/convt-app.exe $Out
 Copy-Item LICENSE "$Out/LICENSE.txt"
 Copy-Item "$PSScriptRoot/inputs.lock.json","$PSScriptRoot/build-native.ps1","$PSScriptRoot/build-document-pack.py","$PSScriptRoot/document-launcher.rs","$Repo/packaging/linux/libheif-explicit-init.patch" "$Out/licenses/"
