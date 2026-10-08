@@ -13,6 +13,7 @@ import type { BillingConfig, BillingContext, FaultPoint } from "./context";
 import { advanceDeletion, deletionStatus, requestDeletion, runDeletions } from "./deletion";
 import { drainOutbox, resolveOutbox } from "./outbox";
 import type { BillingProvider } from "./provider";
+import { backfillPolarOrders } from "./backfill";
 import { reconcileDaily, reconcileFrequent } from "./reconcile";
 import { handleWebhook } from "./webhook";
 
@@ -57,6 +58,8 @@ export function createBillingService(deps: ServiceDeps) {
       withCtx((c) => resolveOutbox(c, id, decision)),
     reconcileFrequent: () => withCtx((c) => reconcileFrequent(c)),
     reconcileDaily: () => withCtx((c) => reconcileDaily(c)),
+    backfillPolarOrders: (opts?: { dryRun?: boolean }) =>
+      withCtx((c) => backfillPolarOrders(c, opts)),
     cleanupAuth: () => withCtx((c) => cleanupAuth(c)),
     runDeletions: () => withCtx((c) => runDeletions(c)),
 

@@ -88,7 +88,24 @@ export async function setCancel(
 /** Polar's customer portal, only if the URL's origin is the provider's. */
 export async function portalUrl(ctx: BillingContext, userId: string): Promise<string | null> {
   try {
-    return await ctx.provider.portalUrl(userId, `${ctx.config.siteUrl}/dashboard/billing`);
+    const row = await one<{ provider_customer_id: string }>(
+      ctx.db,
+      sql`
+        select provider_customer_id from billing_customers
+        where provider = 'polar' and user_id = ${userId} and deleted_at is null
+        union all
+        select provider_customer_id from orders
+        where user_id = ${userId} and provider_customer_id is not null
+        union all
+        select provider_customer_id from subscriptions
+        where user_id = ${userId} and provider_customer_id is not null
+        limit 1`,
+    );
+    return await ctx.provider.portalUrl(
+      userId,
+      `${ctx.config.siteUrl}/dashboard/billing`,
+      row?.provider_customer_id ?? null,
+    );
   } catch (e) {
     ctx.log(`[billing] portal for ${userId}: ${(e as Error).message}`);
     return null;

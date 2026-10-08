@@ -69,17 +69,23 @@ export type ApiEnrollment = {
 };
 
 export type Billing = {
-  /** The Pro subscription, or null. Desktop purchases appear only as invoices. */
+  /** The current Pro subscription, a live Desktop license, or null. */
   plan: {
+    kind: "pro" | "desktop";
     name: string;
     status: "active" | "trialing" | "past_due" | "canceled";
     summary: string;
-    interval: "month" | "year";
+    /** Null for a one-time Desktop license. */
+    interval: "month" | "year" | null;
     /** ISO date the plan ends because it was set to cancel; null when it renews. */
     cancelsOn: string | null;
   } | null;
   /** True when the account had Pro before, so a new start has no trial. */
   hadPro: boolean;
+  /** A live (not refunded or disputed) Desktop license. */
+  ownsDesktop: boolean;
+  /** Polar can open a customer portal for this account (including a claimed guest customer). */
+  polarPortal: boolean;
   api: ApiEnrollment;
   card: { brand: string; last4: string; expires: string } | null;
   receiptEmail: string;

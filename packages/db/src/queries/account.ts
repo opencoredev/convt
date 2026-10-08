@@ -110,6 +110,21 @@ export async function openDeletion(db: Db, userId: string) {
   return row ?? null;
 }
 
+/** Polar customer id we can open a portal session for (account-linked or a claimed guest order). */
+export async function userPolarCustomerId(db: Db, userId: string): Promise<string | null> {
+  const rows = await db.execute<{ provider_customer_id: string }>(sql`
+    select provider_customer_id from billing_customers
+    where provider = 'polar' and user_id = ${userId} and deleted_at is null
+    union all
+    select provider_customer_id from orders
+    where user_id = ${userId} and provider_customer_id is not null
+    union all
+    select provider_customer_id from subscriptions
+    where user_id = ${userId} and provider_customer_id is not null
+    limit 1`);
+  return rows.rows[0]?.provider_customer_id ?? null;
+}
+
 export function userInvoices(db: Db, userId: string) {
   return db
     .select({

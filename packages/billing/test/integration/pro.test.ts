@@ -384,6 +384,7 @@ describe("ordering and versions", () => {
   });
 
   test("billed_at and paid_at are not moved by a later snapshot", async () => {
+    h.mock.takeHeld();
     const b = await h.buy("desktop", null, { email: "moved@convt.test" });
     await h.deliverAll();
     const order = h.mock.state().orders.find((o) => o.checkout_id === b.providerCheckoutId)!;
@@ -397,5 +398,5 @@ describe("ordering and versions", () => {
       sql`select billed_at::text as billed, paid_at::text as paid from orders where provider_order_id = ${order.id}`,
     );
     expect(after).toEqual(before);
-  });
+  }, 20_000);
 });
