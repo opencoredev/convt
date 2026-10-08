@@ -43,6 +43,21 @@ fn trial_poll_delay(elapsed_secs: u64, rate_limited: bool) -> std::time::Duratio
     }
 }
 
+#[cfg(test)]
+mod poll_tests {
+    use super::trial_poll_delay;
+    use std::time::Duration;
+
+    #[test]
+    fn trial_poll_schedule_stays_below_hourly_limit() {
+        assert_eq!(trial_poll_delay(0, false), Duration::from_secs(10));
+        assert_eq!(trial_poll_delay(119, false), Duration::from_secs(10));
+        assert_eq!(trial_poll_delay(120, false), Duration::from_secs(60));
+        assert_eq!(trial_poll_delay(900, false), Duration::from_secs(60));
+        assert_eq!(trial_poll_delay(120, true), Duration::from_secs(120));
+    }
+}
+
 /// Where a sign-in stands. Whether the app is signed in is
 /// [`Account::session`]; this is the flow on top of it.
 #[derive(Debug, Clone, PartialEq, Eq)]

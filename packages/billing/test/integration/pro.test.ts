@@ -70,6 +70,18 @@ describe("trials", () => {
     expect(await h.service.currentProAccess(u.id)).toEqual({ kind: "lapsed" });
   });
 
+  test("an incomplete subscription with a future trial end is still a trial", async () => {
+    const { u } = await startPro(testMailbox("incomplete-trial"));
+    await h.deliverAll();
+    await h.q(sql`update subscriptions set status = 'incomplete' where user_id = ${u.id}`);
+    const access = await h.service.currentProAccess(u.id);
+    expect(access).toMatchObject({ kind: "trial" });
+    if (access.kind === "trial") {
+      expect(access.endsAt).toMatch(/Z$/);
+      expect(access.endsOn).toBe(access.endsAt.slice(0, 10));
+    }
+  });
+
   test("a trialing subscription and its $0 paid order issue nothing; conversion issues one key and one email", async () => {
     const { subId } = await startPro("trial1@convt.test");
     await h.deliverAll();

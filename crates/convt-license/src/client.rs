@@ -348,18 +348,19 @@ impl Licensing {
     /// Sets the current account trial returned by convt.app. No key is stored.
     pub fn set_account_trial(&mut self, ends_on: Option<String>) {
         self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
-        self.account_trial_ends_at = self.account_trial_ends_on.as_deref().and_then(|date| {
-            crate::date::to_days(date).and_then(|day| {
-                (day * 86_400).try_into().ok().map(|seconds| UNIX_EPOCH + Duration::from_secs(seconds))
-            })
-        });
+        self.account_trial_ends_at = None;
     }
 
     /// Sets the exact online trial end. Older servers may omit it; those are
     /// treated conservatively as ending at the start of the display day.
     pub fn set_account_trial_exact(&mut self, ends_on: Option<String>, ends_at: Option<String>) {
+        if ends_at.is_some() && ends_at.as_deref().and_then(parse_utc_timestamp).is_none() {
+            self.account_trial_ends_on = None;
+            self.account_trial_ends_at = None;
+            return;
+        }
         self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
-        self.account_trial_ends_at = ends_at.and_then(parse_utc_timestamp);
+        self.account_trial_ends_at = ends_at.as_deref().and_then(parse_utc_timestamp);
     }
 
     pub fn build_date(&self) -> &str {
@@ -398,11 +399,11 @@ impl Licensing {
         if self.account_trial_ends_at.is_none()
             && let Some(ends_on) = &self.account_trial_ends_on
             && let Some(end) = date::to_days(ends_on)
-            && today <= end
+            && today < end
         {
             return State::AccountTrial {
                 ends_on: ends_on.clone(),
-                days_left: end - today + 1,
+                days_left: end - today,
             };
         }
         let started = self.trial_started();
@@ -529,7 +530,7 @@ impl Licensing {
     }
 }
 
-fn parse_utc_timestamp(value: String) -> Option<SystemTime> {
+fn parse_utc_timestamp(value: &str) -> Option<SystemTime> {
     let (date, time) = value.strip_suffix('Z')?.split_once('T')?;
     let day = crate::date::to_days(date)?;
     let mut parts = time.split(':');
@@ -643,26 +644,23 @@ mod tests {
     }
 
     #[test]
-    fn an_account_trial_allows_conversion_through_its_end_date() {
+    fn an_account_trial_ends_at_the_exact_timestamp() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        let ends_on = date::from_days(today() + 2);
+        l.set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T23:59:59Z")));
+        assert!(matches!(l.state(), State::AccountTrial { ends_on: ref got, days_left, .. } if got == &ends_on && days_left >= 2));
+        assert!(l.begin_conversion().is_ok());
+    }
+
+    #[test]
+    fn an_old_date_only_trial_is_conservative_and_exclusive() {
         let f = Fixture::new();
         let mut l = f.licensing(true);
         let ends_on = date::from_days(today() + 2);
         l.set_account_trial(Some(ends_on.clone()));
-        assert_eq!(
-            l.state_on(today() + 2),
-            State::AccountTrial {
-                ends_on: ends_on.clone(),
-                days_left: 1
-            }
-        );
-        assert!(l.begin_conversion().is_ok());
-        assert_eq!(
-            l.state_on(today() + 3),
-            State::Trial {
-                days_left: 7,
-                started: None
-            }
-        );
+        assert!(matches!(l.state_on(today() + 1), State::AccountTrial { days_left: 1, .. }));
+        assert!(!matches!(l.state_on(today() + 2), State::AccountTrial { .. }));
     }
 
     #[test]
