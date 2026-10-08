@@ -89,11 +89,13 @@ class StagePayloadTest(unittest.TestCase):
             write(source / "licenses" / "codecs" / "x265" / "COPYING.LESSER")
             write(source / "licenses" / "codecs" / "x265" / "LICENSE-1")
             write(source / "licenses" / "codecs" / "libheif" / "LICENSE-2.txt")
+            write(source / "licenses" / "pdfium" / "libjpeg_turbo.ijg")
             self.assertEqual(validate(source), [])
             staged = {path.as_posix() for path, _ in stage(source, dest)}
             self.assertIn("licenses/codecs/x265/COPYING.LESSER", staged)
             self.assertIn("licenses/codecs/x265/LICENSE-1", staged)
             self.assertIn("licenses/codecs/libheif/LICENSE-2.txt", staged)
+            self.assertIn("licenses/pdfium/libjpeg_turbo.ijg", staged)
 
     def test_missing_codec_dll_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
