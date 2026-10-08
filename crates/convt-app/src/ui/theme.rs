@@ -327,11 +327,9 @@ pub enum IconName {
     ExternalLink,
     Folder,
     FolderOpen,
-    Google,
     HardDrive,
     Inbox,
     Info,
-    Key,
     Loader,
     Mail,
     Minus,
@@ -339,7 +337,6 @@ pub enum IconName {
     RefreshCw,
     RotateCw,
     Settings,
-    Sparkles,
     Star,
     TriangleAlert,
     WindowMaximize,
@@ -347,7 +344,8 @@ pub enum IconName {
 }
 
 impl IconName {
-    pub const ALL: [IconName; 39] = {
+    #[cfg(test)]
+    pub const ALL: [IconName; 36] = {
         use IconName::*;
         [
             ArrowDown,
@@ -372,11 +370,9 @@ impl IconName {
             ExternalLink,
             Folder,
             FolderOpen,
-            Google,
             HardDrive,
             Inbox,
             Info,
-            Key,
             Loader,
             Mail,
             Minus,
@@ -384,7 +380,6 @@ impl IconName {
             RefreshCw,
             RotateCw,
             Settings,
-            Sparkles,
             Star,
             TriangleAlert,
             WindowMaximize,
@@ -418,11 +413,9 @@ impl IconName {
             ExternalLink => "external-link",
             Folder => "folder",
             FolderOpen => "folder-open",
-            Google => "google",
             HardDrive => "hard-drive",
             Inbox => "inbox",
             Info => "info",
-            Key => "key",
             Loader => "loading",
             Mail => "mail",
             Minus => "minus",
@@ -430,7 +423,6 @@ impl IconName {
             RefreshCw => "refresh",
             RotateCw => "rotate",
             Settings => "settings",
-            Sparkles => "sparkles",
             Star => "star",
             TriangleAlert => "alert-triangle",
             WindowMaximize => "square",

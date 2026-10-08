@@ -28,11 +28,9 @@ fn open(url: String) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     move |_, _, cx| cx.open_url(&url)
 }
 
-/// "Last checked today at 4:08 PM", or "Not checked yet".
-pub(super) fn last_checked(at: Option<u64>) -> String {
-    let Some(at) = at else {
-        return "Not checked yet".into();
-    };
+/// "Last checked today at 4:08 PM", or nothing before the first check.
+pub(super) fn last_checked(at: Option<u64>) -> Option<String> {
+    let at = at?;
     let when = Local::at(at as i64);
     let day = when.day_label(&Local::now());
     let day = if day == "Today" || day == "Yesterday" {
@@ -40,7 +38,7 @@ pub(super) fn last_checked(at: Option<u64>) -> String {
     } else {
         format!("on {day}")
     };
-    format!("Last checked {day} at {}", when.time())
+    Some(format!("Last checked {day} at {}", when.time()))
 }
 
 /// The sidebar card: only when a newer build is out.
@@ -169,11 +167,15 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
                 )
                 .child(line(
                     "update-last-checked",
-                    format!(
-                        "Built {} · {}",
-                        long_date(state.licensing.build_date()),
-                        last_checked(state.settings.update_checked_at)
-                    ),
+                    match last_checked(state.settings.update_checked_at) {
+                        Some(checked) => {
+                            format!(
+                                "Built {} · {checked}",
+                                long_date(state.licensing.build_date())
+                            )
+                        }
+                        None => format!("Built {}", long_date(state.licensing.build_date())),
+                    },
                     p.secondary,
                 )),
         )

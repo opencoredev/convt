@@ -326,7 +326,13 @@ pub(super) enum Remove {
     Keep,
 }
 
-/// The Documents row in Settings: what is installed, Download or Remove.
+/// The version of the pack this build installs, when its build pinned one.
+fn installed_version() -> Option<String> {
+    let version = convt_engines::packs::documents_source().version;
+    (version != "unconfigured").then_some(version)
+}
+
+/// The Documents row in Settings: what is installed, Install or Uninstall.
 /// `confirming`: the user clicked Remove once and is asked again.
 pub(super) fn settings_row(
     app: &Entity<AppState>,
@@ -347,7 +353,13 @@ pub(super) fn settings_row(
         (PackPhase::Failed(f), _) if f.kind != FailureKind::Cancelled => {
             (pack::plain_failure(f, &pack.offer).0, p.error)
         }
-        (_, Status::Installed(_)) => ("Installed".to_string(), p.green_text),
+        (_, Status::Installed(_)) => (
+            match installed_version() {
+                Some(version) => format!("Installed · version {version}"),
+                None => "Installed".to_string(),
+            },
+            p.green_text,
+        ),
         (_, Status::Rejected(reason)) => (pack::plain_reason(reason).to_string(), p.error),
         _ if system => (
             format!("Using LibreOffice on {}", theme::this_machine()),
@@ -368,10 +380,11 @@ pub(super) fn settings_row(
     let idle = !matches!(pack.phase, PackPhase::Working(_)) && !pack.removing;
     let ask = on_remove.clone();
     let remove = (installed && idle && !confirming).then(|| {
-        Button::ghost("pack-remove", "Remove")
+        Button::secondary("pack-remove", "Uninstall")
             .small()
             .build(p)
             .on_click(move |_, window, cx| ask(Remove::Ask, window, cx))
+            .into_any_element()
     });
     let confirm = (installed && idle && confirming).then(|| {
         let (yes, no) = (on_remove.clone(), on_remove.clone());
@@ -383,7 +396,7 @@ pub(super) fn settings_row(
                 .flex_col()
                 .gap(px(space::SM))
                 .child(theme::callout_words(
-                    "Remove document support?",
+                    "Uninstall document support?",
                     "Documents won't convert until you download it again.",
                     p,
                 ))
@@ -392,7 +405,7 @@ pub(super) fn settings_row(
                         .flex()
                         .gap(px(space::SM))
                         .child(
-                            Button::secondary("pack-remove-confirm", "Remove")
+                            Button::secondary("pack-remove-confirm", "Uninstall")
                                 .color(p.error)
                                 .small()
                                 .build(p)
@@ -410,11 +423,23 @@ pub(super) fn settings_row(
     });
     // Offer the download where it would help: nothing installed and no
     // LibreOffice on this computer, a failed try, or a rejected pack.
-    let offer = match (&pack.phase, &pack.status) {
-        (PackPhase::Working(_), _) => action(app, pack, p),
-        (_, Status::Installed(_)) => None,
+    // While it works, the progress goes under the row.
+    let offer = matches!(pack.phase, PackPhase::Working(_))
+        .then(|| action(app, pack, p))
+        .flatten();
+    // Idle, Install sits on the right, where Uninstall does.
+    let install = match (&pack.phase, &pack.status) {
+        (PackPhase::Working(_), _) | (_, Status::Installed(_)) => None,
         (_, Status::NotInstalled) if system => None,
-        _ => action(app, pack, p),
+        _ if !pack.offer.configured || pack.removing => None,
+        (phase, status) => {
+            let verb = match (phase, status) {
+                (PackPhase::Failed(f), _) if f.kind != FailureKind::Cancelled => "Try again",
+                (_, Status::Rejected(_)) => "Reinstall",
+                _ => "Install",
+            };
+            Some(download_button(app, download_label(verb, &pack.offer), p).into_any_element())
+        }
     };
     let detail = match (&pack.phase, &pack.status) {
         (PackPhase::Failed(f), _) if f.kind != FailureKind::Cancelled => Some(f.message.clone()),
@@ -447,7 +472,8 @@ pub(super) fn settings_row(
                         )
                         .child(status),
                 )
-                .children(remove),
+                .children(remove)
+                .children(install),
         )
         .children(detail.map(|d| {
             div()

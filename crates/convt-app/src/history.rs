@@ -202,8 +202,18 @@ impl History {
         rows.collect()
     }
 
+    #[cfg(test)]
     pub fn clear(&self) -> rusqlite::Result<()> {
         self.db.execute("DELETE FROM history", []).map(drop)
+    }
+
+    /// Deletes the records with these ids.
+    pub fn remove(&self, ids: &[i64]) -> rusqlite::Result<()> {
+        let mut delete = self.db.prepare("DELETE FROM history WHERE id = ?1")?;
+        for id in ids {
+            delete.execute([id])?;
+        }
+        Ok(())
     }
 }
 

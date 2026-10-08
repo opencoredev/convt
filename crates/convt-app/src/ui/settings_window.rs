@@ -468,7 +468,7 @@ impl SettingsView {
                         .into_any_element(),
                         theme::row(
                             "Jobs at once",
-                            Some(theme::detail("Auto runs one per CPU core", p)),
+                            None,
                             div()
                                 .id("concurrency")
                                 .test_support()
@@ -747,7 +747,13 @@ impl SettingsView {
 
     fn license(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx).license.clone();
-        let summary = SharedString::from(state.summary());
+        let summary = SharedString::from(match &state {
+            State::Licensed(l) if l.plan == convt_license::Plan::Pro => {
+                "You have convt Pro".to_string()
+            }
+            State::Licensed(_) => "You have a convt license".to_string(),
+            _ => state.summary(),
+        });
         let allowed = state.allows_conversion();
         let (glyph, tone, about) = match &state {
             State::Unrestricted => (
@@ -767,11 +773,13 @@ impl SettingsView {
                 Tone::Error,
                 "Buy a license or paste your key to keep converting.".to_string(),
             ),
-            State::Licensed(_) => (
+            State::Licensed(l) => (
                 IconName::CircleCheck,
                 Tone::Green,
                 format!(
-                    "Checked offline. The key stays on {}.",
+                    "{} · updates until {}. Checked offline; the key stays on {}.",
+                    l.email,
+                    l.updates_until,
                     theme::this_machine()
                 ),
             ),

@@ -180,8 +180,6 @@ impl MainView {
     fn header(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx);
         let activity = self.page == Page::Activity;
-        let any_finished =
-            !state.recent.is_empty() || state.queue.entries.iter().any(|e| e.status.is_finished());
         let (title, subtitle) = if activity {
             (
                 "Activity",
@@ -225,16 +223,6 @@ impl MainView {
                             .child(styled(size::SMALL, p.secondary).truncate().child(subtitle)),
                     ),
             )
-            .when(activity && any_finished, |d| {
-                d.child(
-                    Button::ghost("clear-finished", "Clear finished")
-                        .small()
-                        .build(p)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.app.update(cx, |s, cx| s.clear_activity(cx));
-                        })),
-                )
-            })
             .when(activity, |d| {
                 d.child(
                     Button::primary("add-files", "Add files")
@@ -267,34 +255,53 @@ impl MainView {
             .filter(|e| !e.status.is_finished())
             .cloned()
             .collect();
-        let mut heading = None;
-        let mut push_heading = |label: String, rows: &mut Vec<AnyElement>| {
-            if heading.as_ref() != Some(&label) {
-                rows.push(
-                    div()
-                        .flex()
-                        .px(px(10.))
-                        .pt(px(if rows.is_empty() { 4. } else { 18. }))
-                        .pb(px(6.))
-                        .child(
-                            styled(size::CAPTION, p.tertiary)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(label.clone()),
-                        )
-                        .into_any_element(),
-                );
-                heading = Some(label);
+        // Rows by day, newest first; each day with finished rows can be
+        // cleared on its own.
+        let mut days: Vec<(String, Vec<AnyElement>, Vec<i64>)> = Vec::new();
+        let day = |label: String, days: &mut Vec<(String, Vec<AnyElement>, Vec<i64>)>| {
+            if days.last().map(|(l, ..)| l) != Some(&label) {
+                days.push((label, Vec::new(), Vec::new()));
             }
+            days.len() - 1
         };
-        if !active.is_empty() {
-            push_heading("Today".into(), &mut rows);
-        }
         for entry in &active {
-            rows.push(active_row(entry, now, &self.app, p).into_any_element());
+            let i = day("Today".into(), &mut days);
+            days[i]
+                .1
+                .push(active_row(entry, now, &self.app, p).into_any_element());
         }
         for record in &state.recent {
-            push_heading(Local::at(record.finished_at).day_label(&today), &mut rows);
-            rows.push(record_row(record, &self.app, p).into_any_element());
+            let i = day(Local::at(record.finished_at).day_label(&today), &mut days);
+            days[i]
+                .1
+                .push(record_row(record, &self.app, p).into_any_element());
+            days[i].2.push(record.id);
+        }
+        for (label, day_rows, ids) in days {
+            let first = rows.is_empty();
+            let id = format!("clear-{}", label.to_lowercase().replace([' ', ','], "-"));
+            let app = self.app.clone();
+            let clear = (!ids.is_empty()).then(|| {
+                theme::text_button(SharedString::from(id), "Clear", p.tertiary, 12.)
+                    .on_click(move |_, _, cx| app.update(cx, |s, cx| s.clear_records(&ids, cx)))
+            });
+            rows.push(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .px(px(10.))
+                    .pt(px(if first { 4. } else { 20. }))
+                    .pb(px(6.))
+                    .child(
+                        styled(size::CAPTION, p.tertiary)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(label),
+                    )
+                    .children(clear)
+                    .into_any_element(),
+            );
+            rows.extend(day_rows);
         }
         let finder_off = state.finder_on == Some(false);
         let notices = self.notices(p, cx);
@@ -342,9 +349,18 @@ impl MainView {
             "Turn on the Finder menu above to convert from a right-click.".to_string()
         } else {
             format!(
-                "Right-click a file in {} and pick a format, or choose files here.",
+                "Or right-click a file in {} and pick a format.",
                 theme::file_manager()
             )
+        };
+        // Soft rings around the mark, like ripples from a drop.
+        let ring = |size: f32, alpha: f32| {
+            div()
+                .absolute()
+                .size(px(size))
+                .rounded_full()
+                .border_1()
+                .border_color(p.green_border.opacity(alpha))
         };
         div().flex().flex_1().min_h_0().p(px(GUTTER)).child(
             div()
@@ -356,27 +372,43 @@ impl MainView {
                 .flex_1()
                 .items_center()
                 .justify_center()
-                .gap(px(space::LG))
+                .gap(px(space::XL))
                 .px(px(space::XXL))
-                .rounded(px(radius::PANEL))
-                .border_1()
-                .border_dashed()
-                .border_color(p.control_border)
-                .bg(p.recessed)
-                .child(theme::mark(40., p))
+                .pb(px(40.))
+                .child(
+                    div()
+                        .relative()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .size(px(200.))
+                        .child(ring(200., 0.35))
+                        .child(ring(148., 0.6))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size(px(96.))
+                                .rounded_full()
+                                .bg(p.green_tint)
+                                .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                                .child(theme::mark(44., p)),
+                        ),
+                )
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .items_center()
                         .gap(px(6.))
-                        .max_w(px(440.))
+                        .max_w(px(400.))
                         .child(
-                            text(15., 20., p.text)
+                            text(17., 22., p.text)
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child("Nothing converted yet"),
+                                .child("Drop files to convert"),
                         )
-                        .child(styled(size::SMALL, p.secondary).text_center().child(hint)),
+                        .child(styled(size::BODY, p.secondary).text_center().child(hint)),
                 )
                 .child(
                     Button::secondary("empty-add-files", "Choose files…")

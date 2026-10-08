@@ -938,7 +938,9 @@ fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) 
     }
     assert!(!shown(cx, window, "empty"));
 
-    click(cx, window, "clear-finished");
+    // Each day clears on its own.
+    assert!(!shown(cx, window, "clear-finished"));
+    click(cx, window, "clear-today");
     cx.read(|cx| {
         let state = f.app.read(cx);
         assert!(state.recent.is_empty() && state.queue.entries.is_empty());
@@ -1318,7 +1320,7 @@ fn quick_convert_keeps_results_after_the_queue_is_cleared(cx: &mut TestAppContex
     });
 
     let app = f.app.clone();
-    cx.update(|cx| app.update(cx, |s, cx| s.clear_finished(cx)));
+    cx.update(|cx| app.update(cx, |s, cx| s.clear_records(&[], cx)));
     cx.read(|cx| assert!(f.app.read(cx).entry(job).is_none()));
     assert_eq!(
         label(cx, window, &format!("status-{job}")).as_deref(),
@@ -1402,11 +1404,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     );
     assert_eq!(
         label(cx, settings, "license-status").as_deref(),
-        Some(concat!(
-            "Licensed to a",
-            "@",
-            "example.com (Desktop), with updates until 2027-10-01."
-        ))
+        Some("You have a convt license")
     );
     let stored = std::fs::read_to_string(f.dir.path().join("license.key")).unwrap();
     assert_eq!(stored.trim(), key);
@@ -4235,10 +4233,7 @@ fn check_now_shows_that_it_is_checking(cx: &mut TestAppContext) {
     let built = cx.read(|cx| f.app.read(cx).licensing.build_date().to_string());
     assert_eq!(
         label(cx, settings, "update-last-checked"),
-        Some(format!(
-            "Built {} · Not checked yet",
-            super::update::long_date(&built)
-        ))
+        Some(format!("Built {}", super::update::long_date(&built)))
     );
     assert!(
         label(cx, settings, "update-status")

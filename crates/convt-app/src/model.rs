@@ -882,18 +882,6 @@ impl AppState {
         self.queue.get(id)
     }
 
-    pub fn clear_finished(&mut self, cx: &mut Context<Self>) {
-        self.queue.clear_finished();
-        cx.notify();
-    }
-
-    /// Clears everything finished from the Activity list: finished jobs and
-    /// the history behind them.
-    pub fn clear_activity(&mut self, cx: &mut Context<Self>) {
-        self.clear_finished(cx);
-        self.clear_history(cx);
-    }
-
     /// Whether this build checks licenses.
     pub fn license_enforced(&self) -> bool {
         self.licensing.enforced()
@@ -977,8 +965,11 @@ impl AppState {
         });
     }
 
-    pub fn clear_history(&mut self, cx: &mut Context<Self>) {
-        if let Err(e) = self.history.clear() {
+    /// Clears some finished conversions from Activity, such as one day's,
+    /// and the finished jobs the list no longer shows.
+    pub fn clear_records(&mut self, ids: &[i64], cx: &mut Context<Self>) {
+        self.queue.clear_finished();
+        if let Err(e) = self.history.remove(ids) {
             self.errors.push(format!("History was not cleared: {e}"));
         }
         self.refresh_history();
