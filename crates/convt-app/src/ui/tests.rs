@@ -947,8 +947,17 @@ fn quick_convert_refuses_a_file_name_that_leaves_the_folder(cx: &mut TestAppCont
         Some("Type a name for the file.")
     );
 
-    // A name without its extension gets it, and the error goes.
-    set_input(cx, window, &input, "renamed");
+    // Typing a new name clears the error; one without its extension gets it.
+    set_input(cx, window, &input, "");
+    cx.update_window(window, |_, window, cx| {
+        use gpui_kit::Focusable as _;
+        let focus = input.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+    })
+    .unwrap();
+    cx.simulate_input(window, "renamed");
+    assert!(!shown(cx, window, "file-name-error"));
+    cx.read(|cx| assert_eq!(input.read(cx).value(), "renamed"));
     click(cx, window, "convert");
     assert!(!shown(cx, window, "file-name-error"));
     let job = f.last_job(cx);

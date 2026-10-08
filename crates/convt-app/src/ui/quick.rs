@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use convt_core::{
     Background, Category, Format, Options, Output, Registry, VideoCodec, format_by_id,
 };
-use gpui_kit::component::input::InputState;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -98,6 +98,8 @@ pub struct QuickView {
     generation: u64,
     _observe: Subscription,
     _appearance: Subscription,
+    /// Clears the file name's error once it's edited.
+    _name: Subscription,
 }
 
 impl QuickView {
@@ -143,6 +145,11 @@ impl QuickView {
         }
         let file_name = cx.new(|cx| InputState::new(window, cx));
         let mut view = Self {
+            _name: cx.subscribe(&file_name, |this: &mut Self, _, event, cx| {
+                if matches!(event, InputEvent::Change) && this.name_error.take().is_some() {
+                    cx.notify();
+                }
+            }),
             _observe: cx.observe_in(&app, window, |this: &mut Self, app, window, cx| {
                 this.remember(&app, cx);
                 this.follow_registry(window, cx);
