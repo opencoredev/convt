@@ -22,6 +22,8 @@ export type BillingEnv = {
   licensePublicKey: string | null;
   /** Public keys that must never sign in production (the local dev keys). */
   devPublicKeys: string[];
+  /** Public PostHog project key + host. Null when unset (staging, local). */
+  posthog: { key: string; host: string } | null;
 };
 
 export type RawEnv = Record<string, unknown>;
@@ -115,6 +117,9 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
   } else if (str(raw, "POLAR_API_URL") && !isLoopback(apiUrl) && catalogEnv === "local") {
     throw new ConfigError("the local catalog only talks to a loopback billing mock");
   }
+  const posthogKey = str(raw, "POSTHOG_KEY");
+  const posthogHost = (str(raw, "POSTHOG_HOST") ?? "https://us.i.posthog.com").replace(/\/$/, "");
+  const posthog = posthogKey ? { key: posthogKey, host: posthogHost } : null;
   return {
     env: envName,
     catalogEnv,
@@ -134,6 +139,7 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    posthog,
   };
 }
 
