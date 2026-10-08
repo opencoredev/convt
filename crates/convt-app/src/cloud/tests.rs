@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use convt_core::{Cancel, Job, Output, format_by_id};
-use convt_license::account::{self, ApiError, CloudCredential, Session};
+use convt_license::account::{self, ApiError, CloudCredential, LicenseReply, Session};
 use convt_license::{License, Plan, client::State, date};
 use futures::StreamExt;
 
@@ -23,7 +23,7 @@ impl account::Api for Site {
     fn exchange(&self, _: &str, _: &str) -> Result<Session, ApiError> {
         unreachable!()
     }
-    fn current_key(&self, _: &str, _: &str) -> Result<Option<String>, ApiError> {
+    fn current_key(&self, _: &str, _: &str) -> Result<LicenseReply, ApiError> {
         unreachable!()
     }
     fn sign_out(&self, _: &str) -> Result<(), ApiError> {
@@ -932,6 +932,7 @@ mod live {
         // The app's own renewal call fetches the Pro key it then checks.
         let key = account::Api::current_key(&account::Http::new(&url), &token, "0.0.0")
             .expect("renewal")
+            .key
             .expect("a Pro key");
         let (dir, app) = live_app(cx, &token, Some(key));
         let access = cx.read(|cx| app.read(cx).cloud_access());

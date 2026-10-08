@@ -294,6 +294,7 @@ pub struct Licensing {
     /// The stored key, read again before each conversion so a key removed
     /// by another client stops counting.
     key: Option<String>,
+    local_trial_enabled: bool,
 }
 
 impl Licensing {
@@ -303,7 +304,7 @@ impl Licensing {
         } else {
             None
         };
-        Self { config, key }
+        Self { config, key, local_trial_enabled: true }
     }
 
     /// Reads the stored key again.
@@ -315,6 +316,11 @@ impl Licensing {
 
     pub fn enforced(&self) -> bool {
         self.config.enforce
+    }
+
+    /// Packaged desktop builds use the account trial; the CLI keeps its local trial.
+    pub fn disable_local_trial(&mut self) {
+        self.local_trial_enabled = false;
     }
 
     pub fn build_date(&self) -> &str {
@@ -341,6 +347,9 @@ impl Licensing {
             };
         }
         let started = self.trial_started();
+        if !self.local_trial_enabled && started.is_none() {
+            return State::TrialEnded;
+        }
         let elapsed = started
             .as_deref()
             .and_then(date::to_days)

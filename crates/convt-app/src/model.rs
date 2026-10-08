@@ -13,6 +13,7 @@ use convt_core::{
 };
 use convt_license::License;
 use convt_license::account::{self, Api};
+use convt_license::date;
 use convt_license::client::{self, Licensing};
 use futures::StreamExt;
 use futures::channel::mpsc::unbounded;
@@ -325,8 +326,13 @@ impl AppState {
                 };
             }
         });
-        let licensing = Licensing::new(paths.license);
-        let account = Account::new(paths.account_url, paths.account_api, licensing.session());
+        let mut licensing = Licensing::new(paths.license);
+        #[cfg(not(test))]
+        licensing.disable_local_trial();
+        let mut account = Account::new(paths.account_url, paths.account_api, licensing.session());
+        if let Some(ends_on) = settings.trial_ends_on.clone() {
+            account.access = Some(crate::account::Access::Trial { ends_on });
+        }
         let mut state = Self {
             registry,
             registry_generation: 0,
@@ -494,7 +500,8 @@ impl AppState {
         {
             return Err(reason.into());
         }
-        let allowed = self.licensing.begin_conversion();
+        let online_trial = matches!(self.account.access.as_ref(), Some(crate::account::Access::Trial { ends_on }) if ends_on.as_str() >= date::from_days(client::today()).as_str());
+        let allowed = if online_trial { Ok(()) } else { self.licensing.begin_conversion() };
         self.license = self.licensing.state();
         if let Err(blocked) = allowed {
             cx.notify();
