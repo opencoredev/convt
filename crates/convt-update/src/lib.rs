@@ -124,7 +124,9 @@ impl Manifest {
                 || b.artifacts.is_empty()
                 || b.artifacts.len() > 32
                 || !artifact(&b.source, true)
-                || b.source_closure.as_ref().is_some_and(|a| !artifact(a, true))
+                || b.source_closure
+                    .as_ref()
+                    .is_some_and(|a| !artifact(a, true))
                 || date::to_days(&b.build_date).unwrap() > (self.issued_at / 86400) as i64
                 || !identities.insert((&b.build_date, &b.version))
             {
