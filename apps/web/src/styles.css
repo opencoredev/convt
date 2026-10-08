@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 
 /* Dark mode follows the `dark` class on <html>, set from the user's choice or the OS. */
@@ -52,7 +52,7 @@
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
   --color-page: var(--page);
@@ -85,6 +85,8 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* Inter's contextual alternates and the straight-sided 1 and l read better at UI sizes. */
+  font-feature-settings: "cv11", "ss01";
 }
 
 /* app tokens */
