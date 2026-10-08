@@ -27,8 +27,8 @@ export function DownloadButton({
   if (!artifact) return <ComingSoon large={large} />;
   const file = fileName(artifact.url);
   return large ? (
-    <PrimaryLink href={artifact.url} download={file} className="h-10 w-full">
-      Download {file}
+    <PrimaryLink href={artifact.url} download={file} className="h-10 w-full min-w-0">
+      <span className="min-w-0 truncate">Download {file}</span>
     </PrimaryLink>
   ) : (
     <SecondaryLink href={artifact.url} download={file} className="shrink-0">
