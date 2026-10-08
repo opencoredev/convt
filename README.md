@@ -17,7 +17,14 @@ Local file conversion for your own machine. Right-click a file, pick a format, a
 
 ## Install
 
-Download the app from [convt.app/download](https://convt.app/download). Release 0.2.0 has a disk image for macOS on Apple silicon and an MSI installer for Windows x86_64. The Linux packages (AppImage, .deb, .rpm and a tarball) build from `packaging/linux` but are not in a release yet. Packaged builds start a 7-day trial on the first conversion.
+macOS (Apple silicon) with Homebrew:
+
+```bash
+brew tap opencoredev/convt https://github.com/opencoredev/convt
+brew install --cask convt
+```
+
+That installs the signed app and puts the `convt` CLI on your `PATH`. Download the app from [convt.app/download](https://convt.app/download) for a disk image, Windows MSI, or Linux packages. There is no Linux Homebrew formula yet; use the `.deb`, `.rpm` or AppImage. Packaged builds start a 7-day trial on the first conversion.
 
 To build from source:
 

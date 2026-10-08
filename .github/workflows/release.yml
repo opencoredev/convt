@@ -183,3 +183,31 @@ jobs:
           fi
           gh release create "v$RELEASE_VERSION" release/* --target "$GITHUB_SHA" \
             --title "convt $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+  # Never blocks publication. Missing tap repo, branch protection, or a
+  # stale sha256 fetch must not fail the Release workflow.
+  homebrew:
+    name: Update Homebrew cask
+    if: always() && needs.preflight.outputs.publish == 'true' && needs.publish.result == 'success'
+    needs: [preflight, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Bump Casks/convt.rb from the published manifest
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          python3 scripts/release/update-homebrew-cask.py \
+            --cask Casks/convt.rb \
+            --from-manifest-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${RELEASE_VERSION}/release-manifest.json" \
+            --commit --push --tap opencoredev/homebrew-tap
