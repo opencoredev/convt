@@ -403,7 +403,7 @@ impl FirstRunView {
                 .child(heading("Signing you in…", p)),
             Stage::Failed(e) => column()
                 .child(heading("Sign-in didn't finish", p))
-                .child(super::error_text(e, p))
+                .child(problem(e, p))
                 .child(
                     actions()
                         .child(
@@ -425,7 +425,7 @@ impl FirstRunView {
                 .children(signed_in),
             Stage::CheckFailed(e) => column()
                 .child(heading("Couldn't reach convt.app", p))
-                .child(super::error_text(e, p))
+                .child(problem(e, p))
                 .child(
                     pill("onboarding-retry", "Retry", Pill::Strong, p).on_click(cx.listener(
                         |this, _, _, cx| this.app.update(cx, |s, cx| s.refresh_license(cx)),
@@ -561,7 +561,7 @@ impl FirstRunView {
                 pill("onboarding-email", "Continue with Email", Pill::Soft, p)
                     .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Email, cx))),
             )
-            .children(notice.map(|n| super::error_text(n, p)))
+            .children(notice.map(|n| problem(n, p)))
             .child(div().h(px(6.)))
             .child(self.key_link(p, cx))
             .child(
@@ -607,7 +607,7 @@ impl FirstRunView {
                     .w(px(PILL_WIDTH))
                     .child(theme::field(&self.key, "onboarding-key")),
             )
-            .children(self.error.clone().map(|e| super::error_text(e, p)))
+            .children(self.error.clone().map(|e| problem(e, p)))
             .child(
                 pill("onboarding-activate", "Activate", Pill::Strong, p)
                     .on_click(cx.listener(|this, _, window, cx| this.activate(window, cx))),
@@ -918,6 +918,17 @@ fn line(body: &str, p: &Palette) -> Div {
         .max_w(px(380.))
         .text_center()
         .child(SharedString::from(body.to_string()))
+}
+
+/// What went wrong, centered and wrapped like [`line`], in the error color.
+fn problem(message: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
+    let message = message.into();
+    div()
+        .id("error")
+        .test_support()
+        .aria_label(message.clone())
+        .max_w(px(420.))
+        .child(text(13., 20., p.error).text_center().child(message))
 }
 
 fn spinner(p: &Palette) -> impl IntoElement {
