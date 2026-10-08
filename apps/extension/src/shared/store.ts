@@ -28,10 +28,23 @@ export async function getRecent(): Promise<RecentItem[]> {
   return parseRecent(recent);
 }
 
-export async function addRecent(item: RecentItem): Promise<void> {
-  const recent = await getRecent();
-  const next = [item, ...recent.filter((r) => r.jobId !== item.jobId)].slice(0, MAX_RECENT);
-  await chrome.storage.local.set({ recent: next });
+/**
+ * Runs read-modify-write updates one at a time. Two downloads can finish together,
+ * and without this the second write would drop the first one's entry.
+ */
+let updates: Promise<unknown> = Promise.resolve();
+function serialized<T>(update: () => Promise<T>): Promise<T> {
+  const next = updates.then(update, update);
+  updates = next.catch(() => undefined);
+  return next;
+}
+
+export function addRecent(item: RecentItem): Promise<void> {
+  return serialized(async () => {
+    const recent = await getRecent();
+    const next = [item, ...recent.filter((r) => r.jobId !== item.jobId)].slice(0, MAX_RECENT);
+    await chrome.storage.local.set({ recent: next });
+  });
 }
 
 export async function clearRecent(): Promise<void> {
@@ -39,11 +52,13 @@ export async function clearRecent(): Promise<void> {
 }
 
 /** Counts finished conversions; returns the new total. */
-export async function countConversion(): Promise<number> {
-  const { conversions } = await chrome.storage.local.get("conversions");
-  const next = (typeof conversions === "number" ? conversions : 0) + 1;
-  await chrome.storage.local.set({ conversions: next });
-  return next;
+export function countConversion(): Promise<number> {
+  return serialized(async () => {
+    const { conversions } = await chrome.storage.local.get("conversions");
+    const next = (typeof conversions === "number" ? conversions : 0) + 1;
+    await chrome.storage.local.set({ conversions: next });
+    return next;
+  });
 }
 
 /** A job waiting for the user to grant site access. */

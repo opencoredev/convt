@@ -113,7 +113,8 @@ export async function renderOnboarding(root: HTMLElement) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !changes.recent) return;
     const [latest] = parseRecent(changes.recent.newValue);
-    if (latest && latest.at >= openedAt) {
+    // Conversions in other tabs land in the same list; only the demo photo counts here.
+    if (latest && latest.demo && latest.at >= openedAt) {
       stage = { kind: "done", item: latest };
       update();
     }

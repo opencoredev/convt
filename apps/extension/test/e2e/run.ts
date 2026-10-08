@@ -613,6 +613,22 @@ try {
     console.log(`ACCESS_JOB=${r.jobId} TAB=${tabId}`);
   }
 
+  // 11b. Two conversions finishing together both land in the recent list.
+  {
+    const both = await inExtension<boolean>(`
+      const ids = [crypto.randomUUID(), crypto.randomUUID()];
+      await Promise.all(ids.map((id, i) => chrome.runtime.sendMessage({ kind: "test:run", job: { id, srcUrl: ${JSON.stringify(`${pageOrigin}/photo.webp`)} + "?n=" + i, pageUrl: ${JSON.stringify(`${pageOrigin}/`)}, tabId: ${tabId}, frameId: 0, action: { kind: "save", target: i ? "jpg" : "webp" } } })));
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 200));
+        const { recent } = await chrome.storage.local.get("recent");
+        const have = (recent ?? []).map((r) => r.jobId);
+        if (ids.every((id) => have.includes(id))) return true;
+      }
+      return false;
+    `);
+    check("two conversions finishing together both appear in recent files", both);
+  }
+
   // 12. After access is granted, the job resumes on its own. Chrome's permission
   // dialog can't be clicked headless, so this queues a job for a host the test build
   // can already read: the access page sees the access and hands straight back.

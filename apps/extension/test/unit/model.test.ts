@@ -141,7 +141,11 @@ describe("message parsing", () => {
       thumb: "d",
       downloadId: 1,
     };
-    expect(parseRecent([good, { ...good, target: "tiff" }, "x", null])).toEqual([good as never]);
+    // Entries written before the demo flag existed read as not from the demo.
+    expect(parseRecent([good, { ...good, target: "tiff" }, "x", null])).toEqual([
+      { ...good, demo: false } as never,
+    ]);
+    expect(parseRecent([{ ...good, demo: true }])[0]?.demo).toBe(true);
     expect(parseRecent("nope")).toEqual([]);
   });
 });

@@ -78,7 +78,7 @@ export type ToastView =
   | { phase: "dismissed"; jobId: JobId };
 
 /** A finished conversion, listed in the popup. */
-export type RecentItem =
+export type RecentItem = (
   | {
       kind: "saved";
       jobId: JobId;
@@ -89,7 +89,11 @@ export type RecentItem =
       thumb: string;
       downloadId: number;
     }
-  | { kind: "copied"; jobId: JobId; at: number; bytes: number; thumb: string };
+  | { kind: "copied"; jobId: JobId; at: number; bytes: number; thumb: string }
+) & {
+  /** Started from convt's own welcome page, so the walkthrough can tell it apart. */
+  demo: boolean;
+};
 
 export const MAX_RECENT = 8;
 
@@ -122,8 +126,10 @@ export function parseRecent(value: unknown): RecentItem[] {
     const bytes = "bytes" in item && typeof item.bytes === "number" ? item.bytes : null;
     const thumb = "thumb" in item && typeof item.thumb === "string" ? item.thumb : null;
     if (jobId === null || at === null || bytes === null || thumb === null) return [];
-    if ("kind" in item && item.kind === "copied")
-      return [{ kind: "copied", jobId, at, bytes, thumb }];
+    const demo = "demo" in item && item.demo === true;
+    if ("kind" in item && item.kind === "copied") {
+      return [{ kind: "copied", jobId, at, bytes, thumb, demo }];
+    }
     if (
       "kind" in item &&
       item.kind === "saved" &&
@@ -144,6 +150,7 @@ export function parseRecent(value: unknown): RecentItem[] {
           name: item.name,
           target: item.target,
           downloadId: item.downloadId,
+          demo,
         },
       ];
     }

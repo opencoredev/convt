@@ -43,6 +43,8 @@ export async function acquire(job: Job): Promise<Acquired> {
   const direct: Fetched = isBlob
     ? { ok: false, kind: "refused" }
     : await fetchFromWorker(job.srcUrl);
+  if (!direct.ok && direct.kind === "too-large")
+    return { ok: false, problem: { kind: "too-large" } };
   if (direct.ok) {
     const result = checked(direct.bytes);
     // A 200 that isn't an image is often a login page; the page's cookies may help.
@@ -78,12 +80,41 @@ function checked(bytes: Uint8Array): Acquired {
 
 async function fetchFromWorker(url: string): Promise<Fetched> {
   try {
-    const response = await fetch(url, { credentials: "omit", cache: "force-cache" });
+    const response = await fetch(url, { credentials: "omit" });
     if (!response.ok) return { ok: false, kind: "http", status: response.status };
-    return { ok: true, bytes: new Uint8Array(await response.arrayBuffer()) };
+    return await readCapped(response);
   } catch {
     return { ok: false, kind: "refused" };
   }
+}
+
+/** Reads a body, giving up as soon as it passes MAX_BYTES instead of buffering it all. */
+async function readCapped(response: Response): Promise<Fetched> {
+  if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES) {
+    await response.body?.cancel();
+    return { ok: false, kind: "too-large" };
+  }
+  if (!response.body) return { ok: true, bytes: new Uint8Array(await response.arrayBuffer()) };
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_BYTES) {
+      await reader.cancel();
+      return { ok: false, kind: "too-large" };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return { ok: true, bytes };
 }
 
 async function fetchInPage(job: Job): Promise<Fetched> {
