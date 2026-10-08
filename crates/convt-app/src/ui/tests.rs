@@ -1657,6 +1657,20 @@ fn onboarding_opens_at_three_quarters_of_the_display(cx: &mut TestAppContext) {
 }
 
 #[test]
+fn the_glow_breathes_without_a_jump() {
+    use super::first_run::breath;
+    assert!(
+        (breath(0.) - breath(1.)).abs() < 1e-4,
+        "a breath ends where it starts"
+    );
+    for i in 0..=100 {
+        let o = breath(i as f32 / 100.);
+        assert!((0.78..=1.).contains(&o), "{o}");
+    }
+    assert!((breath(0.5) - 1.).abs() < 1e-4);
+}
+
+#[test]
 fn onboarding_fits_small_normal_and_large_displays() {
     use super::first_run_fit;
     let fit = |w: f32, h: f32| {

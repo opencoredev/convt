@@ -112,6 +112,7 @@ pub struct FirstRunView {
     _finish: Option<Task<()>>,
     _observe: Subscription,
     _appearance: Subscription,
+    _activation: Subscription,
 }
 
 impl FirstRunView {
@@ -129,6 +130,8 @@ impl FirstRunView {
                 cx.notify()
             }),
             _appearance: theme::observe_appearance(window, cx),
+            // The glow only breathes while the window is in front.
+            _activation: cx.observe_window_activation(window, |_, _, cx| cx.notify()),
             app,
             screen,
             provider: Provider::Google,
@@ -741,9 +744,12 @@ impl FirstRunView {
 
     /// The dithered glow behind every screen, and the bloom that fills the
     /// window while convt sets up.
-    fn backdrop(&self, p: &Palette, cx: &App) -> Div {
+    fn backdrop(&self, p: &Palette, window: &Window, cx: &App) -> Div {
         let theme = if p.dark { "dark" } else { "light" };
         let still = cx.reduce_motion();
+        // Behind other windows nothing needs to move, so nothing asks for
+        // frames.
+        let breathing = !still && window.is_window_active();
         let calibrating = self.screen == Screen::Calibrating;
         let glow = img(SharedString::from(format!("onboarding/glow-{theme}.png")))
             .absolute()
@@ -752,22 +758,17 @@ impl FirstRunView {
             .ml(px(-GLOW.0 / 2.))
             .w(px(GLOW.0))
             .h(px(GLOW.1));
-        let glow = if still {
-            glow.into_any_element()
-        } else {
-            // A slow drift and breath, about one cycle every seven seconds.
+        let glow = if breathing {
+            // A slow breath, about once every seven seconds. Only the
+            // opacity changes: nothing moves, so nothing around it does.
             glow.with_animation(
                 "glow",
                 Animation::new(Duration::from_secs(7)).repeat(),
-                |img, t| {
-                    let wave = (1. - (t * std::f32::consts::TAU).cos()) / 2.;
-                    let sway = (t * std::f32::consts::TAU).sin();
-                    img.opacity(0.78 + 0.22 * wave)
-                        .mb(px(-14. + 14. * wave))
-                        .ml(px(-GLOW.0 / 2. + 24. * sway))
-                },
+                |img, t| img.opacity(breath(t)),
             )
             .into_any_element()
+        } else {
+            glow.opacity(breath(0.)).into_any_element()
         };
         let bloom = calibrating.then(|| {
             // Its brightest point (62% down the image) sits at the
@@ -801,6 +802,13 @@ impl FirstRunView {
             .child(glow)
             .children(bloom)
     }
+}
+
+/// The glow's opacity `t` of the way through a breath: dimmest at the start
+/// and end, so a still glow and a breathing one meet without a jump.
+pub(super) fn breath(t: f32) -> f32 {
+    let wave = (1. - (t * std::f32::consts::TAU).cos()) / 2.;
+    0.78 + 0.22 * wave
 }
 
 /// The glow's and the bloom's size: the PNGs' pixel size, drawn unscaled.
@@ -955,7 +963,7 @@ fn friendly_date(day: &str) -> String {
 }
 
 impl Render for FirstRunView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
         let content = match self.screen {
             Screen::Account => self.account_screen(&p, cx).into_any_element(),
@@ -976,7 +984,7 @@ impl Render for FirstRunView {
             .bg(p.window)
             .font_family(theme::SANS)
             .text_color(p.text)
-            .child(self.backdrop(&p, cx))
+            .child(self.backdrop(&p, window, cx))
             .child(
                 div()
                     .relative()
