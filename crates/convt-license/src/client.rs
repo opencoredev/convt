@@ -371,15 +371,14 @@ impl Licensing {
                 Err(_) => State::NotCovered(license),
             };
         }
-        if let Some(ends_on) = &self.account_trial_ends_on {
-            if let Some(end) = date::to_days(ends_on) {
-                if today <= end {
-                    return State::AccountTrial {
-                        ends_on: ends_on.clone(),
-                        days_left: end - today + 1,
-                    };
-                }
-            }
+        if let Some(ends_on) = &self.account_trial_ends_on
+            && let Some(end) = date::to_days(ends_on)
+            && today <= end
+        {
+            return State::AccountTrial {
+                ends_on: ends_on.clone(),
+                days_left: end - today + 1,
+            };
         }
         let started = self.trial_started();
         if !self.local_trial_enabled && started.is_none() {
