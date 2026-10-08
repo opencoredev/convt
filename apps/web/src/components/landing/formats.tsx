@@ -1,4 +1,7 @@
+import { PlayIcon } from "@hugeicons/core-free-icons";
 import type { ReactNode } from "react";
+
+import { Icon } from "#/components/icon";
 
 import { Container, MisoPhoto } from "./ui";
 
@@ -136,9 +139,12 @@ function VideoPreview() {
         />
         <div className="absolute inset-0 bg-[#00000047]" />
         <div className="relative flex size-10 items-center justify-center rounded-full bg-[#ffffffeb]">
-          <svg width="14" height="16" viewBox="0 0 14 16">
-            <path d="M2 1.5v13L13 8 2 1.5Z" fill="#0a0a0a" />
-          </svg>
+          <Icon
+            icon={PlayIcon}
+            size={18}
+            strokeWidth={2}
+            className="fill-[#0a0a0a] text-[#0a0a0a]"
+          />
         </div>
       </div>
       <div className="flex w-full items-center gap-2.5 font-mono text-[10.5px]/[14px]">

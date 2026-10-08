@@ -1,4 +1,7 @@
+import { ArrowRight01Icon, ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 import type { ComponentProps } from "react";
+
+import { Icon } from "#/components/icon";
 
 // Shared pieces for the dashboard and account pages, sized from the Paper file.
 
@@ -126,33 +129,11 @@ export const table = {
 };
 
 export function ExternalIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
-      <path
-        d="M4 2.5 H9.5 V8 M9.5 2.5 L2.5 9.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Icon icon={ArrowUpRight01Icon} size={13} strokeWidth={1.8} />;
 }
 
 export function ChevronIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
-      <path
-        d="M4.5 2.5 L8 6 L4.5 9.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Icon icon={ArrowRight01Icon} size={13} strokeWidth={1.8} />;
 }
 
 /**
