@@ -44,31 +44,23 @@ export function parseDataUrl(url: string): { mime: string; bytes: Uint8Array } |
 
 /** Decodes %XX escapes to bytes; the text between them keeps its UTF-8 bytes. */
 function percentDecode(text: string): Uint8Array {
-  if (!text.includes("%")) return new TextEncoder().encode(text);
   const encoder = new TextEncoder();
-  const parts: Uint8Array[] = [];
-  let run = "";
+  if (!text.includes("%")) return encoder.encode(text);
+  // UTF-8 needs at most 3 bytes per UTF-16 unit, and an escape shrinks 3 units to 1.
+  const out = new Uint8Array(text.length * 3);
+  let length = 0;
   let i = 0;
   while (i < text.length) {
     const hex = text.slice(i + 1, i + 3);
     if (text[i] === "%" && /^[0-9a-f]{2}$/i.test(hex)) {
-      if (run) parts.push(encoder.encode(run));
-      run = "";
-      parts.push(Uint8Array.of(Number.parseInt(hex, 16)));
+      out[length++] = Number.parseInt(hex, 16);
       i += 3;
     } else {
       const next = text.indexOf("%", i + 1);
       const end = next === -1 ? text.length : next;
-      run += text.slice(i, end);
+      length += encoder.encodeInto(text.slice(i, end), out.subarray(length)).written;
       i = end;
     }
   }
-  if (run) parts.push(encoder.encode(run));
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
-  return out;
+  return out.slice(0, length);
 }

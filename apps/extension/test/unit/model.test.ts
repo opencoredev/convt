@@ -279,6 +279,15 @@ describe("bytes", () => {
     expect(performance.now() - start).toBeLessThan(1000);
   });
 
+  test("a heavily escaped 1 MB data: URL decodes quickly", () => {
+    const url = `data:image/png,${"%89".repeat(1_000_000)}`;
+    const start = performance.now();
+    const bytes = parseDataUrl(url)?.bytes;
+    expect(bytes?.length).toBe(1_000_000);
+    expect(bytes?.[999_999]).toBe(0x89);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   test("base64 round-trips large buffers", () => {
     const data = new Uint8Array(200_000).map((_, i) => i % 251);
     expect(fromBase64(toBase64(data))).toEqual(data);
