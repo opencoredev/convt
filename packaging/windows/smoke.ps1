@@ -30,9 +30,15 @@ if (-not $Convt) { throw 'Extracted MSI has no convt.exe' }
 $Bin = $Convt.Directory.FullName
 $Work = Join-Path $Repo 'packaging/out/windows/smoke'
 New-Item -ItemType Directory -Force "$Work/in","$Work/out" | Out-Null
+# GitHub's workspace is on D:\, whose volume root is not a trusted pack
+# ancestor. Install into the per-user profile, matching production.
+if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is required to install the document pack' }
+$SmokeHome = Join-Path $env:LOCALAPPDATA 'convt-smoke'
+if (Test-Path -LiteralPath $SmokeHome) { Remove-Item -LiteralPath $SmokeHome -Recurse -Force }
+New-Item -ItemType Directory -Force $SmokeHome | Out-Null
 $env:CONVT_LICENSE_STORE = 'file'
-$env:CONVT_CONFIG_DIR = Join-Path $Work 'cfg'
-$env:CONVT_DATA_DIR = Join-Path $Work 'data'
+$env:CONVT_CONFIG_DIR = Join-Path $SmokeHome 'cfg'
+$env:CONVT_DATA_DIR = Join-Path $SmokeHome 'data'
 $env:CONVT_PDFIUM_DIR = $Bin
 & "$Bin/convt.exe" engines
 if ($LASTEXITCODE -ne 0) { throw 'convt engines failed' }
@@ -126,4 +132,5 @@ try {
 } finally {
     if ($Gui -and -not $Gui.HasExited) { Stop-Process -Id $Gui.Id -ErrorAction SilentlyContinue }
 }
+if (Test-Path -LiteralPath $SmokeHome) { Remove-Item -LiteralPath $SmokeHome -Recurse -Force }
 Write-Host 'Windows MSI smoke test passed'

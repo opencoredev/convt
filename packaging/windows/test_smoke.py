@@ -16,6 +16,8 @@ class SmokeScriptTest(unittest.TestCase):
         self.assertIn("--to pdf", SMOKE)
         self.assertIn("document conversion failed", SMOKE)
         self.assertIn("%PDF-", SMOKE)
+        self.assertIn("LOCALAPPDATA", SMOKE)
+        self.assertIn("CONVT_DATA_DIR", SMOKE)
 
     def test_gui_launch_fails_when_the_app_exits(self) -> None:
         self.assertIn("convt-app.exe exited", SMOKE)
