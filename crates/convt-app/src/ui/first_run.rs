@@ -7,7 +7,10 @@
 //! The plan step also offers an optional convt.app sign-in for Pro
 //! subscribers, so their key renews itself (see `crate::account`). The trial
 //! and a Desktop key never need it: starting the trial opens no browser.
+//! A machine that already has a license (a key, or a sign-in that fetched
+//! one) sees it on the plan step instead of the choice.
 
+use convt_license::License;
 use convt_license::client::{BUY_URL, State};
 use gpui_kit::component::IconName;
 use gpui_kit::component::input::InputState;
@@ -113,6 +116,7 @@ impl FirstRunView {
                 self.opened_settings = true;
             }
             Step::Finder => self.step = Step::Plan,
+            Step::Plan if self.licensed(cx).is_some() => self.step = Step::Done,
             Step::Plan => match self.plan {
                 Plan::Trial => self.step = Step::Done,
                 Plan::Key => {
@@ -143,6 +147,14 @@ impl FirstRunView {
             }
         }
         cx.notify();
+    }
+
+    /// The license this machine already has, which makes the trial moot.
+    fn licensed(&self, cx: &App) -> Option<License> {
+        match &self.app.read(cx).license {
+            State::Licensed(license) => Some(license.clone()),
+            _ => None,
+        }
     }
 
     fn pick_plan(&mut self, plan: Plan, cx: &mut Context<Self>) {
@@ -287,6 +299,69 @@ impl FirstRunView {
                             ),
                     ),
             )
+    }
+
+    /// The plan step for a machine that has a license: it, selected, in
+    /// place of the trial and the key field.
+    fn licensed_art(&self, license: &License, p: &Palette, cx: &App) -> Div {
+        let (title, about) = match license.plan {
+            convt_license::Plan::Pro => (
+                "convt Pro",
+                format!("Paid through {}", license.updates_until),
+            ),
+            convt_license::Plan::Desktop => (
+                "convt license",
+                format!("Updates through {}", license.updates_until),
+            ),
+        };
+        let email = self.app.read(cx).account.email().map(str::to_string);
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .gap(px(space::SM))
+            .child(
+                div()
+                    .id("plan-licensed")
+                    .test_support()
+                    .aria_label(title)
+                    .aria_selected(true)
+                    .flex()
+                    .items_start()
+                    .gap(px(space::MD))
+                    .p(px(14.))
+                    .rounded(px(radius::CARD))
+                    .bg(p.green_tint)
+                    .shadow(vec![theme::inset_ring(p.green, 1.5)])
+                    .child(
+                        div()
+                            .pt(px(1.))
+                            .child(icon(IconName::CircleCheck, 16., p.green)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .gap(px(3.))
+                            .child(
+                                styled(size::BODY, p.text)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(title),
+                            )
+                            .child(styled(size::SMALL, p.secondary).child(about)),
+                    ),
+            )
+            .children(email.map(|email| {
+                let signed_in = SharedString::from(format!("Signed in as {email}"));
+                div()
+                    .id("account-status")
+                    .test_support()
+                    .aria_label(signed_in.clone())
+                    .px(px(2.))
+                    .pt(px(6.))
+                    .child(styled(size::SMALL, p.secondary).child(signed_in))
+            }))
     }
 
     fn plan_art(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -486,6 +561,7 @@ impl Render for FirstRunView {
             _ => None,
         };
         let finder_on = self.app.read(cx).finder_on;
+        let licensed = self.licensed(cx).filter(|_| self.step == Step::Plan);
         let (title, body, back, next) = match self.step {
             Step::Finder if finder_on == Some(true) => (
                 "The Finder menu is on",
@@ -503,6 +579,20 @@ impl Render for FirstRunView {
                     "Open System Settings"
                 },
             ),
+            Step::Plan if let Some(license) = &licensed => match license.plan {
+                convt_license::Plan::Pro => (
+                    "You have Pro",
+                    "convt and Cloud conversion are unlocked on this computer.".to_string(),
+                    cfg!(target_os = "macos").then_some("Back"),
+                    "Continue",
+                ),
+                convt_license::Plan::Desktop => (
+                    "You have a license",
+                    "convt is unlocked on this computer.".to_string(),
+                    cfg!(target_os = "macos").then_some("Back"),
+                    "Continue",
+                ),
+            },
             Step::Plan => (
                 "Try it or unlock it",
                 format!(
@@ -532,7 +622,10 @@ impl Render for FirstRunView {
         };
         let art = match self.step {
             Step::Finder => self.finder_art(finder_on, &p).into_any_element(),
-            Step::Plan => self.plan_art(&p, cx).into_any_element(),
+            Step::Plan => match &licensed {
+                Some(license) => self.licensed_art(license, &p, cx).into_any_element(),
+                None => self.plan_art(&p, cx).into_any_element(),
+            },
             Step::Done => self.done_art(&p).into_any_element(),
         };
         let step_label = format!("STEP {n} OF {}", Step::count());

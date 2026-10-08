@@ -1637,12 +1637,61 @@ fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppCon
     wait_until(cx, "the key arrived", |cx| {
         matches!(f.app.read(cx).license, client::State::Licensed(_))
     });
+    // The plan step now shows the Pro plan instead of offering a trial.
+    assert_eq!(
+        label(cx, window, "first-run-title").as_deref(),
+        Some("You have Pro")
+    );
+    assert_eq!(
+        label(cx, window, "plan-licensed").as_deref(),
+        Some("convt Pro")
+    );
+    assert!(!shown(cx, window, "plan-trial"));
     assert_eq!(
         label(cx, window, "account-status").as_deref(),
-        Some("Signed in as pro@example.com · Pro until 2026-11-01")
+        Some("Signed in as pro@example.com")
     );
     cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
     assert_eq!(f.jobs(cx), 0);
+    click(cx, window, "first-run-next");
+    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+}
+
+#[gpui_kit::test]
+fn first_run_shows_a_license_it_already_has_instead_of_the_trial(cx: &mut TestAppContext) {
+    for (key, title, plan) in [
+        (
+            pro_key("pro@example.com", "2027-10-01"),
+            "You have Pro",
+            "convt Pro",
+        ),
+        (
+            license_key("a@example.com", "2027-10-01"),
+            "You have a license",
+            "convt license",
+        ),
+    ] {
+        let f = Fixture::licensed(cx, None, Some(&key));
+        cx.update(|cx| super::route(Request::default(), cx));
+        let (window, view) = window_of::<FirstRunView>(cx);
+        if super::first_run::first_step() == Step::Finder {
+            click(cx, window, "first-run-back");
+        }
+        assert_eq!(label(cx, window, "first-run-title").as_deref(), Some(title));
+        assert_eq!(label(cx, window, "plan-licensed").as_deref(), Some(plan));
+        assert!(!shown(cx, window, "plan-trial") && !shown(cx, window, "plan-key"));
+        // Continue moves on without starting a trial or asking for a key.
+        click(cx, window, "first-run-next");
+        cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
+        assert!(!f.dir.path().join("trial").exists(), "no trial started");
+        click(cx, window, "first-run-next");
+        cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
+        cx.update(|cx| {
+            cx.windows()
+                .iter()
+                .for_each(|w| drop(w.update(cx, |_, w, _| w.remove_window())))
+        });
+    }
 }
 
 #[gpui_kit::test]
