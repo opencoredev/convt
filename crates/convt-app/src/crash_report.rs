@@ -69,17 +69,27 @@ pub fn scrub(input: &str) -> String {
     // Redact credentials before the filename heuristic: domains and JWT dots
     // must not be mistaken for harmless file extensions.
     let mut words = Vec::new();
-    let mut redact_next = false;
+    let mut redact_next = 0u8;
     for word in out.split_whitespace() {
         let trimmed = word.trim_matches(|c: char| ",;)]}".contains(c));
-        if redact_next {
-            words.push("[token]".to_string());
-            redact_next = false;
-        } else if trimmed.eq_ignore_ascii_case("bearer")
-            || trimmed.eq_ignore_ascii_case("authorization")
+        if redact_next == 2
+            && ["bearer", "basic", "token"]
+                .iter()
+                .any(|scheme| trimmed.eq_ignore_ascii_case(scheme))
         {
             words.push(trimmed.to_string());
-            redact_next = true;
+            redact_next = 1;
+        } else if redact_next != 0 {
+            words.push("[token]".to_string());
+            redact_next = 0;
+        } else if trimmed.eq_ignore_ascii_case("bearer")
+            || trimmed.eq_ignore_ascii_case("basic")
+            || trimmed.eq_ignore_ascii_case("authorization")
+            || trimmed.eq_ignore_ascii_case("authorization:")
+            || trimmed.eq_ignore_ascii_case("token:")
+        {
+            words.push(trimmed.to_string());
+            redact_next = if trimmed.ends_with(':') { 2 } else { 1 };
         } else if is_email(trimmed) {
             words.push("[email]".to_string());
         } else if is_license_key(trimmed) {
@@ -396,5 +406,18 @@ mod tests {
         assert!(!scrubbed.contains(&bearer_secret));
         assert!(!scrubbed.contains(&key_secret));
         assert!(!scrubbed.contains(&jwt));
+    }
+
+    #[test]
+    fn scrub_redacts_space_separated_authorization_values() {
+        let secret = ["space", "-", "secret"].concat();
+        let message = format!(
+            "Authorization: {secret} Authorization: Bearer {secret} token: {secret} Basic {secret}"
+        );
+        let stack = format!("frame crates/convt-app/src/main.rs:42 {message}");
+        for value in [scrub(&message), scrub(&stack)] {
+            assert_eq!(value.matches("[token]").count(), 4);
+            assert!(!value.contains(&secret));
+        }
     }
 }
