@@ -1591,7 +1591,7 @@ fn the_sign_in_buttons_ask_for_their_provider(cx: &mut TestAppContext) {
         });
         assert_eq!(
             label(cx, window, "onboarding-title").as_deref(),
-            Some("Finish signing in in your browser")
+            Some("Continue in your browser")
         );
         click(cx, window, "onboarding-reopen");
         assert_eq!(cx.opened_url().as_deref(), Some(page.as_str()));
@@ -1882,8 +1882,8 @@ fn first_run_shows_a_license_it_already_has(cx: &mut TestAppContext) {
             Some(title)
         );
         assert!(!shown(cx, window, "onboarding-google"));
-        // Continue moves on without starting a trial or asking for a key.
-        click(cx, window, "onboarding-primary");
+        // Return continues, without starting a trial or asking for a key.
+        cx.simulate_keystrokes(window, "enter");
         assert!(!f.dir.path().join("trial").exists(), "no trial started");
         finish_onboarding(cx, &view);
         cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));

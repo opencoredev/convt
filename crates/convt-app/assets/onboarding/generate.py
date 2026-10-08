@@ -39,6 +39,11 @@ THEMES = {
     "light": ((0xA8, 0xE6, 0xC4), (0x1F, 0xB3, 0x6C), 0.92),
     "dark": ((0x0E, 0x4D, 0x2E), (0x3F, 0xCB, 0x84), 0.85),
 }
+# The bloom is softer: it fills the window behind text.
+BLOOM = {
+    "light": ((0xD4, 0xF3, 0xE2), (0x6F, 0xD9, 0xA3), 0.8),
+    "dark": ((0x0E, 0x3D, 0x26), (0x2F, 0xB3, 0x72), 0.7),
+}
 
 
 def field(w, h, cx, cy, rx, ry, power):
@@ -57,7 +62,7 @@ def dither(intensity):
 
 
 def render(name, size, center, radii, power, theme):
-    outer, core, alpha = THEMES[theme]
+    outer, core, alpha = (BLOOM if name == "bloom" else THEMES)[theme]
     w, h = size[0] // CELL, size[1] // CELL
     q = dither(field(w, h, center[0] * w, center[1] * h, radii[0] * w, radii[1] * h, power))
     outer, core = np.array(outer, dtype=np.float64), np.array(core, dtype=np.float64)
@@ -69,7 +74,8 @@ def render(name, size, center, radii, power, theme):
 
 
 for theme in THEMES:
-    # A wide band of light rising from below the bottom edge.
-    render("glow", (2400, 720), (0.5, 1.12), (0.42, 1.05), 1.35, theme)
-    # The whole window, brightest low and center.
-    render("bloom", (2400, 1500), (0.5, 0.78), (0.55, 0.95), 1.1, theme)
+    # A wide band of light rising from below the bottom edge, gone by
+    # about half its height so words above it sit on a clean page.
+    render("glow", (2400, 540), (0.5, 1.2), (0.4, 1.15), 1.5, theme)
+    # The whole window, brightest a little below the middle.
+    render("bloom", (2400, 1500), (0.5, 0.62), (0.5, 0.8), 1.2, theme)

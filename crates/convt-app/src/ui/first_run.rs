@@ -291,6 +291,16 @@ impl FirstRunView {
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.screen == Screen::Account && event.keystroke.key == "enter" {
+            // Return continues where Continue is the main button.
+            if matches!(
+                self.stage(cx),
+                Stage::Pro | Stage::Licensed | Stage::Trial { .. }
+            ) {
+                self.continue_from_account(window, cx);
+            }
+            return;
+        }
         let Screen::Question(_) = self.screen else {
             return;
         };
@@ -323,12 +333,15 @@ impl FirstRunView {
             Stage::SignIn => self.sign_in_buttons(p, cx),
             Stage::Waiting => column()
                 .child(spinner(p))
-                .child(heading("Finish signing in in your browser", p))
-                .child(line("convt.app is open in your browser.", p))
+                .child(heading("Continue in your browser", p))
+                .child(line("Finish signing in on convt.app, then come back here.", p))
                 .child(
                     actions()
                         .child(
-                            pill("onboarding-reopen", "Open again", Pill::Soft, p).on_click(
+                            pill("onboarding-reopen", "Open again", Pill::Soft, p)
+                                .w_auto()
+                                .min_w(px(160.))
+                                .px(px(24.)).on_click(
                                 cx.listener(|this, _, _, cx| {
                                     this.app.update(cx, |s, cx| s.reopen_sign_in(cx))
                                 }),
@@ -347,7 +360,10 @@ impl FirstRunView {
                 .child(
                     actions()
                         .child(
-                            pill("onboarding-retry", "Try again", Pill::Strong, p).on_click(
+                            pill("onboarding-retry", "Try again", Pill::Strong, p)
+                                .w_auto()
+                                .min_w(px(160.))
+                                .px(px(24.)).on_click(
                                 cx.listener(|this, _, _, cx| {
                                     let provider = this.provider;
                                     this.sign_in(provider, cx)
@@ -365,7 +381,10 @@ impl FirstRunView {
                 .child(super::error_text(e, p))
                 .child(
                     actions().child(
-                        pill("onboarding-retry", "Try again", Pill::Strong, p).on_click(
+                        pill("onboarding-retry", "Try again", Pill::Strong, p)
+                                .w_auto()
+                                .min_w(px(160.))
+                                .px(px(24.)).on_click(
                             cx.listener(|this, _, _, cx| {
                                 this.app.update(cx, |s, cx| s.refresh_license(cx))
                             }),
@@ -431,6 +450,9 @@ impl FirstRunView {
                     actions()
                         .child(
                             pill("onboarding-reopen", "Open checkout again", Pill::Soft, p)
+                                .w_auto()
+                                .min_w(px(160.))
+                                .px(px(24.))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.app.update(cx, |s, cx| s.start_trial(cx))
                                 })),
@@ -491,9 +513,9 @@ impl FirstRunView {
                     .items_center()
                     .gap(px(14.))
                     .w(px(PILL_WIDTH))
-                    .child(div().flex_1().h(px(1.)).bg(p.hairline))
+                    .child(div().flex_1().h(px(1.)).bg(p.control_border))
                     .child(styled(theme::size::SMALL, p.tertiary).child("or"))
-                    .child(div().flex_1().h(px(1.)).bg(p.hairline)),
+                    .child(div().flex_1().h(px(1.)).bg(p.control_border)),
             )
             .child(
                 pill("onboarding-email", "Continue with Email", Pill::Soft, p)
@@ -562,10 +584,10 @@ impl FirstRunView {
         let detail = match question {
             Question::Documents => match state.pack.offer.download {
                 Some(bytes) => format!(
-                    "Word, Excel, PowerPoint and more. A one-time {} download.",
+                    "Word, Excel, PowerPoint and more. One {} download.",
                     super::human_size(bytes)
                 ),
-                None => "Word, Excel, PowerPoint and more. A one-time download.".to_string(),
+                None => "Word, Excel, PowerPoint and more. One download.".to_string(),
             },
             Question::Finder => {
                 "Right-click any file in Finder to convert it. System Settings opens to turn it on."
@@ -629,7 +651,8 @@ impl FirstRunView {
 
     fn calibrating(&self, p: &Palette, cx: &App) -> AnyElement {
         let words = "Setting convt up…";
-        let (base, bright) = (p.secondary, p.text);
+        // Over the bloom, so darker than the page's secondary text.
+        let (base, bright) = (p.text.opacity(0.5), p.text);
         let still = cx.reduce_motion();
         let label = div()
             .id("onboarding-title")
@@ -705,9 +728,13 @@ impl FirstRunView {
             .into_any_element()
         };
         let bloom = calibrating.then(|| {
+            // Its brightest point (62% down the image) sits at the
+            // window's middle.
+            let top = -BLOOM.1 * 0.62;
             let bloom = img(SharedString::from(format!("onboarding/bloom-{theme}.png")))
                 .absolute()
-                .bottom_0()
+                .top(relative(0.5))
+                .mt(px(top))
                 .left(relative(0.5))
                 .ml(px(-BLOOM.0 / 2.))
                 .w(px(BLOOM.0))
@@ -720,7 +747,7 @@ impl FirstRunView {
                     .with_animation(
                         "bloom",
                         Animation::new(CALIBRATE.mul_f32(0.55)).with_easing(ease_out_quint()),
-                        |img, t| img.opacity(t).mb(px(-180. * (1. - t))),
+                        move |img, t| img.opacity(t).mt(px(top + 160. * (1. - t))),
                     )
                     .into_any_element()
             }
@@ -735,7 +762,7 @@ impl FirstRunView {
 }
 
 /// The glow's and the bloom's size: the PNGs' pixel size, drawn unscaled.
-const GLOW: (f32, f32) = (2400., 720.);
+const GLOW: (f32, f32) = (2400., 540.);
 const BLOOM: (f32, f32) = (2400., 1500.);
 
 const PILL_WIDTH: f32 = 340.;
