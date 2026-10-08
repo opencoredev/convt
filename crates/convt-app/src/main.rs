@@ -14,6 +14,7 @@ mod finder;
 mod history;
 mod instance;
 mod jobs;
+mod linux_menu;
 #[cfg(target_os = "macos")]
 mod macos;
 mod model;
@@ -25,6 +26,7 @@ mod thumbs;
 mod tray;
 mod ui;
 mod update;
+mod window_error;
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -76,8 +78,11 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    run(primary, request);
-    ExitCode::SUCCESS
+    if run(primary, request) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 /// Ignore hangup so closing a launching terminal (or AppImage wrapper) does
@@ -90,7 +95,7 @@ fn ignore_hangup() {
     }
 }
 
-fn run(primary: instance::Primary, first: Request) {
+fn run(primary: instance::Primary, first: Request) -> bool {
     #[cfg(unix)]
     ignore_hangup();
     let (tx, mut rx) = unbounded::<Request>();
@@ -148,6 +153,7 @@ fn run(primary: instance::Primary, first: Request) {
     });
     // In case the platform returns without running the quit observers.
     thumbs::shutdown();
+    !window_error::failed()
 }
 
 /// Quits with the last window, unless conversions are still running; then

@@ -360,8 +360,11 @@ impl MainView {
         }
         let empty = rows.is_empty();
         let finder_off = state.finder_on == Some(false);
+        let linux_menu_off = cfg!(target_os = "linux") && !state.linux_menu.is_installed();
         let hint = if finder_off {
             "Drop files here, or use Add files. Turn on the Finder menu above to convert from a right-click.".to_string()
+        } else if linux_menu_off {
+            "Drop files here, or set up the right-click menu in Settings.".to_string()
         } else {
             format!(
                 "Drop files here, or right-click a file in {} and pick a format.",
@@ -396,7 +399,13 @@ impl MainView {
                         .gap(px(4.))
                         .py(px(60.))
                         .child(text(13., 16., p.secondary).child("Nothing converted yet."))
-                        .child(text(12., 16., p.tertiary).child(hint)),
+                        .child(
+                            div()
+                                .id("empty-hint")
+                                .test_support()
+                                .aria_label(SharedString::from(hint.clone()))
+                                .child(text(12., 16., p.tertiary).child(hint)),
+                        ),
                 )
             })
             .children(rows)

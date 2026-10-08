@@ -9,14 +9,17 @@ config. Rerun it after updating convt. Nautilus uses the dynamic extension in
 nautilus/ instead.
 
 It also installs convt-app.desktop, which handles convt:// links and lists
-convt among all applications, so "Open With Other Application" can reach it.
-It claims no file types and sets no defaults, so a double-click never opens
-convt; the menus above are the way in.
+the formats convt can open so "Open With" can reach it. It never writes
+mimeapps.list, so it does not set itself as the double-click default.
 
-    python3 integrations/linux/install.py [--dolphin] [--nemo] [--thunar] [--nautilus]
+GNOME Files gets the Python extension when nautilus-python is installed,
+and Nautilus scripts that work without that package.
 
-With no flags it installs for every file manager it finds. Both `convt` and
-`convt-app` must be on PATH for installation.
+    python3 integrations/linux/install.py [--dolphin] [--nemo] [--thunar] [--nautilus] [--user]
+
+With no flags it installs for every file manager it finds. `--user` writes
+per-user menus even when a package already installed system ones. Both
+`convt` and `convt-app` must be on PATH for installation.
 
 Remove generated user integrations, including recognized legacy files:
     python3 /usr/share/convt/integrations/install.py --uninstall
@@ -45,8 +48,54 @@ CONVT = shutil.which("convt")
 APP = shutil.which("convt-app")
 SYSTEM_DATA = Path("/usr/share")
 
+
+def appimage_path():
+    """The stable AppImage file, when this process is running from one.
+
+    The mounted payload under /tmp/.mount_* disappears when the AppImage
+    exits, so generated menus must launch the AppImage itself.
+    """
+    raw = os.environ.get("APPIMAGE")
+    if not raw:
+        return None
+    path = Path(raw)
+    return path.resolve() if path.is_file() else None
+
+
+# legacy_app() turns this off so unmarked old menus are regenerated with
+# their saved executable, not $APPIMAGE.
+HONOR_APPIMAGE = True
+
+
+def app_path():
+    if HONOR_APPIMAGE and (image := appimage_path()):
+        return str(image)
+    return APP
+
+
+def cli_command():
+    """How to run the CLI. AppImage menus use --cli on the stable file."""
+    if HONOR_APPIMAGE and (image := appimage_path()):
+        return [str(image), "--cli"]
+    return [CONVT]
+
+
+def bake_nautilus_extension(text):
+    """Pin CONVT and APP so the extension still works when PATH does not
+    contain them (AppImage users, or a Settings install that only had them
+    on PATH for the installer)."""
+    text, n = re.subn(r"^CONVT = .*$", f"CONVT = {cli_command()!r}", text, count=1, flags=re.M)
+    if n != 1:
+        raise ValueError("nautilus extension is missing a CONVT assignment")
+    text, n = re.subn(r"^APP = .*$", f"APP = {app_path()!r}", text, count=1, flags=re.M)
+    if n != 1:
+        raise ValueError("nautilus extension is missing an APP assignment")
+    return text
+
 MARKER = "# convt-generated: linux-integration-v1\n"
 ACTION_MARKER = "<!-- convt-generated: linux-integration-v1 -->"
+SCRIPT_SHEBANG = "#!/bin/sh\n"
+NAUTILUS_SCRIPT_FOLDER = "Convert with convt"
 LEGACY_NAUTILUS_SHA256 = "dc9731676f911afbf77e959f85fe6af026cf9321d6300accb64699766dfdea7e"
 
 # Characters that force quoting in a desktop entry Exec argument.
@@ -73,7 +122,7 @@ def desktop_exec(*args):
 
 def menu_command(target=None):
     """The app invocation for one target, before the file list."""
-    return [APP, "open", *(["--to", target] if target is not None else []), "--"]
+    return [app_path(), "open", *(["--to", target] if target is not None else []), "--"]
 
 
 def groups():
@@ -223,27 +272,78 @@ def install_thunar(groups):
 
 
 def install_nautilus():
-    out = DATA / "nautilus-python/extensions"
-    out.mkdir(parents=True, exist_ok=True)
+    dest = DATA / "nautilus-python/extensions/convt_nautilus.py"
+    if not user_path_safe(dest, DATA):
+        print(f"preserving redirected nautilus extension: {dest}")
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
     source = Path(__file__).parent / "nautilus/convt_nautilus.py"
-    write_owned(out / source.name, source.read_text(), "nautilus")
-    print(f"nautilus: extension in {out} (needs nautilus-python; run `nautilus -q`)")
+    write_owned(dest, bake_nautilus_extension(source.read_text()), "nautilus")
+    print(f"nautilus: extension in {dest.parent} (needs nautilus-python; run `nautilus -q`)")
 
 
-def app_entry():
+def nautilus_script(target=None):
+    """A GNOME Files script. Selected files are passed as arguments."""
+    command = shlex.join(menu_command(target))
+    return f"{SCRIPT_SHEBANG}{MARKER}exec {command} \"$@\"\n"
+
+
+def nautilus_scripts(groups):
+    """Scripts by relative path under nautilus/scripts. Subfolders become a
+    submenu. These work without python3-nautilus / nautilus-python."""
+    scripts = {}
+    folder = NAUTILUS_SCRIPT_FOLDER
+    for t in sorted(extensions_by_target(groups)):
+        scripts[f"{folder}/{t.upper()}"] = nautilus_script(t)
+    if any(sources for sources, _ in groups):
+        scripts[f"{folder}/More options…"] = nautilus_script()
+    return scripts
+
+
+def install_nautilus_scripts(groups):
+    root = DATA / "nautilus/scripts" / NAUTILUS_SCRIPT_FOLDER
+    if not user_path_safe(root, DATA):
+        print(f"preserving redirected nautilus scripts: {root}")
+        return
+    if root.is_dir() and not root.is_symlink():
+        for old in root.iterdir():
+            remove_owned(old, "nautilus-scripts")
+    scripts = nautilus_scripts(groups)
+    for name, text in scripts.items():
+        path = DATA / "nautilus/scripts" / name
+        if not user_path_safe(path, DATA):
+            print(f"preserving redirected nautilus scripts: {path}")
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if write_owned(path, text, "nautilus-scripts"):
+            path.chmod(0o755)
+    print(f"nautilus-scripts: {len(scripts)} scripts in {root}")
+
+
+def app_mimes(groups=None, mimes=None):
+    """Scheme handler first, then each format MIME type, no duplicates."""
+    if mimes is None:
+        mimes = ["x-scheme-handler/convt"]
+        sources = [s for srcs, _ in (groups or []) for s in srcs]
+        mimes.extend(sorted({s["mime"] for s in sources if s.get("mime")}))
+    seen = set()
+    out = []
+    for mime in mimes:
+        if mime and mime not in seen:
+            seen.add(mime)
+            out.append(mime)
+    return out
+
+
+def app_entry(groups=None, mimes=None):
     """convt-app.desktop: the convt:// handler, and an app entry that "Open
-    With Other Application" lists. %U passes file:// URIs and convt:// links
-    alike.
+    With" lists. %U passes file:// URIs and convt:// links alike.
 
-    It lists no file MIME types on purpose. GIO (GNOME, Cinnamon, Xfce)
-    ignores InitialPreference and, when the system names no default for a
-    type, picks the first entry that claims it, searching the user's own
-    applications folder first. Claiming image/png or text/html from
-    ~/.local/share/applications would make convt the double-click opener
-    wherever the distribution has no default list for that type. KDE honors
-    InitialPreference=0, but still picks convt for a type no other app
-    claims. Without file types it can only become a default the user sets
-    explicitly."""
+    File MIME types are listed so Open With offers convt. Nothing is written
+    to mimeapps.list, so this installer does not set a double-click default.
+    On a desktop that has no default for a type, GIO may still pick the first
+    claiming app; that is the cost of appearing in Open With."""
+    listed = ";".join(app_mimes(groups, mimes)) + ";"
     return MARKER + "\n".join([
         "[Desktop Entry]",
         "Type=Application",
@@ -251,24 +351,25 @@ def app_entry():
         "GenericName=File Converter",
         "Comment=Convert files on this computer",
         "Icon=convt",
-        f"Exec={desktop_exec(APP)} %U",
+        f"Exec={desktop_exec(app_path())} %U",
         "Terminal=false",
         "Categories=Utility;",
-        "MimeType=x-scheme-handler/convt;",
+        f"MimeType={listed}",
         "",
     ])
 
 
-def install_app():
+def install_app(groups=None):
     out = DATA / "applications"
     out.mkdir(parents=True, exist_ok=True)
     path = out / "convt-app.desktop"
-    write_owned(path, app_entry(), "app")
+    write_owned(path, app_entry(groups), "app")
     # Refreshes mimeinfo.cache, which is how GIO, KDE and xdg-open find the
-    # only convt:// handler. Nothing is written to mimeapps.list.
+    # convt:// handler and Open With candidates. Nothing is written to
+    # mimeapps.list.
     if shutil.which("update-desktop-database"):
         subprocess.run(["update-desktop-database", str(out)], check=False)
-    print(f"app: {path} (convt:// links, and Open With Other Application)")
+    print(f"app: {path} (convt:// links, and Open With)")
 
 
 def thunar_path():
@@ -278,12 +379,14 @@ def thunar_path():
 @contextmanager
 def legacy_app(app):
     """Regenerate a legacy template with its original executable path."""
-    global APP
+    global APP, HONOR_APPIMAGE
     previous, APP = APP, app
+    previous_honor, HONOR_APPIMAGE = HONOR_APPIMAGE, False
     try:
         yield
     finally:
         APP = previous
+        HONOR_APPIMAGE = previous_honor
 
 
 def legacy_command(value, desktop=False, app_entry=False):
@@ -321,7 +424,9 @@ def legacy_generated(text, kind, name):
         app = legacy_command(command, desktop=kind in {"app", "dolphin"}, app_entry=kind == "app")
         with legacy_app(app):
             if kind == "app":
-                expected = app_entry()
+                found = re.search(r"^MimeType=(.*);$", text, re.M)
+                mimes = found.group(1).split(";") if found else ["x-scheme-handler/convt"]
+                expected = app_entry(mimes=mimes)
             elif kind == "dolphin":
                 mimes = re.search(r"^MimeType=(.*);$", text, re.M).group(1).split(";")
                 actions = re.search(r"^Actions=(.*);$", text, re.M).group(1).split(";")
@@ -354,7 +459,8 @@ def owned_file(path, kind):
         text = path.read_text()
     except (OSError, UnicodeError):
         return False
-    return text.startswith(MARKER) or legacy_generated(text, kind, path.name)
+    return text.startswith(MARKER) or text.startswith(SCRIPT_SHEBANG + MARKER) \
+        or legacy_generated(text, kind, path.name)
 
 
 def remove_owned(path, kind):
@@ -405,6 +511,7 @@ USER_ARTIFACTS = {
     "dolphin": ("kio/servicemenus", "convt-*.desktop"),
     "nemo": ("nemo/actions", "convt-*.nemo_action"),
     "nautilus": ("nautilus-python/extensions", "convt_nautilus.py"),
+    "nautilus-scripts": (f"nautilus/scripts/{NAUTILUS_SCRIPT_FOLDER}", "*"),
     "app": ("applications", "convt-app.desktop"),
 }
 
@@ -428,6 +535,10 @@ def uninstall():
     if (not applications.is_symlink() and user_path_safe(applications, DATA)
             and applications.is_dir() and shutil.which("update-desktop-database")):
         subprocess.run(["update-desktop-database", str(applications)], check=False)
+    scripts_dir = DATA / "nautilus/scripts" / NAUTILUS_SCRIPT_FOLDER
+    if (scripts_dir.is_dir() and not scripts_dir.is_symlink() and user_path_safe(scripts_dir, DATA)
+            and not any(scripts_dir.iterdir())):
+        scripts_dir.rmdir()
     print("Removed generated user integrations; restart your file managers.")
 
 
@@ -460,22 +571,27 @@ def main():
             "`cargo install --path crates/convt-cli` and `cargo install --path crates/convt-app`."
         )
     flags = {a.lstrip("-") for a in sys.argv[1:]}
-    known = {"dolphin", "nemo", "thunar", "nautilus"}
+    known = {"dolphin", "nemo", "thunar", "nautilus", "user"}
     if flags - known:
         sys.exit(f"unknown option --{sorted(flags - known)[0]}\n\n{__doc__.strip()}")
-    wanted = flags or {name for name in known if shutil.which(name)}
+    force_user = "user" in flags
+    wanted = (flags - {"user"}) or {name for name in known - {"user"} if shutil.which(name)}
     if not wanted:
         sys.exit("No supported file manager found. Pass --dolphin, --nemo, --thunar or --nautilus.")
     g = groups()
     for name in sorted(wanted):
-        if use_system_install(name):
-            continue
         if name == "nautilus":
-            install_nautilus()
-        else:
-            globals()[f"install_{name}"](g)
-    if not use_system_install("app"):
-        install_app()
+            if force_user or not use_system_install("nautilus"):
+                install_nautilus()
+            # Nautilus only reads scripts from the user's data directory.
+            # Files under /usr/share/nautilus/scripts never appear as a menu.
+            install_nautilus_scripts(g)
+            continue
+        if not force_user and use_system_install(name):
+            continue
+        globals()[f"install_{name}"](g)
+    if force_user or not use_system_install("app"):
+        install_app(g)
 
 
 if __name__ == "__main__":

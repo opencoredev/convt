@@ -77,6 +77,7 @@ fn show<V: Render>(
         }
         Err(e) => {
             tracing::error!(error = %e, title, "could not open a window");
+            window_open_failed(cx, &e, title);
             None
         }
     }
@@ -182,7 +183,10 @@ fn open_first_run(cx: &mut App) {
 /// Opens Settings on `tab`.
 pub fn show_settings(tab: SettingsTab, cx: &mut App) {
     let app = model::shared(cx);
-    app.update(cx, |s, cx| s.refresh_pack(cx));
+    app.update(cx, |s, cx| {
+        s.refresh_pack(cx);
+        s.refresh_linux_menu(cx);
+    });
     if let Some((handle, view)) = show(size(px(620.), px(600.)), "Settings", cx, |window, cx| {
         cx.new(|cx| SettingsView::new(app, window, cx))
     }) {
@@ -211,9 +215,28 @@ pub fn open_quick(request: Request, cx: &mut App) {
     }) {
         // Each request gets its own window; the global tracks the newest.
         Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
-        Err(e) => tracing::error!(error = %e, "could not open Quick convert"),
+        Err(e) => {
+            tracing::error!(error = %e, "could not open Quick convert");
+            window_open_failed(cx, &e, "Convert");
+        }
     }
     cx.activate(true);
+}
+
+fn window_open_failed(cx: &mut App, error: &dyn std::fmt::Display, title: &str) {
+    let windows = cx.windows().len();
+    let jobs = model::shared(cx).read(cx).queue.active();
+    let fatal = crate::window_error::is_fatal(windows, jobs);
+    crate::window_error::report(error, title, fatal);
+    if fatal {
+        cx.quit();
+        return;
+    }
+    let notice = format!("convt could not open {title}: {error}");
+    model::shared(cx).update(cx, |s, cx| {
+        s.errors.push(notice);
+        cx.notify();
+    });
 }
 
 /// Opens the menu bar popover. Only the tray icon should call this, when it

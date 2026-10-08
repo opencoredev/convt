@@ -299,6 +299,9 @@ impl SettingsView {
             let on = settings.menu_bar_icon;
             move |_, _, cx| app.update(cx, |s, cx| s.update_settings(|s| s.menu_bar_icon = !on, cx))
         });
+        // GPUI has no tray icon on Linux yet; the switch would do nothing.
+        let show_menu_bar = !cfg!(target_os = "linux");
+        let linux_menu = cfg!(target_os = "linux").then(|| linux_menu_row(&self.app, p, cx));
 
         let documents = {
             let weak = cx.entity().downgrade();
@@ -390,7 +393,10 @@ impl SettingsView {
                     .border_t_1()
                     .border_color(p.hairline)
                     .children(finder)
-                    .child(field("Menu bar icon", menu_bar, p))
+                    .children(linux_menu)
+                    .when(show_menu_bar, |d| {
+                        d.child(field("Menu bar icon", menu_bar, p))
+                    })
                     .child(field(
                         "Jobs at once",
                         div()
@@ -815,6 +821,85 @@ fn network(p: &Palette) -> Div {
                 .aria_label(line)
                 .child(text(12., 17., p.secondary).child(line))
         }))
+}
+
+fn linux_menu_row(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
+    use crate::linux_menu::Status;
+    let status = app.read(cx).linux_menu.clone();
+    let (summary, color) = match &status {
+        Status::Installing => ("Installing…".to_string(), p.secondary),
+        Status::Removing => ("Removing…".to_string(), p.secondary),
+        Status::Installed(kinds) => (
+            format!(
+                "On. Right-click a file in {} to convert. Restart the file manager if the menu is missing.",
+                kinds.join(", ")
+            ),
+            p.green,
+        ),
+        Status::System(kinds) => (
+            format!(
+                "On. The package installed menus for {}. Set up to add Thunar or GNOME Files scripts.",
+                kinds.join(", ")
+            ),
+            p.green,
+        ),
+        Status::MissingInstaller => ("This build has no menu installer.".to_string(), p.secondary),
+        Status::Failed(e) => (e.clone(), p.error),
+        Status::NotInstalled | Status::Unavailable => (
+            "Not set up. GNOME Files, Dolphin and Nemo get a Convert with convt menu.".to_string(),
+            p.secondary,
+        ),
+    };
+    let busy = matches!(status, Status::Installing | Status::Removing);
+    // Packaged installs still need Setup: Thunar is user-only, and GNOME
+    // Files without python3-nautilus only sees the per-user scripts.
+    let show_setup = matches!(
+        status,
+        Status::NotInstalled | Status::Failed(_) | Status::MissingInstaller | Status::System(_)
+    );
+    let show_remove = matches!(status, Status::Installed(_));
+    field_top(
+        "Right-click menu",
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .child(
+                div()
+                    .id("linux-menu-status")
+                    .test_support()
+                    .aria_label(SharedString::from(summary.clone()))
+                    .child(text(12., 16., color).child(summary)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(10.))
+                    .when(show_setup && !busy, |row| {
+                        let app = app.clone();
+                        row.child(
+                            text_button(
+                                "setup-linux-menu",
+                                "Set up right-click menu",
+                                p.green,
+                                12.,
+                            )
+                            .on_click(move |_, _, cx| {
+                                app.update(cx, |s, cx| s.install_linux_menu(cx))
+                            }),
+                        )
+                    })
+                    .when(show_remove && !busy, |row| {
+                        let app = app.clone();
+                        row.child(
+                            text_button("remove-linux-menu", "Remove", p.secondary, 12.).on_click(
+                                move |_, _, cx| app.update(cx, |s, cx| s.remove_linux_menu(cx)),
+                            ),
+                        )
+                    }),
+            ),
+        p,
+    )
 }
 
 /// A right-aligned label and its control, as in the design's settings rows.

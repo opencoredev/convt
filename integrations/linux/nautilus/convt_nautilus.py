@@ -2,9 +2,10 @@
 """Nautilus (GNOME Files) extension: adds "Convert with convt" to the context menu.
 
 Install: copy to ~/.local/share/nautilus-python/extensions/ and restart Nautilus
-(`nautilus -q`). Needs the `nautilus-python` package, and `convt` and
-`convt-app` on PATH. The menu lists targets from `convt targets`; picking one
-opens the app, which shows progress and errors.
+(`nautilus -q`). Needs the `nautilus-python` package. The installer bakes the
+`convt` and `convt-app` paths into the installed copy (an AppImage uses
+`--cli`). A checkout copy looks them up on PATH. The menu lists targets from
+`convt targets`; picking one opens the app, which shows progress and errors.
 """
 
 import json
@@ -16,11 +17,18 @@ from functools import lru_cache
 
 from gi.repository import GObject, Nautilus
 
+# A string is one argv word. A list is the full prefix (AppImage + --cli).
 CONVT = shutil.which("convt") or "convt"
 APP = shutil.which("convt-app") or "convt-app"
 
 
 CACHE_TTL = 30
+
+
+def as_argv(value):
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
 
 
 @lru_cache(maxsize=256)
@@ -29,7 +37,7 @@ def cached_targets(extension, generation):
         return ()
     try:
         out = subprocess.run(
-            [CONVT, "targets", "--menu", f"file.{extension}"],
+            [*as_argv(CONVT), "targets", "--menu", f"file.{extension}"],
             capture_output=True, text=True, timeout=2, check=True,
         ).stdout
     except (OSError, subprocess.SubprocessError):
@@ -44,7 +52,7 @@ def targets_for(extension):
 @lru_cache(maxsize=2)
 def cached_extensions(generation):
     try:
-        result = subprocess.run([CONVT, "formats", "--json"], capture_output=True,
+        result = subprocess.run([*as_argv(CONVT), "formats", "--json"], capture_output=True,
                                 text=True, timeout=2, check=True)
         return frozenset(e for f in json.loads(result.stdout) for e in f["extensions"])
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
@@ -65,7 +73,7 @@ def extension_of(path):
 
 
 def command(paths, target=None):
-    return [APP, "open", *(["--to", target] if target is not None else []), "--", *paths]
+    return [*as_argv(APP), "open", *(["--to", target] if target is not None else []), "--", *paths]
 
 
 class ConvtMenu(GObject.GObject, Nautilus.MenuProvider):

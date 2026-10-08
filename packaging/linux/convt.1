@@ -24,5 +24,17 @@ Show document pack availability without downloading anything.
 .SH FILES
 The installed payload and bundled libraries are under /opt/convt.
 Per-user presets and document packs are retained when the package is removed.
+.SH APPIMAGE
+The AppImage runs the desktop app by default. Invoke it as
+.B convt
+(a symlink) or pass
+.B --cli
+as the first argument to run this command:
+.PP
+.nf
+ln -s "$PWD/convt-linux-x86_64.AppImage" "$HOME/.local/bin/convt"
+convt photo.png --to webp
+"$PWD/convt-linux-x86_64.AppImage" --cli photo.png --to webp
+.fi
 .SH SEE ALSO
 .BR convt-app (1)

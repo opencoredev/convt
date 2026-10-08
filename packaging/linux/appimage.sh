@@ -22,12 +22,7 @@ chmod +x "$work/tool"
 mkdir "$work/convt.AppDir"
 cp -a "$out/convt/." "$work/convt.AppDir/"
 cp "$repo/packaging/linux/convt.desktop" "$repo/packaging/linux/convt.svg" "$work/convt.AppDir/"
-cat > "$work/convt.AppDir/AppRun" <<'EOF'
-#!/bin/sh
-app_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$app_dir/convt-app" "$@"
-EOF
-chmod +x "$work/convt.AppDir/AppRun"
+install -m755 "$repo/packaging/linux/AppRun" "$work/convt.AppDir/AppRun"
 cp "$cache/runtime-LICENSE" "$work/convt.AppDir/licenses/appimage-runtime.txt"
 python3 "$repo/packaging/release/install-source-notices.py" "$repo/packaging/release/appimage-source-closure.lock.json" "$cache" "$work/convt.AppDir/licenses/appimage"
 cp "$repo/packaging/linux/appimage-inputs.lock.json" "$work/convt.AppDir/licenses/"

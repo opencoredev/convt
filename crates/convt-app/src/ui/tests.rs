@@ -41,6 +41,8 @@ struct Fixture {
     api: Arc<TestApi>,
     /// What the update check downloads; scripted, never the network.
     releases: Arc<TestReleases>,
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    linux_menus: Arc<TestLinuxMenus>,
 }
 
 /// A scripted update server. It counts every fetch, so tests can prove a
@@ -168,6 +170,54 @@ impl pack::Backend for SystemPacks {
     }
     fn registry_without_documents(&self) -> Registry {
         convt_engines::registry_without_documents()
+    }
+}
+
+/// Scripted Linux menu installer. Tests never write into a real home.
+struct TestLinuxMenus {
+    status: Mutex<crate::linux_menu::Status>,
+    installs: AtomicUsize,
+    removes: AtomicUsize,
+    fail_next: AtomicBool,
+}
+
+impl Default for TestLinuxMenus {
+    fn default() -> Self {
+        use crate::linux_menu::Status;
+        Self {
+            status: Mutex::new(if cfg!(target_os = "linux") {
+                Status::NotInstalled
+            } else {
+                Status::Unavailable
+            }),
+            installs: AtomicUsize::new(0),
+            removes: AtomicUsize::new(0),
+            fail_next: AtomicBool::new(false),
+        }
+    }
+}
+
+impl crate::linux_menu::Backend for TestLinuxMenus {
+    fn status(&self) -> crate::linux_menu::Status {
+        self.status.lock().unwrap().clone()
+    }
+    fn install_menus(&self) -> Result<crate::linux_menu::Status, String> {
+        self.installs.fetch_add(1, Ordering::SeqCst);
+        if self.fail_next.swap(false, Ordering::SeqCst) {
+            return Err("the installer failed".into());
+        }
+        let status = crate::linux_menu::Status::Installed(vec![
+            "GNOME Files".into(),
+            "Dolphin".into(),
+            "Nemo".into(),
+        ]);
+        *self.status.lock().unwrap() = status.clone();
+        Ok(status)
+    }
+    fn remove_menus(&self) -> Result<crate::linux_menu::Status, String> {
+        self.removes.fetch_add(1, Ordering::SeqCst);
+        *self.status.lock().unwrap() = crate::linux_menu::Status::NotInstalled;
+        Ok(crate::linux_menu::Status::NotInstalled)
     }
 }
 
@@ -409,11 +459,12 @@ impl Fixture {
         };
         // Conversions run on real job threads that wake the UI.
         cx.executor().allow_parking();
+        let linux_menus = Arc::new(TestLinuxMenus::default());
         let app = cx.update(|cx| {
             cx.set_app_identity("app.convt.desktop", "convt");
             gpui_kit::init(cx);
             theme::init(cx);
-            let app = cx.new(|cx| AppState::new(packs, paths, cx));
+            let app = cx.new(|cx| AppState::new_with(packs, linux_menus.clone(), paths, cx));
             cx.set_global(Shared(app.clone()));
             app
         });
@@ -422,6 +473,7 @@ impl Fixture {
             app,
             api,
             releases,
+            linux_menus,
         }
     }
 
@@ -995,15 +1047,17 @@ fn settings_change_and_persist(cx: &mut TestAppContext) {
     assert!(cx.read(|cx| f.app.read(cx).settings.notifications));
     click(cx, window, "notifications");
     click(cx, window, "reveal");
+    #[cfg(not(target_os = "linux"))]
     click(cx, window, "menu-bar-icon");
     let saved = f.settings_file();
-    for line in [
-        "notifications = false",
-        "reveal_when_done = true",
-        "menu_bar_icon = false",
-    ] {
+    for line in ["notifications = false", "reveal_when_done = true"] {
         assert!(saved.contains(line), "{line} in {saved}");
     }
+    #[cfg(not(target_os = "linux"))]
+    assert!(
+        saved.contains("menu_bar_icon = false"),
+        "menu_bar_icon = false in {saved}"
+    );
 
     click(cx, window, "output");
     click(cx, window, "output-beside");
@@ -1016,6 +1070,93 @@ fn settings_change_and_persist(cx: &mut TestAppContext) {
     let reloaded = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
     assert!(!reloaded.notifications && reloaded.reveal_when_done);
     assert_eq!(reloaded.concurrency, None);
+}
+
+#[cfg(target_os = "linux")]
+#[gpui_kit::test]
+fn linux_settings_installs_and_removes_the_right_click_menu(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (window, _) = f.settings(SettingsTab::General, cx);
+    assert!(!shown(cx, window, "menu-bar-icon"));
+    assert_eq!(
+        label(cx, window, "linux-menu-status").as_deref(),
+        Some("Not set up. GNOME Files, Dolphin and Nemo get a Convert with convt menu.")
+    );
+    assert!(shown(cx, window, "setup-linux-menu"));
+    assert!(!shown(cx, window, "remove-linux-menu"));
+
+    click(cx, window, "setup-linux-menu");
+    let app = f.app.clone();
+    wait_until(cx, "menus installed", |cx| {
+        app.read(cx).linux_menu.is_installed()
+    });
+    assert_eq!(f.linux_menus.installs.load(Ordering::SeqCst), 1);
+    let status = label(cx, window, "linux-menu-status").expect("status");
+    assert!(
+        status.contains("GNOME Files") && status.contains("Dolphin"),
+        "{status}"
+    );
+    assert!(status.contains("Restart the file manager"), "{status}");
+    assert!(shown(cx, window, "remove-linux-menu"));
+    assert!(!shown(cx, window, "setup-linux-menu"));
+
+    click(cx, window, "remove-linux-menu");
+    let app = f.app.clone();
+    wait_until(cx, "menus removed", |cx| {
+        matches!(
+            app.read(cx).linux_menu,
+            crate::linux_menu::Status::NotInstalled
+        )
+    });
+    assert_eq!(f.linux_menus.removes.load(Ordering::SeqCst), 1);
+    assert!(shown(cx, window, "setup-linux-menu"));
+}
+
+#[cfg(target_os = "linux")]
+#[gpui_kit::test]
+fn linux_settings_refreshes_menu_status(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    *f.linux_menus.status.lock().unwrap() =
+        crate::linux_menu::Status::Installed(vec!["Thunar".into()]);
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).linux_menu,
+            crate::linux_menu::Status::NotInstalled
+        );
+    });
+    cx.update(|cx| super::show_settings(SettingsTab::General, cx));
+    let (window, _) = window_of::<SettingsView>(cx);
+    let status = label(cx, window, "linux-menu-status").expect("status");
+    assert!(status.contains("Thunar"), "{status}");
+    assert!(shown(cx, window, "remove-linux-menu"));
+}
+
+#[cfg(target_os = "linux")]
+#[gpui_kit::test]
+fn linux_settings_offers_setup_when_the_package_already_installed_menus(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    *f.linux_menus.status.lock().unwrap() =
+        crate::linux_menu::Status::System(vec!["Dolphin".into(), "Nemo".into()]);
+    cx.update(|cx| super::show_settings(SettingsTab::General, cx));
+    let (window, _) = window_of::<SettingsView>(cx);
+    let status = label(cx, window, "linux-menu-status").expect("status");
+    assert!(
+        status.contains("Dolphin") && status.contains("Nemo"),
+        "{status}"
+    );
+    assert!(shown(cx, window, "setup-linux-menu"));
+    assert!(!shown(cx, window, "remove-linux-menu"));
+}
+
+#[cfg(target_os = "linux")]
+#[gpui_kit::test]
+fn linux_empty_activity_points_at_settings(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (window, _) = f.main(cx);
+    assert_eq!(
+        label(cx, window, "empty-hint").as_deref(),
+        Some("Drop files here, or set up the right-click menu in Settings.")
+    );
 }
 
 fn save_preset(f: &Fixture, cx: &mut TestAppContext, name: &str, preset: Preset) {
@@ -1319,6 +1460,10 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
     let body = label(cx, window, "first-run-body").expect("done body");
     assert!(body.contains("JPEG") && body.contains("PNG"), "{body}");
+    #[cfg(target_os = "linux")]
+    assert!(body.contains("Settings"), "{body}");
+    #[cfg(target_os = "windows")]
+    assert!(!body.contains("Settings"), "{body}");
     assert!(f.dir.path().join("license.key").exists());
 
     // "Start converting" finishes first run and opens the main window.
