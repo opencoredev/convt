@@ -468,7 +468,15 @@ impl QuickView {
                     .gap(px(5.))
                     .max_w(px(180.))
                     .child(icon(IconName::Folder, 13., p.tertiary))
-                    .child(styled(size::SMALL, p.secondary).truncate().child(dir))
+                    .child(
+                        div().min_w_0().child(
+                            styled(size::SMALL, p.secondary)
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis_start()
+                                .child(dir),
+                        ),
+                    )
             }))
     }
 
