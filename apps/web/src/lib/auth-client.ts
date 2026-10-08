@@ -1,6 +1,9 @@
 // Browser calls to Better Auth's endpoints under /api/auth. Plain fetch: the
 // session cookie is HttpOnly and same-origin, and Better Auth checks Origin.
 
+import posthog from "posthog-js";
+
+import { analyticsChoice } from "./analytics-consent";
 import type { Account } from "./types";
 
 export type AuthResult<T = unknown> =
@@ -82,7 +85,17 @@ export const changeEmail = (newEmail: string, otp: string) =>
 
 export const unlinkAccount = (accountId: string) => post("/unlink-account", { accountId });
 
-export const signOut = () => post("/sign-out", {});
+export const signOut = async () => {
+  const result = await post("/sign-out", {});
+  if (result.ok && analyticsChoice() === "on") {
+    try {
+      posthog.reset();
+    } catch {
+      // PostHog was never loaded.
+    }
+  }
+  return result;
+};
 
 /** The header's view of a signed-in user. A blank name falls back to the email's local part. */
 export function accountFromUser(user: {

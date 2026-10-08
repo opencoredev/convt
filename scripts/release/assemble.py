@@ -31,6 +31,9 @@ assets.extend(tarballs)
 assets.append(macos / 'convt-macos-arm64.dmg')
 if args.include_windows:
     assets.append(windows / f'convt-{args.version}-windows-x86_64.msi')
+    # Same on-demand pack the compiled Windows URL fetches. Not inside the MSI.
+    assets.append(windows / f'convt-{args.version}-windows-x86_64-documents.tar.gz')
+    assets.append(windows / f'convt-{args.version}-windows-x86_64-documents.tar.gz.sha256')
 # Coverage comes from the source builder; never promote it merely because binaries exist.
 # Windows MSI is an optional unsigned release asset until FFmpeg/PDFium corresponding
 # source clears packaging/windows/inputs.lock.json. Do not require windows-x86_64 in

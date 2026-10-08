@@ -55,7 +55,7 @@ convt registers whatever can run on this machine and picks a route:
 - **image** and **resvg** for photos and SVG (JPEG, PNG, WebP, AVIF, GIF, TIFF, BMP, ICO, TGA, PPM, QOI, OpenEXR)
 - **libheif**, or `sips` on macOS, for HEIC
 
-Office files need LibreOffice on `PATH`. Released builds can also run `convt pack install documents`. Ordinary source builds need a system LibreOffice, or an explicit `--source` and `--sha256`. The engines never start that download themselves.
+Office files need LibreOffice on `PATH`. Released Windows builds can also run `convt pack install documents`, which downloads the pinned pack from the GitHub release and verifies its checksum. Ordinary source builds need a system LibreOffice, or an explicit `--source` and `--sha256`. The engines never start that download themselves.
 
 ## CLI
 

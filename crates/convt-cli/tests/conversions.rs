@@ -35,17 +35,44 @@ fn ok(out: &Output) {
     );
 }
 
+/// Linux can return ETXTBSY if we exec a binary whose write has not settled.
+/// Windows may deny the first exec while a scanner still has the copy open.
+fn output_of_copied(binary: &Path, args: &[&str]) -> Output {
+    let mut last = None;
+    for attempt in 0..10 {
+        match Command::new(binary).args(args).output() {
+            Ok(out) => return out,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::ExecutableFileBusy | std::io::ErrorKind::PermissionDenied
+                ) =>
+            {
+                last = Some(e);
+                std::thread::sleep(std::time::Duration::from_millis(20 * (attempt + 1)));
+            }
+            Err(e) => panic!("{e}"),
+        }
+    }
+    panic!("{}", last.unwrap());
+}
+
 #[test]
 fn renamed_binary_uses_convt_in_help_and_errors() {
     let root = tempfile::tempdir().unwrap();
     let binary = root.path().join("convt.bin");
     std::fs::copy(env!("CARGO_BIN_EXE_convt"), &binary).unwrap();
+    // FlushFileBuffers needs write access on Windows; a read-only open fails there.
+    #[cfg(unix)]
+    if let Ok(file) = std::fs::File::open(&binary) {
+        let _ = file.sync_all();
+    }
     for args in [
         vec!["--help"],
         vec!["pack", "status", "--help"],
         vec!["--unknown-option"],
     ] {
-        let out = Command::new(&binary).args(&args).output().unwrap();
+        let out = output_of_copied(&binary, &args);
         assert_eq!(out.status.success(), args.last() == Some(&"--help"));
         let text = format!(
             "{}{}",

@@ -5,6 +5,12 @@
 
 import { sql } from "drizzle-orm";
 
+import {
+  desktopTrialStartedEvent,
+  emitAnalytics,
+  purchaseEventsFromLicenses,
+  type AnalyticsEvent,
+} from "./analytics";
 import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
 import { convergeDesktop, convergePro, convergeApi } from "./converge";
@@ -21,7 +27,7 @@ import { newId } from "@convt/license";
 
 export type IngestOutcome =
   | { rejected: string }
-  | { rejected: null; notes: string[]; userIds: string[] };
+  | { rejected: null; notes: string[]; userIds: string[]; events: AnalyticsEvent[] };
 
 export class BudgetExceeded extends Error {
   constructor() {
@@ -332,6 +338,7 @@ type Touched = {
   subscriptions: Set<string>;
   notes: string[];
   userIds: Set<string>;
+  events: AnalyticsEvent[];
 };
 
 async function applyCustomer(ctx: BillingContext, tx: Q, c: CustomerFact, now: Date) {
@@ -453,6 +460,8 @@ async function applySubscription(
     );
     touched.subscriptions.add(inserted!.id);
     if (userId) touched.userIds.add(userId);
+    if (kind === "pro" && s.status === "trialing" && userId)
+      touched.events.push(desktopTrialStartedEvent(userId, s.providerSubscriptionId));
     await duplicateCheck(tx, userId, kind, now);
     return;
   }
@@ -858,6 +867,7 @@ export async function applyFacts(
     subscriptions: new Set(),
     notes: [],
     userIds: new Set(),
+    events: [],
   };
   for (const a of facts.alerts) await alert(tx, now, a.kind, a.subject, a.detail);
   for (const c of facts.customers) await applyCustomer(ctx, tx, c, now);
@@ -869,18 +879,48 @@ export async function applyFacts(
   }
   for (const d of facts.disputes) await applyDispute(ctx, tx, d, touched, now);
 
-  for (const orderId of touched.orders) await convergeDesktop(ctx, tx, orderId, now);
+  for (const orderId of touched.orders)
+    await convergeDesktop(ctx, tx, orderId, now, touched.events);
   for (const subId of touched.subscriptions) {
     const s = await one<{ kind: string }>(
       tx,
       sql`select kind from subscriptions where id = ${subId}`,
     );
-    if (s?.kind === "pro") await convergePro(ctx, tx, subId, now);
+    if (s?.kind === "pro") await convergePro(ctx, tx, subId, now, touched.events);
     else if (s?.kind === "api") await convergeApi(ctx, tx, subId, now);
   }
   for (const u of users) touched.userIds.add(u);
-  for (const u of touched.userIds) await tx.execute(sql`select * from claim_purchases(${u})`);
-  return { rejected: null, notes: touched.notes, userIds: [...touched.userIds] };
+  for (const u of touched.userIds) {
+    const claimed = await one<{ claimed_licenses: number }>(
+      tx,
+      sql`select claimed_licenses from claim_purchases(${u})`,
+    );
+    if (!claimed || Number(claimed.claimed_licenses) === 0) continue;
+    const licenses = await rows<{
+      plan: string;
+      order_id: string | null;
+      subscription_id: string | null;
+    }>(
+      tx,
+      sql`select plan, order_id, subscription_id from licenses where user_id = ${u} and revoked_at is null`,
+    );
+    touched.events.push(
+      ...purchaseEventsFromLicenses(
+        u,
+        licenses.map((license) => ({
+          plan: license.plan,
+          orderId: license.order_id,
+          subscriptionId: license.subscription_id,
+        })),
+      ),
+    );
+  }
+  return {
+    rejected: null,
+    notes: touched.notes,
+    userIds: [...touched.userIds],
+    events: touched.events,
+  };
 }
 
 /**
@@ -896,7 +936,7 @@ export async function ingestFacts(
   const deadline = Date.now() + ctx.config.budgetMs * 4;
   const { cards } = await hydrate(ctx, facts, deadline);
   const outcome = await ctx.db.transaction(async (tx) => applyFacts(ctx, tx, facts, cards));
-  if (outcome.rejected) {
+  if (outcome.rejected !== null) {
     const subject =
       facts.orders[0]?.providerOrderId ??
       facts.subscriptions[0]?.providerSubscriptionId ??
@@ -904,6 +944,8 @@ export async function ingestFacts(
       "facts";
     await alert(ctx.db, ctx.clock(), "rejected_fact", `${source}:${subject}`, outcome.rejected);
     ctx.log(`[billing] ${source}: rejected ${subject}: ${outcome.rejected}`);
+  } else {
+    await emitAnalytics(ctx.captureAnalytics, outcome.events);
   }
   return outcome;
 }

@@ -177,6 +177,9 @@ jobs:
             printf '\nThe Windows MSI is not part of this release; its optional build did not pass. macOS is Developer ID signed and notarized; Linux packages are unsigned.\n' >> "$RUNNER_TEMP/release-notes.md"
           else
             printf '\nThe Windows per-user MSI and Linux packages are unsigned. macOS is Developer ID signed and notarized.\n' >> "$RUNNER_TEMP/release-notes.md"
+            if find release -maxdepth 1 -name '*-windows-x86_64-documents.tar.gz' -print -quit | grep -q .; then
+              printf '\nWindows document support is a separate download. The app fetches it after you click Install, and verifies the checksum compiled into that build.\n' >> "$RUNNER_TEMP/release-notes.md"
+            fi
           fi
           gh release create "v$RELEASE_VERSION" release/* --target "$GITHUB_SHA" \
             --title "convt $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
