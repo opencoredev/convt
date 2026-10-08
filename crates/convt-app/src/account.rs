@@ -73,7 +73,6 @@ pub enum SignIn {
 /// Which sign-in button was pressed. convt.app/device goes straight to that
 /// way of signing in instead of showing its chooser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum Provider {
     Google,
     Email,
@@ -252,16 +251,12 @@ impl AppState {
     }
 
     /// [`Self::start_sign_in`], with the page told which button was pressed.
-    // CNV-70 adds `&provider=` to the page.
-    #[allow(dead_code)]
     pub fn start_sign_in_with(&mut self, provider: Provider, cx: &mut Context<Self>) {
         self.start_sign_in_page(Some(provider), cx);
     }
 
     /// Opens the account's trial checkout and keeps refreshing until the
     /// trial shows up. Does nothing unless [`Access::CanStartTrial`].
-    // CNV-70 adds the polling.
-    #[allow(dead_code)]
     pub fn start_trial(&mut self, cx: &mut Context<Self>) {
         if let Some(Access::CanStartTrial { checkout_url }) = &self.account.access {
             cx.open_url(checkout_url);
