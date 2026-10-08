@@ -175,9 +175,11 @@ fn handle(event: Event, cx: &mut App) {
 const COLOR_32: &[u8] = include_bytes!("../assets/tray/tray32.png");
 #[cfg(target_os = "linux")]
 const COLOR_64: &[u8] = include_bytes!("../assets/tray/tray64.png");
-/// The menu bar shape, drawn by macOS in the menu bar's color.
+/// The convt mark in color for the macOS menu bar, 18 pt at 2x. Like the
+/// Finder menu icon (`integrations/macos/FinderSync/MenuIcon.svg`), it keeps
+/// the brand colors rather than being a template image.
 #[cfg(target_os = "macos")]
-const TEMPLATE: &[u8] = include_bytes!("../assets/tray/template.png");
+const MENU_BAR: &[u8] = include_bytes!("../assets/tray/menubar.png");
 
 /// A PNG's pixels as RGBA, with its width and height.
 fn rgba(png: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
@@ -248,12 +250,10 @@ pub mod platform {
             .with_tooltip("convt");
         #[cfg(target_os = "macos")]
         let builder = {
-            let (rgba, width, height) = super::rgba(super::TEMPLATE)?;
+            let (rgba, width, height) = super::rgba(super::MENU_BAR)?;
             let icon =
                 tray_icon::Icon::from_rgba(rgba, width, height).map_err(|e| e.to_string())?;
-            builder
-                .with_icon_templated(icon)
-                .with_autosave_name("convt")
+            builder.with_icon(icon).with_autosave_name("convt")
         };
         #[cfg(windows)]
         let builder = {
@@ -414,9 +414,14 @@ mod tests {
         #[cfg(target_os = "linux")]
         assert_eq!(super::rgba(super::COLOR_64).unwrap().1, 64);
         #[cfg(target_os = "macos")]
-        assert_eq!(super::rgba(super::TEMPLATE).unwrap().1, 36);
-        // The macOS shape must stay a template: black, with only alpha set.
-        let (template, ..) = super::rgba(include_bytes!("../assets/tray/template.png")).unwrap();
-        assert!(template.chunks_exact(4).all(|p| p[..3] == [0, 0, 0]));
+        assert_eq!(super::rgba(super::MENU_BAR).unwrap().1, 36);
+        // The macOS menu bar icon is the colored mark, not a black template.
+        let (menu_bar, w, h) = super::rgba(include_bytes!("../assets/tray/menubar.png")).unwrap();
+        assert_eq!((w, h), (36, 36));
+        assert!(
+            menu_bar
+                .chunks_exact(4)
+                .any(|p| p[3] > 0 && u16::from(p[1]) > u16::from(p[0]) + 40)
+        );
     }
 }

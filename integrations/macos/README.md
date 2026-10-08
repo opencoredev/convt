@@ -31,7 +31,7 @@ The extension needs no change for this: Finder picks up published progress from 
 
 ## Menu bar item
 
-While "Keep running in the background" is on (Settings, General; on by default), convt shows a menu bar item (`crates/convt-app/src/tray.rs`, through the `tray-icon` crate's `NSStatusItem`) drawn from `FinderSync/MenuIconTemplate.svg` as a template image, pre-rendered to `crates/convt-app/assets/tray/template.png`. Its menu has Open convt, Settings… and Quit convt; while jobs run, its tooltip counts them. Closing the last window leaves convt running, so a Finder request starts without launching the app, and convt leaves the Dock (accessory activation policy) until a window opens again. ⌘Q and the convt menu's Quit convt quit at once. With the setting off, convt quits with its last window, or when the conversions still running finish.
+While "Keep running in the background" is on (Settings, General; on by default), convt shows a menu bar item (`crates/convt-app/src/tray.rs`, through the `tray-icon` crate's `NSStatusItem`) showing the colored convt mark from `FinderSync/MenuIcon.svg`, pre-rendered to `crates/convt-app/assets/tray/menubar.png` (36 px, drawn at 18 pt). Its menu has Open convt, Settings… and Quit convt; while jobs run, its tooltip counts them. Closing the last window leaves convt running, so a Finder request starts without launching the app, and convt leaves the Dock (accessory activation policy) until a window opens again. ⌘Q and the convt menu's Quit convt quit at once. With the setting off, convt quits with its last window, or when the conversions still running finish.
 
 ## Still to do
 
