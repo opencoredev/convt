@@ -342,6 +342,8 @@ impl AppState {
         self.account.refresh = Refresh::Idle;
         self.account.notice = Some("Signed out. The license on this computer stays.".into());
         self.account._refresh_task = None;
+        self.account.awaiting_trial = false;
+        self.account.trial_poll_started = None;
         // Best effort: the dashboard can sign this computer out too.
         let api = self.account.api.clone();
         self.account._sign_in_task = Some(background(
