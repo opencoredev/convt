@@ -58,7 +58,7 @@ pub fn scrub(input: &str) -> String {
             cleaned.push_str(&rest[..i]);
             let tail = &rest[i..];
             let end = tail
-                .find(|c: char| c.is_whitespace() || c == ')' || c == ']' || c == '"')
+                .find(|c: char| c == ')' || c == ']' || c == '"' || c == '\n' || c == '\r')
                 .unwrap_or(tail.len());
             cleaned.push_str("<PATH>");
             rest = &tail[end..];
@@ -380,6 +380,20 @@ mod tests {
             let x = scrub(s);
             assert!(!x.contains("alice") && !x.contains("Bob") && !x.contains("carol"));
             assert!(!x.contains(".jpg") && !x.contains(".png") && !x.contains(".pdf"));
+        }
+    }
+
+    #[test]
+    fn scrubs_absolute_paths_with_spaces_on_each_platform() {
+        for path in [
+            "/Users/alice/Private Project/file.pdf",
+            "C:\\Users\\Bob\\Private Project\\file.pdf",
+            "/home/carol/Private Project/file.pdf",
+        ] {
+            let value = scrub(&format!("crash at {path}"));
+            assert!(!value.contains("Private"));
+            assert!(!value.contains("Project"));
+            assert!(!value.contains("file.pdf"));
         }
     }
     #[test]
