@@ -2,8 +2,9 @@
 //! result to the clipboard, the running jobs, the automation rules with their
 //! switches, and links to the main window and Settings.
 //!
-//! It opens only from the tray icon (see `tray.rs`), which GPUI can't draw
-//! yet, so for now only tests open it.
+//! Only tests open it. The tray icon (`tray.rs`) shows a native menu
+//! instead: tray-icon and ksni can't anchor a GPUI window to the icon or
+//! take a file dropped on it.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

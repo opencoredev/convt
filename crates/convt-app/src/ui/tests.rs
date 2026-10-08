@@ -34,6 +34,8 @@ use crate::request::{Request, Source};
 use crate::tray::{self, Indicator};
 use crate::update::{Fetch, FetchError, Update, UpdateConfig};
 
+mod background;
+
 struct Fixture {
     dir: TempDir,
     app: Entity<AppState>,

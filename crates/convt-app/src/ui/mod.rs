@@ -89,6 +89,9 @@ fn open_window<V: Render>(
     cx: &mut App,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> gpui_kit::Result<(AnyWindowHandle, Entity<V>)> {
+    // Back in the Dock if the app hid there with no window open.
+    #[cfg(target_os = "macos")]
+    crate::macos::show_in_dock(true);
     let title = options.titlebar.as_ref().and_then(|t| t.title.clone());
     let mut built = None;
     let (handle, _) = gpui_kit::open_window(options, cx, |window, cx| {
@@ -216,9 +219,9 @@ pub fn open_quick(request: Request, cx: &mut App) {
     cx.activate(true);
 }
 
-/// Opens the menu bar popover. Only the tray icon should call this, when it
-/// is clicked or a file is dropped on it. GPUI has no tray yet, so nothing
-/// calls it outside tests; see `tray.rs`.
+/// Opens the menu bar popover. Nothing calls it outside tests: the tray icon
+/// (`tray.rs`) shows a native menu instead, because tray-icon can't anchor a
+/// GPUI window to the icon or take a file dropped on it.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn open_popover(cx: &mut App) -> Option<(AnyWindowHandle, Entity<PopoverView>)> {
     let app = model::shared(cx);

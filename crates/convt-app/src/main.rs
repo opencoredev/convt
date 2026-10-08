@@ -16,6 +16,7 @@ mod instance;
 mod jobs;
 #[cfg(target_os = "macos")]
 mod macos;
+mod menu;
 mod model;
 mod pack;
 mod placeholder;
@@ -119,10 +120,12 @@ fn run(primary: instance::Primary, first: Request) {
         cx.set_app_identity("app.convt.desktop", "convt");
         gpui_kit::init(cx);
         ui::theme::init(cx);
+        menu::init(cx);
         let state = cx.new(|cx| AppState::new(Arc::new(pack::Engines), Paths::from_env(), cx));
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);
         cx.set_global(Shared(state.clone()));
+        tray::init(&state, tray::platform::spawn, cx);
         cx.on_window_closed(last_window_closed).detach();
         // One of the two network calls the app makes by itself: while signed in, at
         // most once a day, ask convt.app for the current Pro key.
@@ -145,41 +148,75 @@ fn run(primary: instance::Primary, first: Request) {
         for req in first {
             ui::route(req, cx);
         }
+        // A launch that opened no window (a Finder or command-line
+        // conversion) stays out of the Dock while the tray keeps it running.
+        #[cfg(target_os = "macos")]
+        if cx.windows().is_empty() && tray::shown(cx) {
+            macos::show_in_dock(false);
+        }
     });
     // In case the platform returns without running the quit observers.
     thumbs::shutdown();
 }
 
-/// Quits with the last window, unless conversions are still running; then
-/// quits when they finish.
+/// After the last window closes, convt keeps running in the background
+/// when the tray icon is up. Otherwise it quits, or quits when the running
+/// conversions finish.
 fn last_window_closed(cx: &mut App, _: gpui_kit::WindowId) {
-    if !cx.windows().is_empty() {
+    if cx.windows().is_empty() {
+        nothing_open(cx);
+    }
+}
+
+/// No window is open: hide from the Dock if the tray keeps convt running,
+/// otherwise quit now or once the jobs are done.
+fn nothing_open(cx: &mut App) {
+    let state = model::shared(cx);
+    let (menu_bar_icon, active) = {
+        let s = state.read(cx);
+        (s.settings.menu_bar_icon, s.queue.active())
+    };
+    let keep_running = tray::keeps_running(menu_bar_icon, cx);
+    if keep_running {
+        // Leave the Dock after AppKit has finished closing the window.
+        #[cfg(target_os = "macos")]
+        cx.spawn(async |cx| {
+            cx.update(|cx| {
+                if cx.windows().is_empty() {
+                    macos::show_in_dock(false);
+                }
+            })
+        })
+        .detach();
         return;
     }
-    let state = model::shared(cx);
-    let keep_running = cfg!(target_os = "macos") && state.read(cx).settings.menu_bar_icon;
-    if keep_running {
-        // macOS keeps the process alive when the menu bar item is enabled.
+    if should_quit_after_last_window(keep_running, active) {
         // Calling cx.quit() from the window-closed observer starts GPUI's
         // teardown while AppKit is still unwinding the last NSWindow; a
         // deferred update callback can then cross that teardown boundary.
-        return;
-    }
-    if should_quit_after_last_window(keep_running, state.read(cx).queue.active()) {
-        cx.quit();
+        // Quit from a task instead, once the close has finished, unless a
+        // window opened meanwhile.
+        cx.spawn(async |cx| {
+            cx.update(|cx| {
+                if cx.windows().is_empty() {
+                    menu::quit(cx);
+                }
+            })
+        })
+        .detach();
     } else {
         state.update(cx, |s, _| s.quit_when_idle = true);
     }
 }
 
-fn should_quit_after_last_window(menu_bar_icon: bool, active_jobs: usize) -> bool {
-    !menu_bar_icon && active_jobs == 0
+fn should_quit_after_last_window(keep_running: bool, active_jobs: usize) -> bool {
+    !keep_running && active_jobs == 0
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn menu_bar_mode_keeps_the_process_alive_after_last_window() {
+    fn the_tray_keeps_the_process_alive_after_last_window() {
         assert!(!super::should_quit_after_last_window(true, 0));
         assert!(!super::should_quit_after_last_window(true, 2));
         assert!(super::should_quit_after_last_window(false, 0));
