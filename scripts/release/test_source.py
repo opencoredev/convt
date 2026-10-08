@@ -70,6 +70,12 @@ class SourceArchiveMembers(unittest.TestCase):
             self.assertFalse(any('__pycache__' in Path(n).parts for n in names))
             self.assertFalse(any(Path(n).parts[:2]==(root.name,'third-party') for n in names))
 
+            closure=Path(tmp)/'closure.tar.gz'
+            source.pack_source_closure_archive(root,closure,1791331200)
+            with tarfile.open(closure) as packed:
+                closure_names=[member.name for member in packed.getmembers()]
+            self.assertIn(f'{root.name}/third-party/native/downloaded-source.tar.gz',closure_names)
+
     def test_two_packs_match_when_only_target_differs(self):
         with tempfile.TemporaryDirectory(prefix='convt-source-repro-') as tmp:
             first=Path(tmp)/'a'/'convt-source'

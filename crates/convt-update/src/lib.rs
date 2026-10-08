@@ -30,6 +30,8 @@ pub struct Build {
     pub build_date: String,
     pub artifacts: Vec<Artifact>,
     pub source: Artifact,
+    #[serde(default)]
+    pub source_closure: Option<Artifact>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -122,6 +124,7 @@ impl Manifest {
                 || b.artifacts.is_empty()
                 || b.artifacts.len() > 32
                 || !artifact(&b.source, true)
+                || b.source_closure.as_ref().is_some_and(|a| !artifact(a, true))
                 || date::to_days(&b.build_date).unwrap() > (self.issued_at / 86400) as i64
                 || !identities.insert((&b.build_date, &b.version))
             {
@@ -279,6 +282,7 @@ mod tests {
                 build_date: d.into(),
                 artifacts: vec![a.clone()],
                 source: source.clone(),
+                source_closure: None,
             })
             .collect(),
         }

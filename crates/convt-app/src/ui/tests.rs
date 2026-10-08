@@ -3604,6 +3604,7 @@ fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8>
                 build_date: (*d).into(),
                 artifacts: vec![artifact("linux-x86_64", "AppImage")],
                 source: artifact("source", "tar.gz"),
+                source_closure: None,
             })
             .collect(),
     };

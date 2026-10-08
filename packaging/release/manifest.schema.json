@@ -163,6 +163,9 @@
         },
         "source": {
           "$ref": "#/$defs/sourceArtifact"
+        },
+        "source_closure": {
+          "$ref": "#/$defs/sourceArtifact"
         }
       }
     },

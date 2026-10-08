@@ -113,6 +113,18 @@ def pack_source_archive(tree, archive_path, epoch):
         raise ValueError('source archive failed')
     refuse_build_output_in_archive(archive_path, tree.name)
 
+def pack_source_closure_archive(tree, archive_path, epoch):
+    """Write the audited generated closure as a separate deterministic asset."""
+    tree=tree.resolve()
+    tar=subprocess.Popen(['tar','--sort=name',f'--mtime=@{epoch}','--owner=0','--group=0','--numeric-owner',
+                            '--exclude=*/__pycache__','--exclude=*/.cache',
+                            '-C',str(tree.parent),'-cf','-',f'{tree.name}/third-party'], stdout=subprocess.PIPE)
+    with Path(archive_path).open('wb') as stream:
+        gzip=subprocess.run(['gzip','-n'], stdin=tar.stdout, stdout=stream)
+    tar.stdout.close()
+    if tar.wait() or gzip.returncode:
+        raise ValueError('source closure archive failed')
+
 def archive(tree, output, version, epoch, verification):
     # Full lockfile vendoring makes the CLI rebuild independent of a host cache.
     subprocess.run(['cargo', 'vendor', '--offline', '--locked', '--versioned-dirs', 'third-party/rust'], cwd=tree, check=True, stdout=subprocess.DEVNULL)
@@ -144,6 +156,7 @@ def archive(tree, output, version, epoch, verification):
     # their original notices, source headers and Cargo checksums.
     archive_path = output/f'convt-{version}-source.tar.gz'
     pack_source_archive(tree, archive_path, epoch)
+    pack_source_closure_archive(tree, output/f'convt-{version}-source-closure.tar.gz', epoch)
     if gaps and not verification:
         raise ValueError('Publication blocked: ' + '; '.join(gaps))
     print(f'Source archive: {archive_path}; {len(gaps)} publication gaps')
