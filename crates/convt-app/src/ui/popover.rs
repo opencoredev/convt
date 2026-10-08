@@ -255,13 +255,15 @@ impl PopoverView {
                             .flex()
                             .flex_col()
                             .flex_1()
+                            .min_w_0()
                             .gap(px(2.))
                             .child(
                                 styled(size::BODY, p.text)
                                     .font_weight(FontWeight::MEDIUM)
+                                    .truncate()
                                     .child(format!("{} → {to}", rule.name)),
                             )
-                            .child(mono(11., 14., p.secondary).child(format!(
+                            .child(mono(11., 14., p.secondary).truncate().child(format!(
                                 "{} · {}",
                                 automation::source_line(&rule),
                                 rule.detail
@@ -274,6 +276,7 @@ impl PopoverView {
                             true,
                             p,
                         )
+                        .flex_shrink_0()
                         .on_click(move |_, _, cx| {
                             app.update(cx, |s, cx| s.set_automation(i, !on, cx))
                         }),

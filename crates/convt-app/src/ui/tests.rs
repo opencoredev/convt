@@ -2153,8 +2153,19 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
             .update(cx, |_, window, _| window.remove_window())
             .unwrap();
 
+        let missing = f
+            .dir
+            .path()
+            .join("a folder with a long name that is not there yet");
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.automations[0].folder = Some(missing.clone()), cx)
+        });
         let (popover, _) = cx.update(super::open_popover).unwrap();
         assert!(fits(cx, popover, "open-settings"), "popover");
+        assert!(
+            fits(cx, popover, "popover-automation-0"),
+            "popover, long rule"
+        );
 
         cx.update(super::show_about);
         let (about, _) = window_of::<AboutView>(cx);
