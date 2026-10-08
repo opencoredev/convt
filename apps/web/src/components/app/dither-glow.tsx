@@ -109,7 +109,7 @@ export function DitherGlow({ className }: { className?: string }) {
       if (!canvas || !ctx) return;
       const w = Math.max(1, Math.ceil(canvas.clientWidth / CELL));
       const h = Math.max(1, Math.ceil(canvas.clientHeight / CELL));
-      if (canvas.width !== w || canvas.height !== h) {
+      if (!image || canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
         image = ctx.createImageData(w, h);

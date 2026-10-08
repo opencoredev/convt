@@ -23,7 +23,7 @@ export function AuthScreen({ children }: { children: ReactNode }) {
       <DitherGlow className="absolute inset-x-0 bottom-0 -z-10 h-[58vh] w-full min-h-[320px]" />
       <main className="flex flex-1 flex-col items-center justify-center px-6 pt-16 pb-24 sm:pb-32">
         <div className="flex w-full max-w-[380px] flex-col items-center">
-          <Rise index={0}>
+          <Rise index={0} className="flex justify-center">
             <Link
               to="/"
               aria-label="convt home"
@@ -77,11 +77,29 @@ export function Rise({
   );
 }
 
-/** The one line under the logo, Delphi-style: the page's real heading. */
-export function AuthTitle({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
+/**
+ * The line under the logo, Delphi-style, and the page's real heading. `strong` is for
+ * a question or a result (the desktop sign-in) rather than an invitation.
+ */
+export function AuthTitle({
+  children,
+  sub,
+  strong = false,
+}: {
+  children: ReactNode;
+  sub?: ReactNode;
+  strong?: boolean;
+}) {
   return (
     <div className="mt-6 flex flex-col items-center gap-2 text-center">
-      <h1 className="text-[17px]/6 font-medium tracking-[-0.01em] text-balance text-ink-2">
+      <h1
+        className={cx(
+          "text-balance",
+          strong
+            ? "text-[22px]/7 font-semibold tracking-[-0.02em] text-ink"
+            : "text-[17px]/6 font-medium tracking-[-0.01em] text-ink-2",
+        )}
+      >
         {children}
       </h1>
       {sub ? <p className="text-sm/[22px] text-pretty break-words text-ink-2">{sub}</p> : null}

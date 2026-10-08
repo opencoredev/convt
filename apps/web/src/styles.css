@@ -119,7 +119,7 @@ body {
   --pill-hover: #e8eae9;
   --pill-line: rgb(0 0 0 / 4%);
   --glow: 31 179 108;
-  --glow-peak: 0.62;
+  --glow-peak: 0.52;
 }
 
 .dark {
@@ -253,9 +253,23 @@ body {
     translate: 0 8px;
   }
 }
+/* Desktop sign-in approved: the check settles in from 90% with a soft green ring. */
+@keyframes device-done {
+  from {
+    opacity: 0;
+    scale: 0.9;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--green) 35%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 14px color-mix(in oklab, var(--green) 0%, transparent);
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .auth-rise {
     animation: auth-rise 520ms var(--ease-out) var(--d, 0ms) both;
+  }
+  .device-done {
+    animation: device-done 700ms var(--ease-out) 120ms both;
   }
 }
 
