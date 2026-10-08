@@ -1344,7 +1344,7 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     click(cx, window, "first-run-next");
     cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
     let body = label(cx, window, "first-run-body").expect("done body");
-    assert!(body.contains("JPEG") && body.contains("PNG"), "{body}");
+    assert!(body.contains("pick a format"), "{body}");
     assert!(f.dir.path().join("license.key").exists());
 
     // "Start converting" finishes first run and opens the main window.
