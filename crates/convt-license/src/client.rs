@@ -537,8 +537,11 @@ fn parse_utc_timestamp(value: &str) -> Option<SystemTime> {
     let hour: u64 = parts.next()?.parse().ok()?;
     let minute: u64 = parts.next()?.parse().ok()?;
     let second: u64 = parts.next()?.split('.').next()?.parse().ok()?;
-    if hour >= 24 || minute >= 60 || second >= 60 { return None; }
-    let seconds = (day as u64).checked_mul(86_400)?
+    if hour >= 24 || minute >= 60 || second >= 60 {
+        return None;
+    }
+    let seconds = (day as u64)
+        .checked_mul(86_400)?
         .checked_add(hour * 3_600 + minute * 60 + second)?;
     Some(UNIX_EPOCH + Duration::from_secs(seconds))
 }
@@ -649,7 +652,9 @@ mod tests {
         let mut l = f.licensing(true);
         let ends_on = date::from_days(today() + 2);
         l.set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T23:59:59Z")));
-        assert!(matches!(l.state(), State::AccountTrial { ends_on: ref got, days_left, .. } if got == &ends_on && days_left >= 2));
+        assert!(
+            matches!(l.state(), State::AccountTrial { ends_on: ref got, days_left, .. } if got == &ends_on && days_left >= 2)
+        );
         assert!(l.begin_conversion().is_ok());
     }
 
@@ -659,8 +664,14 @@ mod tests {
         let mut l = f.licensing(true);
         let ends_on = date::from_days(today() + 2);
         l.set_account_trial(Some(ends_on.clone()));
-        assert!(matches!(l.state_on(today() + 1), State::AccountTrial { days_left: 1, .. }));
-        assert!(!matches!(l.state_on(today() + 2), State::AccountTrial { .. }));
+        assert!(matches!(
+            l.state_on(today() + 1),
+            State::AccountTrial { days_left: 1, .. }
+        ));
+        assert!(!matches!(
+            l.state_on(today() + 2),
+            State::AccountTrial { .. }
+        ));
     }
 
     #[test]

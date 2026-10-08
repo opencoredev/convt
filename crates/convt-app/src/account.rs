@@ -28,8 +28,8 @@ use convt_license::date;
 use gpui_kit::{Context, Task};
 
 use crate::model::AppState;
-use crate::settings::TrialCache;
 use crate::request::AuthReply;
+use crate::settings::TrialCache;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -456,7 +456,8 @@ impl AppState {
                             },
                             cx,
                         );
-                        self.licensing.set_account_trial_exact(Some(ends_on), ends_at);
+                        self.licensing
+                            .set_account_trial_exact(Some(ends_on), ends_at);
                     }
                     Some(Access::Pro | Access::CanStartTrial { .. } | Access::Lapsed) | None => {
                         self.update_settings(|s| s.trial_cache = None, cx);

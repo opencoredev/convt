@@ -233,8 +233,13 @@ pub trait Api: Send + Sync {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Access {
     Pro,
-    Trial { ends_on: String, ends_at: Option<String> },
-    CanStartTrial { checkout_url: String },
+    Trial {
+        ends_on: String,
+        ends_at: Option<String>,
+    },
+    CanStartTrial {
+        checkout_url: String,
+    },
     Lapsed,
 }
 
