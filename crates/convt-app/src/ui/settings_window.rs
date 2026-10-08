@@ -809,7 +809,7 @@ impl SettingsView {
             .px(px(20.))
             .py(px(22.))
             .rounded(px(radius::PANEL))
-            .when(allowed, |d| d.child(theme::glow(0.3, p)))
+            .when(allowed, |d| d.child(theme::glow(0.6, 300., p)))
             .child(theme::icon_tile(glyph, tone, 40., p))
             .child(
                 div()

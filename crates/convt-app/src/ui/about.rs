@@ -10,7 +10,7 @@ use crate::account::VERSION;
 use crate::model::AppState;
 
 /// The About window's size.
-pub(super) const ABOUT_SIZE: (f32, f32) = (340., 320.);
+pub(super) const ABOUT_SIZE: (f32, f32) = (380., 400.);
 
 pub struct AboutView {
     app: Entity<AppState>,

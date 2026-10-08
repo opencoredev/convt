@@ -233,7 +233,6 @@ impl PopoverView {
                     )
                     .child(
                         Button::secondary("manage-rules", "Manage")
-                            .color(p.green_text)
                             .small()
                             .build(p)
                             .on_click(|_, _, cx| show_page(Page::Automations, cx)),
@@ -432,7 +431,7 @@ impl Render for PopoverView {
                     .overflow_hidden()
                     .flex()
                     .flex_col()
-                    .child(theme::glow(0.35, &p))
+                    .child(theme::glow(0.6, 320., &p))
                     .child(self.header(progress, &p))
                     .child(div().flex().px(px(12.)).pb(px(12.)).child(drop_bar)),
             )

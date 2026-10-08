@@ -451,7 +451,7 @@ pub fn google_mark(size: f32) -> Img {
 }
 
 /// The height of a text field, matching [`select`].
-pub const FIELD_HEIGHT: f32 = 30.;
+pub const FIELD_HEIGHT: f32 = 32.;
 /// The height of a small text field, such as Quick convert's file name.
 pub const SMALL_FIELD_HEIGHT: f32 = 26.;
 
@@ -1491,16 +1491,18 @@ pub fn lockup(text_size: f32, p: &Palette) -> Div {
 
 /// The onboarding's dithered green glow (`assets/onboarding`), rising from
 /// the bottom of whatever holds it, at `strength` (0 to 1) of its full
-/// opacity. The holder needs `relative()` and `overflow_hidden()`. Used
+/// opacity, pushed `sink` pixels below the holder's bottom edge so a short
+/// holder shows only its faint upper reach and never a cut-off band. The
+/// holder needs `relative()` and `overflow_hidden()`. Used
 /// sparingly, where a quiet moment can take some warmth: onboarding, the
-/// empty Activity page, the License tab's status.
-pub fn glow(strength: f32, p: &Palette) -> Img {
+/// empty Activity page, the License tab's status and the popover's header.
+pub fn glow(strength: f32, sink: f32, p: &Palette) -> Img {
     img(SharedString::from(format!(
         "onboarding/glow-{}.png",
         if p.dark { "dark" } else { "light" }
     )))
     .absolute()
-    .bottom_0()
+    .bottom(px(-sink))
     .left(relative(0.5))
     .ml(px(-GLOW.0 / 2.))
     .w(px(GLOW.0))

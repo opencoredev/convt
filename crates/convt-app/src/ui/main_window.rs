@@ -378,7 +378,7 @@ impl MainView {
             .flex_1()
             .min_h_0()
             .p(px(GUTTER))
-            .child(theme::glow(0.55, p))
+            .child(theme::glow(0.6, 180., p))
             .child(
                 div()
                     .id("empty")

@@ -714,9 +714,14 @@ impl FirstRunView {
                             .map(|total| *bytes as f32 / total as f32),
                         _ => Some(1.),
                     };
+                    let label = match step {
+                        pack::Progress::Download { .. } => "Adding document support…",
+                        pack::Progress::Verifying => "Checking document support…",
+                        pack::Progress::Installing => "Installing document support…",
+                    };
                     SetupStep {
                         key: "documents",
-                        label: "Adding document support…".into(),
+                        label: label.into(),
                         status: StepStatus::Working(fraction),
                     }
                 }
@@ -748,7 +753,7 @@ impl FirstRunView {
             .flex()
             .flex_col()
             .items_center()
-            .w(px(360.));
+            .w(px(400.));
         if still {
             return setup_content(content, &steps, 1., &p, true).into_any_element();
         }
@@ -834,7 +839,7 @@ pub(super) fn breath(t: f32) -> f32 {
 use theme::GLOW;
 /// How strongly the bloom shows behind the setup step: enough to feel the
 /// glow gather, never so much that it muddies the words over it.
-const BLOOM_STRENGTH: f32 = 0.55;
+const BLOOM_STRENGTH: f32 = 0.42;
 /// The bloom's size: the PNG's pixel size, drawn unscaled.
 const BLOOM: (f32, f32) = (2400., 1500.);
 
@@ -992,10 +997,10 @@ fn setup_content(
         .shadow(vec![
             theme::inset_ring(p.green_border, 1.),
             BoxShadow {
-                color: p.green.opacity(0.10 + 0.14 * breath),
+                color: p.green.opacity(0.16 + 0.22 * breath),
                 offset: point(px(0.), px(0.)),
-                blur_radius: px(24. + 20. * breath),
-                spread_radius: px(2. + 6. * breath),
+                blur_radius: px(28. + 24. * breath),
+                spread_radius: px(2. + 8. * breath),
                 inset: false,
             },
         ]);
@@ -1015,8 +1020,15 @@ fn setup_content(
             .opacity(appear)
             .mt(px(4. * (1. - appear)))
     });
+    // The card arrives with its first line, never empty.
+    let card_in = if still {
+        1.
+    } else {
+        ease((at - step_times(0).0) / 0.35)
+    };
     let list = (!steps.is_empty()).then(|| {
         div()
+            .opacity(card_in)
             .flex()
             .flex_col()
             .w_full()
@@ -1036,7 +1048,8 @@ fn setup_content(
         .child(div().h(px(22.)))
         .child(shimmer_heading("Setting convt up…", at, p, still))
         .child(
-            text(14., 21., p.secondary)
+            // Over the glow, a step darker than secondary text.
+            text(14., 21., mix(p.text, p.secondary, 0.45))
                 .pt(px(6.))
                 .text_center()
                 .child("This only takes a moment."),
@@ -1051,7 +1064,7 @@ fn setup_line(step: &SetupStep, settled: bool, at: f32, p: &Palette) -> theme::C
     let working = matches!(step.status, StepStatus::Working(_));
     let ending = at >= (CALIBRATE - FADE).as_secs_f32() - 0.4;
     let label: SharedString = if working && ending {
-        "Document support continues in the background".into()
+        "Document support finishes in the background".into()
     } else {
         step.label.clone().into()
     };
