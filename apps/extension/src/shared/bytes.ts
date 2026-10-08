@@ -27,31 +27,48 @@ export function parseDataUrl(url: string): { mime: string; bytes: Uint8Array } |
   try {
     // Percent escapes stand for raw bytes (%89 in a PNG), not UTF-8 text, and base64
     // payloads may escape their own characters (%3D for =).
-    const bytes = percentDecode(payload);
     if (/;base64$/i.test(meta)) {
-      let text = "";
-      for (const byte of bytes) text += String.fromCharCode(byte);
+      // Base64 is plain ASCII, so escapes like %3D can be undone as text.
+      const text = payload.includes("%")
+        ? payload.replace(/%([0-9a-f]{2})/gi, (_, hex: string) =>
+            String.fromCharCode(Number.parseInt(hex, 16)),
+          )
+        : payload;
       return { mime, bytes: fromBase64(text.replace(/\s+/g, "")) };
     }
-    return { mime, bytes };
+    return { mime, bytes: percentDecode(payload) };
   } catch {
     return null;
   }
 }
 
-/** Decodes %XX escapes to bytes; other characters keep their UTF-8 bytes. */
+/** Decodes %XX escapes to bytes; the text between them keeps its UTF-8 bytes. */
 function percentDecode(text: string): Uint8Array {
-  const out: number[] = [];
+  if (!text.includes("%")) return new TextEncoder().encode(text);
   const encoder = new TextEncoder();
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i] ?? "";
+  const parts: Uint8Array[] = [];
+  let run = "";
+  let i = 0;
+  while (i < text.length) {
     const hex = text.slice(i + 1, i + 3);
-    if (char === "%" && /^[0-9a-f]{2}$/i.test(hex)) {
-      out.push(Number.parseInt(hex, 16));
-      i += 2;
+    if (text[i] === "%" && /^[0-9a-f]{2}$/i.test(hex)) {
+      if (run) parts.push(encoder.encode(run));
+      run = "";
+      parts.push(Uint8Array.of(Number.parseInt(hex, 16)));
+      i += 3;
     } else {
-      out.push(...encoder.encode(char));
+      const next = text.indexOf("%", i + 1);
+      const end = next === -1 ? text.length : next;
+      run += text.slice(i, end);
+      i = end;
     }
   }
-  return new Uint8Array(out);
+  if (run) parts.push(encoder.encode(run));
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }

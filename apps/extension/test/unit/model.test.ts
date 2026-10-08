@@ -271,6 +271,14 @@ describe("links", () => {
 });
 
 describe("bytes", () => {
+  test("a 5 MB base64 data: URL decodes quickly", () => {
+    const data = new Uint8Array(5_000_000).map((_, i) => i % 251);
+    const url = `data:image/png;base64,${toBase64(data)}`;
+    const start = performance.now();
+    expect(parseDataUrl(url)?.bytes.length).toBe(5_000_000);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   test("base64 round-trips large buffers", () => {
     const data = new Uint8Array(200_000).map((_, i) => i % 251);
     expect(fromBase64(toBase64(data))).toEqual(data);
@@ -289,6 +297,9 @@ describe("bytes", () => {
     expect([...(parseDataUrl("data:image/png,%89PNG%0D%0A")?.bytes ?? [])]).toEqual([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a,
     ]);
+    expect(new TextDecoder().decode(parseDataUrl("data:image/svg+xml,<svg>é</svg>")?.bytes)).toBe(
+      "<svg>é</svg>",
+    );
     expect(parseDataUrl("https://a.com")).toBeNull();
   });
 });

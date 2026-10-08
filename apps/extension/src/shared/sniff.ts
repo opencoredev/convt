@@ -72,8 +72,28 @@ function looksLikeSvg(bytes: Uint8Array): boolean {
   const head = ascii(bytes, 0, SVG_SCAN).replace(/^(\uFEFF|\u00EF\u00BB\u00BF)/, "");
   if (!/^\s*</.test(head)) return false;
   // A web page can contain inline <svg> icons; that doesn't make it an image.
-  if (/^\s*(<!--[\s\S]*?-->\s*)*<(!doctype\s+html|html|head|body)\b/i.test(head)) return false;
-  return /<svg[\s>]/i.test(head);
+  if (/^<(!doctype\s+html|html|head|body)\b/i.test(firstTag(head))) return false;
+  return /<svg[\s>/]/i.test(head);
+}
+
+/**
+ * The document from its first real tag on, past whitespace, the XML declaration
+ * and comments. A forward scan, not a regex: a regex over repeated comments can
+ * backtrack exponentially on hostile input.
+ */
+function firstTag(text: string): string {
+  let at = 0;
+  for (;;) {
+    while (at < text.length && /\s/.test(text[at] ?? "")) at += 1;
+    const end = text.startsWith("<!--", at)
+      ? text.indexOf("-->", at + 4)
+      : text.startsWith("<?", at)
+        ? text.indexOf("?>", at + 2)
+        : -2;
+    if (end === -2) return text.slice(at);
+    if (end === -1) return "";
+    at = end + (text[end] === "-" ? 3 : 2);
+  }
 }
 
 function isAnimated(kind: SourceKind, bytes: Uint8Array): boolean {

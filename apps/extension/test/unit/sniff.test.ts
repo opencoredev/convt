@@ -86,6 +86,16 @@ describe("sniff", () => {
     expect(sniff(enc('<!doctype html><body><svg class="icon"></svg>')).kind).toBe("unknown");
     expect(sniff(enc("<!-- built -->\n<html><svg></svg></html>")).kind).toBe("unknown");
   });
+
+  test("many leading comments stay fast", () => {
+    const enc = (s: string) => new TextEncoder().encode(s);
+    const comments = "<!-- a -->".repeat(2000);
+    const start = performance.now();
+    expect(sniff(enc(`${comments}<svg/>`)).kind).toBe("svg");
+    expect(sniff(enc(`${comments}<html>`)).kind).toBe("unknown");
+    expect(sniff(enc("<!-- a -->".repeat(40))).kind).toBe("unknown");
+    expect(performance.now() - start).toBeLessThan(200);
+  });
 });
 
 describe("svg sizing", () => {
