@@ -70,9 +70,9 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>Pro renewal.</span> If you have signed in to convt Pro from
-              the app, it asks convt.app for your current Pro key at most once a day at launch, and
-              when you click Refresh license. The request identifies your account and this computer
-              through the sign-in token. Desktop license owners never sign in.
+              the app, it asks convt.app for your current Pro key at most once a day while it runs,
+              and when you click Refresh license. The request identifies your account and this
+              computer through the sign-in token. Desktop license owners never sign in.
             </>,
             <>
               <span className={strong}>Things you ask for.</span> Signing in, installing the
