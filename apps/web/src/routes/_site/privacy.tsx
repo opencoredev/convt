@@ -61,10 +61,12 @@ const sections: LegalSection[] = [
         <List
           items={[
             <>
-              <span className={strong}>Update check.</span> At most once a day, while update checks
-              are on in Settings, the app downloads a list of available versions from convt.app. The
-              request carries your IP address and app version, like any web request, and nothing
-              about your files. You can turn it off.
+              <span className={strong}>Updates.</span> At most once a day, while update checks are
+              on in Settings, the app downloads a list of available versions from convt.app. When a
+              newer version your license covers is out, the app downloads its installer from our
+              GitHub releases and installs it when you click Restart to update. These requests carry
+              your IP address and app version, like any web request, and nothing about your files.
+              You can turn update checks off.
             </>,
             <>
               <span className={strong}>Pro renewal.</span> If you have signed in to convt Pro from
@@ -74,8 +76,8 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>Things you ask for.</span> Signing in, installing the
-              optional document pack, downloading an update and sending a file to the cloud each
-              happen only when you click to do them.
+              optional document pack and sending a file to the cloud each happen only when you click
+              to do them.
             </>,
           ]}
         />
