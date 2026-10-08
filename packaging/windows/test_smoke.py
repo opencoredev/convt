@@ -30,6 +30,8 @@ class InstallerCleanupTest(unittest.TestCase):
         self.assertIn("outside packaging/out/windows", INSTALLER)
         self.assertIn("ReparsePoint", INSTALLER)
         self.assertIn("not the MSI harvest directory", INSTALLER)
+        # `$ExpectedStage:` is a ParserError in pwsh; the name must be ${ExpectedStage}.
+        self.assertNotRegex(INSTALLER, r'(?<!\{)\$ExpectedStage:')
 
 
 if __name__ == "__main__":

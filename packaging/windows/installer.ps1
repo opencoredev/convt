@@ -24,7 +24,7 @@ if ([System.IO.Path]::GetFileName($ExpectedStage) -ne 'msi-payload') {
     throw "Refusing to remove unexpected harvest path: $ExpectedStage"
 }
 if ([System.IO.Path]::GetDirectoryName($ExpectedStage) -ne $OwnedRoot) {
-    throw "Refusing to remove $ExpectedStage: outside packaging/out/windows"
+    throw "Refusing to remove ${ExpectedStage}: outside packaging/out/windows"
 }
 $Existing = Get-Item -LiteralPath $ExpectedStage -ErrorAction SilentlyContinue
 if ($Existing) {
