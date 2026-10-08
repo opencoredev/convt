@@ -1648,7 +1648,7 @@ fn closing_first_run_before_the_end_shows_it_again(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn onboarding_opens_at_three_quarters_of_the_display(cx: &mut TestAppContext) {
     let _f = Fixture::licensed(cx, None, None);
-    let (display, wanted) = cx.update(|cx| super::first_run_bounds(cx));
+    let (display, wanted) = cx.update(super::first_run_bounds);
     let visible = cx.update(|cx| cx.primary_display().map(|d| d.visible_bounds().size));
     if let Some(visible) = visible {
         assert!(display.is_some());
