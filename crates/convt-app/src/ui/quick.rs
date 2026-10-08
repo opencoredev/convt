@@ -80,6 +80,8 @@ pub struct QuickView {
     /// Where the files go. `None` is next to each file.
     pub(super) save_dir: Option<PathBuf>,
     pub(super) file_name: Entity<InputState>,
+    /// Why the typed file name can't be used, shown under it.
+    pub(super) name_error: Option<String>,
     pub(super) jobs: Vec<JobId>,
     /// The last state seen of each job, so results stay after the main
     /// window clears finished jobs.
@@ -163,6 +165,7 @@ impl QuickView {
             editing_name: false,
             save_dir,
             file_name,
+            name_error: None,
             jobs: Vec::new(),
             seen: HashMap::new(),
             error,
@@ -240,6 +243,7 @@ impl QuickView {
 
     fn reset_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.default_name().unwrap_or_default();
+        self.name_error = None;
         self.file_name
             .update(cx, |s, cx| s.set_value(name, window, cx));
     }
@@ -322,23 +326,25 @@ impl QuickView {
         options
     }
 
-    fn output(&self, cx: &App) -> Output {
-        let name = self.file_name.read(cx).value().trim().to_string();
-        if let ([file], Some(default)) = (self.files.as_slice(), self.default_name())
-            && !name.is_empty()
-            && name != default
+    /// Where the output goes, or why the typed file name can't be used.
+    fn output(&self, cx: &App) -> Result<Output, String> {
+        if let ([file], Some(default), Some(to)) =
+            (self.files.as_slice(), self.default_name(), self.to)
         {
-            let dir = self
-                .save_dir
-                .clone()
-                .or_else(|| file.parent().map(Path::to_path_buf))
-                .unwrap_or_default();
-            return Output::Exact(dir.join(name));
+            let name = output_name(&self.file_name.read(cx).value(), to.extension())?;
+            if name != default {
+                let dir = self
+                    .save_dir
+                    .clone()
+                    .or_else(|| file.parent().map(Path::to_path_buf))
+                    .unwrap_or_default();
+                return Ok(Output::Exact(dir.join(name)));
+            }
         }
-        match &self.save_dir {
+        Ok(match &self.save_dir {
             Some(dir) => Output::Dir(dir.clone()),
             None => Output::Beside,
-        }
+        })
     }
 
     pub(super) fn convert(&mut self, cx: &mut Context<Self>) {
@@ -358,7 +364,16 @@ impl QuickView {
             cx.notify();
             return;
         }
-        let output = self.output(cx);
+        let output = match self.output(cx) {
+            Ok(output) => output,
+            Err(e) => {
+                self.name_error = Some(e);
+                self.editing_name = true;
+                cx.notify();
+                return;
+            }
+        };
+        self.name_error = None;
         if cloud && !self.app.read(cx).settings.cloud_consent {
             return;
         }
@@ -1142,7 +1157,24 @@ impl QuickView {
                     .child(icon(IconName::Edit, 13., p.tertiary))
                     .into_any_element()
             };
-            row_label("File name", control, p)
+            let error = self.name_error.clone().map(|e| {
+                div()
+                    .id("file-name-error")
+                    .test_support()
+                    .aria_label(SharedString::from(e.clone()))
+                    .flex()
+                    .justify_end()
+                    .px(px(space::LG))
+                    .pb(px(10.))
+                    .mt(px(-4.))
+                    .child(error_text(e, p))
+            });
+            div()
+                .flex()
+                .flex_col()
+                .child(row_label("File name", control, p))
+                .children(error)
+                .into_any_element()
         });
         let folder = row_label(
             "Save to",
@@ -1414,6 +1446,48 @@ fn row_label(label: &'static str, control: impl IntoElement, p: &Palette) -> Any
         )
         .child(div().flex().flex_shrink_0().items_center().child(control))
         .into_any_element()
+}
+
+/// The typed output name as one file name in the save folder, ending in
+/// `extension`: a path, `..` or a separator would put the file somewhere
+/// else, so they're refused rather than followed.
+pub(super) fn output_name(typed: &str, extension: &str) -> Result<String, String> {
+    let name = typed.trim();
+    if name.is_empty() {
+        return Err("Type a name for the file.".into());
+    }
+    let forbidden: &[char] = if cfg!(windows) {
+        &['/', '\\', '\0', ':', '<', '>', '"', '|', '?', '*']
+    } else {
+        &['/', '\\', '\0']
+    };
+    if let Some(c) = name
+        .chars()
+        .find(|c| forbidden.contains(c) || c.is_control())
+    {
+        return Err(match c {
+            '/' | '\\' => "Use a file name, not a folder path.".into(),
+            c if c.is_control() => "The name has a character files can't use.".into(),
+            c => format!("File names can't contain “{c}”."),
+        });
+    }
+    if name.trim_matches('.').is_empty() {
+        return Err("That isn't a file name.".into());
+    }
+    let has_extension = Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(extension));
+    let name = if has_extension {
+        name.to_string()
+    } else {
+        format!("{name}.{extension}")
+    };
+    // Belt and braces: exactly one plain component.
+    let mut parts = Path::new(&name).components();
+    match (parts.next(), parts.next()) {
+        (Some(std::path::Component::Normal(_)), None) => Ok(name),
+        _ => Err("That isn't a file name.".into()),
+    }
 }
 
 /// Whether the Codec control does anything for `to`.

@@ -866,6 +866,98 @@ fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) 
     assert!(!shown(cx, window, "convert"), "the picker should be gone");
 }
 
+#[test]
+fn a_typed_output_name_stays_one_file_in_the_folder() {
+    use super::quick::output_name;
+    for (typed, wanted) in [
+        ("renamed.webp", "renamed.webp"),
+        ("  renamed.webp  ", "renamed.webp"),
+        ("renamed.WEBP", "renamed.WEBP"),
+        // A missing or different extension gets the target's.
+        ("renamed", "renamed.webp"),
+        ("renamed.png", "renamed.png.webp"),
+        ("my holiday", "my holiday.webp"),
+        ("..hidden", "..hidden.webp"),
+    ] {
+        assert_eq!(output_name(typed, "webp").as_deref(), Ok(wanted), "{typed}");
+    }
+    for typed in [
+        "",
+        "   ",
+        ".",
+        "..",
+        "...",
+        "/tmp/x.webp",
+        "../x.webp",
+        "sub/x.webp",
+        "..\\x.webp",
+        "C:\\x.webp",
+        "x\0.webp",
+        "x\n.webp",
+    ] {
+        assert!(
+            output_name(typed, "webp").is_err(),
+            "{typed:?} was accepted"
+        );
+    }
+    assert_eq!(
+        output_name("/tmp/x.webp", "webp").unwrap_err(),
+        "Use a file name, not a folder path."
+    );
+    assert_eq!(
+        output_name("", "webp").unwrap_err(),
+        "Type a name for the file."
+    );
+    if cfg!(windows) {
+        assert!(output_name("C:x.webp", "webp").is_err());
+        assert!(output_name("a:b.webp", "webp").is_err());
+    }
+}
+
+#[gpui_kit::test]
+fn quick_convert_refuses_a_file_name_that_leaves_the_folder(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+    let (window, view) = f.quick(cli(vec![png], None, None), cx);
+    click(cx, window, "to-webp");
+    let outside = tempfile::tempdir().unwrap();
+    let escape = outside.path().join("x.webp");
+    let input = cx.read(|cx| view.read(cx).file_name.clone());
+    click(cx, window, "file-name-edit");
+    for typed in [
+        escape.to_string_lossy().to_string(),
+        "../x.webp".to_string(),
+        "sub/x.webp".to_string(),
+        "..".to_string(),
+        " ".to_string(),
+    ] {
+        set_input(cx, window, &input, &typed);
+        click(cx, window, "convert");
+        assert!(
+            shown(cx, window, "file-name-error"),
+            "{typed:?} wasn't refused"
+        );
+        assert_eq!(f.jobs(cx), 0, "{typed:?} started a conversion");
+        cx.read(|cx| assert!(view.read(cx).editing_name));
+    }
+    assert!(!escape.exists());
+    assert!(!f.dir.path().parent().unwrap().join("x.webp").exists());
+    assert_eq!(
+        label(cx, window, "file-name-error").as_deref(),
+        Some("Type a name for the file.")
+    );
+
+    // A name without its extension gets it, and the error goes.
+    set_input(cx, window, &input, "renamed");
+    click(cx, window, "convert");
+    assert!(!shown(cx, window, "file-name-error"));
+    let job = f.last_job(cx);
+    wait_for_label(cx, window, &format!("status-{job}"), |s| {
+        s.starts_with("Saved")
+    });
+    assert!(is_webp(&f.dir.path().join("renamed.webp")));
+}
+
 #[gpui_kit::test]
 fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
