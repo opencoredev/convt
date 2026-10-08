@@ -42,6 +42,9 @@ pub struct Settings {
     pub defaults: Defaults,
     /// Automation rules. Each enabled rule watches one folder.
     pub automations: Vec<Automation>,
+    /// The user agreed that Cloud conversions upload the file to convt's
+    /// servers. Asked once, the first time they pick Cloud.
+    pub cloud_consent: bool,
 }
 
 impl Default for Settings {
@@ -59,6 +62,7 @@ impl Default for Settings {
             update_sequence: 0,
             defaults: Defaults::default(),
             automations: crate::placeholder::example_automations(),
+            cloud_consent: false,
         }
     }
 }

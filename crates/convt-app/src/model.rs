@@ -387,6 +387,27 @@ impl AppState {
         self.convert_to(files, to, options, output, cx)
     }
 
+    /// Whether Cloud conversions can run now, and if not, why.
+    #[allow(dead_code)]
+    pub fn cloud_access(&self) -> crate::cloud::CloudAccess {
+        crate::cloud::CloudAccess::Unavailable("Cloud conversion isn't in this build yet.".into())
+    }
+
+    /// Like [`Self::convert_to`], but runs on convt's cloud. The caller has
+    /// checked [`Self::cloud_access`] and the user's consent.
+    #[allow(dead_code)]
+    pub fn convert_in_cloud(
+        &mut self,
+        files: &[PathBuf],
+        to: &'static Format,
+        options: &Options,
+        output: Output,
+        cx: &mut Context<Self>,
+    ) -> Result<Vec<JobId>, String> {
+        let _ = (files, to, options, output, cx);
+        Err("Cloud conversion isn't in this build yet.".into())
+    }
+
     /// [`Self::convert`] with an output other than the one in Settings.
     pub fn convert_to(
         &mut self,

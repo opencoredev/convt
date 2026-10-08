@@ -10,6 +10,9 @@ mod account;
 mod automation;
 mod clipboard;
 mod clock;
+// Quick convert's Cloud choice uses this; remove the allow once it does.
+#[allow(dead_code)]
+mod cloud;
 mod finder;
 mod history;
 mod instance;
