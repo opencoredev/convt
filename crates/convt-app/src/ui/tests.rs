@@ -131,11 +131,18 @@ impl Api for TestApi {
         *self.traded.lock().unwrap() = Some((code.into(), verifier.into()));
         self.exchange.lock().unwrap().clone()
     }
-    fn current_key(&self, token: &str, version: &str) -> Result<convt_license::account::LicenseReply, ApiError> {
+    fn current_key(
+        &self,
+        token: &str,
+        version: &str,
+    ) -> Result<convt_license::account::LicenseReply, ApiError> {
         assert_eq!(version, crate::account::VERSION);
         assert!(!token.is_empty());
         self.renewals.fetch_add(1, Ordering::SeqCst);
-        Ok(convt_license::account::LicenseReply { key: self.key.lock().unwrap().clone(), access: None })
+        Ok(convt_license::account::LicenseReply {
+            key: self.key.lock().unwrap().clone()?,
+            access: None,
+        })
     }
     fn sign_out(&self, _: &str) -> Result<(), ApiError> {
         self.sign_outs.fetch_add(1, Ordering::SeqCst);

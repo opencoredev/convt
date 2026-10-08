@@ -336,7 +336,12 @@ impl Api for Http {
             Some(serde_json::Value::Null) => Ok(None),
             _ => Err(ApiError::BadResponse),
         }?;
-        let access = json.get("access").cloned().map(serde_json::from_value).transpose().map_err(|_| ApiError::BadResponse)?;
+        let access = json
+            .get("access")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| ApiError::BadResponse)?;
         Ok(LicenseReply { key, access })
     }
 
@@ -484,7 +489,13 @@ mod tests {
         assert!(request.contains("authorization: bearer cvd_x"));
 
         let (base, _) = serve_once(200, r#"{"key":null}"#);
-        assert_eq!(Http::new(&base).current_key("t", "v"), Ok(LicenseReply { key: None, access: None }));
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                access: None
+            })
+        );
         let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
