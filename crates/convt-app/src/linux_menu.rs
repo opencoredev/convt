@@ -115,6 +115,8 @@ fn thunar_user_actions() -> bool {
     thunar_actions_in(&user_config().join("Thunar/uca.xml"))
 }
 
+const MENU_MARKER: &str = "convt-generated: linux-integration";
+
 fn thunar_actions_in(uca: &Path) -> bool {
     if uca.is_symlink() || !uca.is_file() {
         return false;
@@ -122,9 +124,50 @@ fn thunar_actions_in(uca: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(uca) else {
         return false;
     };
-    // A user action named convt-custom is not ours. Only the installer marker
-    // counts, including unmarked files we later recognize by regenerating.
-    text.contains("convt-generated: linux-integration")
+    thunar_has_owned_action(&text)
+}
+
+fn thunar_has_owned_action(text: &str) -> bool {
+    if text.contains(MENU_MARKER) {
+        return true;
+    }
+    // Unmarked older actions: unique-id convt-webp / convt-more-options and a
+    // convt-app command. A leftover convt-custom with `echo keep` is not ours.
+    for chunk in text.split("<unique-id>") {
+        let Some(end) = chunk.find("</unique-id>") else {
+            continue;
+        };
+        if !legacy_thunar_id(&chunk[..end]) {
+            continue;
+        }
+        if let Some(command) = thunar_command_near(&chunk[end..])
+            && looks_like_convt_open(&command)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn legacy_thunar_id(id: &str) -> bool {
+    let Some(rest) = id.strip_prefix("convt-") else {
+        return false;
+    };
+    rest == "more-options"
+        || (!rest.is_empty()
+            && rest
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()))
+}
+
+fn thunar_command_near(after_id: &str) -> Option<String> {
+    let start = after_id.find("<command>")? + "<command>".len();
+    let end = after_id[start..].find("</command>")?;
+    Some(after_id[start..start + end].replace("%%", "%"))
+}
+
+fn looks_like_convt_open(command: &str) -> bool {
+    (command.contains("convt-app") || command.contains(".AppImage")) && command.contains(" open ")
 }
 
 fn owned_menu_file(path: &Path) -> bool {
@@ -135,9 +178,32 @@ fn owned_menu_file(path: &Path) -> bool {
     {
         return false;
     }
-    std::fs::read_to_string(path)
-        .map(|text| text.contains("convt-generated: linux-integration"))
-        .unwrap_or(false)
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    looks_like_owned_menu(name, &text)
+}
+
+/// Marked files, or unmarked templates from older install.py runs. A leftover
+/// `convt-personal` file with a custom Name= is not ours.
+fn looks_like_owned_menu(name: &str, text: &str) -> bool {
+    if text.contains(MENU_MARKER) {
+        return true;
+    }
+    if name.ends_with(".desktop") {
+        return text.contains("X-KDE-Submenu=Convert with convt") && looks_like_convt_open(text);
+    }
+    if name.ends_with(".nemo_action") {
+        let convert = text.contains("Name=Convert to ") || text.contains("Name=More options");
+        let comment = text.contains("Comment=Convert with convt")
+            || text.contains("Comment=Open Quick convert");
+        return text.contains("[Nemo Action]") && convert && comment;
+    }
+    if name == "convt_nautilus.py" {
+        return text.contains("class ConvtMenu") && text.contains("Convert with convt");
+    }
+    text.starts_with("#!/bin/sh\n") && text.contains("exec ") && looks_like_convt_open(text)
 }
 
 fn dir_has_owned(dir: &Path, prefix: &str) -> bool {
@@ -259,10 +325,39 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join("nemo/actions")).unwrap();
-        std::fs::write(root.join("nemo/actions/convt-personal.nemo_action"), "mine").unwrap();
+        std::fs::write(
+            root.join("nemo/actions/convt-personal.nemo_action"),
+            "[Nemo Action]\nName=Mine\nIcon-Name=convt\nExec=echo keep\n",
+        )
+        .unwrap();
         std::fs::create_dir_all(root.join("kio/servicemenus")).unwrap();
         std::fs::write(root.join("kio/servicemenus/convt-0.desktop"), "mine").unwrap();
         assert!(kinds_in(root, true).is_empty());
+    }
+
+    #[test]
+    fn probe_reads_unmarked_legacy_templates() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("kio/servicemenus")).unwrap();
+        std::fs::write(
+            root.join("kio/servicemenus/convt-0.desktop"),
+            "[Desktop Entry]\nX-KDE-Submenu=Convert with convt\nExec=/usr/bin/convt-app open --to webp -- %F\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("nemo/actions")).unwrap();
+        std::fs::write(
+            root.join("nemo/actions/convt-webp.nemo_action"),
+            "[Nemo Action]\nName=Convert to WEBP\nComment=Convert with convt\nExec=/usr/bin/convt-app open --to webp -- %F\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("nautilus/scripts/Convert with convt")).unwrap();
+        std::fs::write(
+            root.join("nautilus/scripts/Convert with convt/WEBP"),
+            "#!/bin/sh\nexec /usr/bin/convt-app open --to webp -- \"$@\"\n",
+        )
+        .unwrap();
+        assert_eq!(kinds_in(root, true), ["Dolphin", "Nemo", "GNOME Files"]);
     }
 
     #[test]
@@ -283,5 +378,12 @@ mod tests {
         )
         .unwrap();
         assert!(!thunar_actions_in(&uca));
+        std::fs::write(
+            &uca,
+            "<action><unique-id>convt-webp</unique-id>\
+             <command>/usr/bin/convt-app open --to webp -- %F</command></action>",
+        )
+        .unwrap();
+        assert!(thunar_actions_in(&uca));
     }
 }
