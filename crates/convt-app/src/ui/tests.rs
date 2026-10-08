@@ -1648,17 +1648,41 @@ fn closing_first_run_before_the_end_shows_it_again(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn onboarding_opens_at_three_quarters_of_the_display(cx: &mut TestAppContext) {
     let _f = Fixture::licensed(cx, None, None);
-    let wanted = cx.update(|cx| super::first_run_size(cx));
-    assert!(wanted.width >= px(super::FIRST_RUN_SIZE.0));
-    assert!(wanted.height >= px(super::FIRST_RUN_SIZE.1));
-    let display = cx.update(|cx| cx.primary_display().map(|d| d.bounds().size));
-    if let Some(display) = display {
-        assert_eq!(
-            wanted.width,
-            (display.width * 0.75)
-                .max(px(super::FIRST_RUN_SIZE.0))
-                .round()
-        );
+    let (display, wanted) = cx.update(|cx| super::first_run_bounds(cx));
+    let visible = cx.update(|cx| cx.primary_display().map(|d| d.visible_bounds().size));
+    if let Some(visible) = visible {
+        assert!(display.is_some());
+        assert_eq!(wanted, super::first_run_fit(visible));
+    }
+}
+
+#[test]
+fn onboarding_fits_small_normal_and_large_displays() {
+    use super::first_run_fit;
+    let fit = |w: f32, h: f32| {
+        let s = first_run_fit(size(px(w), px(h)));
+        (f32::from(s.width), f32::from(s.height))
+    };
+    // A normal laptop or desktop: three quarters.
+    assert_eq!(fit(1440., 900.), (1080., 675.));
+    assert_eq!(fit(1920., 1080.), (1440., 810.));
+    // 4K at 1x: three quarters, however large.
+    assert_eq!(fit(3840., 2160.), (2880., 1620.));
+    // Where three quarters is too small, the least size, while it fits.
+    assert_eq!(fit(1024., 768.), (900., 640.));
+    assert_eq!(fit(1180., 800.), (900., 640.));
+    // Smaller than that: 95%, never past the edges.
+    assert_eq!(fit(800., 600.), (760., 570.));
+    assert_eq!(fit(640., 480.), (608., 456.));
+    for (w, h) in [
+        (640., 480.),
+        (800., 600.),
+        (1024., 768.),
+        (1280., 720.),
+        (3840., 2160.),
+    ] {
+        let (fw, fh) = fit(w, h);
+        assert!(fw <= w * 0.95 + 0.5 && fh <= h * 0.95 + 0.5, "{w}x{h}");
     }
 }
 

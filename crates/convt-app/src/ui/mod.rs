@@ -198,6 +198,17 @@ fn show<V: Render>(
     cx: &mut App,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> Option<(AnyWindowHandle, Entity<V>)> {
+    show_on(None, size, title, cx, build)
+}
+
+/// [`show`], centered on `display` (the primary display for `None`).
+fn show_on<V: Render>(
+    display: Option<DisplayId>,
+    size: Size<Pixels>,
+    title: &str,
+    cx: &mut App,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Option<(AnyWindowHandle, Entity<V>)> {
     if let Some((handle, view)) = Open::<V>::get(cx)
         && handle
             .update(cx, |_, window, _| window.activate_window())
@@ -205,7 +216,7 @@ fn show<V: Render>(
     {
         return Some((handle, view));
     }
-    let opened = open_window(window_options(size, title, cx), cx, build);
+    let opened = open_window(window_options_on(display, size, title, cx), cx, build);
     cx.activate(true);
     match opened {
         Ok((handle, view)) => {
@@ -342,25 +353,46 @@ pub(super) fn quick_height() -> Pixels {
         })
 }
 
-/// The smallest onboarding window; it opens at three quarters of the
-/// primary display, centered.
+/// The size onboarding would like at least; it opens at three quarters of
+/// the display, centered.
 pub(super) const FIRST_RUN_SIZE: (f32, f32) = (900., 640.);
 
-/// Three quarters of the primary display, no smaller than [`FIRST_RUN_SIZE`].
-pub(super) fn first_run_size(cx: &App) -> Size<Pixels> {
-    let display = cx
-        .primary_display()
-        .map(|d| d.bounds().size)
-        .unwrap_or(size(px(FIRST_RUN_SIZE.0), px(FIRST_RUN_SIZE.1)));
+/// The display onboarding opens on: the one with the window in front (the
+/// user is looking there), else the primary one. GPUI can't tell where the
+/// pointer is before a window exists.
+fn first_run_display(cx: &mut App) -> Option<std::rc::Rc<dyn PlatformDisplay>> {
+    cx.active_window()
+        .and_then(|w| w.update(cx, |_, window, cx| window.display(cx)).ok())
+        .flatten()
+        .or_else(|| cx.primary_display())
+}
+
+/// Onboarding's size on a display whose usable area is `visible`: three
+/// quarters of it, at least [`FIRST_RUN_SIZE`] where that fits, and never
+/// more than 95% of it, so a small screen still shows the whole window.
+pub(super) fn first_run_fit(visible: Size<Pixels>) -> Size<Pixels> {
+    let side = |room: Pixels, least: f32| (room * 0.75).max(px(least)).min(room * 0.95).round();
     size(
-        (display.width * 0.75).max(px(FIRST_RUN_SIZE.0)).round(),
-        (display.height * 0.75).max(px(FIRST_RUN_SIZE.1)).round(),
+        side(visible.width, FIRST_RUN_SIZE.0),
+        side(visible.height, FIRST_RUN_SIZE.1),
     )
+}
+
+/// Where onboarding opens and how big.
+pub(super) fn first_run_bounds(cx: &mut App) -> (Option<DisplayId>, Size<Pixels>) {
+    match first_run_display(cx) {
+        Some(display) => (
+            Some(display.id()),
+            first_run_fit(display.visible_bounds().size),
+        ),
+        None => (None, size(px(FIRST_RUN_SIZE.0), px(FIRST_RUN_SIZE.1))),
+    }
 }
 
 fn open_first_run(cx: &mut App) {
     let app = model::shared(cx);
-    show(first_run_size(cx), "Welcome to convt", cx, |window, cx| {
+    let (display, size) = first_run_bounds(cx);
+    show_on(display, size, "Welcome to convt", cx, |window, cx| {
         cx.new(|cx| FirstRunView::new(app, first_run::Screen::Account, window, cx))
     });
 }
@@ -414,8 +446,18 @@ pub fn open_popover(cx: &mut App) -> Option<(AnyWindowHandle, Entity<PopoverView
 }
 
 fn window_options(size: Size<Pixels>, title: &str, cx: &App) -> WindowOptions {
+    window_options_on(None, size, title, cx)
+}
+
+fn window_options_on(
+    display: Option<DisplayId>,
+    size: Size<Pixels>,
+    title: &str,
+    cx: &App,
+) -> WindowOptions {
     WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size, cx))),
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(display, size, cx))),
+        display_id: display,
         titlebar: Some(TitlebarOptions {
             title: Some(SharedString::from(title.to_string())),
             appears_transparent: theme::transparent_titlebar(),
