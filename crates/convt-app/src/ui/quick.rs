@@ -408,7 +408,7 @@ impl QuickView {
 
     /// Asks, the first time Cloud is picked, whether the files may be
     /// uploaded.
-    fn consent(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
+    fn consent(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.jobs.is_empty() || !self.in_cloud(cx) || self.app.read(cx).settings.cloud_consent {
             return None;
         }
@@ -417,56 +417,54 @@ impl QuickView {
         } else {
             "these files"
         };
+        let them = if self.files.len() == 1 { "it" } else { "them" };
+        // A strip on the footer, so the question sits next to the choice
+        // that asked it.
         Some(
-            div().flex_shrink_0().px(px(GUTTER)).pb(px(space::LG)).child(
-                div()
-                    .id("cloud-consent")
-                    .test_support()
-                    .aria_label("Upload to convt's cloud?")
-                    .child(theme::callout(
-                        IconName::Info,
-                        Tone::Neutral,
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(space::LG))
-                            .child(
-                                theme::callout_words(
-                                    "Upload to convt's cloud?",
-                                    format!(
-                                        "Cloud uploads {what} to convt's servers to convert, then deletes {}.",
-                                        if self.files.len() == 1 { "it" } else { "them" }
-                                    ),
-                                    p,
-                                )
-                                .flex_1()
-                                .min_w_0(),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_shrink_0()
-                                    .gap(px(space::SM))
-                                    .child(
-                                        Button::secondary("cloud-consent-cancel", "Cancel")
-                                            .small()
-                                            .build(p)
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.set_cloud(false, cx)
-                                            })),
-                                    )
-                                    .child(
-                                        Button::primary("cloud-consent-agree", "Agree")
-                                            .small()
-                                            .build(p)
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.agree_to_cloud(cx)
-                                            })),
-                                    ),
-                            ),
+            div()
+                .id("cloud-consent")
+                .test_support()
+                .aria_label("Upload to convt's cloud?")
+                .flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(space::LG))
+                .px(px(GUTTER))
+                .pt(px(14.))
+                .pb(px(2.))
+                .bg(p.chrome)
+                .border_t_1()
+                .border_color(p.chrome_border)
+                .child(
+                    theme::callout_words(
+                        "Upload to convt's cloud?",
+                        format!(
+                            "Cloud uploads {what} to convt's servers to convert, then deletes {them}."
+                        ),
                         p,
-                    )),
-            ),
+                    )
+                    .flex_1()
+                    .min_w_0(),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .gap(px(space::SM))
+                        .child(
+                            Button::secondary("cloud-consent-cancel", "Not now")
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(|this, _, _, cx| this.set_cloud(false, cx))),
+                        )
+                        .child(
+                            Button::primary("cloud-consent-agree", "Agree")
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(|this, _, _, cx| this.agree_to_cloud(cx))),
+                        ),
+                )
+                .into_any_element(),
         )
     }
 
@@ -1082,7 +1080,7 @@ impl QuickView {
             .child(theme::group(rows.collect::<Vec<_>>(), p))
     }
 
-    fn footer(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+    fn footer(&self, asking: bool, p: &Palette, cx: &mut Context<Self>) -> Div {
         let bar = div()
             .flex()
             .flex_shrink_0()
@@ -1091,8 +1089,7 @@ impl QuickView {
             .px(px(GUTTER))
             .h(px(60.))
             .bg(p.chrome)
-            .border_t_1()
-            .border_color(p.chrome_border);
+            .when(!asking, |d| d.border_t_1().border_color(p.chrome_border));
         if !self.jobs.is_empty() {
             let outputs = self.outputs();
             let first = outputs.first().cloned();
@@ -1443,6 +1440,8 @@ impl Render for QuickView {
         } else {
             vec![self.progress_section(&p).into_any_element()]
         };
+        let consent = self.consent(&p, cx);
+        let asking = consent.is_some();
         div()
             .id("quick")
             .flex()
@@ -1470,7 +1469,7 @@ impl Render for QuickView {
                     .overflow_y_scroll()
                     .children(body),
             )
-            .children(self.consent(&p, cx))
-            .child(self.footer(&p, cx))
+            .children(consent)
+            .child(self.footer(asking, &p, cx))
     }
 }
