@@ -536,7 +536,7 @@ impl SettingsView {
                 };
                 let edit_name = name.clone();
                 let edit = valid.then(|| {
-                    Button::ghost(SharedString::from(format!("edit-preset-{name}")), "Edit")
+                    Button::secondary(SharedString::from(format!("edit-preset-{name}")), "Edit")
                         .small()
                         .build(p)
                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -548,7 +548,7 @@ impl SettingsView {
                 theme::row(
                     name.clone(),
                     Some(mono(11., 15., color).child(about).into_any_element()),
-                    div().flex().gap(px(2.)).children(edit).child(
+                    div().flex().gap(px(space::SM)).children(edit).child(
                         Button::ghost(
                             SharedString::from(format!("delete-preset-{name}")),
                             "Delete",
@@ -575,17 +575,17 @@ impl SettingsView {
                 .aria_selected(on)
                 .flex()
                 .items_center()
-                .h(px(24.))
-                .px(px(9.))
-                .rounded(px(radius::CONTROL))
+                .h(px(26.))
+                .px(px(11.))
+                .rounded_full()
                 .map(|d| {
                     if on {
                         d.bg(p.green_tint)
-                            .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                            .shadow(vec![theme::inset_ring(p.green, 1.5)])
                     } else {
                         d.bg(p.surface)
                             .shadow(vec![theme::inset_ring(p.border, 1.)])
-                            .hover(|s| s.bg(p.hover))
+                            .hover(|s| s.bg(p.recessed))
                     }
                 })
                 .on_click(move |_, _, cx| {
@@ -801,11 +801,16 @@ impl SettingsView {
             ),
         };
         let status = theme::card(p)
+            .relative()
+            .overflow_hidden()
             .flex_row()
             .items_center()
             .gap(px(14.))
-            .p(px(space::LG))
-            .child(theme::icon_tile(glyph, tone, 36., p))
+            .px(px(20.))
+            .py(px(22.))
+            .rounded(px(radius::PANEL))
+            .when(allowed, |d| d.child(theme::glow(0.3, p)))
+            .child(theme::icon_tile(glyph, tone, 40., p))
             .child(
                 div()
                     .flex()
@@ -1095,40 +1100,33 @@ impl Render for SettingsView {
             .bg(p.chrome)
             .border_b_1()
             .border_color(p.chrome_border)
-            .child(
-                div()
-                    .flex()
-                    .gap(px(2.))
-                    .p(px(2.))
-                    .rounded(px(radius::CONTROL + 2.))
-                    .bg(if p.dark { p.recessed } else { p.track })
-                    .children(TABS.into_iter().map(|(tab, id, label, glyph)| {
-                        let on = self.tab == tab;
-                        theme::clickable(id, label)
-                            .aria_selected(on)
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .h(px(26.))
-                            .px(px(14.))
-                            .rounded(px(radius::CONTROL))
-                            .map(|d| {
-                                if on {
-                                    d.bg(if p.dark { p.selected } else { p.surface })
-                                        .shadow(vec![theme::shadow(p.shadow_soft, 1., 2.)])
-                                } else {
-                                    d.hover(|s| s.bg(p.hover))
-                                }
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
-                            .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
-                            .child(
-                                styled(size::SMALL, if on { p.text } else { p.secondary })
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(label),
-                            )
-                    })),
-            );
+            .child(theme::pill_track(&p).children(TABS.into_iter().map(
+                |(tab, id, label, glyph)| {
+                    let on = self.tab == tab;
+                    theme::clickable(id, label)
+                        .aria_selected(on)
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .h(px(28.))
+                        .px(px(16.))
+                        .rounded_full()
+                        .map(|d| {
+                            if on {
+                                theme::pill_segment_on(d, &p)
+                            } else {
+                                d.hover(|s| s.bg(p.hover))
+                            }
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
+                        .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
+                        .child(
+                            styled(size::SMALL, if on { p.text } else { p.secondary })
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(label),
+                        )
+                },
+            )));
         let body = match self.tab {
             SettingsTab::General => self.general(&p, cx),
             SettingsTab::Presets => self.presets(&p, cx),

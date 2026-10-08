@@ -73,10 +73,13 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
             .flex_col()
             .gap(px(space::SM))
             .p(px(space::MD))
-            .rounded(px(radius::CARD))
+            .rounded(px(radius::PANEL))
             .bg(p.surface)
-            .border_1()
-            .border_color(p.border)
+            .shadow({
+                let mut s = vec![theme::inset_ring(p.border, 1.)];
+                s.extend(theme::soft(p));
+                s
+            })
             .child(
                 div()
                     .flex()

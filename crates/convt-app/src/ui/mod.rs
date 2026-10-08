@@ -560,11 +560,15 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
     };
     // The License tab has the sign-in button and follows the flow.
     let sign_in = matches!(state, State::SignInNeeded).then(|| {
-        theme::text_button("sign-in-banner", "Sign in", p.green_text, 12.)
+        theme::Button::primary("sign-in-banner", "Sign in")
+            .small()
+            .build(p)
             .on_click(|_, _, cx| show_license(None, cx))
     });
     let download = matches!(state, State::NotCovered(_)).then(|| {
-        theme::text_button("download", "Download a covered build", p.green_text, 12.)
+        theme::Button::secondary("download", "Download a covered build")
+            .small()
+            .build(p)
             .on_click(|_, _, cx| cx.open_url(DOWNLOAD_URL))
     });
     Some(theme::callout(
@@ -589,15 +593,20 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(16.))
+                    .flex_wrap()
+                    .gap(px(8.))
                     .children(sign_in)
                     .child(
-                        theme::text_button("buy", buy, p.green_text, 12.)
+                        theme::Button::brand("buy", buy)
+                            .small()
+                            .build(p)
                             .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                     )
                     .children(download)
                     .child(
-                        theme::text_button("enter-license", "Enter license", p.text, 12.)
+                        theme::Button::secondary("enter-license", "Enter license")
+                            .small()
+                            .build(p)
                             .on_click(|_, _, cx| show_license(None, cx)),
                     ),
             ),

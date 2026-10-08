@@ -35,7 +35,6 @@ fn download_button(app: &Entity<AppState>, label: String, p: &Palette) -> theme:
     let app = app.clone();
     Button::primary("pack-download", label)
         .icon(IconName::Download)
-        .small()
         .build(p)
         .on_click(move |_, _, cx| start_install(&app, cx))
 }
@@ -258,11 +257,14 @@ pub(super) fn card(
         .aria_label(SharedString::from(words.title.clone()))
         .flex()
         .gap(px(14.))
-        .p(px(space::LG))
-        .rounded(px(radius::CARD))
+        .p(px(18.))
+        .rounded(px(radius::PANEL))
         .bg(p.surface)
-        .border_1()
-        .border_color(p.border)
+        .shadow({
+            let mut s = vec![theme::inset_ring(p.border, 1.)];
+            s.extend(theme::soft(p));
+            s
+        })
         .child(page_icon(p))
         .child(
             div()

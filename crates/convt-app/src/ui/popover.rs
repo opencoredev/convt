@@ -232,7 +232,7 @@ impl PopoverView {
                             .child("Automations"),
                     )
                     .child(
-                        Button::ghost("manage-rules", "Manage")
+                        Button::secondary("manage-rules", "Manage")
                             .color(p.green_text)
                             .small()
                             .build(p)
@@ -403,9 +403,9 @@ impl Render for PopoverView {
             .items_center()
             .justify_center()
             .gap(px(space::SM))
-            .h(px(52.))
-            .rounded(px(theme::radius::CARD))
-            .bg(p.recessed)
+            .h(px(56.))
+            .rounded(px(theme::radius::PANEL))
+            .bg(p.surface.opacity(0.85))
             .border_1()
             .border_dashed()
             .border_color(p.control_border)
@@ -426,23 +426,16 @@ impl Render for PopoverView {
             .font_family(theme::SANS)
             .text_color(p.text)
             .child(
+                // The header and the drop bar over a faint glow.
                 div()
+                    .relative()
+                    .overflow_hidden()
                     .flex()
-                    .items_center()
-                    .justify_between()
-                    // The traffic lights sit at the left of a transparent title bar.
-                    .pl(px(if theme::transparent_titlebar() {
-                        84.
-                    } else {
-                        16.
-                    }))
-                    .pr(px(16.))
-                    .pt(px(14.))
-                    .pb(px(10.))
-                    .child(theme::lockup(13., &p))
-                    .children(progress.map(|line| theme::badge(line, theme::Tone::Green, &p))),
+                    .flex_col()
+                    .child(theme::glow(0.35, &p))
+                    .child(self.header(progress, &p))
+                    .child(div().flex().px(px(12.)).pb(px(12.)).child(drop_bar)),
             )
-            .child(div().flex().px(px(12.)).pb(px(10.)).child(drop_bar))
             .children(
                 self.error
                     .clone()
@@ -452,41 +445,63 @@ impl Render for PopoverView {
             .children(self.dropped(&p))
             .child(self.automations(&p, cx))
             .child(div().flex_1())
+            .child(self.footer(license, &p))
+    }
+}
+
+impl PopoverView {
+    fn header(&self, progress: Option<String>, p: &Palette) -> Div {
+        let p = *p;
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            // The traffic lights sit at the left of a transparent title bar.
+            .pl(px(if theme::transparent_titlebar() {
+                84.
+            } else {
+                16.
+            }))
+            .pr(px(16.))
+            .pt(px(14.))
+            .pb(px(10.))
+            .child(theme::lockup(13., &p))
+            .children(progress.map(|line| theme::badge(line, theme::Tone::Green, &p)))
+    }
+
+    fn footer(&self, license: Option<String>, p: &Palette) -> Div {
+        let p = *p;
+        div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .justify_between()
+            .px(px(12.))
+            .py(px(8.))
+            .bg(p.chrome)
+            .border_t_1()
+            .border_color(p.chrome_border)
+            .child(
+                styled(size::SMALL, p.secondary)
+                    .pl(px(4.))
+                    .child(license.unwrap_or_default()),
+            )
             .child(
                 div()
                     .flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .justify_between()
-                    .px(px(12.))
-                    .py(px(8.))
-                    .bg(p.chrome)
-                    .border_t_1()
-                    .border_color(p.chrome_border)
+                    .gap(px(space::XS))
                     .child(
-                        styled(size::SMALL, p.secondary)
-                            .pl(px(4.))
-                            .child(license.unwrap_or_default()),
+                        Button::secondary("open-settings", "Settings")
+                            .icon(IconName::Settings)
+                            .small()
+                            .build(&p)
+                            .on_click(|_, _, cx| super::show_settings(SettingsTab::General, cx)),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .gap(px(space::XS))
-                            .child(
-                                Button::ghost("open-convt", "Open convt")
-                                    .small()
-                                    .build(&p)
-                                    .on_click(|_, _, cx| show_page(Page::Activity, cx)),
-                            )
-                            .child(
-                                Button::ghost("open-settings", "Settings")
-                                    .icon(IconName::Settings)
-                                    .small()
-                                    .build(&p)
-                                    .on_click(|_, _, cx| {
-                                        super::show_settings(SettingsTab::General, cx)
-                                    }),
-                            ),
+                        Button::primary("open-convt", "Open convt")
+                            .small()
+                            .build(&p)
+                            .on_click(|_, _, cx| show_page(Page::Activity, cx)),
                     ),
             )
     }

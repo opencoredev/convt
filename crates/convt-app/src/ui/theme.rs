@@ -984,6 +984,31 @@ pub fn segmented(
     p: &Palette,
     on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
 ) -> Div {
+    pill_track(p).children(choices.iter().map(|(key, label)| {
+        let key = *key;
+        let on = key == selected;
+        let on_pick = on_pick.clone();
+        clickable(SharedString::from(format!("{id}-{key}")), label.clone())
+            .aria_selected(on)
+            .flex()
+            .items_center()
+            .h(px(24.))
+            .px(px(12.))
+            .rounded_full()
+            .when(on, |d| pill_segment_on(d, p))
+            .when(!on, |d| d.hover(|s| s.bg(p.hover)))
+            .on_click(move |_, window, cx| on_pick(key, window, cx))
+            .child(
+                text(12., 16., if on { p.text } else { p.secondary })
+                    .font_weight(FontWeight::MEDIUM)
+                    .whitespace_nowrap()
+                    .child(label.clone()),
+            )
+    }))
+}
+
+/// The soft gray pill that holds a segmented control or tabs.
+pub fn pill_track(p: &Palette) -> Div {
     div()
         .flex()
         .flex_shrink_0()
@@ -991,34 +1016,16 @@ pub fn segmented(
         .gap(px(2.))
         .rounded_full()
         .bg(if p.dark { p.recessed } else { c(SOFT_FILL.0) })
-        .when(p.dark, |d| d.shadow(vec![inset_ring(p.border, 1.)]))
-        .children(choices.iter().map(|(key, label)| {
-            let key = *key;
-            let on = key == selected;
-            let on_pick = on_pick.clone();
-            clickable(SharedString::from(format!("{id}-{key}")), label.clone())
-                .aria_selected(on)
-                .flex()
-                .items_center()
-                .h(px(24.))
-                .px(px(12.))
-                .rounded_full()
-                .when(on, |d| {
-                    d.bg(if p.dark { p.selected } else { p.surface }).shadow({
-                        let mut s = raise(p);
-                        s.push(shadow(p.shadow_soft, 1., 3.));
-                        s
-                    })
-                })
-                .when(!on, |d| d.hover(|s| s.bg(p.hover)))
-                .on_click(move |_, window, cx| on_pick(key, window, cx))
-                .child(
-                    text(12., 16., if on { p.text } else { p.secondary })
-                        .font_weight(FontWeight::MEDIUM)
-                        .whitespace_nowrap()
-                        .child(label.clone()),
-                )
-        }))
+        .shadow(vec![inset_ring(p.border, 1.)])
+}
+
+/// The picked segment of a [`pill_track`]: a raised white pill.
+pub fn pill_segment_on(d: Clickable, p: &Palette) -> Clickable {
+    d.bg(if p.dark { p.selected } else { p.surface }).shadow({
+        let mut s = raise(p);
+        s.push(shadow(p.shadow_soft, 1., 3.));
+        s
+    })
 }
 
 /// Keeps a hover flag in step with the pointer.
