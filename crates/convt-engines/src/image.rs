@@ -6,7 +6,7 @@ use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, format_b
 use image::codecs::avif::AvifEncoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
-use image::{DynamicImage, ImageFormat, ImageReader};
+use image::{DynamicImage, ImageFormat};
 
 pub(crate) const INPUTS: &[&str] = &[
     "png", "jpeg", "webp", "gif", "tiff", "bmp", "ico", "tga", "ppm", "qoi", "exr",
@@ -20,7 +20,7 @@ const OUTPUTS: &[&str] = &[
 /// WIC) will take over HEIC and the heavy lifting with a higher priority.
 pub struct ImageEngine;
 
-fn failed(e: impl std::fmt::Display) -> Error {
+pub(crate) fn failed(e: impl std::fmt::Display) -> Error {
     Error::EngineFailed {
         engine: "image",
         message: e.to_string(),
@@ -37,10 +37,7 @@ impl Engine for ImageEngine {
     }
 
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
-        let img = ImageReader::open(input)?
-            .with_guessed_format()?
-            .decode()
-            .map_err(failed)?;
+        let img = crate::orientation::open_oriented(input)?;
         ctx.check()?;
         ctx.progress(0.5);
         let output = ctx.artifact(out_dir, 0);
@@ -91,7 +88,7 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
         .read_info()
         .map_err(failed)?;
     let source = reader.info();
-    let img = apply_background(image::open(path).map_err(failed)?, "png", options)?;
+    let img = apply_background(crate::orientation::open_oriented(path)?, "png", options)?;
     let mut info = png::Info::with_size(img.width(), img.height());
     info.pixel_dims = source.pixel_dims;
     info.source_gamma = source.gamma();
@@ -347,6 +344,47 @@ mod tests {
             flatten(opaque, [9, 9, 9]),
             DynamicImage::ImageRgb8(_)
         ));
+    }
+
+    #[test]
+    fn jpeg_exif_orientation_is_baked_into_pixels() {
+        use crate::orientation::{decoder_orientation, jpeg_with_orientation};
+        use image::metadata::Orientation;
+
+        let dir = tempfile::tempdir().unwrap();
+        let raw = dir.path().join("raw.jpeg");
+        image::RgbImage::from_fn(32, 24, |x, y| {
+            image::Rgb(if x < 16 {
+                if y < 12 { [240, 24, 24] } else { [24, 24, 240] }
+            } else if y < 12 {
+                [24, 224, 24]
+            } else {
+                [224, 224, 24]
+            })
+        })
+        .save(&raw)
+        .unwrap();
+        let jpeg = std::fs::read(&raw).unwrap();
+        let src = dir.path().join("oriented.jpeg");
+        std::fs::write(&src, jpeg_with_orientation(&jpeg, 6).unwrap()).unwrap();
+        let webp = run(&src, "webp", &Options::default());
+        assert_eq!((webp.width(), webp.height()), (24, 32));
+        let px = webp.to_rgb8();
+        assert!(
+            px.get_pixel(18, 8).0[0] > 200,
+            "red should be at top-right after 90° CW"
+        );
+        assert!(
+            px.get_pixel(6, 8).0[2] > 180,
+            "blue (was bottom-left) should be at top-left, got {:?}",
+            px.get_pixel(6, 8).0
+        );
+        let out = dir.path().join("check.webp");
+        webp.save(&out).unwrap();
+        assert_eq!(
+            decoder_orientation(&out).unwrap(),
+            Orientation::NoTransforms
+        );
     }
 
     #[test]

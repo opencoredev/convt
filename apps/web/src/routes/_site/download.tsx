@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 import { cx } from "#/components/app/ui";
-import { DownloadButton, Sha } from "#/components/site/download";
+import { DownloadButton, HomebrewInstall, Sha } from "#/components/site/download";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
 import {
   isOs,
@@ -125,6 +125,7 @@ function Recommended({ os }: { os: Os }) {
         </div>
         <DownloadButton artifact={slot?.artifact ?? null} large />
         {slot?.artifact && <Sha value={slot.artifact.sha256} />}
+        {os === "macos" && <HomebrewInstall />}
         <p className="text-[13px]/5 text-ink-2">
           Not your system?{" "}
           <TextLink href="#platforms" className="font-normal">
@@ -187,6 +188,7 @@ function PlatformCard({ os, current }: { os: Os; current: boolean }) {
           </li>
         ))}
       </ul>
+      {os === "macos" && <HomebrewInstall />}
     </section>
   );
 }
