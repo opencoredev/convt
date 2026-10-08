@@ -1,0 +1,12 @@
+#!/bin/sh
+# AppImage entry: the desktop app by default, the CLI when invoked as `convt`
+# or with `--cli` as the first argument.
+app_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+name=$(basename -- "${ARGV0:-$0}")
+if [ "$name" = "convt" ] || [ "${1-}" = "--cli" ]; then
+  if [ "${1-}" = "--cli" ]; then
+    shift
+  fi
+  exec "$app_dir/convt" "$@"
+fi
+exec "$app_dir/convt-app" "$@"

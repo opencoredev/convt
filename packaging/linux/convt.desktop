@@ -1,7 +1,10 @@
 [Desktop Entry]
 Name=convt
-Exec=convt-app open %F
+GenericName=File Converter
+Comment=Convert files on this computer
+Exec=convt-app %U
 Type=Application
 Icon=convt
 Terminal=false
 Categories=Utility;
+MimeType=x-scheme-handler/convt;image/jpeg;image/png;image/webp;image/heic;image/avif;image/gif;image/tiff;image/bmp;image/x-icon;image/x-tga;image/x-portable-anymap;image/qoi;image/x-exr;image/svg+xml;video/mp4;video/quicktime;video/webm;video/x-matroska;video/x-msvideo;audio/mpeg;audio/wav;audio/flac;audio/aac;audio/mp4;audio/ogg;audio/opus;application/pdf;application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/msword;application/vnd.oasis.opendocument.text;application/rtf;text/plain;text/html;application/vnd.openxmlformats-officedocument.presentationml.presentation;application/vnd.ms-powerpoint;application/vnd.oasis.opendocument.presentation;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;application/vnd.ms-excel;application/vnd.oasis.opendocument.spreadsheet;text/csv;

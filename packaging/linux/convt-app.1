@@ -6,8 +6,18 @@ convt-app \- desktop file converter
 .RI [ "--to format" ] " -- files"
 .SH DESCRIPTION
 Open selected files in Quick convert. Choose an available format, follow
-progress and cancel conversions. An X11 or Wayland desktop and working
-graphics drivers are required.
+progress and cancel conversions. An X11 or Wayland desktop and a working
+Vulkan driver are required. If the window cannot open, convt prints the
+error, writes
+.I window-error.log
+in its config directory, shows a zenity or kdialog dialog when one is
+available, and exits with status 1. On Linux it retries once with Mesa
+lavapipe when that ICD is installed.
 Use --help for all entry points, including convt:// URLs.
+.PP
+AppImage and tarball builds include the file-manager menu installer. Open
+Settings and choose
+.B Set up right-click menu
+to install per-user menus for GNOME Files, Dolphin, Nemo and Thunar.
 .SH SEE ALSO
 .BR convt (1)

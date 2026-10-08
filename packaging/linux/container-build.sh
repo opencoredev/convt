@@ -100,6 +100,9 @@ cp LICENSE "$stage/licenses/convt-AGPL.txt"
 # Tie the dependency notice map to this exact payload source snapshot.
 sha256sum Cargo.lock | cut -d" " -f1 > "$stage/licenses/cargo-lock.sha256"
 cp packaging/linux/{convt.desktop,convt.svg} "$stage/share/"
+mkdir -p "$stage/share/integrations/nautilus"
+cp integrations/linux/install.py "$stage/share/integrations/"
+cp integrations/linux/nautilus/convt_nautilus.py "$stage/share/integrations/nautilus/"
 # Preserve exact patched sources and recipes for the codecs we built.
 mkdir -p "$stage/licenses/codecs"
 for package in x265 libde265 aom libheif; do

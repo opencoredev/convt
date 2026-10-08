@@ -21,6 +21,7 @@ use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, T
 use crate::account::Account;
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
+use crate::linux_menu;
 use crate::pack::{self, Failure};
 use crate::request::Request;
 use crate::settings::{Kind, Settings, write_atomic};
@@ -226,6 +227,9 @@ pub struct AppState {
     pub registry_generation: u64,
     packs: Arc<dyn pack::Backend>,
     pub pack: PackState,
+    linux_menus: Arc<dyn linux_menu::Backend>,
+    pub linux_menu: linux_menu::Status,
+    _linux_menu_task: Option<Task<()>>,
     pack_cancel: Option<Arc<AtomicBool>>,
     _pack_task: Option<Task<()>>,
     runner: Runner,
@@ -279,7 +283,17 @@ impl Global for Shared {}
 
 impl AppState {
     pub fn new(packs: Arc<dyn pack::Backend>, paths: Paths, cx: &mut Context<Self>) -> Self {
+        Self::new_with(packs, linux_menu::default_backend(), paths, cx)
+    }
+
+    pub fn new_with(
+        packs: Arc<dyn pack::Backend>,
+        linux_menus: Arc<dyn linux_menu::Backend>,
+        paths: Paths,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let registry = Arc::new(packs.registry());
+        let linux_menu = linux_menus.status();
         let pack = PackState {
             status: packs.status(),
             offer: packs.offer(),
@@ -322,6 +336,9 @@ impl AppState {
             registry_generation: 0,
             packs,
             pack,
+            linux_menus,
+            linux_menu,
+            _linux_menu_task: None,
             pack_cancel: None,
             _pack_task: None,
             runner,
@@ -618,6 +635,56 @@ impl AppState {
         if let Some(cancel) = &self.pack_cancel {
             cancel.store(true, Ordering::Relaxed);
         }
+    }
+
+    /// Installs per-user file-manager menus. Only the Settings button calls
+    /// this; it never runs at launch.
+    pub fn install_linux_menu(&mut self, cx: &mut Context<Self>) {
+        self.start_linux_menu(true, cx);
+    }
+
+    /// Removes user-owned file-manager menus. Package menus stay.
+    pub fn remove_linux_menu(&mut self, cx: &mut Context<Self>) {
+        self.start_linux_menu(false, cx);
+    }
+
+    fn start_linux_menu(&mut self, install: bool, cx: &mut Context<Self>) {
+        if matches!(
+            self.linux_menu,
+            linux_menu::Status::Installing | linux_menu::Status::Removing
+        ) {
+            return;
+        }
+        self.linux_menu = if install {
+            linux_menu::Status::Installing
+        } else {
+            linux_menu::Status::Removing
+        };
+        cx.notify();
+        let backend = self.linux_menus.clone();
+        let (tx, mut rx) = unbounded();
+        std::thread::Builder::new()
+            .name("convt-linux-menu".into())
+            .spawn(move || {
+                let result = if install {
+                    backend.install()
+                } else {
+                    backend.remove()
+                };
+                let _ = tx.unbounded_send(result);
+            })
+            .expect("spawn the linux menu thread");
+        self._linux_menu_task = Some(cx.spawn(async move |this, cx| {
+            if let Some(result) = rx.next().await {
+                let _ = this.update(cx, |s, cx| {
+                    s.linux_menu = match result {
+                        Ok(status) => status,
+                        Err(e) => linux_menu::Status::Failed(e),
+                    };
+                    cx.notify();
+                });
+            }
+        }));
     }
 
     /// Removes the document pack, once no document is converting.

@@ -76,6 +76,8 @@ fn show<V: Render>(
         }
         Err(e) => {
             tracing::error!(error = %e, title, "could not open a window");
+            crate::window_error::report(&e, title);
+            cx.quit();
             None
         }
     }
@@ -193,7 +195,11 @@ pub fn open_quick(request: Request, cx: &mut App) {
     }) {
         // Each request gets its own window; the global tracks the newest.
         Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
-        Err(e) => tracing::error!(error = %e, "could not open Quick convert"),
+        Err(e) => {
+            tracing::error!(error = %e, "could not open Quick convert");
+            crate::window_error::report(&e, "Convert");
+            cx.quit();
+        }
     }
     cx.activate(true);
 }

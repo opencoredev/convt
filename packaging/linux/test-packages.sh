@@ -74,7 +74,7 @@ for distro in "${distros[@]}"; do
     docker cp "$container:/usr/share/metainfo/app.convt.convt.metainfo.xml" "$report/$distro/installed.metainfo.xml"
     appstreamcli validate --no-net "$report/$distro/installed.metainfo.xml" >> "$report/$distro/metadata.log" 2>&1
   fi
-  docker exec "$container" bash -euo pipefail -c 'LD_LIBRARY_PATH=/opt/convt/lib ldd /opt/convt/convt-app.bin; test -f /usr/share/nautilus-python/extensions/convt_nautilus.py; test -x /usr/share/kio/servicemenus/convt-0.desktop; test -f /usr/share/nemo/actions/convt-zz-more-options.nemo_action; test -f /usr/share/convt/integrations/install.py' > "$report/$distro/gui-ldd-menus.log" 2>&1
+  docker exec "$container" bash -euo pipefail -c 'LD_LIBRARY_PATH=/opt/convt/lib ldd /opt/convt/convt-app.bin; test -f /usr/share/nautilus-python/extensions/convt_nautilus.py; test -x /usr/share/kio/servicemenus/convt-0.desktop; grep -E -q "convert_(jpeg|png|webp)" /usr/share/kio/servicemenus/convt-0.desktop; test -f /usr/share/nemo/actions/convt-zz-more-options.nemo_action; ls /usr/share/nemo/actions/convt-*.nemo_action | grep -vq more-options; test -d "/usr/share/nautilus/scripts/Convert with convt"; grep -q "image/png" /usr/share/applications/convt-app.desktop; test -f /usr/share/convt/integrations/install.py; test -f /opt/convt/share/integrations/install.py' > "$report/$distro/gui-ldd-menus.log" 2>&1
   ! /usr/bin/grep -q 'not found' "$report/$distro/gui-ldd-menus.log"
   snapshots+=("$(docker commit --message "convt-pkg offline installer verification" "$container" "$image")")
   docker rm -f "$container" >/dev/null
