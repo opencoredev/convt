@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { authSearch, isNewAccount, landingAfterSignIn } from "../../src/lib/sign-in";
+import { authSearch, downloadGate, isNewAccount, landingAfterSignIn } from "../../src/lib/sign-in";
 
 const origin = "https://convt.app";
 const now = Date.parse("2026-10-08T12:00:00Z");
@@ -33,4 +33,13 @@ test("a page that asked to come back wins, and only same-origin paths count", ()
   expect(landingAfterSignIn({ redirect: "//evil.example", newAccount: false, origin })).toBe(
     "/dashboard",
   );
+});
+
+test("/download sends signed-out visitors to sign-in with next, and unverified ones to confirm", () => {
+  expect(downloadGate(null, "/download")).toBe("/sign-in?next=%2Fdownload");
+  expect(downloadGate(null, "/download?os=linux")).toBe("/sign-in?next=%2Fdownload%3Fos%3Dlinux");
+  expect(downloadGate({ emailVerified: false }, "/download")).toBe(
+    "/sign-in/verify-email?redirect=%2Fdownload",
+  );
+  expect(downloadGate({ emailVerified: true }, "/download")).toBeNull();
 });

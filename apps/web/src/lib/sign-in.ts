@@ -57,3 +57,17 @@ export function landingAfterSignIn({
   if (redirect) return safeRedirect(redirect, origin);
   return newAccount ? routes.download : safeRedirect(undefined, origin);
 }
+
+/**
+ * Where a visitor to /download goes instead, or null to show the page. The page asks for
+ * an account; Homebrew and the GitHub releases stay open, and sign-in says so.
+ */
+export function downloadGate(
+  session: { emailVerified: boolean } | null,
+  href: string,
+): string | null {
+  const back = encodeURIComponent(href);
+  if (!session) return `/sign-in?next=${back}`;
+  if (!session.emailVerified) return `/sign-in/verify-email?redirect=${back}`;
+  return null;
+}

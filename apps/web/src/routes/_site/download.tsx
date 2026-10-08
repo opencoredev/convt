@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 import { cx } from "#/components/app/ui";
@@ -14,9 +14,11 @@ import {
   type Slot,
 } from "#/lib/platform";
 import { formatBytes, parseReleaseManifest } from "#/lib/release-manifest";
+import { downloadGate } from "#/lib/sign-in";
 import { fetchLatestManifest } from "#/server/latest-release";
+import { getSession } from "#/server/session";
 import { visitorOs } from "#/server/visitor-os";
-import { routes, seo } from "#/lib/site";
+import { GITHUB_URL, routes, seo } from "#/lib/site";
 
 // The newest GitHub release's manifest (packaging/release/manifest.schema.json), read
 // on each load. content/release-manifest.json is the fallback when GitHub has none or
@@ -36,6 +38,12 @@ const loadRelease = createServerFn({ method: "GET" }).handler(async () =>
 export const Route = createFileRoute("/_site/download")({
   validateSearch: (search: Record<string, unknown>): { os?: Os } =>
     isOs(search.os) ? { os: search.os } : {},
+  // Downloads need an account, so a new user meets sign-up first (CNV-69).
+  beforeLoad: async ({ location }) => {
+    const session = await getSession();
+    const gate = downloadGate(session ? session.user : null, location.href);
+    if (gate) throw redirect({ href: gate });
+  },
   loaderDeps: ({ search }) => ({ os: search.os }),
   // The User-Agent picks the build unless the link names one.
   loader: async ({ deps }) => ({
@@ -65,7 +73,8 @@ function DownloadPage() {
           <p>
             The app, the right-click menu and the{" "}
             <code className="font-mono text-[15px]">convt</code> command line tool in one install.
-            Every download starts a 7-day free trial; no account needed.
+            Every download starts a 7-day free trial. Older versions and checksums are on{" "}
+            <TextLink href={`${GITHUB_URL}/releases`}>GitHub releases</TextLink>.
           </p>
         </PageHeader>
         {!published && (
