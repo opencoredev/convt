@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { localPriceIds } from "@convt/db/seed";
 import { localProducts } from "@convt/billing-mock";
 
-import { loadCatalog, meteredPriceProblem, validateCatalog } from "../../src/catalog";
+import {
+  complimentaryDesktop,
+  discountProblem,
+  loadCatalog,
+  meteredPriceProblem,
+  validateCatalog,
+} from "../../src/catalog";
 import { addYears } from "../../src/context";
 
 describe("catalog", () => {
@@ -60,6 +66,44 @@ describe("catalog", () => {
     expect(a).toEqual(b);
     expect(a?.code).toBe("PRODUCTHUNT");
     expect(a?.products).toEqual(["desktop", "pro_month"]);
+  });
+
+  test("a 100% Polar Desktop write-off is complimentary; a partial unknown discount is not", () => {
+    const c = loadCatalog("local");
+    const price = c.products.desktop.priceId;
+    const full = {
+      netCents: 0,
+      subtotalCents: 2900,
+      discountCents: 2900,
+      items: [{ priceId: price, amountCents: 2900 }],
+    };
+    const zeroed = {
+      netCents: 0,
+      subtotalCents: 0,
+      discountCents: 0,
+      items: [{ priceId: price, amountCents: 0 }],
+    };
+    expect(complimentaryDesktop(c, full)).toBe(true);
+    expect(complimentaryDesktop(c, zeroed)).toBe(true);
+    expect(discountProblem(c, "disc_giveaway", "desktop", full)).toBeNull();
+    expect(discountProblem(c, null, "desktop", full)).toBeNull();
+    expect(discountProblem(c, "disc_giveaway", "desktop", zeroed)).toBeNull();
+    expect(
+      discountProblem(c, "disc_other", "desktop", {
+        netCents: 2030,
+        subtotalCents: 2900,
+        discountCents: 870,
+        items: [{ priceId: price, amountCents: 2900 }],
+      }),
+    ).toMatch(/unknown discount/);
+    expect(
+      complimentaryDesktop(c, {
+        netCents: 2030,
+        subtotalCents: 2900,
+        discountCents: 870,
+        items: [{ priceId: price, amountCents: 2900 }],
+      }),
+    ).toBe(false);
   });
 
   test("updates_until is the same day a year later; 29 February becomes 28 February", () => {

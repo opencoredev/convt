@@ -37,6 +37,7 @@
     "db:seed": "bun packages/db/src/cli/seed.ts",
     "db:ci": "bash packages/db/scripts/ci.sh",
     "billing:outbox": "bun packages/billing/src/cli/outbox.ts",
+    "billing:backfill": "bun packages/billing/src/cli/backfill.ts",
     "license:keygen": "bun packages/billing/src/cli/keygen.ts",
     "release:linux": "bash scripts/release-linux.sh",
     "update:keygen": "bun scripts/release/manifest.ts keygen",

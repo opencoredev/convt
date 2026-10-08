@@ -1511,8 +1511,14 @@ export function createBillingMock(options: MockOptions) {
       return json(200, page(items, url));
     }
     if (path === "/v1/customer-sessions/" && method === "POST") {
-      const b = body as models.CustomerSessionCustomerExternalIDCreate;
-      const c = [...customers.values()].find((x) => x.externalId === b.external_customer_id);
+      const b = body as {
+        customer_id?: string;
+        external_customer_id?: string;
+        return_url?: string | null;
+      };
+      const c = b.customer_id
+        ? customers.get(b.customer_id)
+        : [...customers.values()].find((x) => x.externalId === b.external_customer_id);
       if (!c) throw notFound();
       const token = `polar_cst_${randomBytes(16).toString("hex")}`;
       sessions.set(token, { customerId: c.id, returnUrl: b.return_url ?? null });

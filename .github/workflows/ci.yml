@@ -72,6 +72,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxcb1-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libasound2-dev libzstd-dev
+      - name: Homebrew cask style
+        if: runner.os == 'macOS' && matrix.suite == 'core'
+        run: bash scripts/release/check-homebrew-cask.sh
       - run: cargo fmt --all --check
         if: runner.os == 'Linux'
       - name: Clippy (core)
@@ -80,12 +83,20 @@ jobs:
       - name: Test (core)
         if: matrix.suite == 'core'
         run: cargo test --workspace --exclude convt-app
+      - name: HEIC orientation (macOS sips, must not skip)
+        if: runner.os == 'macOS' && matrix.suite == 'core'
+        run: cargo test -p convt-engines --lib heic_orientation -- --nocapture --test-threads=1
       - name: Clippy (desktop)
         if: matrix.suite == 'desktop'
         run: cargo clippy -p convt-app --all-targets -- -D warnings
       - name: Test (desktop)
         if: matrix.suite == 'desktop'
         run: cargo test -p convt-app
+      - name: Windows GUI subsystem
+        if: runner.os == 'Windows' && matrix.suite == 'desktop'
+        run: |
+          cargo build -p convt-app --release
+          ./packaging/windows/smoke.ps1 -AppExe target/release/convt-app.exe
 
   release-scripts:
     name: Release scripts
@@ -103,6 +114,8 @@ jobs:
           python-version: "3.12"
       - name: Source archive and audit unit tests
         run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - name: Windows packaging unit tests
+        run: python3 -m unittest discover -s packaging/windows -p 'test_*.py' -v
 
   web:
     name: Web
@@ -180,11 +193,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: actions/cache@v4
         with:
-          # `cargo sqlx` runs cargo-sqlx; sqlx alone is not enough.
+          # db:ci runs `cargo sqlx`, which needs cargo-sqlx, not only sqlx.
           path: |
             ~/.cargo/bin/sqlx
             ~/.cargo/bin/cargo-sqlx
-          key: sqlx-cli-${{ runner.os }}-0.9.0-cargo-sqlx
+          key: sqlx-cli-${{ runner.os }}-0.9.0-cargo
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache

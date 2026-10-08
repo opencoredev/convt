@@ -37,8 +37,7 @@ fn local_path(path: &Path) -> std::ffi::OsString {
 pub fn thumbnail_command(ffmpeg: &Path, path: &Path, at: &str, width: u32) -> Command {
     let input = local_path(path);
     let mut command = Command::new(ffmpeg);
-    #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x08000000);
+    crate::hide_console(&mut command);
     command
         .args(LOCAL_INPUT_ARGS)
         .args(["-nostdin", "-v", "error", "-ss", at, "-i"])

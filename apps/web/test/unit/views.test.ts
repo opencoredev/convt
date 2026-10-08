@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { apiSpendLine, billingHasNoPlan } from "../../src/lib/billing-display";
+import {
+  apiSpendLine,
+  billingCardCopy,
+  billingHasNoPlan,
+  showGetDesktop,
+  showPolarBilling,
+} from "../../src/lib/billing-display";
 import {
   accountView,
   apiKeyView,
@@ -273,11 +279,30 @@ describe("billing per state", () => {
       status: "paid",
     },
   ];
+  const desktopInvoice = (amountCents: number) => ({
+    id: "inv_desk",
+    description: "Desktop License, 12 months of updates",
+    amountCents,
+    issuedAt: new Date("2026-10-07T00:00:00Z"),
+    status: "paid",
+  });
   const bv = (
     subscriptions: SubscriptionRow[],
     inv = [] as typeof invoices,
     openApiCheckout = false,
-  ) => billingView({ user, subscriptions, invoices: inv, card: null, openApiCheckout, now });
+    licenses: LicenseRow[] = [],
+    polarCustomerId: string | null = null,
+  ) =>
+    billingView({
+      user,
+      subscriptions,
+      licenses,
+      invoices: inv,
+      card: null,
+      openApiCheckout,
+      now,
+      polarCustomerId,
+    });
 
   test("no plan", () => {
     const b = bv([]);
@@ -294,6 +319,7 @@ describe("billing per state", () => {
   test("active yearly keeps the design's summary", () => {
     const b = bv([sub({})], invoices);
     expect(b.plan).toEqual({
+      kind: "pro",
       name: "Pro, yearly",
       status: "active",
       interval: "year",
@@ -419,7 +445,7 @@ describe("billing per state", () => {
     expect(billingHasNoPlan(b)).toBe(false);
   });
 
-  test("desktop-only and empty accounts still have no plan", () => {
+  test("empty and API-ended accounts still have no plan; Desktop does not", () => {
     expect(billingHasNoPlan(bv([]))).toBe(true);
     expect(
       billingHasNoPlan({
@@ -433,6 +459,90 @@ describe("billing per state", () => {
         api: { state: "ended", spendCapCents: 2500, endsOn: null },
       }),
     ).toBe(true);
+    expect(billingHasNoPlan(bv([], [desktopInvoice(0)], false, [desktop]))).toBe(false);
+  });
+
+  test("Desktop paid", () => {
+    const b = bv([], [desktopInvoice(2900)], false, [desktop]);
+    expect(b.plan).toEqual({
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+      interval: null,
+      cancelsOn: null,
+      summary:
+        "Paid once. Updates until Aug 20, 2027. Your license is on this account and works offline.",
+    });
+    expect(b.ownsDesktop).toBe(true);
+    expect(b.invoices).toEqual([
+      {
+        id: "inv_desk",
+        date: "2026-10-07",
+        description: "Desktop License, 12 months of updates",
+        amountCents: 2900,
+        statusLabel: null,
+      },
+    ]);
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(showGetDesktop(b)).toBe(false);
+    expect(billingCardCopy(b)).toBe("No card needed.");
+  });
+
+  test("Desktop $0 order", () => {
+    const b = bv([], [desktopInvoice(0)], false, [desktop]);
+    expect(b.plan).toMatchObject({
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+    });
+    expect(b.ownsDesktop).toBe(true);
+    expect(b.invoices[0]?.amountCents).toBe(0);
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(showGetDesktop(b)).toBe(false);
+    expect(billingCardCopy(b)).toBe("No card needed.");
+  });
+
+  test("Pro trialing", () => {
+    const b = bv([sub({ interval: "month", status: "trialing", trialEndsAt: days(3) })]);
+    expect(b.plan).toMatchObject({
+      kind: "pro",
+      name: "Pro, monthly",
+      status: "trialing",
+      interval: "month",
+    });
+    expect(b.plan?.summary).toStartWith("Free until Oct 7, 2026, then $12 a month.");
+    expect(b.ownsDesktop).toBe(false);
+    expect(billingHasNoPlan(b)).toBe(false);
+    expect(showGetDesktop(b)).toBe(true);
+    expect(billingCardCopy(b)).toBe("No card on file.");
+  });
+
+  test("active yearly extras", () => {
+    const b = bv([sub({})], invoices);
+    expect(b.plan?.kind).toBe("pro");
+    expect(b.ownsDesktop).toBe(false);
+    expect(showGetDesktop(b)).toBe(true);
+  });
+
+  test("Pro wins over Desktop when both exist", () => {
+    const b = bv(
+      [sub({ interval: "month", status: "trialing", trialEndsAt: days(3) })],
+      [],
+      false,
+      [desktop],
+    );
+    expect(b.plan).toMatchObject({ kind: "pro", status: "trialing" });
+    expect(b.ownsDesktop).toBe(true);
+    expect(showGetDesktop(b)).toBe(false);
+  });
+
+  test("no purchase extras", () => {
+    const b = bv([]);
+    expect(b.ownsDesktop).toBe(false);
+    expect(b.receiptEmail).toBe(user.email);
+    expect(billingHasNoPlan(b)).toBe(true);
+    expect(showGetDesktop(b)).toBe(true);
+    expect(billingCardCopy(b)).toBe("No card on file.");
   });
 });
 
@@ -561,5 +671,88 @@ describe("checkout success", () => {
     });
     expect(checkoutGiveUp("desktop", false)).toEqual({ state: "email" });
     expect(checkoutGiveUp("pro", false)).toEqual({ state: "email" });
+  });
+});
+
+describe("Desktop ownership and Polar portal", () => {
+  const desktopInvoice = (status: string) => ({
+    id: "inv_desk_open",
+    description: "Desktop License, 12 months of updates",
+    amountCents: 2900,
+    issuedAt: new Date("2026-10-07T00:00:00Z"),
+    status,
+  });
+  const live = {
+    id: "lic_live_desktop",
+    plan: "desktop",
+    trial: false,
+    issuedOn: "2026-08-20",
+    updatesUntil: "2027-08-20",
+    revokedAt: null as Date | null,
+    orderPaidAt: new Date("2026-08-20T10:00:00Z"),
+    subscriptionInterval: null as string | null,
+  };
+  const view = (
+    licenses: LicenseRow[] = [],
+    invoices: Array<ReturnType<typeof desktopInvoice>> = [],
+    polarCustomerId: string | null = null,
+  ) =>
+    billingView({
+      user,
+      subscriptions: [],
+      licenses,
+      invoices,
+      card: null,
+      openApiCheckout: false,
+      now,
+      polarCustomerId,
+    });
+
+  test("an unpaid or disputed Desktop invoice is not ownership without a live license", () => {
+    for (const status of ["open", "paid", "uncollectible", "draft"]) {
+      const b = view([], [desktopInvoice(status)]);
+      expect(b.ownsDesktop).toBe(false);
+      expect(b.plan).toBeNull();
+    }
+    const revoked = {
+      ...live,
+      revokedAt: new Date("2026-10-05T10:00:00Z"),
+      revokeReason: "dispute_lost",
+    };
+    expect(view([revoked], [desktopInvoice("paid")]).ownsDesktop).toBe(false);
+    expect(view([live]).ownsDesktop).toBe(true);
+    expect(view([live]).plan?.kind).toBe("desktop");
+  });
+
+  test("claimed guest Desktop hides Polar billing controls unless a Polar customer is stored", () => {
+    const hidden = view([live], [], null);
+    expect(hidden.plan?.kind).toBe("desktop");
+    expect(hidden.polarPortal).toBe(false);
+    expect(showPolarBilling(hidden)).toBe(false);
+    const shown = view([live], [], "cus_guest_polar");
+    expect(shown.polarPortal).toBe(true);
+    expect(showPolarBilling(shown)).toBe(true);
+  });
+
+  test("a lapsed Pro with a live Desktop license shows Desktop, not canceled Pro", () => {
+    const b = billingView({
+      user,
+      subscriptions: [
+        sub({ interval: "month", status: "canceled", endedAt: new Date("2026-09-14T00:00:00Z") }),
+      ],
+      licenses: [live],
+      invoices: [],
+      card: null,
+      openApiCheckout: false,
+      now,
+    });
+    expect(b.plan).toMatchObject({
+      kind: "desktop",
+      name: "Desktop (lifetime)",
+      status: "active",
+    });
+    expect(b.ownsDesktop).toBe(true);
+    expect(b.hadPro).toBe(true);
+    expect(showGetDesktop(b)).toBe(false);
   });
 });
