@@ -87,6 +87,16 @@ impl Account {
     pub fn email(&self) -> Option<&str> {
         self.session.as_ref().map(|s| s.email.as_str())
     }
+
+    /// The site this build signs in to.
+    pub(crate) fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// The client for convt.app, which cloud jobs ask for credentials.
+    pub(crate) fn api(&self) -> Arc<dyn Api> {
+        self.api.clone()
+    }
 }
 
 /// Runs `work` on its own thread, then `done` on the app state with its

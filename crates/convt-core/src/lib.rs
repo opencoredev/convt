@@ -15,4 +15,4 @@ pub use engine::{Cancel, Ctx, Engine, Progress, Step};
 pub use error::{Error, Result, stderr_tail};
 pub use formats::{Category, FORMATS, Format, format_by_extension, format_by_id};
 pub use options::{Background, Options, PageRange, Preset, VideoCodec};
-pub use registry::{Job, Output, Plan, Registry};
+pub use registry::{Destination, Job, Output, Plan, Registry};

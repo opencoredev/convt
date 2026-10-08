@@ -2,7 +2,7 @@
 // functions run as convt_web, the Pro key comes from convt-billing's query as
 // convt_billing, like the two Workers. See src/server/device-auth.ts.
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
 import { currentProKey } from "@convt/billing";
 import type { Db } from "@convt/db";
@@ -12,9 +12,11 @@ import { runSeed } from "@convt/db/seed";
 import { base64urlEncode, importSigningKey } from "@convt/license";
 import { eq, sql } from "drizzle-orm";
 
+import { cloudCredentialSeconds, type CloudConfig } from "../../src/server/cloud-credential";
 import {
   approveDevice,
   bearer,
+  deviceCloudCredential,
   deviceLimits,
   exchangeCode,
   parseDeviceRequest,
@@ -316,5 +318,87 @@ describe("request bodies", () => {
     });
     expect(await readSmallJson(post(endless))).toBe("too_large");
     expect(pulled).toBeLessThan(16);
+  });
+});
+
+describe("cloud credential", () => {
+  // Built at run time so no address sits in the source.
+  const fixture = (name: string) => [name, "convt.test"].join("@");
+  // Earlier tests used up the hourly approvals for the fixtures.
+  beforeEach(async () => {
+    await h.owner.execute(sql`delete from otp_send_limits where key like 'device-%'`);
+  });
+  const config: CloudConfig = {
+    kind: "configured",
+    secret: "s".repeat(40),
+    baseUrl: "http://127.0.0.1:9",
+  };
+
+  /** What convt-server's tokens::verify checks: the HMAC, the audience and the expiry. */
+  async function claimsOf(token: string, secret: string) {
+    const [body, signature] = token.replace(/^cvt_web_/, "").split(".");
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    const bytes = new Uint8Array(signature.match(/../g)!.map((h) => parseInt(h, 16)));
+    expect(await crypto.subtle.verify("HMAC", key, bytes, new TextEncoder().encode(body))).toBe(
+      true,
+    );
+    const padded = body.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(padded)) as { sub: string; exp: number; aud: string };
+  }
+
+  test("a paid Pro device gets a five-minute credential for its own account", async () => {
+    const pro = await userId(fixture("pro"));
+    const token = await signIn(fixture("pro"));
+    const now = new Date();
+    const res = await deviceCloudCredential(web, config, token, nextIp(), now);
+    expect(res.status).toBe(200);
+    expect(res.body.baseUrl).toBe(config.baseUrl);
+    expect(res.body.expiresIn).toBe(cloudCredentialSeconds);
+    const credential = res.body.token as string;
+    expect(credential).toStartWith("cvt_web_");
+    const claims = await claimsOf(credential, config.secret);
+    expect(claims).toEqual({
+      sub: pro,
+      exp: Math.floor(now.getTime() / 1000) + 300,
+      aud: "convt-cloud-web",
+    });
+  });
+
+  test("no paid Pro, no credential; the device token is checked first", async () => {
+    for (const name of ["desktop", "lapsed", "trial", "new"]) {
+      const token = await signIn(fixture(name));
+      const res = await deviceCloudCredential(web, config, token, nextIp(), new Date());
+      expect(res).toEqual({ status: 403, body: { error: "not_pro" } });
+    }
+    expect(await deviceCloudCredential(web, config, null, nextIp(), new Date())).toEqual({
+      status: 401,
+      body: { error: "signed_out" },
+    });
+    const revoked = await signIn(fixture("pro"));
+    expect((await signOutDevice(web, revoked, new Date())).status).toBe(200);
+    expect((await deviceCloudCredential(web, config, revoked, nextIp(), new Date())).status).toBe(
+      401,
+    );
+  });
+
+  test("a site without the API configured says so", async () => {
+    const token = await signIn(fixture("pro"));
+    const res = await deviceCloudCredential(web, { kind: "missing" }, token, nextIp(), new Date());
+    expect(res).toEqual({ status: 503, body: { error: "not_configured" } });
+  });
+
+  test("credentials per device are limited per hour", async () => {
+    const token = await signIn(fixture("pro"));
+    const now = new Date();
+    for (let i = 0; i < deviceLimits.cloudPerDevice; i++) {
+      expect((await deviceCloudCredential(web, config, token, nextIp(), now)).status).toBe(200);
+    }
+    expect((await deviceCloudCredential(web, config, token, nextIp(), now)).status).toBe(429);
   });
 });

@@ -186,40 +186,10 @@ impl Registry {
         let plan = self.plan(from, job.to)?;
         tracing::debug!(plan = plan.describe(), "converting {}", input.display());
 
-        let (dir, stem, ext) = match &job.output {
-            Output::Beside | Output::Dir(_) => {
-                let dir = match &job.output {
-                    Output::Dir(d) => d.clone(),
-                    _ => parent_dir(input),
-                };
-                let stem = input
-                    .file_stem()
-                    .ok_or_else(|| Error::UndetectedFormat(input.clone()))?;
-                (
-                    dir,
-                    stem.to_string_lossy().into_owned(),
-                    job.to.extension().to_string(),
-                )
-            }
-            // The caller's name wins, extension included (`photo.jpeg`, or
-            // none at all), so the first output lands exactly on `path`.
-            Output::Exact(path) => {
-                let stem = path
-                    .file_stem()
-                    .ok_or_else(|| Error::OutputExists(path.clone()))?;
-                let ext = path.extension().unwrap_or_default();
-                (
-                    parent_dir(path),
-                    stem.to_string_lossy().into_owned(),
-                    ext.to_string_lossy().into_owned(),
-                )
-            }
-        };
+        let destination = Destination::of(job)?;
         // Staging lives in the destination so publishing is a same-volume
         // rename. Dropping it removes everything on any early return.
-        let staging = tempfile::Builder::new()
-            .prefix(".convt-")
-            .tempdir_in(&dir)?;
+        let staging = destination.staging()?;
 
         let n = plan.hops.len() as f32;
         // Each file in flight carries the 0-based page it came from.
@@ -266,16 +236,83 @@ impl Registry {
             return Err(Error::Cancelled);
         }
         let (files, pages): (Vec<_>, Vec<_>) = current.into_iter().unzip();
-        let published = publish(
-            &files,
-            &pages,
-            &dir,
-            &stem,
-            &ext,
-            matches!(job.output, Output::Exact(_)),
-        )?;
+        let published = destination.publish(&files, &pages)?;
         progress(Some(1.0));
         Ok(published)
+    }
+}
+
+/// Where a job's results land, by the rules every conversion follows: next
+/// to the input or in a folder under the input's name with the target's
+/// extension, renamed on collision, or at an exact path. Conversions that
+/// don't run through [`Registry::run`] (the desktop app's cloud jobs) use it
+/// so their files are named the same way.
+#[derive(Debug, Clone)]
+pub struct Destination {
+    dir: PathBuf,
+    stem: String,
+    ext: String,
+    exact: bool,
+}
+
+impl Destination {
+    pub fn of(job: &Job) -> Result<Self> {
+        let input = &job.input;
+        let (dir, stem, ext) = match &job.output {
+            Output::Beside | Output::Dir(_) => {
+                let dir = match &job.output {
+                    Output::Dir(d) => d.clone(),
+                    _ => parent_dir(input),
+                };
+                let stem = input
+                    .file_stem()
+                    .ok_or_else(|| Error::UndetectedFormat(input.clone()))?;
+                (
+                    dir,
+                    stem.to_string_lossy().into_owned(),
+                    job.to.extension().to_string(),
+                )
+            }
+            // The caller's name wins, extension included (`photo.jpeg`, or
+            // none at all), so the first output lands exactly on `path`.
+            Output::Exact(path) => {
+                let stem = path
+                    .file_stem()
+                    .ok_or_else(|| Error::OutputExists(path.clone()))?;
+                let ext = path.extension().unwrap_or_default();
+                (
+                    parent_dir(path),
+                    stem.to_string_lossy().into_owned(),
+                    ext.to_string_lossy().into_owned(),
+                )
+            }
+        };
+        Ok(Self {
+            dir,
+            stem,
+            ext,
+            exact: matches!(job.output, Output::Exact(_)),
+        })
+    }
+
+    /// The folder the results go to.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// A hidden folder inside [`Self::dir`] to write results into before
+    /// [`Self::publish`], so publishing is a same-volume rename. It and
+    /// whatever is left in it are removed when it is dropped.
+    pub fn staging(&self) -> Result<tempfile::TempDir> {
+        Ok(tempfile::Builder::new()
+            .prefix(".convt-")
+            .tempdir_in(&self.dir)?)
+    }
+
+    /// Moves `files` from staging to their final names. `pages[i]` is the
+    /// 0-based page `files[i]` came from; a single result is page 0.
+    pub fn publish(&self, files: &[PathBuf], pages: &[usize]) -> Result<Vec<PathBuf>> {
+        publish(files, pages, &self.dir, &self.stem, &self.ext, self.exact)
     }
 }
 

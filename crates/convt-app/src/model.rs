@@ -19,6 +19,7 @@ use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
 
 use crate::account::Account;
+use crate::cloud::{self, CloudAccess};
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
@@ -255,6 +256,11 @@ pub struct AppState {
     /// The last manifest accepted this session, to select again when the
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
+    /// The cloud jobs API client. Building it sends nothing; only a cloud
+    /// conversion does.
+    cloud_api: Arc<dyn cloud::CloudApi>,
+    /// How often a cloud job asks how it is doing.
+    cloud_poll: std::time::Duration,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in a background menu).
     /// Explorer requests that ask to show progress are tracked like normal
@@ -346,6 +352,8 @@ impl AppState {
             update_attempted: None,
             _update_schedule: None,
             update_manifest: None,
+            cloud_api: Arc::new(cloud::Http::new()),
+            cloud_poll: std::time::Duration::from_secs(2),
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]
@@ -387,13 +395,22 @@ impl AppState {
         self.convert_to(files, to, options, output, cx)
     }
 
-    /// Whether Cloud conversions can run now, and if not, why.
-    pub fn cloud_access(&self) -> crate::cloud::CloudAccess {
-        crate::cloud::CloudAccess::Unavailable("Cloud conversion isn't in this build yet.".into())
+    /// Whether Cloud conversions can run now, and if not, why. Decided from
+    /// what this computer already knows, without a network call, so windows
+    /// can ask on every render.
+    pub fn cloud_access(&self) -> CloudAccess {
+        cloud::access(
+            self.account.url(),
+            self.account.session.is_some(),
+            &self.license,
+            client::today(),
+        )
     }
 
     /// Like [`Self::convert_to`], but runs on convt's cloud. The caller has
-    /// checked [`Self::cloud_access`] and the user's consent.
+    /// checked [`Self::cloud_access`] and the user's consent; this checks
+    /// both again. The cloud takes no conversion options, so a request with
+    /// any is refused rather than converted without them.
     pub fn convert_in_cloud(
         &mut self,
         files: &[PathBuf],
@@ -402,8 +419,51 @@ impl AppState {
         output: Output,
         cx: &mut Context<Self>,
     ) -> Result<Vec<JobId>, String> {
-        let _ = (files, to, options, output, cx);
-        Err("Cloud conversion isn't in this build yet.".into())
+        if let Some(reason) = self.cloud_access().reason() {
+            return Err(reason);
+        }
+        if !self.settings.cloud_consent {
+            return Err("Agree to upload files to convt's cloud before converting there.".into());
+        }
+        if *options != Options::default() {
+            return Err(
+                "Cloud conversion doesn't take options yet. Convert on this computer to use them."
+                    .into(),
+            );
+        }
+        let Some(session) = &self.account.session else {
+            return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
+        };
+        // One credential serves the whole batch while it lasts.
+        let batch = Arc::new(cloud::Cloud {
+            api: self.cloud_api.clone(),
+            credentials: cloud::Credentials::new(self.account.api(), session.token.clone()),
+            poll: self.cloud_poll,
+        });
+        let output = absolute_output(output);
+        let ids = files
+            .iter()
+            .map(|file| {
+                let job = Job {
+                    input: file.clone(),
+                    to,
+                    options: Options::default(),
+                    output: output.clone(),
+                };
+                let id = self.queue.add_cloud(&job);
+                self.runner.submit_cloud(id, job, batch.clone());
+                id
+            })
+            .collect();
+        cx.notify();
+        Ok(ids)
+    }
+
+    /// Replaces the cloud client and how often it polls, for tests.
+    #[cfg(test)]
+    pub fn set_cloud_api(&mut self, api: Arc<dyn cloud::CloudApi>, poll: std::time::Duration) {
+        self.cloud_api = api;
+        self.cloud_poll = poll;
     }
 
     /// [`Self::convert`] with an output other than the one in Settings.
@@ -562,6 +622,9 @@ impl AppState {
     ) -> Result<Vec<JobId>, String> {
         let files = [input.to_path_buf()];
         match setup {
+            Some(setup) if setup.cloud => {
+                self.convert_in_cloud(&files, to, &setup.options, setup.output.clone(), cx)
+            }
             Some(setup) => self.convert_to(&files, to, &setup.options, setup.output.clone(), cx),
             None => self.convert(&files, to, &Options::default(), cx),
         }

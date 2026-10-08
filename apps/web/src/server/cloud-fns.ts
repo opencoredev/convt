@@ -1,6 +1,8 @@
 import { cloudAllowance, createApiKey, revokeApiKey } from "@convt/db/queries";
 import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
+
+import { cloudConfig, mintCloudCredential } from "./cloud-credential";
 import { authed } from "./session";
 
 export const addApiKey = createServerFn({ method: "POST" })
@@ -27,40 +29,14 @@ export const fetchCloudAccess = createServerFn({ method: "GET" })
   .middleware([authed])
   .handler(async ({ context: { db, userId } }) => ({
     ...(await cloudAllowance(db, userId, "pro")),
-    configured:
-      typeof env.CONVT_API_URL === "string" && typeof env.CONVT_WEB_TOKEN_SECRET === "string",
+    configured: cloudConfig(env).kind === "configured",
   }));
 export const fetchCloudCredential = createServerFn({ method: "POST" })
   .middleware([authed])
   .handler(async ({ context: { db, userId } }) => {
     if (!(await cloudAllowance(db, userId, "pro")).allowed)
       throw new Error("Cloud conversion requires an active paid Pro subscription.");
-    const secret = env.CONVT_WEB_TOKEN_SECRET;
-    const baseUrl = env.CONVT_API_URL;
-    if (typeof secret !== "string" || secret.length < 32 || typeof baseUrl !== "string")
-      throw new Error("Cloud conversion is not configured yet.");
-    const body = btoa(
-      JSON.stringify({
-        sub: userId,
-        exp: Math.floor(Date.now() / 1000) + 300,
-        aud: "convt-cloud-web",
-      }),
-    )
-      .replace(/=/g, "")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_");
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const signature = new Uint8Array(
-      await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)),
-    );
-    return {
-      baseUrl,
-      token: `cvt_web_${body}.${Array.from(signature, (n) => n.toString(16).padStart(2, "0")).join("")}`,
-    };
+    const config = cloudConfig(env);
+    if (config.kind === "missing") throw new Error("Cloud conversion is not configured yet.");
+    return mintCloudCredential({ config, userId, now: new Date() });
   });

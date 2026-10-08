@@ -341,14 +341,18 @@ impl QuickView {
         if files.is_empty() || !self.jobs.is_empty() {
             return;
         }
-        let options = self.conversion_options();
+        let cloud = self.in_cloud(cx);
+        let options = if cloud {
+            Options::default()
+        } else {
+            self.conversion_options()
+        };
         if let Err(e) = options.validate() {
             self.error = Some(e.to_string());
             cx.notify();
             return;
         }
         let output = self.output(cx);
-        let cloud = self.in_cloud(cx);
         if cloud && !self.app.read(cx).settings.cloud_consent {
             return;
         }
@@ -760,6 +764,18 @@ impl QuickView {
 
     fn options_section(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
         let to = self.to?;
+        if self.in_cloud(cx) {
+            // The cloud API takes no options, so there is nothing to set.
+            return Some(
+                section("Options", p).child(
+                    theme::styled(theme::size::SMALL, p.secondary)
+                        .id("cloud-options")
+                        .test_support()
+                        .aria_label("Cloud converts with the standard settings.")
+                        .child("Cloud converts with the standard settings."),
+                ),
+            );
+        }
         let quality = quality_applies(to).then(|| {
             let mut choices: Vec<(&'static str, SharedString)> = QUALITY
                 .iter()

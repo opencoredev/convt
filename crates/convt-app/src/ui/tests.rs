@@ -920,6 +920,11 @@ fn cloud_says_why_it_is_off_and_asks_once_before_uploading(cx: &mut TestAppConte
     cx.read(|cx| assert!(f.app.read(cx).settings.cloud_consent));
     assert!(f.settings_file().contains("cloud_consent = true"));
     assert!(!shown(cx, window, "cloud-consent"));
+    // The cloud takes no options, so it says so instead of offering them.
+    assert!(shown(cx, window, "cloud-options"));
+    click(cx, window, "where-local");
+    assert!(!shown(cx, window, "cloud-options"));
+    click(cx, window, "where-cloud");
 
     // Convert goes to the cloud, not to a local job; what it can't do shows
     // like any other error.
