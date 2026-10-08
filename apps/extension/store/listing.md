@@ -13,14 +13,16 @@ Upload `convt-extension-<version>.zip`. The name, summary, version and icons com
 
 **Description:**
 
+Name formats inside sentences, never as a bare list. The store rejected 0.1.0 for excessive keywords over the bullet "Reads WebP, AVIF, PNG, JPG, GIF, SVG, BMP and ICO".
+
 ```text
 Right-click any image on the web and save it as PNG, JPG or WebP, or copy it as PNG.
 
 Got a .webp you can't open? A .avif your editor doesn't know? Right-click it, choose Convert with convt, and pick the format you need. The file lands in your Downloads folder with a sensible name, and a small note in the corner of the page tells you what was saved.
 
-• Save as PNG, JPG or WebP, or copy as PNG to paste anywhere
+• Copy as PNG to paste the image straight into a document or chat
 • Converts inside your browser. Your images are never uploaded.
-• Reads WebP, AVIF, PNG, JPG, GIF, SVG, BMP and ICO
+• Works with the images Chrome shows, from SVG icons to animated GIFs (it saves the first frame)
 • Transparent images get a clean white background as JPG
 • Your recent files and quality settings live in the toolbar
 
