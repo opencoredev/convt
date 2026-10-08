@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="frame.css" />
+    <style>
+      html,
+      body {
+        width: 440px;
+        height: 280px;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 0;
+        padding: 0 34px;
+        background:
+          radial-gradient(320px 220px at 100% 120%, rgb(31 164 99 / 34%), transparent 70%), #0a0b0b;
+      }
+      .brand {
+        margin-bottom: 18px;
+        font-size: 24px;
+      }
+      h1 {
+        font-size: 31px;
+        line-height: 35px;
+      }
+      .formats {
+        display: flex;
+        gap: 6px;
+        margin-top: 18px;
+      }
+      .formats span {
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgb(255 255 255 / 8%);
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
+        color: #edefee;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .formats span.on {
+        background: linear-gradient(#46d08b, #1fa463);
+        box-shadow: none;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand"><img src="/ext/icons/icon-48.png" width="34" height="34" alt="" />convt</div>
+    <h1>Right-click any image to save it as</h1>
+    <div class="formats"><span class="on">PNG</span><span>JPG</span><span>WebP</span></div>
+  </body>
+</html>

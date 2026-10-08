@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Toolbar icon (16 and 32 px): the app icon's tile cropped to the edges, so the mark
+       stays legible at toolbar size on light and dark browser themes. -->
+  <defs>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#46d08b"/>
+      <stop offset="1" stop-color="#1fa463"/>
+    </linearGradient>
+    <clipPath id="source"><rect x="2" y="2" width="19" height="19" rx="5"/></clipPath>
+  </defs>
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#131615"/>
+  <g transform="translate(16 16) scale(3)">
+    <rect x="2" y="2" width="19" height="19" rx="5" fill="#edefee"/>
+    <rect x="11" y="11" width="19" height="19" rx="5" fill="url(#green)"/>
+    <rect x="11" y="11" width="19" height="19" rx="5" fill="#a6f0c8" clip-path="url(#source)"/>
+  </g>
+</svg>

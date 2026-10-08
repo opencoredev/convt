@@ -1,0 +1,303 @@
+/*
+ * The toast card. Used inside a shadow root on web pages (so page styles can't reach
+ * it) and at the top of the popup. Radii are concentric: card 16 = padding 8 + thumb 8.
+ */
+/* The host element pins the stack to the bottom-right corner of the page. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.toast {
+  all: initial;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-font-smoothing: antialiased;
+  pointer-events: auto;
+  text-align: left;
+
+  /* transitions.dev toast: rise with fade, slight scale and cross-blur. */
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
+  filter: blur(2px);
+  transition:
+    opacity var(--toast-close) var(--toast-ease),
+    transform var(--toast-close) var(--toast-ease),
+    filter var(--toast-close) var(--toast-ease);
+}
+.toast *,
+.toast *::before,
+.toast *::after {
+  box-sizing: border-box;
+}
+/* `all: initial` and the display rules below would otherwise beat [hidden]. */
+.toast [hidden] {
+  display: none !important;
+}
+.toast[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+  transition:
+    opacity var(--toast-open) var(--toast-ease),
+    transform var(--toast-open) var(--toast-ease),
+    filter var(--toast-open) var(--toast-ease);
+}
+/* In the popup the card sits in the layout instead of floating over a page. */
+.toast[data-inline="true"] {
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  /* Top-aligned so the thumbnail stays beside the title when a button adds a line. */
+  align-items: start;
+  column-gap: 12px;
+}
+
+.thumb {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+.thumb-image {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--sunken);
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+}
+.thumb-fallback {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--ink-3);
+}
+
+/* The status chip: the landing page's green arrow, which turns into a check. */
+.chip {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--raised);
+  background: var(--chip-green);
+  color: #ffffff;
+  transition: background-color 150ms ease-out;
+}
+.toast[data-tone="failed"] .chip {
+  background: var(--error);
+}
+.chip-icon {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  filter: blur(2px);
+  transform: scale(0.25);
+  transition:
+    opacity var(--icon-swap-dur) ease-in-out,
+    filter var(--icon-swap-dur) ease-in-out,
+    transform var(--icon-swap-dur) ease-in-out;
+}
+.toast[data-tone="working"] .chip-icon[data-icon="working"],
+.toast[data-tone="done"] .chip-icon[data-icon="done"],
+.toast[data-tone="failed"] .chip-icon[data-icon="failed"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.toast[data-tone="working"] .chip-icon[data-icon="working"] svg {
+  animation: nudge 900ms ease-in-out infinite;
+}
+@keyframes nudge {
+  0%,
+  100% {
+    translate: -1px 0;
+  }
+  50% {
+    translate: 1.5px 0;
+  }
+}
+
+/* At least as tall as the thumbnail, so one- and two-line cards stay centered on it. */
+.text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 44px;
+}
+.title,
+.detail {
+  max-width: 100%;
+}
+.title {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+.detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 16px;
+  text-wrap: pretty;
+}
+.detail[data-mono="true"] {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.side {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  align-self: start;
+}
+
+.button {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--sunken);
+  box-shadow: var(--shadow-button);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    scale 150ms var(--press-ease);
+}
+.button:hover {
+  background: var(--hover);
+}
+.button:active {
+  scale: 0.96;
+}
+.button[data-primary="true"] {
+  background: var(--chip-green);
+  box-shadow:
+    rgb(255 255 255 / 28%) 0 1px 0 inset,
+    #157f4a 0 0 0 1px,
+    rgb(10 60 35 / 25%) 0 1px 3px;
+  color: #ffffff;
+}
+.button[data-primary="true"]:hover {
+  filter: brightness(1.06);
+}
+
+.close {
+  all: unset;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 2px 0 0 2px;
+  border-radius: 8px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+/* A 32px hit area around the 24px button. */
+.close::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.close:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.button:focus-visible,
+.close:focus-visible,
+.note-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.note {
+  display: block;
+  margin: 8px 0 0;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 17px;
+  text-wrap: pretty;
+}
+.note-link {
+  color: var(--green);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--green) 40%, transparent);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.note-link:hover {
+  text-decoration-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    transform: none;
+    filter: none;
+  }
+  .toast,
+  .toast[data-open="true"],
+  .chip-icon,
+  .button {
+    transition: opacity 150ms ease-out !important;
+  }
+  .chip-icon {
+    transform: none;
+    filter: none;
+  }
+  .toast[data-tone="working"] .chip-icon[data-icon="working"] svg {
+    animation: none;
+  }
+}
