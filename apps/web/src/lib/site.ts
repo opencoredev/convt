@@ -66,10 +66,9 @@ export const BUY_DESKTOP_URL = "/checkout/desktop";
 /** Checkout for Pro; signs in first. */
 export const buyProUrl = (interval: "month" | "year") => `/checkout/pro?interval=${interval}`;
 
-/** Pages listed in the sitemap, in order. */
+/** Pages listed in the sitemap, in order. /download asks for an account, so it isn't one. */
 export const sitemapPaths = [
   "/",
-  routes.download,
   routes.formats,
   routes.changelog,
   routes.apiDocs,
