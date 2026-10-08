@@ -190,8 +190,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/sqlx
-          key: sqlx-cli-${{ runner.os }}-0.9.0
+          # db:ci runs `cargo sqlx`, which needs cargo-sqlx, not only sqlx.
+          path: |
+            ~/.cargo/bin/sqlx
+            ~/.cargo/bin/cargo-sqlx
+          key: sqlx-cli-${{ runner.os }}-0.9.0-cargo
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -203,7 +206,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install SQLx CLI
         run: |
-          if ! command -v sqlx >/dev/null 2>&1; then
+          if ! command -v cargo-sqlx >/dev/null 2>&1; then
             cargo install sqlx-cli --version 0.9.0 --locked --no-default-features --features rustls,postgres
           fi
       - name: Create database roles
