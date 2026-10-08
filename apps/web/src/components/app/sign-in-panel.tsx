@@ -187,7 +187,7 @@ function WithoutAccount() {
         </a>{" "}
         or with Homebrew on a Mac:
       </p>
-      <pre className="max-w-full overflow-x-auto rounded-lg bg-sunken/80 px-3 py-2 text-left font-mono text-[11.5px]/[18px] text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]">
+      <pre className="w-full rounded-lg bg-sunken/80 px-3 py-2 text-left whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-[11.5px]/[18px] text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]">
         {homebrew}
       </pre>
     </div>
