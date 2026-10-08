@@ -13,7 +13,7 @@ Upload `convt-extension-<version>.zip`. The name, summary, version and icons com
 
 **Description:**
 
-Don't list format names in the description. The store rejected 0.1.0 for excessive keywords over a bullet that listed eight formats.
+Name formats inside sentences, never as a bare list. The store rejected 0.1.0 for excessive keywords over the bullet "Reads WebP, AVIF, PNG, JPG, GIF, SVG, BMP and ICO".
 
 ```text
 Right-click any image on the web and save it as PNG, JPG or WebP, or copy it as PNG.
