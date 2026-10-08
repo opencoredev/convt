@@ -652,7 +652,7 @@ impl FirstRunView {
     fn calibrating(&self, p: &Palette, cx: &App) -> AnyElement {
         let words = "Setting convt up…";
         // Over the bloom, so darker than the page's secondary text.
-        let (base, bright) = (p.text.opacity(0.5), p.text);
+        let (base, bright) = (p.text.opacity(0.45), p.text);
         let still = cx.reduce_motion();
         let label = div()
             .id("onboarding-title")
@@ -880,7 +880,7 @@ fn mix(a: Hsla, b: Hsla, t: f32) -> Hsla {
         r: a.r + (b.r - a.r) * t,
         g: a.g + (b.g - a.g) * t,
         b: a.b + (b.b - a.b) * t,
-        a: 1.,
+        a: a.a + (b.a - a.a) * t,
     }
     .into()
 }

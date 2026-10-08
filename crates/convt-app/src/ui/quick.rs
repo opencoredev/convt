@@ -612,9 +612,8 @@ impl QuickView {
                 .relative()
                 .flex()
                 .flex_col()
-                .flex_shrink_0()
+                .min_w_0()
                 .gap(px(3.))
-                .w(px(CARD_WIDTH))
                 .px(px(space::MD))
                 .py(px(10.))
                 .rounded(px(radius::CARD))
@@ -727,9 +726,10 @@ impl QuickView {
                 )
                 .into_any_element()
             } else {
+                // Four to a row, whatever the window's width.
                 div()
-                    .flex()
-                    .flex_wrap()
+                    .grid()
+                    .grid_cols(CARDS_PER_ROW)
                     .gap(px(space::SM))
                     .children(cards)
                     .into_any_element()
@@ -1383,8 +1383,8 @@ impl Global for TestCloud {}
 
 /// Space between the window edge and the content.
 const GUTTER: f32 = 24.;
-/// Four format cards to a row.
-const CARD_WIDTH: f32 = 132.;
+/// Format cards to a row.
+const CARDS_PER_ROW: u16 = 4;
 const SELECT_WIDTH: f32 = 190.;
 
 /// A titled part of the window.

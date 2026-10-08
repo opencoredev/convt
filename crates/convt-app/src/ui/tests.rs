@@ -532,7 +532,7 @@ fn open<V: Render>(
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds {
                 origin: point(px(0.), px(0.)),
-                size: size(px(1040.), px(760.)),
+                size: size(px(1040.), px(900.)),
             })),
             ..Default::default()
         };
@@ -2479,6 +2479,8 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-webp");
         assert!(fits(cx, quick, "convert"), "Quick convert");
+        // An image's Options row, where it runs and Save fit without scrolling.
+        assert!(fits(cx, quick, "change-folder"), "Quick convert, Save");
         cx.update(|cx| super::open_quick(cli(pngs.clone(), None, None), cx));
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-jpeg");
