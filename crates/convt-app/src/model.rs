@@ -756,6 +756,22 @@ impl AppState {
         cx.notify();
     }
 
+    /// Reads the file-manager menu status again, such as after a hand-run
+    /// of install.py.
+    pub fn refresh_linux_menu(&mut self, cx: &mut Context<Self>) {
+        if matches!(
+            self.linux_menu,
+            linux_menu::Status::Installing | linux_menu::Status::Removing
+        ) {
+            return;
+        }
+        let next = self.linux_menus.status();
+        if next != self.linux_menu {
+            self.linux_menu = next;
+            cx.notify();
+        }
+    }
+
     /// Reads the pack status again, offline, and rebuilds the registry if it
     /// changed, such as after `convt pack install` in a terminal.
     pub fn refresh_pack(&mut self, cx: &mut Context<Self>) {

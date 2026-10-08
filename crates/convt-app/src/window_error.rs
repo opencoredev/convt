@@ -16,19 +16,28 @@ pub fn failed() -> bool {
     FAILED.load(Ordering::SeqCst)
 }
 
-/// Log the error, try a software-rendering restart, then show a dialog and
-/// mark the process as failed so `main` exits non-zero.
-pub fn report(error: &dyn std::fmt::Display, title: &str) {
+/// True when this is the first window and nothing else is running, so a
+/// restart or exit cannot interrupt work.
+pub fn is_fatal(open_windows: usize, active_jobs: usize) -> bool {
+    open_windows == 0 && active_jobs == 0
+}
+
+/// Log the error. When `fatal`, try a software-rendering restart, then show
+/// a dialog and mark the process as failed so `main` exits non-zero.
+/// A later Settings or Quick convert failure must not replace the process.
+pub fn report(error: &dyn std::fmt::Display, title: &str, fatal: bool) {
     let message = format_message(error, title);
     eprintln!("convt-app: {message}");
     if let Some(path) = write_log(&message) {
         eprintln!("convt-app: details written to {}", path.display());
     }
-    if try_software_reexec() {
+    if fatal && try_software_reexec() {
         return;
     }
     show_dialog(&message);
-    FAILED.store(true, Ordering::SeqCst);
+    if fatal {
+        FAILED.store(true, Ordering::SeqCst);
+    }
 }
 
 pub fn format_message(error: &dyn std::fmt::Display, title: &str) -> String {
@@ -211,5 +220,13 @@ mod tests {
     #[test]
     fn no_dialog_when_path_is_empty() {
         assert!(dialog_command_in("x", std::ffi::OsStr::new("")).is_none());
+    }
+
+    #[test]
+    fn only_the_first_idle_window_is_fatal() {
+        assert!(is_fatal(0, 0));
+        assert!(!is_fatal(1, 0), "an existing window is still usable");
+        assert!(!is_fatal(0, 1), "a conversion is still running");
+        assert!(!is_fatal(2, 3));
     }
 }

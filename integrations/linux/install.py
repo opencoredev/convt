@@ -48,6 +48,25 @@ CONVT = shutil.which("convt")
 APP = shutil.which("convt-app")
 SYSTEM_DATA = Path("/usr/share")
 
+
+def appimage_path():
+    """The stable AppImage file, when this process is running from one.
+
+    The mounted payload under /tmp/.mount_* disappears when the AppImage
+    exits, so generated menus must launch the AppImage itself.
+    """
+    raw = os.environ.get("APPIMAGE")
+    if not raw:
+        return None
+    path = Path(raw)
+    return path.resolve() if path.is_file() else None
+
+
+def app_path():
+    if image := appimage_path():
+        return str(image)
+    return APP
+
 MARKER = "# convt-generated: linux-integration-v1\n"
 ACTION_MARKER = "<!-- convt-generated: linux-integration-v1 -->"
 SCRIPT_SHEBANG = "#!/bin/sh\n"
@@ -78,7 +97,7 @@ def desktop_exec(*args):
 
 def menu_command(target=None):
     """The app invocation for one target, before the file list."""
-    return [APP, "open", *(["--to", target] if target is not None else []), "--"]
+    return [app_path(), "open", *(["--to", target] if target is not None else []), "--"]
 
 
 def groups():
@@ -298,7 +317,7 @@ def app_entry(groups=None, mimes=None):
         "GenericName=File Converter",
         "Comment=Convert files on this computer",
         "Icon=convt",
-        f"Exec={desktop_exec(APP)} %U",
+        f"Exec={desktop_exec(app_path())} %U",
         "Terminal=false",
         "Categories=Utility;",
         f"MimeType={listed}",
@@ -528,8 +547,9 @@ def main():
         if name == "nautilus":
             if force_user or not use_system_install("nautilus"):
                 install_nautilus()
-            if force_user or not use_system_install("nautilus-scripts"):
-                install_nautilus_scripts(g)
+            # Nautilus only reads scripts from the user's data directory.
+            # Files under /usr/share/nautilus/scripts never appear as a menu.
+            install_nautilus_scripts(g)
             continue
         if not force_user and use_system_install(name):
             continue

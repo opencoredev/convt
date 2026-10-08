@@ -484,6 +484,21 @@ class SystemIntegration(unittest.TestCase):
             self.assertTrue(written)
             self.assertIn("X-KDE-Submenu=Convert with convt", written[0].read_text())
 
+    def test_appimage_env_writes_the_stable_appimage_path(self):
+        with tempfile.TemporaryDirectory(prefix="convt-appimage-") as tmp:
+            image = Path(tmp) / "convt-linux-x86_64.AppImage"
+            image.write_text("payload")
+            mount = Path(tmp) / ".mount_convt123"
+            mount.mkdir()
+            with mock.patch.object(install, "APP", str(mount / "convt-app")), \
+                    mock.patch.dict(os.environ, {"APPIMAGE": str(image)}):
+                command = install.menu_command("webp")
+                desktop = install.app_entry()
+            self.assertEqual(command[0], str(image.resolve()))
+            self.assertIn(str(image.resolve()), desktop)
+            self.assertNotIn(".mount_convt123", command[0])
+            self.assertNotIn(".mount_convt123", desktop)
+
 
 class Ownership(Fixture):
     def setUp(self):
@@ -627,8 +642,7 @@ class EmptyTargets(Fixture):
             self.assertIn('Actions=options;', desktop)
             self.assertIn('MimeType=image/heic;', desktop)
             self.assertIn('Extensions=heic;heif;', (root / 'stage/usr/share/nemo/actions/convt-zz-more-options.nemo_action').read_text())
-            scripts = root / 'stage/usr/share/nautilus/scripts' / install.NAUTILUS_SCRIPT_FOLDER
-            self.assertTrue((scripts / 'More options…').is_file())
+            self.assertFalse((root / 'stage/usr/share/nautilus/scripts').exists())
             self.assertIn('image/heic', (root / 'stage/usr/share/applications/convt-app.desktop').read_text())
 
     def test_packaged_static_menus_include_full_targets(self):
@@ -645,7 +659,7 @@ class EmptyTargets(Fixture):
             desktop = (root / 'stage/usr/share/kio/servicemenus/convt-0.desktop').read_text()
             self.assertIn('Actions=convert_jpeg;convert_webp;options;', desktop)
             self.assertTrue((root / 'stage/usr/share/nemo/actions/convt-jpeg.nemo_action').is_file())
-            self.assertTrue((root / 'stage/usr/share/nautilus/scripts' / install.NAUTILUS_SCRIPT_FOLDER / 'JPEG').is_file())
+            self.assertFalse((root / 'stage/usr/share/nautilus/scripts').exists())
 
 
 

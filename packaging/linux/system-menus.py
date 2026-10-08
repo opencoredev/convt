@@ -28,8 +28,9 @@ for name, text in menus.dolphin_menus(groups).items():
     write("usr/share/kio/servicemenus/" + name, text, 0o755)
 for name, text in menus.nemo_actions(groups).items():
     write("usr/share/nemo/actions/" + name, text)
-for name, text in menus.nautilus_scripts(groups).items():
-    write("usr/share/nautilus/scripts/" + name, text, 0o755)
+# Nautilus scripts only appear when they live in the user's data directory.
+# The package ships the Python extension; Settings or install.py --nautilus
+# writes the script fallback that works without python3-nautilus.
 write("usr/share/applications/convt-app.desktop", menus.app_entry(groups))
 for source, dest in [
     ("integrations/linux/nautilus/convt_nautilus.py", "usr/share/nautilus-python/extensions/convt_nautilus.py"),

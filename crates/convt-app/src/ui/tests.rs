@@ -1112,6 +1112,25 @@ fn linux_settings_installs_and_removes_the_right_click_menu(cx: &mut TestAppCont
 
 #[cfg(target_os = "linux")]
 #[gpui_kit::test]
+fn linux_settings_refreshes_menu_status(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    *f.linux_menus.status.lock().unwrap() =
+        crate::linux_menu::Status::Installed(vec!["Thunar".into()]);
+    cx.read(|cx| {
+        assert_eq!(
+            f.app.read(cx).linux_menu,
+            crate::linux_menu::Status::NotInstalled
+        );
+    });
+    cx.update(|cx| super::show_settings(SettingsTab::General, cx));
+    let (window, _) = window_of::<SettingsView>(cx);
+    let status = label(cx, window, "linux-menu-status").expect("status");
+    assert!(status.contains("Thunar"), "{status}");
+    assert!(shown(cx, window, "remove-linux-menu"));
+}
+
+#[cfg(target_os = "linux")]
+#[gpui_kit::test]
 fn linux_empty_activity_points_at_settings(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let (window, _) = f.main(cx);

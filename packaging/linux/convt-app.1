@@ -11,13 +11,17 @@ Vulkan driver are required. If the window cannot open, convt prints the
 error, writes
 .I window-error.log
 in its config directory, shows a zenity or kdialog dialog when one is
-available, and exits with status 1. On Linux it retries once with Mesa
-lavapipe when that ICD is installed.
+available, and exits with status 1 if no other window is open and no
+conversion is running. On Linux that first failure retries once with Mesa
+lavapipe when that ICD is installed. A later Settings or Quick convert
+failure leaves the running session alone.
 Use --help for all entry points, including convt:// URLs.
 .PP
 AppImage and tarball builds include the file-manager menu installer. Open
 Settings and choose
 .B Set up right-click menu
 to install per-user menus for GNOME Files, Dolphin, Nemo and Thunar.
+Menus written from an AppImage launch that AppImage file, not its
+temporary mount.
 .SH SEE ALSO
 .BR convt (1)

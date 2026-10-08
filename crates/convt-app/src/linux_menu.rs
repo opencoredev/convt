@@ -62,11 +62,15 @@ pub fn probe() -> Status {
     if !cfg!(target_os = "linux") {
         return Status::Unavailable;
     }
-    let user = kinds_in(&user_data());
+    let mut user = kinds_in(&user_data(), true);
+    if thunar_user_actions() {
+        user.push("Thunar".into());
+    }
     if !user.is_empty() {
         return Status::Installed(user);
     }
-    let system = kinds_in(Path::new("/usr/share"));
+    // Nautilus scripts under /usr/share never appear in GNOME Files.
+    let system = kinds_in(Path::new("/usr/share"), false);
     if !system.is_empty() {
         return Status::System(system);
     }
@@ -83,7 +87,7 @@ fn user_data() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn kinds_in(root: &Path) -> Vec<String> {
+fn kinds_in(root: &Path, user_scripts: bool) -> Vec<String> {
     let mut out = Vec::new();
     if dir_has(&root.join("kio/servicemenus"), "convt-") {
         out.push("Dolphin".into());
@@ -94,11 +98,33 @@ fn kinds_in(root: &Path) -> Vec<String> {
     if root
         .join("nautilus-python/extensions/convt_nautilus.py")
         .is_file()
-        || dir_has(&root.join("nautilus/scripts/Convert with convt"), "")
+        || (user_scripts && dir_has(&root.join("nautilus/scripts/Convert with convt"), ""))
     {
         out.push("GNOME Files".into());
     }
     out
+}
+
+fn user_config() -> PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Thunar custom actions live in the user config tree, not /usr/share.
+fn thunar_user_actions() -> bool {
+    thunar_actions_in(&user_config().join("Thunar/uca.xml"))
+}
+
+fn thunar_actions_in(uca: &Path) -> bool {
+    if uca.is_symlink() || !uca.is_file() {
+        return false;
+    }
+    let Ok(text) = std::fs::read_to_string(uca) else {
+        return false;
+    };
+    text.contains("convt-generated: linux-integration") || text.contains("<unique-id>convt-")
 }
 
 fn dir_has(dir: &Path, prefix: &str) -> bool {
@@ -193,7 +219,7 @@ mod tests {
     #[test]
     fn empty_data_dir_is_not_installed() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(kinds_in(dir.path()).is_empty());
+        assert!(kinds_in(dir.path(), true).is_empty());
     }
 
     #[test]
@@ -206,6 +232,21 @@ mod tests {
         std::fs::write(root.join("nemo/actions/convt-jpeg.nemo_action"), "x").unwrap();
         std::fs::create_dir_all(root.join("nautilus/scripts/Convert with convt")).unwrap();
         std::fs::write(root.join("nautilus/scripts/Convert with convt/JPEG"), "x").unwrap();
-        assert_eq!(kinds_in(root), ["Dolphin", "Nemo", "GNOME Files"]);
+        assert_eq!(kinds_in(root, true), ["Dolphin", "Nemo", "GNOME Files"]);
+        assert_eq!(kinds_in(root, false), ["Dolphin", "Nemo"]);
+    }
+
+    #[test]
+    fn thunar_probe_reads_owned_actions() {
+        let dir = tempfile::tempdir().unwrap();
+        let uca = dir.path().join("Thunar/uca.xml");
+        std::fs::create_dir_all(uca.parent().unwrap()).unwrap();
+        std::fs::write(
+            &uca,
+            "<!-- convt-generated: linux-integration-v1 --><unique-id>convt-webp</unique-id>",
+        )
+        .unwrap();
+        assert!(thunar_actions_in(&uca));
+        assert!(!thunar_actions_in(&dir.path().join("missing.xml")));
     }
 }
