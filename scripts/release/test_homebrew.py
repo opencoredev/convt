@@ -82,6 +82,15 @@ class BumpTests(unittest.TestCase):
         self.assertIn("zap trash:", bumped)
         self.assertEqual(bumped.count("cask "), 1)
 
+    def test_bump_keeps_stanza_layout(self):
+        url = "https://github.com/opencoredev/convt/releases/download/v9.9.9/convt-macos-arm64.dmg"
+        bumped = homebrew.bump_cask(CASK, version="9.9.9", sha256="c" * 64, url=url)
+        # brew style wants the blank line between sha256 and url kept.
+        self.assertEqual(bumped.count("\n"), CASK.count("\n"))
+        self.assertIn('"' + "c" * 64 + '"\n\n  url', bumped)
+        # A release URL that matches the template keeps #{version}.
+        self.assertIn("/v#{version}/convt-macos-arm64.dmg", bumped)
+
     def test_url_override_keeps_the_manifest_host(self):
         url = "https://downloads.convt.app/9.9.9/convt-macos-arm64.dmg"
         bumped = homebrew.bump_cask(CASK, version="9.9.9", sha256="c" * 64, url=url)
