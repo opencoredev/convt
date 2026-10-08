@@ -542,6 +542,16 @@ fn label(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Option
     .unwrap()
 }
 
+/// A switch's or checkbox's state, as screen readers get it.
+fn toggled(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Option<bool> {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.try_find(id(name)).and_then(|e| e.checked())
+    })
+    .unwrap()
+}
+
 fn shown(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> bool {
     label(cx, handle, name).is_some()
 }
@@ -996,8 +1006,23 @@ fn settings_change_and_persist(cx: &mut TestAppContext) {
     assert!(!f.settings_file().contains("concurrency"));
 
     assert!(cx.read(|cx| f.app.read(cx).settings.notifications));
+    // Screen readers hear each switch's setting, not just On or Off.
+    assert_eq!(
+        label(cx, window, "notifications").as_deref(),
+        Some("Show a notification")
+    );
+    assert_eq!(
+        label(cx, window, "reveal"),
+        Some(format!(
+            "Reveal it in {}",
+            super::theme::file_manager_name()
+        ))
+    );
+    assert_eq!(toggled(cx, window, "notifications"), Some(true));
     click(cx, window, "notifications");
+    assert_eq!(toggled(cx, window, "notifications"), Some(false));
     click(cx, window, "reveal");
+    assert_eq!(toggled(cx, window, "reveal"), Some(true));
     let saved = if cfg!(target_os = "macos") {
         click(cx, window, "menu-bar-icon");
         let saved = f.settings_file();
@@ -1565,13 +1590,12 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
     assert!(!rules[2].enabled);
     assert_eq!(
         label(cx, popover, "popover-automation-2").as_deref(),
-        Some("Off")
+        Some("HEIC → JPEG"),
+        "a switch is named for its rule"
     );
+    assert_eq!(toggled(cx, popover, "popover-automation-2"), Some(false));
     click(cx, popover, "popover-automation-2");
-    assert_eq!(
-        label(cx, popover, "popover-automation-2").as_deref(),
-        Some("On")
-    );
+    assert_eq!(toggled(cx, popover, "popover-automation-2"), Some(true));
     cx.read(|cx| assert!(f.app.read(cx).settings.automations[2].enabled));
     let reloaded = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
     assert!(reloaded.automations[2].enabled);
@@ -1580,7 +1604,11 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
     click(cx, popover, "manage-rules");
     let (main, view) = window_of::<MainView>(cx);
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
-    assert_eq!(label(cx, main, "automation-2").as_deref(), Some("On"));
+    assert_eq!(
+        label(cx, main, "automation-2").as_deref(),
+        Some("HEIC → JPEG")
+    );
+    assert_eq!(toggled(cx, main, "automation-2"), Some(true));
     let intro = label(cx, main, "automations-intro").expect("intro");
     assert!(intro.contains("screenshot"), "{intro}");
     assert_eq!(
@@ -3845,9 +3873,13 @@ fn update_checks_off_ask_only_when_the_user_does(cx: &mut TestAppContext) {
         .serve(Ok(manifest(1, &[("9.2.0", "2026-10-03")], &update_key())));
     let (settings, view) = f.settings(SettingsTab::General, cx);
     view.update(cx, |v, cx| v.reveal_updates(cx));
-    assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("On"));
+    assert_eq!(
+        label(cx, settings, "update-checks").as_deref(),
+        Some("Check automatically")
+    );
+    assert_eq!(toggled(cx, settings, "update-checks"), Some(true));
     click(cx, settings, "update-checks");
-    assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("Off"));
+    assert_eq!(toggled(cx, settings, "update-checks"), Some(false));
     assert!(f.settings_file().contains("update_checks = false"));
     assert!(
         label(cx, settings, "update-status")

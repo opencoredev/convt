@@ -241,6 +241,7 @@ impl PopoverView {
             )
             .children(rules.into_iter().enumerate().map(|(i, rule)| {
                 let to = format_by_id(&rule.to).map_or(rule.to.clone(), |f| f.name.to_string());
+                let title = format!("{} → {to}", rule.name);
                 let app = self.app.clone();
                 let on = rule.enabled;
                 div()
@@ -260,7 +261,7 @@ impl PopoverView {
                                 styled(size::BODY, p.text)
                                     .font_weight(FontWeight::MEDIUM)
                                     .truncate()
-                                    .child(format!("{} → {to}", rule.name)),
+                                    .child(title.clone()),
                             )
                             .child(mono(11., 14., p.secondary).truncate().child(format!(
                                 "{} · {}",
@@ -271,6 +272,7 @@ impl PopoverView {
                     .child(
                         theme::switch(
                             SharedString::from(format!("popover-automation-{i}")),
+                            title,
                             on,
                             true,
                             p,

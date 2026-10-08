@@ -572,8 +572,15 @@ pub fn text_button(
     )
 }
 
-/// A switch (`small`: 28x16, as in lists, otherwise 32x18).
-pub fn switch(id: impl Into<ElementId>, on: bool, small: bool, p: &Palette) -> Clickable {
+/// A switch (`small`: 28x16, as in lists, otherwise 32x18). Screen readers
+/// read `name`; the state is in `aria_toggled`.
+pub fn switch(
+    id: impl Into<ElementId>,
+    name: impl Into<SharedString>,
+    on: bool,
+    small: bool,
+    p: &Palette,
+) -> Clickable {
     let (w, h, knob) = if small {
         (28., 16., 12.)
     } else {
@@ -588,7 +595,7 @@ pub fn switch(id: impl Into<ElementId>, on: bool, small: bool, p: &Palette) -> C
         } else {
             accesskit::Toggled::False
         })
-        .aria_label(if on { "On" } else { "Off" })
+        .aria_label(name)
         .flex()
         .flex_shrink_0()
         .items_center()

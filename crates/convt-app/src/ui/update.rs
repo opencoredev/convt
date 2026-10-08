@@ -190,7 +190,7 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
         .child(status(state, on, p))
         .into_any_element();
 
-    let switch = theme::switch("update-checks", on, false, p).on_click({
+    let switch = theme::switch("update-checks", "Check automatically", on, false, p).on_click({
         let app = app.clone();
         move |_, _, cx| app.update(cx, |s, cx| s.set_update_checks(!on, cx))
     });

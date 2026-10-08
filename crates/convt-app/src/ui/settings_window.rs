@@ -298,15 +298,27 @@ impl SettingsView {
         );
 
         let app = self.app.clone();
-        let notifications = theme::switch("notifications", settings.notifications, false, p)
-            .on_click({
-                let app = app.clone();
-                let on = settings.notifications;
-                move |_, _, cx| {
-                    app.update(cx, |s, cx| s.update_settings(|s| s.notifications = !on, cx))
-                }
-            });
-        let reveal = theme::switch("reveal", settings.reveal_when_done, false, p).on_click({
+        let reveal_label = format!("Reveal it in {}", theme::file_manager_name());
+        let notifications = theme::switch(
+            "notifications",
+            "Show a notification",
+            settings.notifications,
+            false,
+            p,
+        )
+        .on_click({
+            let app = app.clone();
+            let on = settings.notifications;
+            move |_, _, cx| app.update(cx, |s, cx| s.update_settings(|s| s.notifications = !on, cx))
+        });
+        let reveal = theme::switch(
+            "reveal",
+            reveal_label.clone(),
+            settings.reveal_when_done,
+            false,
+            p,
+        )
+        .on_click({
             let app = app.clone();
             let on = settings.reveal_when_done;
             move |_, _, cx| {
@@ -315,7 +327,14 @@ impl SettingsView {
                 })
             }
         });
-        let menu_bar = theme::switch("menu-bar-icon", settings.menu_bar_icon, false, p).on_click({
+        let menu_bar = theme::switch(
+            "menu-bar-icon",
+            "Menu bar icon",
+            settings.menu_bar_icon,
+            false,
+            p,
+        )
+        .on_click({
             let app = app.clone();
             let on = settings.menu_bar_icon;
             move |_, _, cx| app.update(cx, |s, cx| s.update_settings(|s| s.menu_bar_icon = !on, cx))
@@ -467,7 +486,7 @@ impl SettingsView {
                         )
                         .into_any_element(),
                         theme::row(
-                            format!("Reveal it in {}", theme::file_manager_name()),
+                            reveal_label,
                             Some(theme::detail("When a file is done", p)),
                             reveal,
                             p,

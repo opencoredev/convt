@@ -589,13 +589,18 @@ impl MainView {
                             app.update(cx, |s, cx| s.set_automation_copy(i, !copy, cx))
                         })
                     });
+                let title = format!("{} → {to}", rule.name);
                 theme::row(
-                    format!("{} → {to}", rule.name),
+                    title.clone(),
                     Some(detail.into_any_element()),
-                    theme::switch(SharedString::from(format!("automation-{i}")), on, false, p)
-                        .on_click(move |_, _, cx| {
-                            app.update(cx, |s, cx| s.set_automation(i, !on, cx))
-                        }),
+                    theme::switch(
+                        SharedString::from(format!("automation-{i}")),
+                        title,
+                        on,
+                        false,
+                        p,
+                    )
+                    .on_click(move |_, _, cx| app.update(cx, |s, cx| s.set_automation(i, !on, cx))),
                     p,
                 )
                 .into_any_element()
