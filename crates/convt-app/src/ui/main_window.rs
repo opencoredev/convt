@@ -185,7 +185,7 @@ impl MainView {
                 "Activity",
                 match (state.queue.progress_line(), state.recent.len()) {
                     (Some(line), _) => line,
-                    (None, 0) => "Drop files anywhere in this window".to_string(),
+                    (None, 0) => "Nothing converted yet".to_string(),
                     (None, 1) => "1 recent conversion".to_string(),
                     (None, n) => format!("{n} recent conversions"),
                 },
