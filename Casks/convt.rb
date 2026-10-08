@@ -1,8 +1,7 @@
 cask "convt" do
-  version "0.2.0"
-  sha256 "8fc47f8b9873adbf4ad6df1db9e050d74205c26cff7e8c7e919ce0d398ae2ea3"
-
-  url "https://github.com/opencoredev/convt/releases/download/v#{version}/convt-macos-arm64.dmg",
+  version "0.3.0"
+  sha256 "97784e68a1c5a8ae63630608559d1cab681f695f1c714dac222230b57643fe9f"
+  url "https://github.com/opencoredev/convt/releases/download/v0.3.0/convt-macos-arm64.dmg",
       verified: "github.com/opencoredev/convt/"
   name "convt"
   desc "Convert files locally without uploading"
