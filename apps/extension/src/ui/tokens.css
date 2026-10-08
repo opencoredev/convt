@@ -1,0 +1,74 @@
+/*
+ * convt's palette, copied from apps/web/src/styles.css so the extension looks like the
+ * site. `:host` makes the same tokens work inside the toast's shadow root on any page.
+ * Light is the default; dark follows the OS.
+ */
+:root,
+:host {
+  --page: #ffffff;
+  --raised: #ffffff;
+  --sunken: #f7f8f7;
+  --hover: #f3f4f3;
+  --line: #e6e8e7;
+  --line-strong: #d5d9d7;
+  --ink: #0a0a0a;
+  --ink-2: #6b6f6d;
+  --ink-3: #6c716e;
+  --green: #127a47;
+  --green-tint: #eef7f2;
+  --error: #b3261e;
+  --error-tint: #fbeeed;
+  --mark-source: #0a0a0a;
+  --mark-green-top: #1fb36c;
+  --mark-green-bottom: #127a47;
+  --mark-overlap: #0b5c34;
+  --chip-green: linear-gradient(#1fb36c, #127a47);
+  --shadow-button:
+    rgb(0 0 0 / 4%) 0 -1px 0 inset, rgb(0 0 0 / 8%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 1px 2px;
+  --shadow-float: rgb(10 60 35 / 10%) 0 0 0 1px, rgb(10 60 35 / 12%) 0 4px 14px;
+  --image-outline: rgb(0 0 0 / 10%);
+  --focus: #127a47;
+
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* transitions.dev toast and icon-swap tunings */
+  --toast-open: 350ms;
+  --toast-close: 250ms;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --icon-swap-dur: 250ms;
+  --press-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host {
+    --page: #0a0b0b;
+    --raised: #111312;
+    --sunken: #161918;
+    --hover: #1c201e;
+    --line: #232726;
+    --line-strong: #2e3331;
+    --ink: #edefee;
+    --ink-2: #a1a6a3;
+    --ink-3: #868b88;
+    --green: #3fcb84;
+    --green-tint: #12261b;
+    --error: #f2786d;
+    --error-tint: #2a1513;
+    --mark-source: #edefee;
+    --mark-green-top: #46d08b;
+    --mark-green-bottom: #1fa463;
+    --mark-overlap: #a6f0c8;
+    --chip-green: linear-gradient(#46d08b, #1fa463);
+    --shadow-button:
+      rgb(255 255 255 / 6%) 0 1px 0 inset, #2e3331 0 0 0 1px, rgb(0 0 0 / 40%) 0 1px 2px;
+    --shadow-float:
+      rgb(255 255 255 / 8%) 0 0 0 1px, rgb(0 0 0 / 60%) 0 24px 60px, rgb(0 0 0 / 40%) 0 4px 12px;
+    --image-outline: rgb(255 255 255 / 10%);
+    --focus: #3fcb84;
+    color-scheme: dark;
+  }
+}
