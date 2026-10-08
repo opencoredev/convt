@@ -6,6 +6,7 @@ import type { Db } from "@convt/db";
 import type { MailTransport } from "@convt/mail";
 
 import * as actions from "./actions";
+import type { CaptureAnalytics } from "./analytics";
 import type { Catalog, CatalogProduct } from "./catalog";
 import { cleanupAuth } from "./cleanup";
 import { checkoutResult, createCheckout } from "./checkout";
@@ -27,6 +28,7 @@ export type ServiceDeps = {
   clock?: () => Date;
   fault?: (point: FaultPoint) => void | Promise<void>;
   log?: (line: string) => void;
+  captureAnalytics?: CaptureAnalytics;
 };
 
 export function createBillingService(deps: ServiceDeps) {
@@ -43,6 +45,7 @@ export function createBillingService(deps: ServiceDeps) {
         config: deps.config,
         fault: deps.fault,
         log: deps.log ?? ((l) => console.log(l)),
+        captureAnalytics: deps.captureAnalytics,
       });
     } finally {
       await close();

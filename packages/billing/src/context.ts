@@ -6,6 +6,7 @@ import type { Db } from "@convt/db";
 import { newId, type IdPrefix } from "@convt/license";
 import type { MailTransport } from "@convt/mail";
 
+import type { CaptureAnalytics } from "./analytics";
 import type { Catalog } from "./catalog";
 import type { BillingProvider } from "./provider";
 
@@ -46,6 +47,8 @@ export type BillingContext = {
   config: BillingConfig;
   fault?: (point: FaultPoint) => void | Promise<void>;
   log: (line: string) => void;
+  /** PostHog capture after a successful ingest. Tests record events this way. */
+  captureAnalytics?: CaptureAnalytics;
 };
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];

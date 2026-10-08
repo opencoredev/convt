@@ -8,7 +8,10 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type BillingRpc as Rpc,
   ConfigError,
+  analyticsEventsToCapture,
+  captureEvent,
   createBillingService,
+  emitAnalytics,
   currentProKey,
   createPolarProvider,
   loadCatalog,
@@ -55,6 +58,7 @@ function setup(raw: Env) {
           ? sequenzyTransport({ apiKey: env.mail.apiKey })
           : logTransport(),
     signingKey: () => key,
+    captureAnalytics: (event) => captureEvent(env.posthog, event),
     config: {
       siteUrl: env.siteUrl,
       mailFrom: env.mail.from,
@@ -108,6 +112,13 @@ async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Respon
       return text(400, "invalid body");
     }
     const result = await s.service.handleWebhook(request.method, raw, request.headers);
+    const pending = analyticsEventsToCapture(result.analytics, request.headers);
+    if (pending.length)
+      ctx.waitUntil(
+        emitAnalytics((event) => captureEvent(s.env.posthog, event), pending).catch((e) =>
+          console.warn("[billing] analytics", (e as Error).message),
+        ),
+      );
     if (result.drain)
       ctx.waitUntil(
         s.service

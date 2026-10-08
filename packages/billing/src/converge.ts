@@ -6,6 +6,7 @@
 import { sql } from "drizzle-orm";
 import { newId, sign } from "@convt/license";
 
+import { licensePurchasedEvent, type AnalyticsEvent } from "./analytics";
 import { addYears, alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
 import { enqueueEmail } from "./outbox";
 
@@ -30,7 +31,13 @@ async function revoke(
     where revoked_at is null and ${where}`);
 }
 
-export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: string, now: Date) {
+export async function convergeDesktop(
+  ctx: BillingContext,
+  tx: Q,
+  orderId: string,
+  now: Date,
+  events: AnalyticsEvent[] = [],
+) {
   const o = await one<{
     id: string;
     status: string;
@@ -68,6 +75,7 @@ export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: strin
     returning id`,
   );
   if (inserted.length === 0) return;
+  if (o.user_id) events.push(licensePurchasedEvent(o.user_id, "desktop", o.id));
   await fault(ctx, "after-license-insert");
   await enqueueEmail(tx, {
     kind: "license_issued",
@@ -85,7 +93,13 @@ export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: strin
  * end among funded rows; if its date is past every unrevoked original key of the
  * subscription, issue one key up to it.
  */
-export async function convergePro(ctx: BillingContext, tx: Q, subscriptionId: string, now: Date) {
+export async function convergePro(
+  ctx: BillingContext,
+  tx: Q,
+  subscriptionId: string,
+  now: Date,
+  events: AnalyticsEvent[] = [],
+) {
   // Revocations first, so a refunded invoice's key never counts as covering.
   await revoke(
     tx,
@@ -186,6 +200,7 @@ export async function convergePro(ctx: BillingContext, tx: Q, subscriptionId: st
     return;
   }
   await fault(ctx, "after-license-insert");
+  if (!current?.any && sub.user_id) events.push(licensePurchasedEvent(sub.user_id, "pro", sub.id));
   // Only a subscription's first Pro key is emailed; renewals appear on the dashboard.
   if (!current?.any) {
     await enqueueEmail(tx, {
