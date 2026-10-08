@@ -114,6 +114,12 @@ body {
   --shadow-float: rgb(10 60 35 / 10%) 0 0 0 1px, rgb(10 60 35 / 12%) 0 4px 14px;
   --shadow-note: rgb(0 0 0 / 6%) 0 0 0 1px, rgb(10 30 20 / 15%) 0 8px 24px;
   --avatar-ring: rgb(0 0 0 / 10%);
+  /* Sign-in screens: the light pill and the dithered glow (components/app/dither-glow.tsx). */
+  --pill: #f1f2f1;
+  --pill-hover: #e8eae9;
+  --pill-line: rgb(0 0 0 / 4%);
+  --glow: 31 179 108;
+  --glow-peak: 0.62;
 }
 
 .dark {
@@ -137,6 +143,11 @@ body {
     rgb(255 255 255 / 8%) 0 0 0 1px, rgb(0 0 0 / 60%) 0 24px 60px, rgb(0 0 0 / 40%) 0 4px 12px;
   --shadow-note: var(--shadow-float);
   --avatar-ring: rgb(255 255 255 / 10%);
+  --pill: #1a1d1c;
+  --pill-hover: #222624;
+  --pill-line: #2a2f2d;
+  --glow: 52 196 122;
+  --glow-peak: 0.5;
 }
 
 @theme inline {
@@ -153,6 +164,8 @@ body {
   --color-code-ink: var(--code-ink);
   --color-code-ring: var(--code-ring);
   --color-panel: var(--panel);
+  --color-pill: var(--pill);
+  --color-pill-hover: var(--pill-hover);
   --shadow-button: var(--shadow-button);
   --shadow-input: var(--shadow-input);
   --shadow-float: var(--shadow-float);
@@ -231,6 +244,19 @@ body {
   background-image: url("/landing/dither-glow.png");
   background-size: cover;
   image-rendering: pixelated;
+}
+
+/* Sign-in screens: each block rises 8px into place in order (components/app/auth-screen.tsx). */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .auth-rise {
+    animation: auth-rise 520ms var(--ease-out) var(--d, 0ms) both;
+  }
 }
 
 /* The checkout page's indeterminate progress bar (reduced motion: static). */

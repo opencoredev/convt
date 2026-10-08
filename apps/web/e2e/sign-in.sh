@@ -63,7 +63,7 @@ oauth_sign_in() { # provider identity [email]
   sign_out_all_cookies
   reset_limits
   open_page "/sign-in"
-  ab find role button click --name "$([[ $1 == github ]] && echo GitHub || echo Google)" >/dev/null
+  ab find role button click --name "$([[ $1 == github ]] && echo GitHub || echo "Continue with Google")" >/dev/null
   wait_url "/$1/authorize"
   local url
   url=$(url_now)
