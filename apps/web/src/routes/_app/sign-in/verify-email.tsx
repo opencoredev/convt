@@ -54,6 +54,7 @@ function VerifyEmailPage() {
     <AuthScreen>
       <Rise index={1}>
         <AuthTitle
+          strong
           sub={
             sent
               ? `We sent a code to ${email}. It works once and expires in ${magicLinkMinutes} minutes.`

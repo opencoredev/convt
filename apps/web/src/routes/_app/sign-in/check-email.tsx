@@ -61,6 +61,7 @@ function CheckEmailPage() {
       </Rise>
       <Rise index={2}>
         <AuthTitle
+          strong
           sub={
             <>
               We sent a code and a sign-in link to{" "}

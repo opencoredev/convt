@@ -318,20 +318,20 @@ body {
 @container (max-width: 560px) {
   .demo {
     --src-x: 0.4em;
-    --src-y: 0.6em;
+    --src-y: 1.6em;
     --menu-x: 5.8em;
-    --menu-y: 4.4em;
+    --menu-y: 5.4em;
     --sub-x: 14.6em;
-    --sub-y: 9.5em;
+    --sub-y: 10.5em;
     --res-x: 10.6em;
-    --res-y: 17.2em;
-    --c-start: 16em 26em;
-    --c-file: 5.7em 4.3em;
-    --c-convt: 10.4em 10.3em;
-    --c-webp: 16.2em 10.3em;
-    --c-rest: 6em 22em;
+    --res-y: 18.2em;
+    --c-start: 16em 27em;
+    --c-file: 5.7em 5.3em;
+    --c-convt: 10.4em 11.3em;
+    --c-webp: 16.2em 11.3em;
+    --c-rest: 6em 23em;
     width: 20em;
-    height: 26.6em;
+    height: 27.6em;
     font-size: 5cqw;
   }
   .demo-arrow {
