@@ -105,7 +105,8 @@ const GOOGLE_G: (&str, &[u8]) = (
     include_bytes!("../../assets/icons/google-g.svg"),
 );
 
-/// Onboarding's dithered glow and bloom (`assets/onboarding/generate.py`).
+/// Onboarding's dithered glow and the setup step's spinner
+/// (`assets/onboarding/generate.py`).
 const ONBOARDING: &[(&str, &[u8])] = &[
     (
         "onboarding/glow-light.png",
@@ -116,12 +117,12 @@ const ONBOARDING: &[(&str, &[u8])] = &[
         include_bytes!("../../assets/onboarding/glow-dark.png"),
     ),
     (
-        "onboarding/bloom-light.png",
-        include_bytes!("../../assets/onboarding/bloom-light.png"),
+        "onboarding/spinner-track.svg",
+        include_bytes!("../../assets/onboarding/spinner-track.svg"),
     ),
     (
-        "onboarding/bloom-dark.png",
-        include_bytes!("../../assets/onboarding/bloom-dark.png"),
+        "onboarding/spinner-arc.svg",
+        include_bytes!("../../assets/onboarding/spinner-arc.svg"),
     ),
 ];
 

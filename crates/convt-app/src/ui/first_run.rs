@@ -26,11 +26,11 @@ use super::theme::{self, IconName, Look, Palette, icon, styled, text};
 use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::finder::EXTENSION_SETTINGS;
 use crate::model::{AppState, PackPhase};
-use crate::pack;
 
 /// How long the "Setting convt up" moment lasts before the main window
-/// opens, its fade included. Nothing it lists takes longer: the document
-/// download, the one slow thing, carries on in the background.
+/// opens, its fade included. It never waits for anything: the document
+/// download, the one slow thing, carries on in the background, and Activity
+/// shows it.
 pub const CALIBRATE: Duration = Duration::from_millis(2300);
 /// The last part of [`CALIBRATE`], while the screen fades out.
 const FADE: Duration = Duration::from_millis(300);
@@ -108,9 +108,6 @@ pub struct FirstRunView {
     pub(super) provider: Provider,
     /// The highlighted tile of a question: true for Yes.
     pub(super) yes: bool,
-    /// Yes was the answer to the documents question, so the setup step
-    /// follows the download.
-    pub(super) documents_chosen: bool,
     pub(super) key: Entity<InputState>,
     pub(super) error: Option<String>,
     /// Onboarding asked the account itself, for a launch that didn't (the
@@ -144,7 +141,6 @@ impl FirstRunView {
             screen,
             provider: Provider::Google,
             yes: true,
-            documents_chosen: false,
             key: cx.new(|cx| InputState::new(window, cx).placeholder("Paste your license key")),
             error: None,
             asked: false,
@@ -282,10 +278,7 @@ impl FirstRunView {
             match question {
                 // A click on Yes is the user asking for the download, as the
                 // Download button is.
-                Question::Documents => {
-                    self.documents_chosen = true;
-                    super::pack::start_install(&self.app, cx)
-                }
+                Question::Documents => super::pack::start_install(&self.app, cx),
                 Question::Finder => cx.open_url(EXTENSION_SETTINGS),
             }
         }
@@ -682,98 +675,28 @@ impl FirstRunView {
             )
     }
 
-    /// What the setup step lists, in order, each with its state now.
-    pub(super) fn setup_steps(&self, cx: &App) -> Vec<SetupStep> {
-        let state = self.app.read(cx);
-        let mut steps = Vec::new();
-        if state.account.session.is_some() {
-            steps.push(SetupStep::ready("account", "Signed in"));
-        } else if matches!(state.license, State::Licensed(_) | State::NotCovered(_)) {
-            steps.push(SetupStep::ready("account", "License key added"));
-        }
-        let plan = match self.stage(cx) {
-            Stage::Trial { ends_on } => {
-                Some(format!("Free trial on until {}", friendly_date(&ends_on)))
-            }
-            Stage::Pro => Some("convt Pro".to_string()),
-            Stage::Licensed => Some("convt license".to_string()),
-            _ => None,
-        };
-        steps.extend(plan.map(|label| SetupStep::ready("plan", label)));
-        if self.documents_chosen {
-            let pack = &state.pack;
-            let documents = match &pack.phase {
-                _ if state.documents_supported() => {
-                    SetupStep::ready("documents", "Document support is ready")
-                }
-                PackPhase::Working(step) => {
-                    let fraction = match step {
-                        pack::Progress::Download { bytes, total } => total
-                            .filter(|t| *t >= *bytes && *t > 0)
-                            .or(pack.offer.download)
-                            .map(|total| *bytes as f32 / total as f32),
-                        _ => Some(1.),
-                    };
-                    let label = match step {
-                        pack::Progress::Download { .. } => "Adding document support…",
-                        pack::Progress::Verifying => "Checking document support…",
-                        pack::Progress::Installing => "Installing document support…",
-                    };
-                    SetupStep {
-                        key: "documents",
-                        label: label.into(),
-                        status: StepStatus::Working(fraction),
-                    }
-                }
-                PackPhase::Failed(f) if f.kind == pack::FailureKind::Cancelled => SetupStep {
-                    key: "documents",
-                    label: "Document support stopped".into(),
-                    status: StepStatus::Failed("Download it from Settings any time.".into()),
-                },
-                _ => SetupStep {
-                    key: "documents",
-                    label: "Couldn't add document support".into(),
-                    status: StepStatus::Failed("Try again in Settings.".into()),
-                },
-            };
-            steps.push(documents);
-        }
-        if cfg!(target_os = "macos") {
-            steps.push(SetupStep::ready("finder", "Right-click menu in Finder"));
-        }
-        steps
-    }
-
     fn calibrating(&self, p: &Palette, cx: &App) -> AnyElement {
-        let steps = self.setup_steps(cx);
         let still = cx.reduce_motion();
         let p = *p;
-        let content = div()
-            .id("setup")
-            .flex()
-            .flex_col()
-            .items_center()
-            .w(px(400.));
+        let content = div().id("setup").flex().flex_col().items_center();
         if still {
-            return setup_content(content, &steps, 1., &p, true).into_any_element();
+            return setup_content(content, 1., &p, true).into_any_element();
         }
         let total = CALIBRATE.as_secs_f32();
         content
             .with_animation("setup", Animation::new(CALIBRATE), move |d, t| {
-                setup_content(d, &steps, t * total, &p, false)
+                setup_content(d, t * total, &p, false)
             })
             .into_any_element()
     }
 
-    /// The dithered glow behind every screen, and the bloom that fills the
-    /// window while convt sets up.
+    /// The dithered glow behind every screen.
     fn backdrop(&self, p: &Palette, window: &Window, cx: &App) -> Div {
         let theme = if p.dark { "dark" } else { "light" };
         let still = cx.reduce_motion();
         // Behind other windows nothing needs to move, so nothing asks for
         // frames.
         let breathing = !still && window.is_window_active();
-        let calibrating = self.screen == Screen::Calibrating;
         let glow = img(SharedString::from(format!("onboarding/glow-{theme}.png")))
             .absolute()
             .bottom_0()
@@ -793,39 +716,7 @@ impl FirstRunView {
         } else {
             glow.opacity(breath(0.)).into_any_element()
         };
-        let bloom = calibrating.then(|| {
-            // Its brightest point (62% down the image) sits at the
-            // window's middle.
-            let top = -BLOOM.1 * 0.62;
-            let bloom = img(SharedString::from(format!("onboarding/bloom-{theme}.png")))
-                .absolute()
-                .top(relative(0.5))
-                .mt(px(top))
-                .left(relative(0.5))
-                .ml(px(-BLOOM.0 / 2.))
-                .w(px(BLOOM.0))
-                .h(px(BLOOM.1));
-            if still {
-                bloom.opacity(BLOOM_STRENGTH).into_any_element()
-            } else {
-                // Rises and brightens over the first half, holds, and
-                // fades with the rest of the screen.
-                let total = CALIBRATE.as_secs_f32();
-                bloom
-                    .with_animation("bloom", Animation::new(CALIBRATE), move |img, t| {
-                        let rise = ease_out_quint()((t * total / 1.2).min(1.));
-                        img.opacity(BLOOM_STRENGTH * rise * fade_out(t * total))
-                            .mt(px(top + 160. * (1. - rise)))
-                    })
-                    .into_any_element()
-            }
-        });
-        div()
-            .absolute()
-            .inset_0()
-            .overflow_hidden()
-            .child(glow)
-            .children(bloom)
+        div().absolute().inset_0().overflow_hidden().child(glow)
     }
 }
 
@@ -837,11 +728,6 @@ pub(super) fn breath(t: f32) -> f32 {
 }
 
 use theme::GLOW;
-/// How strongly the bloom shows behind the setup step: enough to feel the
-/// glow gather, never so much that it muddies the words over it.
-const BLOOM_STRENGTH: f32 = 0.42;
-/// The bloom's size: the PNG's pixel size, drawn unscaled.
-const BLOOM: (f32, f32) = (2400., 1500.);
 
 const PILL_WIDTH: f32 = 340.;
 
@@ -921,50 +807,11 @@ fn spinner(p: &Palette) -> impl IntoElement {
     Spinner::new().with_size(px(22.)).color(p.green)
 }
 
-fn mix(a: Hsla, b: Hsla, t: f32) -> Hsla {
-    let (a, b) = (a.to_rgb(), b.to_rgb());
-    Rgba {
-        r: a.r + (b.r - a.r) * t,
-        g: a.g + (b.g - a.g) * t,
-        b: a.b + (b.b - a.b) * t,
-        a: 1.,
-    }
-    .into()
-}
-
-/// One line of the setup step.
-#[derive(Debug, Clone, PartialEq)]
-pub(super) struct SetupStep {
-    pub key: &'static str,
-    pub label: String,
-    pub status: StepStatus,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(super) enum StepStatus {
-    /// Settles to a check as the list reaches it.
-    Ready,
-    /// Still going, with how far when known: the document download.
-    Working(Option<f32>),
-    /// Didn't work; the note says where to go next.
-    Failed(String),
-}
-
-impl SetupStep {
-    fn ready(key: &'static str, label: impl Into<String>) -> Self {
-        Self {
-            key,
-            label: label.into(),
-            status: StepStatus::Ready,
-        }
-    }
-}
-
-/// When the `i`th line appears and when it settles, in seconds.
-fn step_times(i: usize) -> (f32, f32) {
-    let shown = 0.25 + 0.12 * i as f32;
-    (shown, 0.75 + 0.35 * i as f32)
-}
+/// One turn of the setup spinner. Steady, not eased: an easing that slows
+/// every turn reads as a stutter.
+const TURN: Duration = Duration::from_millis(1100);
+/// The spinner's size: its SVGs' pixel size, drawn unscaled.
+const SPINNER: f32 = 64.;
 
 /// 1 until the fade begins, then down to 0 at the end of [`CALIBRATE`].
 fn fade_out(at: f32) -> f32 {
@@ -972,218 +819,51 @@ fn fade_out(at: f32) -> f32 {
     ((end - at) / fade).clamp(0., 1.)
 }
 
-/// The setup step `at` seconds in: the breathing mark, the heading with its
-/// sheen, and the list settling line by line. `still` draws the end state
-/// with nothing moving.
-fn setup_content(
-    d: Stateful<Div>,
-    steps: &[SetupStep],
-    at: f32,
-    p: &Palette,
-    still: bool,
-) -> Stateful<Div> {
-    let ease = |x: f32| ease_out_quint()(x.clamp(0., 1.));
-    // One slow breath over the whole moment.
-    let breath = if still {
-        0.
+/// The setup step `at` seconds in: a ring with a turning arc around the mark,
+/// and one line under it. It eases in, then fades out. `still`
+/// draws it with nothing moving.
+fn setup_content(d: Stateful<Div>, at: f32, p: &Palette, still: bool) -> Stateful<Div> {
+    let appear = if still {
+        1.
     } else {
-        (1. - (at / CALIBRATE.as_secs_f32() * std::f32::consts::TAU).cos()) / 2.
+        ease_out_quint()((at / 0.5).clamp(0., 1.))
     };
-    let halo = div()
-        .absolute()
-        .size(px(112.))
-        .rounded_full()
-        .bg(p.green_tint)
-        .shadow(vec![
-            theme::inset_ring(p.green_border, 1.),
-            BoxShadow {
-                color: p.green.opacity(0.16 + 0.22 * breath),
-                offset: point(px(0.), px(0.)),
-                blur_radius: px(28. + 24. * breath),
-                spread_radius: px(2. + 8. * breath),
-                inset: false,
-            },
-        ]);
-    let mark = div()
+    let ring = |path: &'static str| svg().absolute().inset_0().size(px(SPINNER)).path(path);
+    let arc = ring("onboarding/spinner-arc.svg").text_color(p.green);
+    let arc = if still {
+        arc.with_transformation(Transformation::rotate(percentage(0.1)))
+            .into_any_element()
+    } else {
+        arc.with_animation("turn", Animation::new(TURN).repeat(), |arc, t| {
+            arc.with_transformation(Transformation::rotate(percentage(t)))
+        })
+        .into_any_element()
+    };
+    let spinner = div()
         .relative()
         .flex()
         .items_center()
         .justify_center()
-        .size(px(112.))
-        .child(halo)
-        .child(theme::mark(48., p));
-    let lines = steps.iter().enumerate().map(|(i, step)| {
-        let (shown, settles) = step_times(i);
-        let appear = if still { 1. } else { ease((at - shown) / 0.35) };
-        let settled = still || at >= settles;
-        setup_line(step, settled, at, p)
-            .opacity(appear)
-            .mt(px(4. * (1. - appear)))
-    });
-    // The card arrives with its first line, never empty.
-    let card_in = if still {
-        1.
-    } else {
-        ease((at - step_times(0).0) / 0.35)
-    };
-    let list = (!steps.is_empty()).then(|| {
-        div()
-            .opacity(card_in)
-            .flex()
-            .flex_col()
-            .w_full()
-            .mt(px(28.))
-            .py(px(6.))
-            .rounded(px(theme::radius::PANEL))
-            .bg(p.surface)
-            .shadow({
-                let mut s = vec![theme::inset_ring(p.border, 1.)];
-                s.extend(theme::soft(p));
-                s
-            })
-            .children(lines)
-    });
-    d.opacity(if still { 1. } else { fade_out(at) })
-        .child(mark)
-        .child(div().h(px(22.)))
-        .child(shimmer_heading("Setting convt up…", at, p, still))
-        .child(
-            // Over the glow, a step darker than secondary text.
-            text(14., 21., mix(p.text, p.secondary, 0.45))
-                .pt(px(6.))
-                .text_center()
-                .child("This only takes a moment."),
-        )
-        .children(list)
-}
-
-/// A line of the setup list: what it is, then a spinner that settles into a
-/// check, live progress, or what went wrong. Tests read it by
-/// `setup-step-{key}`.
-fn setup_line(step: &SetupStep, settled: bool, at: f32, p: &Palette) -> theme::Clickable {
-    let working = matches!(step.status, StepStatus::Working(_));
-    let ending = at >= (CALIBRATE - FADE).as_secs_f32() - 0.4;
-    let label: SharedString = if working && ending {
-        "Document support finishes in the background".into()
-    } else {
-        step.label.clone().into()
-    };
-    let glyph = match (&step.status, settled) {
-        (StepStatus::Ready, true) => div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(20.))
-            .rounded_full()
-            .bg(p.green)
-            .child(icon(
-                IconName::Check,
-                12.,
-                if p.dark {
-                    p.window
-                } else {
-                    rgb(0xFFFFFF).into()
-                },
-            ))
-            .into_any_element(),
-        (StepStatus::Failed(_), true) => {
-            icon(IconName::CircleAlert, 20., p.error).into_any_element()
-        }
-        _ => div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(20.))
-            .child(Spinner::new().with_size(px(15.)).color(p.green))
-            .into_any_element(),
-    };
-    let note = match (&step.status, settled) {
-        (StepStatus::Failed(note), true) => Some(
-            styled(theme::size::SMALL, p.secondary)
-                .child(SharedString::from(note.clone()))
-                .into_any_element(),
-        ),
-        (StepStatus::Working(Some(fraction)), _) => Some(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(10.))
-                .child(
-                    div()
-                        .flex_1()
-                        .child(theme::progress(*fraction, p.track, p.green)),
-                )
-                .child(
-                    theme::mono(11., 14., p.secondary)
-                        .child(format!("{:.0}%", fraction.clamp(0., 1.) * 100.)),
-                )
-                .into_any_element(),
-        ),
-        _ => None,
-    };
-    let done = settled && step.status == StepStatus::Ready;
-    div()
-        .id(SharedString::from(format!("setup-step-{}", step.key)))
-        .test_support()
-        .aria_label(label.clone())
-        .flex()
-        .items_start()
-        .gap(px(12.))
-        .px(px(18.))
-        .py(px(10.))
-        .child(div().flex_shrink_0().pt(px(0.5)).child(glyph))
+        .size(px(SPINNER))
+        .child(ring("onboarding/spinner-track.svg").text_color(p.text.opacity(0.07)))
+        .child(arc)
+        .child(theme::mark(24., p));
+    let title = "Setting up convt";
+    d.opacity(if still { 1. } else { appear * fade_out(at) })
+        .child(spinner)
         .child(
             div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .gap(px(6.))
+                .id("onboarding-title")
+                .test_support()
+                .aria_label(title)
+                .mt(px(22. + 4. * (1. - appear)))
                 .child(
-                    text(14., 21., if done || working { p.text } else { p.secondary })
+                    text(15., 22., p.text)
                         .font_weight(FontWeight::MEDIUM)
-                        .child(label),
-                )
-                .children(note),
+                        .text_center()
+                        .child(title),
+                ),
         )
-}
-
-/// The heading in ink with a band of green light sweeping across it. Ink
-/// and green both read well on the page, so every letter stays legible.
-fn shimmer_heading(words: &'static str, at: f32, p: &Palette, still: bool) -> impl IntoElement {
-    let base = p.text;
-    let bright = p.green_text;
-    let label = div()
-        .id("onboarding-title")
-        .test_support()
-        .aria_label(words);
-    let heading = |runs: Vec<(std::ops::Range<usize>, HighlightStyle)>| {
-        text(24., 30., base)
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_center()
-            .child(StyledText::new(words).with_highlights(runs))
-    };
-    if still {
-        return label.child(heading(Vec::new()));
-    }
-    // About one and a half passes over the moment.
-    let n = words.chars().count() as f32;
-    let centre = -4. + (at / 1.4).fract() * (n + 8.);
-    let runs = words
-        .char_indices()
-        .enumerate()
-        .map(|(i, (at, ch))| {
-            let k = (-((i as f32 - centre) / 2.4).powi(2)).exp();
-            (
-                at..at + ch.len_utf8(),
-                HighlightStyle {
-                    color: Some(mix(base, bright, k)),
-                    ..Default::default()
-                },
-            )
-        })
-        .collect();
-    label.child(heading(runs))
 }
 
 /// "2026-10-15" as "October 15".

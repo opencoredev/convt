@@ -2,14 +2,19 @@
 
     python3 crates/convt-app/assets/onboarding/generate.py
 
-Writes four PNGs next to this script: `glow-*` rises from the bottom edge of
-every onboarding screen, `bloom-*` fills the window while convt sets itself
-up. Each is a soft radial falloff in the brand green, quantized to a few
-levels with an 8x8 Bayer matrix on 3px cells, so the grain stays visible.
-The app draws them at their pixel size, unscaled, so the cells stay square.
+Writes two PNGs next to this script, `glow-light` and `glow-dark`, which
+rise from the bottom edge of every onboarding screen. Each is a soft radial
+falloff in the brand green, quantized to a few levels with an 8x8 Bayer
+matrix on 3px cells, so the grain stays visible. The app draws them at their
+pixel size, unscaled, so the cells stay square.
+
+Also writes the setup step's spinner: `spinner-track.svg`, a thin ring, and
+`spinner-arc.svg`, an arc on it that fades out toward its tail. Both are
+one-color masks the app tints and draws unscaled.
 Needs Pillow and NumPy; the output is the same on every run.
 """
 
+import math
 from pathlib import Path
 
 import numpy as np
@@ -39,11 +44,9 @@ THEMES = {
     "light": ((0xA8, 0xE6, 0xC4), (0x1F, 0xB3, 0x6C), 0.92),
     "dark": ((0x0E, 0x4D, 0x2E), (0x3F, 0xCB, 0x84), 0.85),
 }
-# The bloom is softer: it fills the window behind text.
-BLOOM = {
-    "light": ((0xD4, 0xF3, 0xE2), (0x6F, 0xD9, 0xA3), 0.8),
-    "dark": ((0x0E, 0x3D, 0x26), (0x2F, 0xB3, 0x72), 0.7),
-}
+# The spinner: its size in pixels, the ring's width, and how far the arc
+# reaches, in degrees.
+SPINNER = (64, 2.5, 150)
 
 
 def field(w, h, cx, cy, rx, ry, power):
@@ -62,7 +65,7 @@ def dither(intensity):
 
 
 def render(name, size, center, radii, power, theme):
-    outer, core, alpha = (BLOOM if name == "bloom" else THEMES)[theme]
+    outer, core, alpha = THEMES[theme]
     w, h = size[0] // CELL, size[1] // CELL
     q = dither(field(w, h, center[0] * w, center[1] * h, radii[0] * w, radii[1] * h, power))
     outer, core = np.array(outer, dtype=np.float64), np.array(core, dtype=np.float64)
@@ -77,5 +80,31 @@ for theme in THEMES:
     # A wide band of light rising from below the bottom edge, gone by
     # about half its height so words above it sit on a clean page.
     render("glow", (2400, 540), (0.5, 1.2), (0.4, 1.15), 1.5, theme)
-    # The whole window, brightest a little below the middle.
-    render("bloom", (2400, 1500), (0.5, 0.62), (0.5, 0.8), 1.2, theme)
+
+
+def spinner():
+    size, width, sweep = SPINNER
+    c = size / 2
+    r = c - width / 2 - 0.25
+    head = math.radians(sweep)
+    x2, y2 = c + r * math.sin(head), c - r * math.cos(head)
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 {size} {size}" fill="none">'
+    )
+    (HERE / "spinner-track.svg").write_text(
+        f'{svg}<circle cx="{c:g}" cy="{c:g}" r="{r:g}" stroke="#000" stroke-width="{width:g}"/></svg>\n'
+    )
+    # The arc starts at the top and runs clockwise, the way it turns, so its
+    # head leads. The gradient runs along the chord, from the tail to the head.
+    (HERE / "spinner-arc.svg").write_text(
+        f'{svg}<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" '
+        f'x1="{c - r * 0.35:.3f}" y1="{c - r:.3f}" x2="{x2:.3f}" y2="{y2:.3f}">'
+        '<stop offset="0" stop-opacity="0"/><stop offset="0.6" stop-opacity="0.75"/>'
+        '<stop offset="1"/></linearGradient></defs>'
+        f'<path d="M{c:g} {c - r:g}A{r:g} {r:g} 0 0 1 {x2:.3f} {y2:.3f}" stroke="url(#g)" '
+        f'stroke-width="{width:g}" stroke-linecap="round"/></svg>\n'
+    )
+
+
+spinner()

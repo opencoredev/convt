@@ -1671,7 +1671,7 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     click(cx, window, "onboarding-primary");
     assert_eq!(
         label(cx, window, "onboarding-title").as_deref(),
-        Some("Setting convt up…")
+        Some("Setting up convt")
     );
     cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
     finish_onboarding(cx, &view);
@@ -2925,6 +2925,10 @@ fn the_icons_the_windows_draw_are_bundled() {
         );
     }
     assert!(assets.load("icons/google-g.svg").unwrap().is_some());
+    // Onboarding's setup spinner.
+    for path in ["onboarding/spinner-track.svg", "onboarding/spinner-arc.svg"] {
+        assert!(assets.load(path).unwrap().is_some(), "{path}");
+    }
 }
 
 #[test]
@@ -5163,11 +5167,11 @@ fn addresses_show_masked(cx: &mut TestAppContext) {
     }
 }
 
-/// Yes to documents shows the download as a live line of the setup step,
-/// never holds onboarding for it, and hands it to Activity in the main
-/// window.
+/// Yes to documents starts the download, but the setup step shows only its
+/// spinner and line, never holds onboarding for the download, and hands it
+/// to Activity in the main window.
 #[gpui_kit::test]
-fn the_setup_step_follows_the_document_download_into_the_background(cx: &mut TestAppContext) {
+fn the_setup_step_leaves_the_document_download_to_the_background(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks::default());
     packs.hold.store(true, Ordering::SeqCst);
     let key = pro_key("pro-tester", "2027-10-01");
@@ -5182,16 +5186,11 @@ fn the_setup_step_follows_the_document_download_into_the_background(cx: &mut Tes
     });
     assert_eq!(
         label(cx, window, "onboarding-title").as_deref(),
-        Some("Setting convt up…")
+        Some("Setting up convt")
     );
-    assert_eq!(
-        label(cx, window, "setup-step-plan").as_deref(),
-        Some("convt Pro")
-    );
-    assert_eq!(
-        label(cx, window, "setup-step-documents").as_deref(),
-        Some("Adding document support…")
-    );
+    for id in ["pack-progress", "setup-step-documents", "setup-step-plan"] {
+        assert!(!shown(cx, window, id), "{id}");
+    }
     // The download is still going when the moment ends; the main window
     // opens anyway and shows it.
     finish_onboarding(cx, &view);
@@ -5209,8 +5208,8 @@ fn the_setup_step_follows_the_document_download_into_the_background(cx: &mut Tes
     assert_eq!(packs.installs(), 1);
 }
 
-/// A download that fails says so plainly, in the setup step and in
-/// Activity, with Settings as the way to try again.
+/// A download that fails during onboarding doesn't stop it, and Activity
+/// says so plainly, with Settings as the way to try again.
 #[gpui_kit::test]
 fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks::default());
@@ -5225,9 +5224,10 @@ fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppC
         matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
     });
     cx.run_until_parked();
+    // Onboarding carries on; the failure waits in Activity.
     assert_eq!(
-        label(cx, window, "setup-step-documents").as_deref(),
-        Some("Couldn't add document support")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Setting up convt")
     );
     finish_onboarding(cx, &view);
     let (main, _) = window_of::<MainView>(cx);
