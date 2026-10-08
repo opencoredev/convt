@@ -1222,7 +1222,7 @@ fn section(label: &'static str, p: &Palette) -> Div {
         .flex()
         .flex_col()
         .px(px(GUTTER))
-        .pb(px(space::XL))
+        .pb(px(20.))
         .child(theme::section_label(label, p))
 }
 
@@ -1232,9 +1232,9 @@ fn row_label(label: &'static str, control: impl IntoElement, p: &Palette) -> Any
         .flex()
         .items_center()
         .gap(px(space::LG))
-        .min_h(px(46.))
+        .min_h(px(42.))
         .px(px(space::LG))
-        .py(px(space::SM))
+        .py(px(6.))
         .child(
             styled(size::BODY, p.text)
                 .font_weight(FontWeight::MEDIUM)

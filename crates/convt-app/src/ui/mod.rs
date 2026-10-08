@@ -226,6 +226,20 @@ pub fn show_about(cx: &mut App) {
     );
 }
 
+/// Quick convert's size: room for a typical image's format cards, its three
+/// options and Save without scrolling. Video options and long lists scroll.
+pub(super) const QUICK_SIZE: (f32, f32) = (600., 680.);
+
+/// Quick convert's height, plus the title bar macOS draws inside it.
+pub(super) fn quick_height() -> Pixels {
+    px(QUICK_SIZE.1
+        + if theme::transparent_titlebar() {
+            24.
+        } else {
+            0.
+        })
+}
+
 /// The first-run window's size.
 pub(super) const FIRST_RUN_SIZE: (f32, f32) = (460., 520.);
 
@@ -265,7 +279,7 @@ pub fn open_quick(request: Request, cx: &mut App) {
     let app = model::shared(cx);
     // Status is read offline; it may have changed through the CLI.
     app.update(cx, |s, cx| s.refresh_pack(cx));
-    let options = window_options(size(px(600.), px(560.)), "Convert", cx);
+    let options = window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx);
     match open_window(options, cx, |window, cx| {
         cx.new(|cx| QuickView::new(app, request, window, cx))
     }) {
