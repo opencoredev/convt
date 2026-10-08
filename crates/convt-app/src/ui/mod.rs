@@ -38,8 +38,40 @@ use theme::Palette;
 /// The icons the windows draw: checkmarks, dropdown chevrons and the drop
 /// bar's arrow. Register it with `Application::with_assets`; without it
 /// every icon draws empty.
-pub fn assets() -> gpui_kit::assets::Assets {
-    gpui_kit::assets::Assets
+pub fn assets() -> Assets {
+    Assets
+}
+
+/// gpui-kit's default icons, plus the few convt draws from the rest of the
+/// Lucide catalog (see [`EXTRA_ICONS`]).
+pub struct Assets;
+
+/// Lucide icons outside gpui-kit's default set, at the path their
+/// `gpui_kit::assets::IconName` gives. Copied one by one, because the whole
+/// catalog is megabytes; Lucide's ISC notice ships with gpui-kit-assets'.
+const EXTRA_ICONS: &[(&str, &[u8])] = &[(
+    "icons/cloud.svg",
+    include_bytes!("../../assets/icons/cloud.svg"),
+)];
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
+        match EXTRA_ICONS.iter().find(|(p, _)| *p == path) {
+            Some((_, bytes)) => Ok(Some(std::borrow::Cow::Borrowed(*bytes))),
+            None => gpui_kit::assets::Assets.load(path),
+        }
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        let mut all = gpui_kit::assets::Assets.list(path)?;
+        all.extend(
+            EXTRA_ICONS
+                .iter()
+                .filter(|(p, _)| p.starts_with(path))
+                .map(|(p, _)| SharedString::from(*p)),
+        );
+        Ok(all)
+    }
 }
 
 /// The license price quoted in the trial card and the first-run window.

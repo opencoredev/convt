@@ -571,8 +571,9 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
     )
 }
 
-/// The file name, an arrow and the target, "interview.mov → MP4".
-fn name_line(input: &std::path::Path, to: &str, p: &Palette) -> Div {
+/// The file name, an arrow and the target, "interview.mov → MP4", then
+/// "Cloud" for a job that ran on convt's cloud. `cloud` is that mark's id.
+fn name_line(input: &std::path::Path, to: &str, cloud: Option<String>, p: &Palette) -> Div {
     div()
         .flex()
         .items_center()
@@ -586,6 +587,19 @@ fn name_line(input: &std::path::Path, to: &str, p: &Palette) -> Div {
         )
         .child(icon(IconName::ArrowRight, 12., p.tertiary).flex_shrink_0())
         .child(theme::badge(to.to_string(), Tone::Neutral, p))
+        .children(cloud.map(|id| {
+            div()
+                .id(SharedString::from(id))
+                .test_support()
+                .aria_label("Cloud")
+                .flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(4.))
+                .pl(px(2.))
+                .child(icon(gpui_kit::assets::IconName::Cloud, 13., p.tertiary))
+                .child(styled(size::SMALL, p.tertiary).child("Cloud"))
+        }))
 }
 
 /// The status column: an icon and a line tests read by `id`.
@@ -681,7 +695,12 @@ fn active_row(
                 .flex_1()
                 .min_w_0()
                 .gap(px(8.))
-                .child(name_line(&entry.input, entry.to.name, p))
+                .child(name_line(
+                    &entry.input,
+                    entry.to.name,
+                    entry.setup.cloud.then(|| format!("job-cloud-{id}")),
+                    p,
+                ))
                 .children(bar),
         )
         .child(status_cell(format!("status-{id}"), status, glyph, el))
@@ -765,7 +784,16 @@ fn record_row(record: &Record, app: &Entity<AppState>, p: &Palette) -> impl Into
                 .flex_1()
                 .min_w_0()
                 .gap(px(4.))
-                .child(name_line(&record.input, &to_name, p))
+                .child(name_line(
+                    &record.input,
+                    &to_name,
+                    record
+                        .setup
+                        .as_ref()
+                        .is_some_and(|s| s.cloud)
+                        .then(|| format!("record-cloud-{id}")),
+                    p,
+                ))
                 .children(detail),
         )
         .child(status_cell(

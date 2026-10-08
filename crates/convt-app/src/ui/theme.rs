@@ -299,7 +299,9 @@ pub fn styled(step: (f32, f32), color: Hsla) -> Div {
 }
 
 /// An icon from the bundled set (see `ui::assets`).
-pub fn icon(name: IconName, size: f32, color: Hsla) -> Icon {
+/// `name` is a component icon or, for one outside that set, one from
+/// `gpui_kit::assets::IconName`, the whole bundled Lucide catalog.
+pub fn icon(name: impl Into<Icon>, size: f32, color: Hsla) -> Icon {
     Icon::new(name).size(px(size)).text_color(color)
 }
 

@@ -950,6 +950,45 @@ fn cloud_says_why_it_is_off_and_asks_once_before_uploading(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
+fn activity_marks_jobs_that_ran_in_the_cloud(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+    let webp = format_by_id("webp").unwrap();
+    let (window, _) = f.main(cx);
+    let (local, cloud) = cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            // Waiting jobs that never start: no runner picks them up.
+            let local = s.queue.add(&convt_core::Job::new(&png, webp));
+            let cloud = s.queue.add_cloud(&convt_core::Job::new(&png, webp));
+            for (id, cloud) in [(1, false), (2, true)] {
+                s.recent.push(crate::history::Record {
+                    id,
+                    finished_at: 0,
+                    input: png.clone(),
+                    to: "webp".into(),
+                    outcome: Outcome::Done(vec![png.clone()]),
+                    setup: Some(crate::history::Setup {
+                        cloud,
+                        ..Default::default()
+                    }),
+                });
+            }
+            cx.notify();
+            (local, cloud)
+        })
+    });
+    assert!(shown(cx, window, &format!("status-{local}")));
+    assert!(!shown(cx, window, &format!("job-cloud-{local}")));
+    assert_eq!(
+        label(cx, window, &format!("job-cloud-{cloud}")).as_deref(),
+        Some("Cloud")
+    );
+    assert!(shown(cx, window, "record-status-1"));
+    assert!(!shown(cx, window, "record-cloud-1"));
+    assert!(shown(cx, window, "record-cloud-2"));
+}
+
+#[gpui_kit::test]
 fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let broken = f.dir.path().join("broken.bmp");
@@ -2351,6 +2390,13 @@ fn the_icons_the_windows_draw_are_bundled() {
             "{path} is missing, so it would draw empty"
         );
     }
+    // Icons outside the component set, from the whole catalog
+    // (`super::EXTRA_ICONS`).
+    let path = gpui_kit::assets::IconName::Cloud.path();
+    assert!(
+        assets.load(&path).unwrap().is_some(),
+        "{path} is missing, so it would draw empty"
+    );
 }
 
 #[test]
