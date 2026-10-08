@@ -399,7 +399,12 @@ mod tests {
     fn leftovers(dir: &Path) -> Vec<String> {
         walk(dir)
             .into_iter()
-            .map(|p| p.strip_prefix(dir).unwrap().display().to_string())
+            // Joined with `/` on every platform, so Windows compares the same.
+            .map(|p| {
+                let rel = p.strip_prefix(dir).unwrap();
+                let parts: Vec<_> = rel.iter().map(|c| c.to_string_lossy()).collect();
+                parts.join("/")
+            })
             .collect()
     }
 
