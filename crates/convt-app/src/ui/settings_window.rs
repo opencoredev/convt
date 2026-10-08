@@ -13,6 +13,7 @@ use super::theme::{
     size, space, styled, text_button,
 };
 use super::{LICENSE_PRICE, describe, error_text, open_folder};
+use crate::account::masked_email;
 use crate::finder::EXTENSION_SETTINGS;
 use crate::model::AppState;
 use crate::settings::{Settings, auto_concurrency};
@@ -165,9 +166,9 @@ impl SettingsView {
                 // the status above says it can't convert here.
                 let allowed = self.app.read(cx).license.allows_conversion();
                 self.license_notice = Some(if allowed {
-                    format!("License activated for {}.", license.email)
+                    format!("License activated for {}.", masked_email(&license.email))
                 } else {
-                    format!("Saved the license for {}.", license.email)
+                    format!("Saved the license for {}.", masked_email(&license.email))
                 });
                 self.license_key
                     .update(cx, |s, cx| s.set_value("", window, cx));
@@ -788,7 +789,7 @@ impl SettingsView {
                 Tone::Green,
                 format!(
                     "{} · updates until {}. Checked offline; the key stays on {}.",
-                    l.email,
+                    masked_email(&l.email),
                     l.updates_until,
                     theme::this_machine()
                 ),

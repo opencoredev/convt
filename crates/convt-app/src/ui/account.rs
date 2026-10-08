@@ -41,7 +41,7 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
     let state = app.read(cx);
     let account = &state.account;
     let body = div().flex().flex_col().gap(px(10.));
-    let body = match (&account.sign_in, account.email()) {
+    let body = match (&account.sign_in, account.masked_email()) {
         (SignIn::Waiting, _) => body
             .child(line(
                 "account-status",

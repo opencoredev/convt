@@ -43,6 +43,53 @@ fn trial_poll_delay(elapsed_secs: u64, rate_limited: bool) -> std::time::Duratio
     }
 }
 
+/// An address as the app shows it: the first letter, `***`, then the domain
+/// (`a***@example.com`), as convt.app's `maskEmail` writes it. The full
+/// address never appears on screen, so a screenshot or screen share doesn't
+/// give it away. Anything without an `@` shows as `***`.
+pub fn masked_email(email: &str) -> String {
+    match email.split_once('@') {
+        Some((local, domain)) => {
+            let first: String = local.chars().take(1).collect();
+            format!("{first}***@{domain}")
+        }
+        None => "***".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod mask_tests {
+    use super::masked_email;
+
+    fn address(local: &str, domain: &str) -> String {
+        [local, domain].join("@")
+    }
+
+    #[test]
+    fn addresses_keep_the_first_letter_and_the_domain() {
+        assert_eq!(
+            masked_email(&address("someone.long", "example.com")),
+            "s***@example.com"
+        );
+        assert_eq!(
+            masked_email(&address("a", "example.com")),
+            "a***@example.com"
+        );
+        assert_eq!(masked_email(&address("", "example.com")), "***@example.com");
+        // Not split inside a character.
+        assert_eq!(
+            masked_email(&address("élodie", "example.fr")),
+            "é***@example.fr"
+        );
+    }
+
+    #[test]
+    fn anything_else_hides_entirely() {
+        assert_eq!(masked_email("pro-tester"), "***");
+        assert_eq!(masked_email(""), "***");
+    }
+}
+
 #[cfg(test)]
 mod poll_tests {
     use super::trial_poll_delay;
@@ -147,6 +194,11 @@ impl Account {
 
     pub fn email(&self) -> Option<&str> {
         self.session.as_ref().map(|s| s.email.as_str())
+    }
+
+    /// The signed-in address as the windows show it ([`masked_email`]).
+    pub fn masked_email(&self) -> Option<String> {
+        self.email().map(masked_email)
     }
 
     /// The site this build signs in to.

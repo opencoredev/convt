@@ -367,7 +367,7 @@ impl FirstRunView {
 
     fn account_screen(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let stage = self.stage(cx);
-        let email = self.app.read(cx).account.email().map(str::to_string);
+        let email = self.app.read(cx).account.masked_email();
         let signed_in = email.map(|email| {
             let line = SharedString::from(format!("Signed in as {email}"));
             div()

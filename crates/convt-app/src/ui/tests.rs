@@ -1549,7 +1549,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     assert!(!shown(cx, settings, "error"));
     assert_eq!(
         label(cx, settings, "license-notice").as_deref(),
-        Some("License activated for a-tester.")
+        Some("License activated for ***.")
     );
     assert_eq!(
         label(cx, settings, "license-status").as_deref(),
@@ -1881,7 +1881,7 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
         );
         assert_eq!(
             label(cx, window, "account-status").as_deref(),
-            Some("Signed in as pro-tester")
+            Some("Signed in as ***")
         );
     }
 
@@ -1955,7 +1955,7 @@ fn a_signed_in_relaunch_never_waits_on_the_account_forever(cx: &mut TestAppConte
     assert!(shown(cx, window, "onboarding-key-link"));
     assert_eq!(
         label(cx, window, "account-status").as_deref(),
-        Some("Signed in as pro-tester")
+        Some("Signed in as ***")
     );
     // Drawing again doesn't ask again.
     cx.update(|cx| f.app.update(cx, |_, cx| cx.notify()));
@@ -2141,7 +2141,7 @@ fn signing_in_from_onboarding_brings_it_back_with_the_key(cx: &mut TestAppContex
     );
     assert_eq!(
         label(cx, window, "account-status").as_deref(),
-        Some("Signed in as pro-tester")
+        Some("Signed in as ***")
     );
     cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
     assert_eq!(f.jobs(cx), 0);
@@ -3144,7 +3144,7 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
     assert!(f.dir.path().join("license.key").exists());
     assert_eq!(
         label(cx, window, "license-notice").as_deref(),
-        Some("Saved the license for old-tester.")
+        Some("Saved the license for ***.")
     );
     assert_eq!(label(cx, window, "settings-buy").as_deref(), Some("Renew"));
 
@@ -3152,7 +3152,7 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
     click(cx, window, "activate");
     assert_eq!(
         label(cx, window, "license-notice").as_deref(),
-        Some("License activated for new-tester.")
+        Some("License activated for ***.")
     );
     assert!(!shown(cx, window, "settings-buy"));
 }
@@ -3901,7 +3901,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     });
     assert_eq!(
         label(cx, settings, "account-status").as_deref(),
-        Some("Signed in to convt.app as pro-tester.")
+        Some("Signed in to convt.app as ***.")
     );
     assert_eq!(
         label(cx, settings, "refresh-status").as_deref(),
@@ -5128,4 +5128,37 @@ fn the_edit_menu_reaches_the_text_fields(cx: &mut TestAppContext) {
         .unwrap();
     cx.run_until_parked();
     cx.read(|cx| assert_eq!(field.read(cx).value().as_ref(), "CONVT-1234"));
+}
+
+/// The signed-in address and a key's address show masked everywhere, as
+/// convt.app masks them: the first letter and the domain.
+#[gpui_kit::test]
+fn addresses_show_masked(cx: &mut TestAppContext) {
+    let address = ["pro.tester", "example.com"].join("@");
+    let key = pro_key(&address, "2026-11-01");
+    let f = Fixture::signed_in(cx, Some(&key), &address);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.access = Some(Access::Trial {
+                ends_on: "2026-10-15".into(),
+            });
+            cx.notify();
+        })
+    });
+    let app = f.app.clone();
+    let (window, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    assert_eq!(
+        label(cx, window, "account-status").as_deref(),
+        Some("Signed in as p***@example.com")
+    );
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    assert_eq!(
+        label(cx, settings, "account-status").as_deref(),
+        Some("Signed in to convt.app as p***@example.com.")
+    );
+    for (window, id) in [(window, "account-status"), (settings, "account-status")] {
+        assert!(!label(cx, window, id).unwrap().contains(&address));
+    }
 }
