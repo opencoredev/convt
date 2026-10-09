@@ -54,10 +54,10 @@ convt pack status documents
 
 ## Exit codes and errors
 
-- `0` — success (including `--skill`, `--help`, and list commands)
-- `1` — one or more conversions failed
-- `2` — usage error (unknown flag, bad value)
-- `130` — cancelled (`SIGINT`; a second interrupt exits immediately)
+- `0`: success (including `--skill`, `--help`, and list commands)
+- `1`: a conversion failed, or the run was rejected before it started (no `--to`, unknown format, nothing to convert, license)
+- `2`: usage error from the parser (unknown flag, bad value)
+- `130`: cancelled (`SIGINT`; a second interrupt exits immediately)
 
 `--json` prints one event per line on stdout: `started`, `progress`, `done`, `failed`, then `summary`. A `failed` event has a stable `kind`: `unsupported_input`, `no_route`, `invalid_option`, `engine_missing`, `engine_failed`, `output_exists`, `cancelled`, `io`.
 
@@ -67,7 +67,7 @@ Folder inputs skip files that cannot reach the target (or already are it). Files
 
 - Non-interactive: pass every option on the command line. The CLI does not prompt.
 - Prefer `--json` when parsing progress. Human `input -> output` lines go to stderr unless `--json`.
-- Use `--out-dir` so a same-format or failed run cannot touch the inputs.
+- Outputs never overwrite existing files; a taken name gets a numbered suffix. Use `--out-dir` to keep results apart from the inputs.
 - Discover before converting: `convt engines`, `convt formats`, `convt targets path/to/file`.
 - `formats`, `targets`, `engines`, `presets` and `--skill` never need a license. Only conversions do. Source builds skip the license check; packaged builds start a 7-day trial on the first conversion.
 - `convt license activate` reads the key from stdin when KEY is omitted. Do not put a license key in a shared command line.

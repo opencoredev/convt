@@ -26,7 +26,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Cmd>,
     /// Print a SKILL.md for AI coding agents and exit
-    #[arg(long)]
+    #[arg(long, exclusive = true)]
     skill: bool,
     /// Files or folders to convert
     files: Vec<PathBuf>,
@@ -326,7 +326,7 @@ fn main() -> anyhow::Result<()> {
         }
         Some(Cmd::Pack { action }) => pack(action)?,
         Some(Cmd::License { action }) => license(action.unwrap_or(LicenseCmd::Status))?,
-        Some(Cmd::Skill) => skill::print(&Cli::command()),
+        Some(Cmd::Skill) => unreachable!("printed before the registry loads"),
         None => return convert(cli, &registry),
     }
     Ok(())

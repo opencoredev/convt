@@ -27,8 +27,8 @@ fn flags_markdown(cmd: &Command) -> String {
             let _ = writeln!(out, "{line}");
         }
     }
-    let _ = writeln!(out, "- `--help`, `-h` — Print help");
-    let _ = writeln!(out, "- `--version`, `-V` — Print version");
+    let _ = writeln!(out, "- `--help`, `-h`: Print help");
+    let _ = writeln!(out, "- `--version`, `-V`: Print version");
     out
 }
 
@@ -100,7 +100,7 @@ fn flag_line(arg: &clap::Arg) -> Option<String> {
         line.push_str(&format!(" `<{name}>`"));
     }
     if let Some(help) = arg.get_help() {
-        line.push_str(&format!(" — {help}"));
+        line.push_str(&format!(": {help}"));
     }
     Some(line)
 }
@@ -134,7 +134,7 @@ fn formats_markdown() -> String {
             .map(|ext| format!(".{ext}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let _ = writeln!(out, "- `{}` ({}) — {extensions}", format.id, format.name);
+        let _ = writeln!(out, "- `{}` ({}): {extensions}", format.id, format.name);
     }
     out
 }
