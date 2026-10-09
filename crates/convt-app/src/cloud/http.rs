@@ -4,6 +4,7 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::mpsc;
 use std::time::Duration;
 
 use convt_core::Cancel;
@@ -15,8 +16,9 @@ use super::{CloudApi, CloudError, Created, MAX_OUTPUT_BYTES, RemoteJob, RemoteOu
 pub struct Http {
     /// Calls to the jobs API, which answer quickly.
     calls: Agent,
-    /// Uploads and downloads, which take as long as the file does. Stop
-    /// ends them; a connection that stalls times out.
+    /// Uploads and downloads, which take as long as the file does. They run
+    /// on a thread of their own, so Stop returns at once even while one is
+    /// stalled inside the network; a connection that stalls times out.
     transfers: Agent,
 }
 
@@ -117,15 +119,63 @@ fn checked(id: &str) -> Result<&str, CloudError> {
     ok.then_some(id).ok_or(CloudError::BadResponse)
 }
 
-/// Reads a file for upload, counting what was sent and stopping on Stop.
-struct Counting<'a> {
-    file: std::fs::File,
-    sent: u64,
-    report: &'a dyn Fn(u64),
-    cancel: &'a Cancel,
+/// How often a transfer's caller looks for Stop while the transfer runs.
+const STOP_CHECK: Duration = Duration::from_millis(50);
+
+enum Transfer<T> {
+    Sent(u64),
+    Done(Result<T, CloudError>),
 }
 
-impl Read for Counting<'_> {
+/// Runs `work` on its own thread and waits for it, passing on its progress,
+/// but returns [`CloudError::Cancelled`] as soon as `cancel` is set. A
+/// transfer blocked in the network can't see Stop until its wait ends; the
+/// job doesn't wait for that, so it can cancel on the server and free its
+/// slot. The abandoned thread checks Stop itself and ends with its wait.
+fn interruptible<T: Send + 'static>(
+    cancel: &Cancel,
+    sent: &dyn Fn(u64),
+    work: impl FnOnce(Box<dyn Fn(u64) + Send>) -> Result<T, CloudError> + Send + 'static,
+) -> Result<T, CloudError> {
+    let (tx, rx) = mpsc::channel();
+    let progress = tx.clone();
+    let report: Box<dyn Fn(u64) + Send> = Box::new(move |n| {
+        let _ = progress.send(Transfer::Sent(n));
+    });
+    std::thread::Builder::new()
+        .name("cloud-transfer".into())
+        .spawn(move || {
+            let _ = tx.send(Transfer::Done(work(report)));
+        })
+        .map_err(|e| CloudError::Io(e.to_string()))?;
+    loop {
+        if cancel.is_cancelled() {
+            return Err(CloudError::Cancelled);
+        }
+        match rx.recv_timeout(STOP_CHECK) {
+            Ok(Transfer::Sent(n)) => sent(n),
+            Ok(Transfer::Done(result)) => {
+                return if cancel.is_cancelled() {
+                    Err(CloudError::Cancelled)
+                } else {
+                    result
+                };
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err(CloudError::Offline),
+        }
+    }
+}
+
+/// Reads a file for upload, counting what was sent and stopping on Stop.
+struct Counting {
+    file: std::fs::File,
+    sent: u64,
+    report: Box<dyn Fn(u64) + Send>,
+    cancel: Cancel,
+}
+
+impl Read for Counting {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.cancel.is_cancelled() {
             return Err(std::io::Error::other("cancelled"));
@@ -180,35 +230,37 @@ impl CloudApi for Http {
         }
         let file = std::fs::File::open(file)
             .map_err(|e| CloudError::Io(format!("The file couldn't be read: {e}")))?;
-        // The storage link is signed for exactly this many bytes.
-        let mut reader = Counting {
-            file,
-            sent: 0,
-            report: sent,
-            cancel,
-        }
-        .take(bytes);
-        let result = self
-            .transfers
-            .put(url)
-            .header("content-length", bytes.to_string())
-            .header("content-type", "application/octet-stream")
-            .send(SendBody::from_reader(&mut reader));
-        if cancel.is_cancelled() {
-            return Err(CloudError::Cancelled);
-        }
-        let response = result.map_err(|_| {
-            // Transfer errors can quote the signed link, so none is logged.
-            tracing::debug!("cloud upload failed");
-            CloudError::Offline
-        })?;
-        match response.status().as_u16() {
-            200..=299 => Ok(()),
-            status => Err(CloudError::Refused {
-                status,
-                code: "upload_refused".into(),
-            }),
-        }
+        let (agent, url, stop) = (self.transfers.clone(), url.to_string(), cancel.clone());
+        interruptible(cancel, sent, move |report| {
+            // The storage link is signed for exactly this many bytes.
+            let mut reader = Counting {
+                file,
+                sent: 0,
+                report,
+                cancel: stop.clone(),
+            }
+            .take(bytes);
+            let result = agent
+                .put(&url)
+                .header("content-length", bytes.to_string())
+                .header("content-type", "application/octet-stream")
+                .send(SendBody::from_reader(&mut reader));
+            if stop.is_cancelled() {
+                return Err(CloudError::Cancelled);
+            }
+            let response = result.map_err(|_| {
+                // Transfer errors can quote the signed link, so none is logged.
+                tracing::debug!("cloud upload failed");
+                CloudError::Offline
+            })?;
+            match response.status().as_u16() {
+                200..=299 => Ok(()),
+                status => Err(CloudError::Refused {
+                    status,
+                    code: "upload_refused".into(),
+                }),
+            }
+        })
     }
 
     fn start(&self, credential: &CloudCredential, id: &str) -> Result<RemoteJob, CloudError> {
@@ -247,41 +299,13 @@ impl CloudApi for Http {
         if !secure_url(url) {
             return Err(CloudError::BadResponse);
         }
-        let mut response = self.transfers.get(url).call().map_err(|_| {
-            // Transfer errors can quote the signed link, so none is logged.
-            tracing::debug!("cloud download failed");
-            CloudError::Offline
-        })?;
-        let status = response.status().as_u16();
-        if !(200..300).contains(&status) {
-            return Err(CloudError::Refused {
-                status,
-                code: "download_refused".into(),
-            });
-        }
-        let io = |e: std::io::Error| CloudError::Io(format!("The result couldn't be saved: {e}"));
-        let mut out = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(to)
-            .map_err(io)?;
-        let mut body = response
-            .body_mut()
-            .with_config()
-            .limit(MAX_OUTPUT_BYTES)
-            .reader();
-        let mut buf = vec![0u8; 256 * 1024];
-        loop {
-            if cancel.is_cancelled() {
-                return Err(CloudError::Cancelled);
-            }
-            let n = body.read(&mut buf).map_err(|_| CloudError::Offline)?;
-            if n == 0 {
-                break;
-            }
-            out.write_all(&buf[..n]).map_err(io)?;
-        }
-        out.sync_all().map_err(io)
+        let (agent, url, to, stop) = (
+            self.transfers.clone(),
+            url.to_string(),
+            to.to_path_buf(),
+            cancel.clone(),
+        );
+        interruptible(cancel, &|_| {}, move |_| download(&agent, &url, &to, &stop))
     }
 
     fn cancel(&self, credential: &CloudCredential, id: &str) -> Result<(), CloudError> {
@@ -291,5 +315,101 @@ impl CloudApi for Http {
             &format!("/v1/jobs/{}/cancel", checked(id)?),
         )
         .map(|_| ())
+    }
+}
+
+/// Downloads `url` into the new file `to`, checking Stop between reads.
+fn download(agent: &Agent, url: &str, to: &Path, cancel: &Cancel) -> Result<(), CloudError> {
+    let mut response = agent.get(url).call().map_err(|_| {
+        // Transfer errors can quote the signed link, so none is logged.
+        tracing::debug!("cloud download failed");
+        CloudError::Offline
+    })?;
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(CloudError::Refused {
+            status,
+            code: "download_refused".into(),
+        });
+    }
+    let io = |e: std::io::Error| CloudError::Io(format!("The result couldn't be saved: {e}"));
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(to)
+        .map_err(io)?;
+    let mut body = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_OUTPUT_BYTES)
+        .reader();
+    let mut buf = vec![0u8; 256 * 1024];
+    loop {
+        if cancel.is_cancelled() {
+            return Err(CloudError::Cancelled);
+        }
+        let n = body.read(&mut buf).map_err(|_| CloudError::Offline)?;
+        if n == 0 {
+            break;
+        }
+        out.write_all(&buf[..n]).map_err(io)?;
+    }
+    out.sync_all().map_err(io)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::TcpListener;
+    use std::time::Instant;
+
+    use super::*;
+
+    /// A storage host that accepts and then never answers.
+    fn stalled() -> (TcpListener, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/out", listener.local_addr().unwrap());
+        (listener, url)
+    }
+
+    #[test]
+    fn stop_ends_a_stalled_download_at_once() {
+        let (_listener, url) = stalled();
+        let dir = tempfile::tempdir().unwrap();
+        let cancel = Cancel::new();
+        let stop = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            stop.cancel();
+        });
+        let started = Instant::now();
+        let result = Http::new().download(&url, &dir.path().join("0.part"), &cancel);
+        assert_eq!(result, Err(CloudError::Cancelled));
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn stop_ends_a_stalled_upload_at_once() {
+        let (_listener, url) = stalled();
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("photo.png");
+        std::fs::write(&file, vec![0u8; 1024]).unwrap();
+        let cancel = Cancel::new();
+        let stop = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            stop.cancel();
+        });
+        let started = Instant::now();
+        let result = Http::new().upload(&url, &file, 1024, &|_| {}, &cancel);
+        assert_eq!(result, Err(CloudError::Cancelled));
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
     }
 }
