@@ -27,6 +27,7 @@ import {
 import { signInCodeLength } from "#/lib/config";
 import type { SignInMethod } from "#/lib/types";
 import { endOtherSessions, endSession, saveName } from "#/server/account-fns";
+import { saveMarketingPreference } from "#/server/marketing-fns";
 import { deleteAccount } from "#/server/billing-fns";
 
 export const Route = createFileRoute("/_app/_shell/account")({
@@ -165,6 +166,8 @@ function SettingsPage() {
           />
         </section>
       </Card>
+
+      <MarketingEmail subscribed={settings.marketing?.subscribed ?? null} />
 
       <section aria-labelledby="methods-title" className={table.wrap}>
         <CardHeader
@@ -332,6 +335,66 @@ function SettingsPage() {
 
       <DeleteAccount email={settings.account.email} deletion={settings.deletion} />
     </div>
+  );
+}
+
+/** Campaign email. Account and license email is not affected and has no switch. */
+function MarketingEmail({ subscribed }: { subscribed: boolean | null }) {
+  const notice = useNotice();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function choose(next: boolean) {
+    setBusy(true);
+    try {
+      await saveMarketingPreference({ data: { subscribed: next } });
+      notice(next ? "Subscribed to product news." : "Unsubscribed from product news.");
+      await router.invalidate();
+    } catch {
+      notice("Unable to save your email preference. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <section aria-labelledby="email-title">
+        <CardHeader
+          id="email-title"
+          title="Email"
+          body="Sign-in codes, license keys and billing notices always arrive."
+        />
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
+          <div className="flex flex-col gap-1">
+            <p className="text-[13px]/4 font-medium">Product news and tips</p>
+            <p className="text-[13px]/[18px] text-ink-2">
+              {subscribed === null
+                ? "Unable to load this setting right now."
+                : subscribed
+                  ? "Occasional emails about new features, releases and offers."
+                  : "You don't get product news or tips."}
+            </p>
+          </div>
+          {subscribed === null ? null : (
+            <div className="flex items-center gap-4">
+              <span className={cx("text-[13px]/4", subscribed ? "text-green" : "text-ink-3")}>
+                {subscribed ? "Subscribed" : "Unsubscribed"}
+              </span>
+              {/* aria-disabled, not disabled: a disabled button drops keyboard focus. */}
+              <SecondaryButton
+                aria-disabled={busy}
+                onClick={() => {
+                  if (!busy) void choose(!subscribed);
+                }}
+              >
+                {subscribed ? "Unsubscribe" : "Subscribe"}
+              </SecondaryButton>
+            </div>
+          )}
+        </div>
+      </section>
+    </Card>
   );
 }
 
