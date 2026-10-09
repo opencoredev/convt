@@ -243,6 +243,8 @@ begin
     raise exception 'enroll_marketing: source % is not an enrollment', p_source
       using errcode = 'P0001';
   end if;
+  -- Billing's per-user lock first, the order ingest and claim_purchases use.
+  perform pg_advisory_xact_lock(hashtextextended('user:' || p_user_id, 0));
   insert into marketing_subscriptions (user_id, status, source)
     select u.id, 'subscribed', p_source from users u where u.id = p_user_id
     on conflict (user_id) do nothing;
@@ -264,7 +266,7 @@ $$;
 -- way the push may make Sequenzy's contact active again. Returns true when the
 -- status changed.
 create function set_marketing_consent(p_user_id text, p_subscribed boolean, p_source text, p_detail text,
-  p_occurred_at timestamptz)
+  p_occurred_at timestamptz, p_expected_email text)
 returns boolean
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
@@ -280,9 +282,16 @@ begin
     raise exception 'set_marketing_consent: the provider never subscribes anyone'
       using errcode = 'P0001';
   end if;
-  -- Exclusive, so two first choices for an account without a row serialize and
-  -- the second sees the first.
-  perform 1 from users u where u.id = p_user_id for update;
+  -- Billing's per-user lock first, the order ingest and claim_purchases use, so
+  -- neither side waits on the other's row locks. It also serializes two first
+  -- choices for an account without a row, so the second sees the first. NO KEY
+  -- UPDATE leaves foreign-key checks (the backfill's inserts) unblocked.
+  perform pg_advisory_xact_lock(hashtextextended('user:' || p_user_id, 0));
+  -- A preferences link names the address it was signed for; it only counts
+  -- while that is still the account's address, checked under the lock.
+  perform 1 from users u where u.id = p_user_id
+    and (p_expected_email is null or u.email = p_expected_email)
+    for no key update;
   if not found then
     return false;
   end if;
@@ -309,9 +318,9 @@ $$;
 --> statement-breakpoint
 revoke all on function enroll_marketing(text, text) from public;
 --> statement-breakpoint
-revoke all on function set_marketing_consent(text, boolean, text, text, timestamptz) from public;
+revoke all on function set_marketing_consent(text, boolean, text, text, timestamptz, text) from public;
 --> statement-breakpoint
-grant execute on function set_marketing_consent(text, boolean, text, text, timestamptz) to convt_billing;
+grant execute on function set_marketing_consent(text, boolean, text, text, timestamptz, text) to convt_billing;
 --> statement-breakpoint
 -- Every new account is subscribed (Leo's decision, 2026-10-09); the privacy policy
 -- says so and every campaign email carries an unsubscribe link. Runs for whichever

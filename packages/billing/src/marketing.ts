@@ -113,7 +113,7 @@ export async function setMarketingPreference(
   input: { userId: string; subscribed: boolean; source: "settings" | "email_link" },
 ): Promise<MarketingPreference> {
   await ctx.db.execute(
-    sql`select set_marketing_consent(${input.userId}, ${input.subscribed}, ${input.source}, null, null)`,
+    sql`select set_marketing_consent(${input.userId}, ${input.subscribed}, ${input.source}, null, null, null)`,
   );
   return marketingPreference(ctx, input.userId);
 }
@@ -148,12 +148,13 @@ export async function setPreferenceByToken(
 ): Promise<TokenPreference | null> {
   const user = await tokenUser(ctx, input.token);
   if (!user) return null;
-  const pref = await setMarketingPreference(ctx, {
-    userId: user.id,
-    subscribed: input.subscribed,
-    source: "email_link",
-  });
-  return { ...pref, maskedEmail: maskEmail(user.email) };
+  // set_marketing_consent checks the address again under the account's lock, so
+  // an email change that lands after the check above makes this write a no-op.
+  await ctx.db.execute(
+    sql`select set_marketing_consent(${user.id}, ${input.subscribed}, 'email_link', null, null, ${user.email})`,
+  );
+  if (!(await tokenUser(ctx, input.token))) return null;
+  return { ...(await marketingPreference(ctx, user.id)), maskedEmail: maskEmail(user.email) };
 }
 
 // --- push to Sequenzy ------------------------------------------------------------
@@ -219,7 +220,7 @@ async function push(
   const contact = await contactFor(ctx, row, secret);
   const updated = await contacts.update({ contact, reactivate: row.reactivate });
   if (updated.kind !== "not_found") return updated;
-  return contacts.create({
+  const created = await contacts.create({
     contact,
     tags: ctx.marketing.tags,
     lists: ctx.marketing.lists,
@@ -227,6 +228,10 @@ async function push(
     // keeps Sequenzy from enrolling them in the welcome sequence.
     createdAt: row.source === "signup" ? null : row.user_created_at,
   });
+  // A create may merge into an existing contact with this address, which keeps
+  // that contact's unsubscribed status. A resubscribe has to be applied again.
+  if (created.kind !== "ok" || !row.reactivate) return created;
+  return contacts.update({ contact, reactivate: true });
 }
 
 /**
@@ -414,7 +419,7 @@ export async function handleMarketingWebhook(
       : null;
   if (!user) return { status: 200, body: "no account" };
   await ctx.db.execute(
-    sql`select set_marketing_consent(${user.id}, false, 'provider', ${`${event.type} ${event.id}`}, ${event.occurredAt})`,
+    sql`select set_marketing_consent(${user.id}, false, 'provider', ${`${event.type} ${event.id}`}, ${event.occurredAt}, null)`,
   );
   return { status: 200, body: "ok" };
 }

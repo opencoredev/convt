@@ -99,7 +99,9 @@ describe("marketing email", () => {
     const b = await legacyUser("mkt-legacy-b", false);
     const opted = await legacyUser("mkt-legacy-out");
     await h.service.withCtx((c) =>
-      c.db.execute(sql`select set_marketing_consent(${opted.id}, false, 'settings', null, null)`),
+      c.db.execute(
+        sql`select set_marketing_consent(${opted.id}, false, 'settings', null, null, null)`,
+      ),
     );
     const plan = await planMarketingBackfill(h.owner);
     const ids = plan.missing.map((m) => m.userId);
@@ -325,6 +327,41 @@ describe("marketing email", () => {
     expect(r).toEqual({ sync_state: "synced", lease: null });
   });
 
+  test("a resubscribe survives Sequenzy merging into an existing unsubscribed contact", async () => {
+    const u = await legacyUser("mkt-merge");
+    // A contact Leo imported by hand: same address, no convt id, unsubscribed.
+    h.mock.sequenzy.contacts.set("imported-by-hand", {
+      externalId: "imported-by-hand",
+      email: u.email,
+      firstName: "",
+      status: "unsubscribed",
+      tags: [],
+      lists: [],
+      attributes: {},
+      createdAt: null,
+    });
+    await h.service.setMarketingPreference(u.id, true);
+    await h.service.syncMarketing();
+    expect(contact(u.id)?.status).toBe("active");
+    expect((await row(u.id)).sync_state).toBe("synced");
+  });
+
+  test("preference saves and the backfill run concurrently without deadlocks", async () => {
+    const users = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => legacyUser(`mkt-concurrent-${i}`)),
+    );
+    await Promise.all([
+      applyMarketingBackfill(h.owner, { resync: true }),
+      ...users.map((u, i) => h.service.setMarketingPreference(u.id, i % 2 === 0)),
+    ]);
+    for (const [i, u] of users.entries()) {
+      // Each account ends with exactly one row; an explicit unsubscribe is never undone.
+      const r = await row(u.id);
+      expect(r).toBeDefined();
+      if (i % 2 === 1) expect(r.status).toBe("unsubscribed");
+    }
+  });
+
   test("an account being deleted is not pushed", async () => {
     const u = await h.user(testMailbox("mkt-deleting"));
     await h.q(sql`insert into account_deletions (id, user_id, status, next_attempt_at, created_at, updated_at)
@@ -427,8 +464,13 @@ describe("marketing email", () => {
         ),
       ).rejects.toThrow("permission denied");
       await expect(
-        run(sql`select set_marketing_consent(${u.id}, true, 'provider', null, null)`),
+        run(sql`select set_marketing_consent(${u.id}, true, 'provider', null, null, null)`),
       ).rejects.toThrow("never subscribes");
+      // A link signed for an address the account no longer has changes nothing.
+      const stale = await c.db.execute<{ changed: boolean }>(
+        sql`select set_marketing_consent(${u.id}, false, 'email_link', null, null, ${testMailbox("someone-else")}) as changed`,
+      );
+      expect(stale.rows[0]?.changed).toBe(false);
       await expect(run(sql`select enroll_marketing(${u.id}, 'backfill')`)).rejects.toThrow(
         "permission denied",
       );
