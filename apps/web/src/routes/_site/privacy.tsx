@@ -25,7 +25,7 @@ export const Route = createFileRoute("/_site/privacy")({
           convt converts files on your own computer. Your files stay on your machine unless you
           choose to convert one in the cloud. The convt.app website uses PostHog analytics to count
           visits, which you can turn off. This policy covers the convt app, the command line tool,
-          convt.app and the convt API.
+          the convt browser extension, convt.app and the convt API.
         </p>
       }
       sections={sections}
@@ -61,22 +61,62 @@ const sections: LegalSection[] = [
         <List
           items={[
             <>
-              <span className={strong}>Update check.</span> While automatic update checks are on in
+              <span className={strong}>Updates.</span> While automatic update checks are on in
               Settings, the app downloads a list of available versions from convt.app at every
-              launch and every 5 hours while it runs, and whenever you click Check now. The request
-              carries your IP address and app version, like any web request, and nothing about your
-              files. You can turn automatic checks off.
+              launch and every 5 hours while it runs, and whenever you click Check now. When a newer
+              version your license covers is out, the app downloads its installer from our GitHub
+              releases and installs it when you click Restart to update. These requests carry your
+              IP address and app version, like any web request, and nothing about your files. You
+              can turn automatic checks off.
             </>,
             <>
               <span className={strong}>Pro renewal.</span> If you have signed in to convt Pro from
-              the app, it asks convt.app for your current Pro key at most once a day at launch, and
-              when you click Refresh license. The request identifies your account and this computer
-              through the sign-in token. Desktop license owners never sign in.
+              the app, it asks convt.app for your current Pro key at most once a day while it runs,
+              and when you click Refresh license. The request identifies your account and this
+              computer through the sign-in token. Desktop license owners never sign in.
             </>,
             <>
               <span className={strong}>Things you ask for.</span> Signing in, installing the
-              optional document pack, downloading an update and sending a file to the cloud each
-              happen only when you click to do them.
+              optional document pack and sending a file to the cloud each happen only when you click
+              to do them.
+            </>,
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: "browser-extension",
+    title: "The browser extension",
+    body: (
+      <>
+        <p>
+          The convt extension for Chrome and Edge converts images inside your browser. It collects
+          no personal data and sends us nothing. It has no account and no advertising code, and it
+          does not record how you use it.
+        </p>
+        <List
+          items={[
+            <>
+              <span className={strong}>The image you choose.</span> When you right-click an image
+              and pick a format, the extension downloads that image from the site it came from,
+              converts it on your computer and saves the result to your Downloads folder or
+              clipboard. The image is never sent to convt.
+            </>,
+            <>
+              <span className={strong}>Stored in your browser.</span> Your settings, and a list of
+              your last eight conversions with small thumbnails, are kept in your browser's
+              extension storage. Clearing them in the extension or removing it deletes them.
+            </>,
+            <>
+              <span className={strong}>Site access.</span> Some sites only share images with
+              extensions you allow. The extension asks for that access when you need it, and uses it
+              only to download images you right-click.
+            </>,
+            <>
+              <span className={strong}>Links to convt.app.</span> Links in the extension carry a tag
+              saying they came from the extension, so the website's analytics can count those
+              visits. They never include the page you were on.
             </>,
           ]}
         />

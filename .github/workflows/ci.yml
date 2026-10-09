@@ -146,7 +146,7 @@ jobs:
         run: >-
           bun test apps/billing/test packages/billing/test/unit packages/db/test/unit
           packages/license/test packages/mail/test packages/sdk/test
-          tools/billing-mock/test tools/loadtest/test apps/web/test/unit
+          tools/billing-mock/test tools/loadtest/test apps/web/test/unit apps/extension/test/unit
       - run: bun run check
       - run: bun run check-types
       - run: bun run build

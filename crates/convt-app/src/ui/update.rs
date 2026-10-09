@@ -1,10 +1,13 @@
 //! The update check as the windows show it: a card in the main window's
-//! sidebar when a newer build is out, and the Update checks row in Settings.
-//! Failures appear only in Settings.
+//! sidebar when a newer build is out, downloading or ready to install, and
+//! the Updates card in Settings. Failed checks appear only in Settings; a
+//! failed download or install shows in both, with the download page as the
+//! way out.
 
 use convt_license::client::{DOWNLOAD_URL, State};
 use gpui_kit::component::Sizable;
 use gpui_kit::component::spinner::Spinner;
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::theme::IconName;
@@ -41,29 +44,116 @@ pub(super) fn last_checked(at: Option<u64>) -> Option<String> {
     Some(format!("Last checked {day} at {}", when.time()))
 }
 
-/// The sidebar card: only when a newer build is out.
+fn act(
+    app: &Entity<AppState>,
+    f: fn(&mut AppState, &mut Context<AppState>),
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let app = app.clone();
+    move |_, _, cx| app.update(cx, f)
+}
+
+fn downloading(version: &str, percent: u8) -> String {
+    format!("Downloading convt {version}… {percent}%")
+}
+
+type OnClick = Box<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
+/// The buttons a state offers, shared by the card and Settings, the thing
+/// to do first. Empty for states with nothing to do.
+fn actions(app: &Entity<AppState>, state: &AppState) -> Vec<(Button, OnClick)> {
+    let self_install = state.update_config.install.is_some() && state.settings.update_checks;
+    let download_page = || -> OnClick { Box::new(open(DOWNLOAD_URL.to_string())) };
+    let buttons: Vec<(Button, OnClick)> = match &state.update {
+        Update::Available { .. } if self_install => vec![(
+            Button::primary("update-install", "Update").icon(IconName::Download),
+            Box::new(act(app, AppState::download_update)),
+        )],
+        Update::Available { .. } => vec![(
+            Button::primary("update-download", "Download").icon(IconName::Download),
+            download_page(),
+        )],
+        Update::Ready { .. } => vec![(
+            Button::primary("update-restart", "Restart to update").icon(IconName::RotateCw),
+            Box::new(act(app, AppState::restart_to_update)),
+        )],
+        Update::InstallFailed { .. } => vec![
+            (
+                Button::primary("update-retry", "Try again").icon(IconName::RefreshCw),
+                Box::new(act(app, AppState::download_update)),
+            ),
+            (
+                Button::secondary("update-download", "Download instead"),
+                download_page(),
+            ),
+        ],
+        Update::NotCovered { purchase_url, .. } => vec![(
+            Button::secondary("update-renew", "Renew to update"),
+            Box::new(open(purchase_url.clone())),
+        )],
+        _ => Vec::new(),
+    };
+    buttons.into_iter().map(|(b, f)| (b.small(), f)).collect()
+}
+
+fn built(app: &Entity<AppState>, state: &AppState, p: &Palette) -> Vec<Clickable> {
+    actions(app, state)
+        .into_iter()
+        .map(|(b, f)| b.build(p).on_click(f))
+        .collect()
+}
+
+/// The sidebar card: while a newer build is out, downloads, waits to be
+/// installed or didn't install.
 pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Clickable> {
-    let (title, detail, button, url) = match &app.read(cx).update {
+    let state = app.read(cx);
+    let (title, detail, tone, icon) = match &state.update {
         Update::Available { version, .. } => (
-            "Update available",
+            "Update available".to_string(),
             format!("convt {version}"),
-            Button::primary("update-download", "Download")
-                .icon(IconName::Download)
-                .small(),
-            DOWNLOAD_URL.to_string(),
+            Tone::Green,
+            IconName::ArrowDown,
         ),
-        Update::NotCovered {
-            version,
-            purchase_url,
-            ..
-        } => (
-            "New version",
+        Update::Downloading { version, percent } => (
+            "Update available".to_string(),
+            downloading(version, *percent),
+            Tone::Green,
+            IconName::ArrowDown,
+        ),
+        Update::Ready { version, .. } => (
+            format!("convt {version} is ready"),
+            state
+                .updater
+                .notice
+                .clone()
+                .unwrap_or_else(|| "Restarting takes a few seconds.".into()),
+            Tone::Green,
+            IconName::CircleCheck,
+        ),
+        Update::Installing { version } => (
+            format!("Installing convt {version}…"),
+            "convt restarts when it's done.".to_string(),
+            Tone::Green,
+            IconName::Loader,
+        ),
+        Update::InstallFailed { version, why } => (
+            format!("convt {version} didn't install"),
+            why.clone(),
+            Tone::Neutral,
+            IconName::CircleAlert,
+        ),
+        Update::NotCovered { version, .. } => (
+            "New version".to_string(),
             format!("convt {version} needs a renewed license"),
-            Button::secondary("update-renew", "Renew to update").small(),
-            purchase_url.clone(),
+            Tone::Neutral,
+            IconName::ArrowDown,
         ),
         _ => return None,
     };
+    let progress = match &state.update {
+        Update::Downloading { percent, .. } => Some(*percent),
+        _ => None,
+    };
+    let buttons = built(app, state, p);
     Some(
         div()
             .id("update-card")
@@ -85,7 +175,7 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
                     .flex()
                     .items_center()
                     .gap(px(space::SM))
-                    .child(theme::icon_tile(IconName::ArrowDown, Tone::Green, 22., p))
+                    .child(theme::icon_tile(icon, tone, 22., p))
                     .child(
                         div()
                             .flex()
@@ -99,7 +189,22 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
                             .child(styled(size::CAPTION, p.secondary).child(detail)),
                     ),
             )
-            .child(button.build(p).w_full().on_click(open(url))),
+            .when_some(progress, |d, percent| {
+                d.child(theme::progress(
+                    f32::from(percent) / 100.,
+                    p.border,
+                    p.green,
+                ))
+            })
+            .when(!buttons.is_empty(), |d| {
+                d.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(space::XS))
+                        .children(buttons.into_iter().map(|b| b.w_full())),
+                )
+            }),
     )
 }
 
@@ -142,6 +247,12 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
         let app = app.clone();
         move |_, _, cx| app.update(cx, |s, cx| s.check_updates(cx))
     });
+    // Downloading, ready or installing: Restart to update is the thing to
+    // do, and a check would only hide it for a moment.
+    let busy = matches!(
+        state.update,
+        Update::Downloading { .. } | Update::Ready { .. } | Update::Installing { .. }
+    );
     let version = div()
         .flex()
         .items_center()
@@ -182,7 +293,7 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
                     p.secondary,
                 )),
         )
-        .child(check_now)
+        .when(!busy, |d| d.child(check_now))
         .into_any_element();
 
     let status = div()
@@ -192,7 +303,7 @@ pub fn settings_rows(app: &Entity<AppState>, p: &Palette, cx: &App) -> Vec<AnyEl
         .min_h(px(44.))
         .px(px(space::LG))
         .py(px(space::MD))
-        .child(status(state, on, p))
+        .child(status(app, state, on, p))
         .into_any_element();
 
     let switch = theme::switch("update-checks", "Check automatically", on, false, p).on_click({
@@ -226,13 +337,23 @@ fn note(lead: AnyElement, message: impl Into<SharedString>, color: Hsla) -> Div 
 }
 
 /// What the last check found, as the middle row of the Updates card.
-fn status(state: &AppState, on: bool, p: &Palette) -> AnyElement {
+fn status(app: &Entity<AppState>, state: &AppState, on: bool, p: &Palette) -> AnyElement {
     let lead = |name: IconName, color: Hsla| theme::icon(name, 14., color).into_any_element();
-    let offer = |title: String, body: String, version: &str, tone: Tone, action: Clickable| {
+    let offer = |icon: IconName,
+                 title: String,
+                 body: String,
+                 version: &str,
+                 tone: Tone,
+                 actions: Vec<Clickable>| {
+        let label = if body.is_empty() {
+            title.clone()
+        } else {
+            format!("{title} {body}")
+        };
         let words = div()
             .id("update-status")
             .test_support()
-            .aria_label(SharedString::from(format!("{title} {body}")))
+            .aria_label(SharedString::from(label))
             .child(theme::callout_words(title, body, p));
         let notes = Button::ghost("update-notes", "Release notes")
             .icon(IconName::ExternalLink)
@@ -240,7 +361,7 @@ fn status(state: &AppState, on: bool, p: &Palette) -> AnyElement {
             .build(p)
             .on_click(open(release_notes_url(version)));
         theme::callout(
-            IconName::ArrowDown,
+            icon,
             tone,
             div()
                 .flex()
@@ -253,7 +374,7 @@ fn status(state: &AppState, on: bool, p: &Palette) -> AnyElement {
                         .flex_wrap()
                         .items_center()
                         .gap(px(space::SM))
-                        .child(action)
+                        .children(actions)
                         .child(notes),
                 ),
             p,
@@ -299,19 +420,58 @@ fn status(state: &AppState, on: bool, p: &Palette) -> AnyElement {
                     " convt {newer} is out too and needs a renewed license."
                 ));
             }
-            let download = Button::primary("update-download", "Download")
-                .icon(IconName::Download)
-                .small()
-                .build(p)
-                .on_click(open(DOWNLOAD_URL.to_string()));
             offer(
+                IconName::ArrowDown,
                 format!("convt {version} is available"),
                 body,
                 version,
                 Tone::Green,
-                download,
+                built(app, state, p),
             )
         }
+        Update::Downloading { version, percent } => div()
+            .flex()
+            .flex_col()
+            .gap(px(space::SM))
+            .child(note(
+                Spinner::new()
+                    .with_size(px(14.))
+                    .color(p.secondary)
+                    .into_any_element(),
+                downloading(version, *percent),
+                p.secondary,
+            ))
+            .child(theme::progress(
+                f32::from(*percent) / 100.,
+                p.border,
+                p.green,
+            ))
+            .into_any_element(),
+        Update::Ready { version, .. } => offer(
+            IconName::CircleCheck,
+            format!("convt {version} is ready to install."),
+            state.updater.notice.clone().unwrap_or_default(),
+            version,
+            Tone::Green,
+            built(app, state, p),
+        ),
+        Update::Installing { version } => note(
+            Spinner::new()
+                .with_size(px(14.))
+                .color(p.secondary)
+                .into_any_element(),
+            format!("Installing convt {version}… convt restarts when it's done."),
+            p.secondary,
+        )
+        .into_any_element(),
+        Update::InstallFailed { version, why } => offer(
+            IconName::CircleAlert,
+            format!("convt {version} didn't install."),
+            why.clone(),
+            version,
+            Tone::Neutral,
+            built(app, state, p),
+        ),
         Update::NotCovered {
             version,
             date,
@@ -336,11 +496,12 @@ fn status(state: &AppState, on: bool, p: &Palette) -> AnyElement {
                 .build(p)
                 .on_click(open(purchase_url.clone()));
             offer(
+                IconName::ArrowDown,
                 format!("convt {version} is out"),
                 body,
                 version,
                 Tone::Neutral,
-                renew,
+                vec![renew],
             )
         }
         // Quiet: a note, never an alert.

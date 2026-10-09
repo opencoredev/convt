@@ -21,6 +21,7 @@ Users are people who want to convert files without uploading them. Conversions r
 - `apps/web`: convt.app on Cloudflare Workers: the landing page, download page, sign-in (Better Auth: email code, GitHub, Google), the dashboard, and the checkout pages. It reaches Postgres through Hyperdrive and billing through the `BILLING` service binding; it holds no billing secret.
 - `apps/docs`: convt.app/docs, a static [Blume](https://useblume.dev) site deployed as the `convt-docs` Worker on the `convt.app/docs*` routes. The API reference renders `crates/convt-server/openapi.json` through the overlay in `apps/docs/openapi/public.yaml`; the formats page is generated from `crates/convt-server/cloud-formats.json`. `apps/docs/api-host.ts` holds the API host the samples use.
 - `apps/billing`: the `convt-billing` Worker: the Polar webhook route, the billing crons and the `BillingRpc` entrypoint. The only holder of the license signing key and the Polar and Resend secrets; connects as `convt_billing`.
+- `apps/extension`: the Chrome and Edge extension. It adds "Convert with convt" to the image right-click menu (PNG, JPG, WebP, Copy as PNG) and converts in the browser with canvas, so it shares no code with the Rust engine. It makes no network calls besides fetching the image; links to convt.app carry UTM parameters. `apps/extension/README.md` covers permissions and the store listing.
 - `apps/desktop`, `tools/cli`: version metadata for Changesets (`.changeset/README.md`), not code. The binaries come from `crates/convt-app` and `crates/convt-cli`.
 - `packages/sdk`: `@convt/sdk`, the TypeScript client for the cloud API. Not published to npm yet. Its default host does not resolve yet, so pass `baseUrl`; `apps/docs/api-host.ts` has the host the docs use.
 - `packages/billing`: the billing logic both Workers and the tests share: the catalog, the Polar adapter and webhook verifier, ingest, license issuance, the email outbox, the reconciler and account deletion.
@@ -95,6 +96,8 @@ Project skills live in `.agents/skills` (`.claude/skills` links there). Read the
 - `test-convt-desktop`: anything in `crates/convt-app`.
 - `test-convt-web`: anything in `apps/web`, `apps/billing`, `packages/db`, `packages/billing`, `packages/mail`, `packages/license`, `tools/oauth-mock` or `tools/billing-mock`.
 - `test-convt-server`: `crates/convt-server` and `crates/convt-worker`.
+
+`apps/extension` has no skill: `bun run --cwd apps/extension test` runs its unit tests and `test:e2e` runs it in headless Chrome against local image servers. Native context menus and Chrome's site-access prompt can't be clicked headless; say so rather than claiming they work.
 
 `crates/convt-ffi` builds anywhere (`cargo build -p convt-ffi`), but the Finder extension in `integrations/macos` needs Xcode and has no Linux test path, and `crates/convt-shell` and the MSI need Windows (`integrations/windows/README.md`); say so instead of claiming they work.
 

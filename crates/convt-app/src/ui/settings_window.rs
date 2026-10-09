@@ -332,7 +332,7 @@ impl SettingsView {
         });
         let menu_bar = theme::switch(
             "menu-bar-icon",
-            "Menu bar icon",
+            "Keep running in the background",
             settings.menu_bar_icon,
             false,
             p,
@@ -409,30 +409,30 @@ impl SettingsView {
             )
             .into_any_element()
         });
-        // Only macOS keeps running for a menu bar icon; elsewhere the switch
-        // would do nothing.
-        let menu_bar = cfg!(target_os = "macos").then(|| {
-            theme::row(
-                "Menu bar icon",
-                Some(theme::detail("Shows progress and takes dropped files", p)),
-                menu_bar,
-                p,
-            )
-            .into_any_element()
-        });
-        let desktop_label = match (finder.is_some(), menu_bar.is_some()) {
-            (true, true) => Some("Finder and menu bar"),
-            (true, false) => Some("Finder"),
-            (false, true) => Some("Menu bar"),
-            (false, false) => None,
-        };
-        let desktop = desktop_label.map(|label| {
-            section(
-                label,
-                theme::group(finder.into_iter().chain(menu_bar), p),
-                p,
-            )
-        });
+        // Every platform: the tray icon keeps convt running with no window.
+        let menu_bar = theme::row(
+            "Keep running in the background",
+            Some(
+                div()
+                    .id("menu-bar-icon-note")
+                    .test_support()
+                    .aria_label(SharedString::from(background_note()))
+                    .child(styled(size::SMALL, p.secondary).child(background_note()))
+                    .into_any_element(),
+            ),
+            menu_bar,
+            p,
+        )
+        .into_any_element();
+        let desktop = section(
+            if finder.is_some() {
+                "Finder and menu bar"
+            } else {
+                "Background"
+            },
+            theme::group(finder.into_iter().chain([menu_bar]), p),
+            p,
+        );
 
         div()
             .flex()
@@ -498,7 +498,7 @@ impl SettingsView {
                 ),
                 p,
             ))
-            .children(desktop)
+            .child(desktop)
             .child(section(
                 "Documents",
                 theme::group([documents.into_any_element()], p),
@@ -1016,11 +1016,14 @@ pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
         "network-updates",
         "Update checks: while automatic checks are on, at every launch and every 5 hours, and \
          whenever you click Check now, convt downloads the signed list of releases from \
-         convt.app. The request carries the app version and nothing about your files.",
+         convt.app. The request carries the app version and nothing about your files. When a \
+         new version your license covers is out and automatic checks are on, convt downloads \
+         its installer from the release's host (GitHub) and checks it against that list before \
+         offering to restart.",
     ),
     (
         "network-refresh",
-        "License refresh: only while you're signed in to convt.app, once a day at launch, \
+        "License refresh: only while you're signed in to convt.app, at most once a day, \
          to fetch your current Pro key. See License.",
     ),
     (
@@ -1070,6 +1073,16 @@ fn section(label: impl Into<SharedString>, content: impl IntoElement, p: &Palett
         .flex_col()
         .child(theme::section_label(label, p))
         .child(content)
+}
+
+/// What "Keep running in the background" does, in this platform's words.
+fn background_note() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Shows convt in the menu bar so conversions start instantly. Quit from there or with ⌘Q."
+    } else {
+        "Shows convt in the system tray so conversions start instantly. Quit from there or with \
+         Ctrl+Q."
+    }
 }
 
 /// Parses an optional number field. Empty means unset.

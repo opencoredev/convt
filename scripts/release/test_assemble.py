@@ -17,6 +17,7 @@ def write(path: Path, data: bytes = b"x") -> None:
 def linux_tree(root: Path, version: str) -> None:
     review = root / "linux-release-review"
     write(review / f"convt-{version}-source.tar.gz")
+    write(review / f"convt-{version}-source-closure.tar.gz")
     write(review / "convt_0.2.0-1_amd64.deb")
     write(review / f"convt-{version}-1.x86_64.rpm")
     write(review / "convt-linux-x86_64.AppImage")

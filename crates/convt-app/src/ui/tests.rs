@@ -34,8 +34,12 @@ use crate::model::{AppState, PackPhase, Paths, Shared};
 use crate::pack::{self, Failure, FailureKind};
 use crate::request::{Request, Source};
 use crate::tray::{self, Indicator};
-use crate::update::{Fetch, FetchError, Update, UpdateConfig};
+use crate::update::download;
+use crate::update::install::Installer;
+use crate::update::{Fetch, FetchError, SelfInstall, Update, UpdateConfig};
 use convt_license::client::BUY_URL;
+
+mod background;
 
 struct Fixture {
     dir: TempDir,
@@ -441,6 +445,7 @@ impl Fixture {
                 key: Some(update_key().verifying_key()),
                 fetch: releases.clone(),
                 target: ("linux-x86_64", "AppImage"),
+                install: None,
             },
         };
         // Conversions run on real job threads that wake the UI.
@@ -1291,18 +1296,14 @@ fn settings_change_and_persist(cx: &mut TestAppContext) {
     assert_eq!(toggled(cx, window, "notifications"), Some(false));
     click(cx, window, "reveal");
     assert_eq!(toggled(cx, window, "reveal"), Some(true));
-    let saved = if cfg!(target_os = "macos") {
-        click(cx, window, "menu-bar-icon");
-        let saved = f.settings_file();
-        assert!(saved.contains("menu_bar_icon = false"), "{saved}");
-        saved
-    } else {
-        assert!(
-            !shown(cx, window, "menu-bar-icon"),
-            "no menu bar switch where it does nothing"
-        );
-        f.settings_file()
-    };
+    // Every platform keeps running in the background with the tray icon.
+    assert_eq!(
+        label(cx, window, "menu-bar-icon").as_deref(),
+        Some("Keep running in the background")
+    );
+    click(cx, window, "menu-bar-icon");
+    let saved = f.settings_file();
+    assert!(saved.contains("menu_bar_icon = false"), "{saved}");
     for line in ["notifications = false", "reveal_when_done = true"] {
         assert!(saved.contains(line), "{line} in {saved}");
     }
@@ -1999,7 +2000,7 @@ fn a_signed_in_relaunch_never_waits_on_the_account_forever(cx: &mut TestAppConte
                 },
                 cx,
             );
-            s.renew_on_launch(cx);
+            s.renew_if_due(cx);
         })
     });
     assert_eq!(f.api.calls(), (0, 0, 0));
@@ -4104,7 +4105,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     let current = pro_key("pro-tester", "2026-10-15");
     let f = Fixture::signed_in(cx, Some(&current), "pro-tester");
     // Offline at launch: one try, the key stays, the failure shows in Settings.
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     wait_until(cx, "the refresh failed", |cx| {
         matches!(
             f.app.read(cx).account.refresh,
@@ -4127,7 +4128,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     cx.read(|cx| assert!(f.app.read(cx).account.session.is_some()));
 
     // A second launch the same day asks nothing.
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     cx.run_until_parked();
     assert_eq!(f.api.calls(), (0, 1, 0));
     // A launch on a later day asks again.
@@ -4136,7 +4137,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
             s.update_settings(|s| s.license_checked = Some("2026-01-01".into()), cx)
         })
     });
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     wait_until(cx, "the second launch's refresh", |_| f.api.calls().1 == 2);
 
     // Refresh license asks whenever clicked, and stores the next period's key.
@@ -4200,7 +4201,7 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
         Some("2026-09-30"),
         Some(&license_key("a-tester", "2027-10-01")),
     );
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     assert!(!shown(cx, settings, "refresh-license"));
@@ -4246,7 +4247,7 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
             s.update_settings(|s| s.license_checked = None, cx);
-            s.renew_on_launch(cx)
+            s.renew_if_due(cx)
         })
     });
     cx.run_until_parked();
@@ -4373,8 +4374,23 @@ fn update_key() -> SigningKey {
 /// bumps on every release. Builds meant to be newer use 9.x so a version bump
 /// never turns them into downgrades; 0.1.0 stays older than any real version.
 fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8> {
+    manifest_for(sequence, builds, key, b"x")
+}
+
+/// [`manifest`] whose AppImage is `installer`: its size and SHA-256.
+fn manifest_for(
+    sequence: u64,
+    builds: &[(&str, &str)],
+    key: &SigningKey,
+    installer: &[u8],
+) -> Vec<u8> {
     use base64::Engine as _;
     use ed25519_dalek::Signer as _;
+    use sha2::Digest as _;
+    let sha256: String = sha2::Sha256::digest(installer)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -4383,9 +4399,9 @@ fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8>
     let artifact = |platform: &str, kind: &str| convt_update::Artifact {
         platform: platform.into(),
         kind: kind.into(),
-        url: "https://downloads.convt.test/convt".into(),
-        size: 1,
-        sha256: "a".repeat(64),
+        url: "https://downloads.convt.test/convt-linux-x86_64.AppImage".into(),
+        size: installer.len() as u64,
+        sha256: sha256.clone(),
     };
     let m = convt_update::Manifest {
         schema_version: 1,
@@ -4401,6 +4417,7 @@ fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8>
                 build_date: (*d).into(),
                 artifacts: vec![artifact("linux-x86_64", "AppImage")],
                 source: artifact("source", "tar.gz"),
+                source_closure: None,
             })
             .collect(),
     };
@@ -4759,6 +4776,21 @@ fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
             purchase_url: "https://convt.test/pricing".into(),
         },
         Update::Failed("convt.app couldn't be reached.".into()),
+        Update::Downloading {
+            version: "9.2.0".into(),
+            percent: 42,
+        },
+        Update::Ready {
+            version: "9.2.0".into(),
+            path: "/tmp/convt.AppImage".into(),
+        },
+        Update::Installing {
+            version: "9.2.0".into(),
+        },
+        Update::InstallFailed {
+            version: "9.2.0".into(),
+            why: download::Error::Checksum.plain(),
+        },
     ];
     for dark in [false, true] {
         cx.update(|cx| theme::set_dark(dark, cx));
@@ -4772,7 +4804,10 @@ fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
                 })
             });
             assert!(shown(cx, settings, "update-status"), "{state:?}");
-            let card = matches!(state, Update::Available { .. } | Update::NotCovered { .. });
+            let card = !matches!(
+                state,
+                Update::Idle | Update::Checking | Update::UpToDate | Update::Failed(_)
+            );
             assert_eq!(shown(cx, main, "update-card"), card, "{state:?}");
             if card {
                 assert!(fits(cx, main, "update-card"), "{state:?}");
@@ -5304,4 +5339,765 @@ fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppC
     );
     click(cx, main, "activity-pack-settings");
     window_of::<SettingsView>(cx);
+}
+
+/// A scripted installer host: serves `body` for any URL, counts requests,
+/// and can hold a download part-way so tests can see it in progress.
+#[derive(Default)]
+struct TestDownloads {
+    opened: AtomicUsize,
+    body: Mutex<Vec<u8>>,
+    hold: Arc<AtomicBool>,
+}
+
+impl TestDownloads {
+    fn opened(&self) -> usize {
+        self.opened.load(Ordering::SeqCst)
+    }
+}
+
+/// Hands out half the bytes, then waits while held.
+struct HeldReader {
+    body: std::io::Cursor<Vec<u8>>,
+    hold: Arc<AtomicBool>,
+}
+
+impl std::io::Read for HeldReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = self.body.get_ref().len() as u64;
+        if self.body.position() >= len / 2 {
+            while self.hold.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        let end = if self.body.position() < len / 2 {
+            (len / 2 - self.body.position()) as usize
+        } else {
+            buf.len()
+        };
+        let end = end.clamp(1, buf.len());
+        self.body.read(&mut buf[..end])
+    }
+}
+
+impl download::Source for TestDownloads {
+    fn open(&self, url: &str) -> Result<Box<dyn std::io::Read + Send>, download::Error> {
+        assert!(url.starts_with("https://"), "{url}");
+        self.opened.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(HeldReader {
+            body: std::io::Cursor::new(self.body.lock().unwrap().clone()),
+            hold: self.hold.clone(),
+        }))
+    }
+}
+
+/// Records what it would have installed, fails when told to, and can be
+/// held mid-install.
+#[derive(Default)]
+struct TestInstaller {
+    installed: Mutex<Vec<PathBuf>>,
+    fail: Mutex<Option<String>>,
+    hold: Arc<AtomicBool>,
+    started: AtomicUsize,
+}
+
+impl Installer for TestInstaller {
+    fn install(&self, file: &Path) -> Result<(), String> {
+        self.started.fetch_add(1, Ordering::SeqCst);
+        while self.hold.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        if let Some(why) = self.fail.lock().unwrap().take() {
+            return Err(why);
+        }
+        self.installed.lock().unwrap().push(file.to_path_buf());
+        Ok(())
+    }
+}
+
+/// The installer bytes the self-update tests serve.
+const NEW_APPIMAGE: &[u8] = b"\x7fELF a newer convt, as an AppImage";
+
+impl Fixture {
+    /// Makes this install one that updates itself, downloading into the
+    /// fixture directory from a scripted host.
+    fn self_installing(&self, cx: &mut TestAppContext) -> (Arc<TestDownloads>, Arc<TestInstaller>) {
+        let downloads = Arc::new(TestDownloads::default());
+        *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+        let installer = Arc::new(TestInstaller::default());
+        let dir = self.dir.path().join("updates");
+        cx.update(|cx| {
+            self.app.update(cx, |s, _| {
+                s.update_config.install = Some(SelfInstall {
+                    source: downloads.clone(),
+                    dir,
+                    installer: installer.clone(),
+                })
+            })
+        });
+        (downloads, installer)
+    }
+
+    fn update(&self, cx: &mut TestAppContext) -> Update {
+        cx.read(|cx| self.app.read(cx).update.clone())
+    }
+}
+
+#[gpui_kit::test]
+fn a_covered_update_downloads_then_restarts_to_update(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    let builds = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
+    f.releases
+        .serve(Ok(manifest_for(5, &builds, &update_key(), NEW_APPIMAGE)));
+    downloads.hold.store(true, Ordering::SeqCst);
+    launch_check(&f, cx);
+    wait_until(
+        cx,
+        "half downloaded",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(
+        card.starts_with("Update available: Downloading convt 9.2.0… 5"),
+        "{card}"
+    );
+    assert!(!shown(cx, main, "update-restart"));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("Downloading convt 9.2.0…")
+    );
+    // No second check while downloading.
+    assert!(!shown(cx, settings, "check-updates"));
+
+    downloads.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { version, path } = f.update(cx) else {
+        unreachable!()
+    };
+    assert_eq!(version, "9.2.0");
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    assert!(path.starts_with(f.dir.path().join("updates/9.2.0")));
+    assert_eq!(
+        label(cx, main, "update-card").as_deref(),
+        Some("convt 9.2.0 is ready: Restarting takes a few seconds.")
+    );
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("convt 9.2.0 is ready to install.")
+    );
+    assert!(fits(cx, main, "update-card"));
+    assert!(shown(cx, settings, "update-restart"));
+    // Restart to update is the thing to do; Check now would only hide it.
+    assert!(!shown(cx, settings, "check-updates"));
+
+    // Checking again finds the same version: the verified file is reused.
+    assert!(matches!(
+        manual_check(&f, cx),
+        Update::Downloading { .. } | Update::Ready { .. }
+    ));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+
+    click(cx, main, "update-restart");
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    assert_eq!(*installer.installed.lock().unwrap(), [path]);
+    cx.run_until_parked();
+    // The app quits for the helper; it stays Installing until it does.
+    assert_eq!(
+        f.update(cx),
+        Update::Installing {
+            version: "9.2.0".into()
+        }
+    );
+    assert_eq!(f.releases.fetches(), 2);
+}
+
+#[gpui_kit::test]
+fn a_bad_download_or_install_falls_back_to_the_download_page(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    // The host serves something other than the signed bytes.
+    *downloads.body.lock().unwrap() = b"\x7fELF something else".to_vec();
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("didn't match the signed list"), "{card}");
+    assert!(fits(cx, main, "update-card"));
+    // Nothing unverified stays on disk.
+    let leftovers: Vec<_> = std::fs::read_dir(f.dir.path().join("updates/9.2.0"))
+        .unwrap()
+        .collect();
+    assert!(leftovers.is_empty());
+    click(cx, main, "update-download");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(convt_license::client::DOWNLOAD_URL)
+    );
+
+    // Try again with the right bytes.
+    *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+
+    // The install itself can fail too, and says why.
+    *installer.fail.lock().unwrap() = Some("convt can't write to /opt/apps.".into());
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("convt 9.2.0 didn't install. convt can't write to /opt/apps.")
+    );
+    assert!(shown(cx, settings, "update-download"));
+    assert!(installer.installed.lock().unwrap().is_empty());
+}
+
+#[gpui_kit::test]
+fn update_checks_off_stop_the_download(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    downloads.hold.store(true, Ordering::SeqCst);
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    assert!(matches!(f.update(cx), Update::Downloading { .. }));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "update-checks");
+    assert_eq!(f.update(cx), Update::Idle);
+    downloads.hold.store(false, Ordering::SeqCst);
+    // The cancelled download leaves nothing, and nothing turns Ready.
+    wait_until(cx, "the partial file is gone", |_| {
+        std::fs::read_dir(f.dir.path().join("updates/9.2.0"))
+            .map_or(true, |mut d| d.next().is_none())
+    });
+    cx.run_until_parked();
+    assert_eq!(f.update(cx), Update::Idle);
+}
+
+#[gpui_kit::test]
+fn a_license_change_that_still_covers_keeps_the_download(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2028-10-01"), cx)
+            })
+            .unwrap();
+    });
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+    // A key whose updates ended before 9.2.0 turns it into a renewal.
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2026-10-02"), cx)
+            })
+            .unwrap();
+    });
+    assert!(matches!(f.update(cx), Update::NotCovered { .. }));
+    assert_eq!(downloads.opened(), 1);
+}
+
+/// Serves `manifest_for(5, …)` with 9.2.0 newer than this build.
+fn serve_9_2(f: &Fixture) {
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+}
+
+/// Checks and waits for the download to be Ready; returns its path.
+fn ready(f: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    serve_9_2(f);
+    manual_check(f, cx);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { path, .. } = f.update(cx) else {
+        unreachable!()
+    };
+    path
+}
+
+#[gpui_kit::test]
+fn a_stopped_download_never_touches_the_next_one(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    // The first attempt reads other bytes of the same size, so anything it
+    // wrote into the second attempt's file would break the checksum.
+    let mut other = NEW_APPIMAGE.to_vec();
+    other.reverse();
+    *downloads.body.lock().unwrap() = other;
+    downloads.hold.store(true, Ordering::SeqCst);
+    serve_9_2(&f);
+    manual_check(&f, cx);
+    wait_until(
+        cx,
+        "the first attempt is half way",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    // Off and on again while the first attempt is still held mid-read.
+    click(cx, settings, "update-checks");
+    assert_eq!(f.update(cx), Update::Idle);
+    *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+    click(cx, settings, "update-checks");
+    wait_until(
+        cx,
+        "the second attempt is half way",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    assert_eq!(downloads.opened(), 2);
+    // Both readers go on at once.
+    downloads.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { path, .. } = f.update(cx) else {
+        unreachable!()
+    };
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    // The stopped attempt removes its own part file and nothing else.
+    let folder = f.dir.path().join("updates/9.2.0");
+    wait_until(cx, "only the verified file is left", |_| {
+        std::fs::read_dir(&folder)
+            .unwrap()
+            .all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".part"))
+    });
+    cx.run_until_parked();
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+}
+
+#[gpui_kit::test]
+fn a_ready_file_changed_on_disk_is_not_installed(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (_, installer) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    let mut tampered = NEW_APPIMAGE.to_vec();
+    tampered[1] ^= 1;
+    std::fs::write(&path, tampered).unwrap();
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install was refused", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    assert!(installer.installed.lock().unwrap().is_empty());
+    assert!(!path.exists(), "the changed file is deleted");
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("didn't match the signed list"), "{card}");
+    // Try again downloads it afresh.
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+}
+
+#[gpui_kit::test]
+fn a_failed_check_keeps_restart_to_update(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    let path = ready(&f, cx);
+    // The periodic check runs while an update waits, and convt.app is down.
+    f.releases.serve(Err(FetchError::Offline));
+    assert_eq!(
+        manual_check(&f, cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path
+        }
+    );
+    let (main, _) = f.main(cx);
+    assert!(shown(cx, main, "update-restart"));
+}
+
+#[gpui_kit::test]
+fn the_schedule_renews_daily_and_checks_for_updates_every_few_hours(cx: &mut TestAppContext) {
+    use crate::update::{CHECK_INTERVAL, SCHEDULE_TICK};
+    let f = Fixture::signed_in(
+        cx,
+        Some(&pro_key("pro@example.com", "2027-10-01")),
+        "pro@example.com",
+    );
+    f.releases
+        .serve(Ok(manifest(1, &[("0.1.0", "2026-10-01")], &update_key())));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    wait_until(cx, "the launch renewal", |_| f.api.calls().1 == 1);
+    assert_eq!(f.releases.fetches(), 1);
+
+    // A tick later: neither is due.
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 1);
+    assert_eq!(f.api.calls().1, 1);
+
+    // Hours later the same day: the update check runs, the renewal doesn't.
+    let long_ago = crate::update::now_unix() - CHECK_INTERVAL.as_secs();
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_attempted = Some(long_ago)));
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    wait_until(cx, "the second check", |_| f.releases.fetches() == 2);
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert_eq!(f.api.calls().1, 1);
+
+    // The next day (as the settings record it): the renewal asks once more,
+    // on the next tick, without a restart.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.license_checked = Some("2026-01-01".into()), cx)
+        })
+    });
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    wait_until(cx, "the second renewal", |_| f.api.calls().1 == 2);
+    assert_eq!(f.releases.fetches(), 2);
+}
+
+/// Holds the next update check's fetch until the returned flag is cleared.
+fn hold_check(f: &Fixture) -> Arc<AtomicBool> {
+    let hold = Arc::new(AtomicBool::new(true));
+    let h = hold.clone();
+    *f.releases.during.lock().unwrap() = Some(Box::new(move || {
+        while h.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }));
+    hold
+}
+
+#[gpui_kit::test]
+fn a_check_result_never_replaces_what_came_after_it(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    ready(&f, cx);
+    // A check runs while the update waits, and something takes over
+    // before it answers, as an install would.
+    let hold = hold_check(&f);
+    f.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
+    assert_eq!(f.update(cx), Update::Checking);
+    let installing = Update::Installing {
+        version: "9.2.0".into(),
+    };
+    cx.update(|cx| f.app.update(cx, |s, _| s.update = installing.clone()));
+    wait_until(cx, "the fetch started", |_| f.releases.fetches() == 2);
+    hold.store(false, Ordering::SeqCst);
+    // The answer comes from the check's thread; give it time to land.
+    for _ in 0..5 {
+        std::thread::sleep(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    assert_eq!(f.update(cx), installing, "the stale result was dropped");
+    assert!(cx.read(|cx| f.app.read(cx).installing()));
+}
+
+#[gpui_kit::test]
+fn a_license_change_during_a_check_is_not_undone_by_it(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    ready(&f, cx);
+    let hold = hold_check(&f);
+    f.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
+    // A key whose updates ended before 9.2.0, while the check runs: the
+    // check keeps the state and picks for the new license when it ends.
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2026-10-02"), cx)
+            })
+            .unwrap();
+    });
+    assert_eq!(f.update(cx), Update::Checking);
+    hold.store(false, Ordering::SeqCst);
+    // The failed check doesn't bring back a Ready the license no longer covers.
+    assert!(
+        matches!(wait_for_check(&f, cx), Update::NotCovered { .. }),
+        "{:?}",
+        f.update(cx)
+    );
+    assert_eq!(downloads.opened(), 1);
+}
+
+#[gpui_kit::test]
+fn a_renewal_that_covers_an_update_downloads_it(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let (downloads, _) = f.self_installing(cx);
+    serve_9_2(&f);
+    assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
+    assert_eq!(downloads.opened(), 0);
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2027-10-01"), cx)
+            })
+            .unwrap();
+    });
+    // No Update click needed: it downloads as a check's selection would.
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+    assert_eq!(f.releases.fetches(), 1);
+
+    // With update checks off, the license change downloads nothing.
+    let g = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let (downloads, _) = g.self_installing(cx);
+    serve_9_2(&g);
+    assert!(matches!(manual_check(&g, cx), Update::NotCovered { .. }));
+    cx.update(|cx| {
+        g.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.update_checks = false, cx);
+            s.activate(&license_key("a@b.c", "2027-10-01"), cx).unwrap();
+        })
+    });
+    cx.run_until_parked();
+    assert!(matches!(g.update(cx), Update::Available { .. }));
+    assert_eq!(downloads.opened(), 0);
+}
+
+/// What a relaunch loses: everything the app keeps in memory about updates.
+fn forget_updates(f: &Fixture, cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        f.app.update(cx, |s, _| {
+            s.update = Update::Idle;
+            s.update_manifest = None;
+            s.updater = Default::default();
+        })
+    });
+}
+
+#[gpui_kit::test]
+fn a_relaunch_offers_restart_to_update_without_a_request(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    let saved = path.parent().unwrap().join(".manifest.json");
+    assert!(saved.is_file());
+    forget_updates(&f, cx);
+    // Same UTC day: no check is due, so nothing reaches the network.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(
+        f.update(cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path: path.clone()
+        }
+    );
+    assert_eq!(f.releases.fetches(), 1);
+    assert_eq!(downloads.opened(), 1);
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    assert_eq!(
+        *installer.installed.lock().unwrap(),
+        std::slice::from_ref(&path)
+    );
+
+    // A changed file is not offered, and is deleted.
+    let g = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    g.self_installing(cx);
+    let path = ready(&g, cx);
+    std::fs::write(&path, b"\x7fELF something else").unwrap();
+    forget_updates(&g, cx);
+    cx.update(|cx| g.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the changed file is deleted", |_| !path.exists());
+    cx.run_until_parked();
+    assert_eq!(g.update(cx), Update::Idle);
+
+    // A saved manifest that doesn't verify is not trusted either.
+    let h = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    h.self_installing(cx);
+    let path = ready(&h, cx);
+    let saved = path.parent().unwrap().join(".manifest.json");
+    let forged = manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &SigningKey::from_bytes(&[99; 32]),
+        NEW_APPIMAGE,
+    );
+    std::fs::write(&saved, forged).unwrap();
+    forget_updates(&h, cx);
+    cx.update(|cx| h.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    std::thread::sleep(Duration::from_millis(200));
+    cx.run_until_parked();
+    assert_eq!(h.update(cx), Update::Idle);
+    assert!(path.is_file(), "an unverified manifest deletes nothing");
+}
+
+#[gpui_kit::test]
+fn a_restored_update_follows_settings_changed_meanwhile(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (_, installer) = f.self_installing(cx);
+    ready(&f, cx);
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    // Update checks went off after the launch looked at the saved download
+    // (the settings file changed, or the switch raced the restore): Restart
+    // to update no longer installs it.
+    cx.update(|cx| f.app.update(cx, |s, _| s.settings.update_checks = false));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.restart_to_update(cx)));
+    cx.run_until_parked();
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+}
+
+#[gpui_kit::test]
+fn try_again_without_a_saved_download_checks_again(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    std::fs::write(
+        f.dir.path().join("updates/install-result.json"),
+        "{\"version\":\"9.2.0\",\"exit_code\":1603}",
+    )
+    .unwrap();
+    // The installer is gone by the next launch, so nothing can be restored.
+    std::fs::remove_file(&path).unwrap();
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the failure shows", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(f.releases.fetches(), 2);
+    assert_eq!(downloads.opened(), 2);
+}
+
+#[gpui_kit::test]
+fn a_relaunch_after_a_failed_windows_install_says_so(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    // What the helper writes after msiexec fails, before starting the old convt.
+    let result = f.dir.path().join("updates/install-result.json");
+    std::fs::write(
+        &result,
+        "\u{feff}{\"version\":\"9.2.0\",\"exit_code\":1603}\r\n",
+    )
+    .unwrap();
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the failure shows", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(
+        f.update(cx),
+        Update::InstallFailed {
+            version: "9.2.0".into(),
+            why: "Windows Installer stopped with error 1603.".into()
+        }
+    );
+    assert!(!result.exists(), "read once");
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.starts_with("convt 9.2.0 didn't install"), "{card}");
+    // Try again reuses the verified download.
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+    assert_eq!(
+        f.update(cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path
+        }
+    );
+    assert_eq!(f.releases.fetches(), 1);
+}
+
+#[gpui_kit::test]
+fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let (_, installer) = f.self_installing(cx);
+    ready(&f, cx);
+    packs.hold.store(true, Ordering::SeqCst);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.download_pack(cx)));
+    wait_until(cx, "the pack download", |_| packs.installs() == 1);
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("Wait for document support"), "{card}");
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+
+    // While the update installs, the pack can't start downloading or be removed.
+    installer.hold.store(true, Ordering::SeqCst);
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install started", |_| {
+        installer.started.load(Ordering::SeqCst) == 1
+    });
+    let removed = cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.download_pack(cx);
+            s.remove_pack(cx)
+        })
+    });
+    assert_eq!(removed, Err(crate::model::INSTALLING_PACK.to_string()));
+    assert_eq!(packs.installs(), 1);
+    assert_eq!(packs.removes.load(Ordering::SeqCst), 0);
+    assert!(!cx.read(|cx| f.app.read(cx).pack.removing));
+    installer.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
 }

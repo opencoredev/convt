@@ -11,7 +11,7 @@ m=json.loads((left/'release-manifest.json').read_text())
 names=['release-manifest.json','update-manifest.json','source-audit.json']
 for b in m['builds']:
     if b['version']==left.name:
-        names.extend(unquote(Path(urlparse(a['url']).path).name) for a in b['artifacts']+[b['source']])
+        names.extend(unquote(Path(urlparse(a['url']).path).name) for a in b['artifacts']+[b['source']] + ([b['source_closure']] if b.get('source_closure') else []))
 failed=[]
 for name in names:
     a=hashlib.sha256((left/name).read_bytes()).hexdigest()

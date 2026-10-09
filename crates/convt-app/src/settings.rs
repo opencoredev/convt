@@ -20,7 +20,8 @@ pub struct Settings {
     pub notifications: bool,
     /// Show each finished file in the file manager.
     pub reveal_when_done: bool,
-    /// Show the menu bar (tray) icon where the platform has one.
+    /// "Keep running in the background": show the tray (menu bar) icon and
+    /// keep running after the last window closes. The key predates the label.
     pub menu_bar_icon: bool,
     /// The first-run window was finished (Start converting / Open convt).
     /// Closing or quitting mid-setup leaves this false so the next launch
@@ -327,12 +328,6 @@ impl Settings {
             None => Output::Beside,
         }
     }
-
-    /// Whether the app keeps running with no window open. Only macOS keeps a
-    /// menu bar app alive; elsewhere nothing would be left to reopen it from.
-    pub fn stays_in_menu_bar(&self) -> bool {
-        cfg!(target_os = "macos") && self.menu_bar_icon
-    }
 }
 
 /// What Auto means for "Jobs at once": one job per CPU core.
@@ -395,17 +390,6 @@ mod tests {
 
         std::fs::write(&path, "concurrency = \"lots\"").unwrap();
         assert!(Settings::load(&path).is_err());
-    }
-
-    #[test]
-    fn only_macos_stays_running_for_the_menu_bar() {
-        let on = Settings::default();
-        assert_eq!(on.stays_in_menu_bar(), cfg!(target_os = "macos"));
-        let off = Settings {
-            menu_bar_icon: false,
-            ..Settings::default()
-        };
-        assert!(!off.stays_in_menu_bar());
     }
 
     #[test]

@@ -115,7 +115,7 @@ pub fn init(cx: &mut App) {
     on::<Hide>(|cx| cx.hide(), cx);
     on::<HideOthers>(|cx| cx.hide_other_apps(), cx);
     on::<ShowAll>(|cx| cx.unhide_other_apps(), cx);
-    on::<Quit>(|cx| cx.quit(), cx);
+    on::<Quit>(crate::menu::quit, cx);
     on::<AddFiles>(super::add_files, cx);
     on::<CloseWindow>(|cx| on_active_window(cx, |w| w.remove_window()), cx);
     on::<Minimize>(|cx| on_active_window(cx, |w| w.minimize_window()), cx);

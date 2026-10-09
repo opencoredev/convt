@@ -327,9 +327,9 @@ function Approve({ search, email }: { search: Search; email: string }) {
 
       <Rise index={4} className="mt-6">
         <p className="text-center text-xs/[18px] text-pretty text-ink-2">
-          While signed in, the app checks your plan with convt.app once a day and when you click
-          Refresh license. It sends this computer's sign-in token and the app version, never your
-          files. Sign it out any time from your account.
+          While signed in, the app checks your plan with convt.app at most once a day while it runs,
+          and when you click Refresh license. It sends this computer's sign-in token and the app
+          version, never your files. Sign it out any time from your account.
         </p>
       </Rise>
     </AuthScreen>

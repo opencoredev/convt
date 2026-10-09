@@ -660,6 +660,7 @@ mod app {
                 key: None,
                 fetch: Arc::new(NoUpdates),
                 target: ("linux-x86_64", "AppImage"),
+                install: None,
             },
         };
         cx.executor().allow_parking();
@@ -896,6 +897,7 @@ mod live {
                 key: None,
                 fetch: Arc::new(NoUpdates),
                 target: ("linux-x86_64", "AppImage"),
+                install: None,
             },
         };
         cx.executor().allow_parking();

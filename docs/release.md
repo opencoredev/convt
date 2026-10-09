@@ -16,7 +16,9 @@ export CONVT_RELEASE_SOURCE_TREE=/tmp/convt-release-source
 bun run release:linux --verification-only packaging/out/rebuild-a
 bun run release:linux --verification-only packaging/out/rebuild-b
 python3 scripts/release/compare.py packaging/out/rebuild-a/0.1.0 packaging/out/rebuild-b/0.1.0
-bash scripts/release/rebuild-cli.sh packaging/out/rebuild-a/0.1.0/convt-0.1.0-source.tar.gz
+bash scripts/release/rebuild-cli.sh \
+  packaging/out/rebuild-a/0.1.0/convt-0.1.0-source.tar.gz \
+  packaging/out/rebuild-a/0.1.0/convt-0.1.0-source-closure.tar.gz
 ```
 
 Choose one fixed UTC timestamp for the release. The example is 2026-10-07 UTC, Wednesday. `CONVT_BUILD_DATE` must be that timestamp's UTC date. The date becomes the license coverage cutoff, so never backdate a rebuilt release to fit an expired license. The package version comes from `[workspace.package].version` in Cargo.toml and must use `MAJOR.MINOR.PATCH`. Increase the version for any changed published payload. Existing output directories are refused.
@@ -29,9 +31,9 @@ Production `--dry-run` additionally requires `CONVT_LICENSE_PUBKEY`, `CONVT_UPDA
 
 ## Corresponding source
 
-The Linux source archive contains the frozen convt tree, exact FFmpeg 7.0.2 and codec sources, Ubuntu patches, matching native source RPMs and GCC recipes, the source-built AppImage runtime closure, and the exact PDFium revision, DEPS archives and builder scripts. Hash validation ties them to the actual payload and AppImage runtime. General compiler binaries and SDKs remain declared build prerequisites, outside the source archive.
+The Linux source audit validates the frozen convt tree against the exact FFmpeg 7.0.2 and codec sources, Ubuntu patches, matching native source RPMs and GCC recipes, the source-built AppImage runtime closure, and the exact PDFium revision, DEPS archives and builder scripts. Hash validation ties those corresponding sources to the actual payload and AppImage runtime. The public source archive contains the compact frozen checkout; generated audit staging under `third-party` is delivered as the matching `convt-<version>-source-closure.tar.gz` asset and remains represented by `source-audit.json`. General compiler binaries and SDKs remain declared build prerequisites.
 
-Rust sources under `third-party/rust` cover all Linux CLI and app compilation units, including build dependencies and proc macros. Archive-only Cargo manifests and the lockfile are derived to exclude unrelated platform packages. `third-party/linux-source-scope` preserves original metadata, package pins, patches, source hashes and the identical before/after Cargo unit graph. Upstream source bytes remain unchanged. The SDK-derived objc2 sources retain their exact source archives, upstream `LICENSE.md` declaration and Apple SDK caveat, authors/copyright lines, and canonical SPDX terms reproduced from the hash-pinned SPDX license-list-data. The release audit retains target-specific inventories for `aarch64-apple-darwin` and `x86_64-apple-darwin`, including those crates.
+The audit's Rust closure under `third-party/rust` covers all Linux CLI and app compilation units, including build dependencies and proc macros. Archive-only Cargo manifests and the lockfile are derived to exclude unrelated platform packages. `third-party/linux-source-scope` preserves original metadata, package pins, patches, source hashes and the identical before/after Cargo unit graph. Upstream source bytes remain unchanged. The SDK-derived objc2 sources retain their exact source archives, upstream `LICENSE.md` declaration and Apple SDK caveat, authors/copyright lines, and canonical SPDX terms reproduced from the hash-pinned SPDX license-list-data. The release audit retains target-specific inventories for `aarch64-apple-darwin` and `x86_64-apple-darwin`, including those crates.
 
 `scripts/release/rebuild-cli.sh` rebuilds and runs the archived CLI in a clean, network-disabled container with empty Cargo and target directories. It mounts only the Rust compiler as a declared prerequisite and checks a real SVG-to-PNG conversion. The local release pipeline runs that actual archive check before generating manifests. The source audit also compiles the full derived CLI/app release graph with empty caches before creating the archive.
 
@@ -48,6 +50,16 @@ The website consumes [manifest.schema.json](../packaging/release/manifest.schema
 `bun run release:manifest generate DIR VERSION DATE BASE_URL [HISTORY_JSON]` writes the website JSON. `SOURCE_DATE_EPOCH` supplies `issued_at`; `CONVT_MANIFEST_SEQUENCE` defaults to that epoch and must increase on metadata revisions. `CONVT_MANIFEST_EXPIRES` defaults to 90 days after issuance. Refresh and re-sign metadata before expiry even if there is no new application build. CI accepts the previous signed update envelope as `history_url`, authenticates it with the compiled update public key, and preserves its builds at both generation stages. A production first release requires explicit `initial_release` confirmation. Preserve historical covered builds when refreshing it. `bun run release:manifest sign MANIFEST EXTERNAL_SEED OUTPUT` writes the signed envelope.
 
 The envelope contains `payload` and `signature`, both unpadded base64url. Payload is the exact JSON byte sequence. Signatures cover the ASCII bytes of `convt-update-v1\n` followed by the base64url payload. This domain separates update signatures from license signatures. No JSON canonicalization is needed because verifiers authenticate the encoded bytes before parsing.
+
+## How the app installs an update
+
+The desktop app fetches `update-manifest.json` through `https://convt.app/updates/manifest.json`, verifies it against the embedded update key, and picks the newest build its license covers. If the install can replace itself, it downloads that build's artifact in the background, from the URL in the manifest, and keeps it only if the byte count and SHA-256 match the signed record. Then it offers "Restart to update". So every artifact URL must keep serving exactly the bytes the manifest names; re-signing or re-uploading an artifact means a new manifest.
+
+- macOS (`dmg`): the image is mounted read-only, its `convt.app` must pass `codesign --verify --deep --strict` and carry the running app's Team ID, and it replaces the running bundle in place. The disk image must keep `convt.app` at its root. An app running from the image, from an App Translocation copy or from a folder the user can't write falls back to the download page.
+- Windows (`msi`): `msiexec /i <msi> /passive /norestart` runs after the app quits, then the app starts again from the `InstallFolder` the MSI records under `HKCU\Software\Convt`. This relies on the per-user scope and `MajorUpgrade` in `packaging/windows/convt.wxs`; keep the `UpgradeCode`.
+- Linux (`AppImage`): the file named by `$APPIMAGE` is replaced by a rename in its own folder. The deb, rpm and tarball still open the download page; their users update through the package manager or by hand.
+
+The code is `crates/convt-app/src/update.rs` and `crates/convt-app/src/update/`.
 
 ## Signing and publishing
 

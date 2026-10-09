@@ -123,7 +123,9 @@ jobs:
           bun run release:linux "$mode" packaging/out/ci-b
           version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')
           python3 scripts/release/compare.py "packaging/out/ci-a/$version" "packaging/out/ci-b/$version"
-          bash scripts/release/rebuild-cli.sh "packaging/out/ci-a/$version/convt-$version-source.tar.gz"
+          bash scripts/release/rebuild-cli.sh \
+            "packaging/out/ci-a/$version/convt-$version-source.tar.gz" \
+            "packaging/out/ci-a/$version/convt-$version-source-closure.tar.gz"
           rm -rf "$frozen"
       - uses: actions/upload-artifact@v4
         with:
