@@ -36,7 +36,7 @@ export function ConvertDemo() {
 
   return (
     <div className="demo-figure">
-      <figure className="bg-land-glow relative overflow-clip rounded-2xl bg-bottom shadow-[inset_0_0_0_1px_var(--line)] dark:shadow-none px-4 pt-10 pb-8 sm:px-8 lg:pt-20 lg:pb-12">
+      <figure className="bg-land-glow relative overflow-clip rounded-2xl bg-bottom shadow-[inset_0_0_0_1px_var(--line)] dark:shadow-none px-4 pt-10 pb-8 sm:px-8 lg:pt-12 lg:pb-12">
         <figcaption className="sr-only">
           Right-click miso.heic, choose Convert with convt, then WebP: miso.webp, 612 KB, appears
           next to the original.

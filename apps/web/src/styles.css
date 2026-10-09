@@ -492,6 +492,7 @@ body {
   0%,
   21% {
     background-color: transparent;
+    color: var(--ink);
   }
   22%,
   47% {
@@ -501,6 +502,7 @@ body {
   50%,
   100% {
     background-color: transparent;
+    color: var(--ink);
   }
 }
 @keyframes demo-menu {
