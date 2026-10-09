@@ -470,6 +470,7 @@ impl AppState {
             api: self.cloud_api.clone(),
             credentials: cloud::Credentials::new(self.account.api(), session.token.clone()),
             poll: self.cloud_poll,
+            link_reuse: cloud::LINK_REUSE,
         });
         let output = absolute_output(output);
         let ids = files

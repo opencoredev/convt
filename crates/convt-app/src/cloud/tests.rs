@@ -121,18 +121,29 @@ impl CloudApi for Fake {
     }
     fn outputs(&self, _: &CloudCredential, id: &str) -> Result<Vec<RemoteOutput>, CloudError> {
         self.log(format!("outputs {id}"));
+        // Each listing signs new links, as the server does.
+        let listing = self
+            .calls()
+            .iter()
+            .filter(|c| c.starts_with("outputs"))
+            .count();
         Ok(self
             .outputs
             .iter()
             .map(|(name, _)| RemoteOutput {
                 name: name.to_string(),
-                url: format!("https://storage.test/{name}"),
+                url: if listing == 1 {
+                    format!("https://storage.test/{name}")
+                } else {
+                    format!("https://storage.test/{name}?listing={listing}")
+                },
             })
             .collect())
     }
     fn download(&self, url: &str, to: &Path, _: &Cancel) -> Result<(), CloudError> {
         self.log(format!("download {url}"));
         let name = url.rsplit('/').next().unwrap();
+        let name = name.split('?').next().unwrap();
         let (_, bytes) = self.outputs.iter().find(|(n, _)| *n == name).unwrap();
         std::fs::write(to, bytes).map_err(|e| CloudError::Io(e.to_string()))
     }
@@ -153,6 +164,7 @@ fn cloud(fake: Arc<Fake>, refuse: Option<ApiError>) -> Cloud {
             "cvd_device".into(),
         ),
         poll: Duration::from_millis(1),
+        link_reuse: LINK_REUSE,
     }
 }
 
@@ -1010,6 +1022,7 @@ mod live {
             api: Arc::new(Http::new()),
             credentials: Credentials::new(Arc::new(account::Http::new(&url)), desktop),
             poll: Duration::from_millis(500),
+            link_reuse: LINK_REUSE,
         };
         let e = run(&cloud, &job, &|_| {}, &Cancel::new()).unwrap_err();
         eprintln!("Desktop-only device: {} ({})", e.message, e.kind);
@@ -1034,4 +1047,36 @@ fn pages_follow_the_names_workers_publish() {
     assert_eq!(pages_of(&files(&["input.webp"])), [0]);
     // Names that don't tell pages apart keep their order.
     assert_eq!(pages_of(&files(&["a.png", "b.png"])), [0, 1]);
+}
+
+#[test]
+fn later_downloads_ask_for_fresh_links() {
+    let fake = Arc::new(Fake {
+        outputs: vec![("input-2.webp", b"two"), ("input.webp", b"one")],
+        ..Fake::default()
+    });
+    fake.statuses
+        .lock()
+        .unwrap()
+        .push_back(Ok(remote(RemoteStatus::Succeeded, None)));
+    let (_dir, file) = input();
+    let mut cloud = cloud(fake.clone(), None);
+    // Every link counts as stale, as after a long first download.
+    cloud.link_reuse = Duration::ZERO;
+    run_quietly(&cloud, &webp(&file), &Cancel::new()).unwrap();
+    let tail: Vec<String> = fake
+        .calls()
+        .into_iter()
+        .skip_while(|c| !c.starts_with("outputs"))
+        .collect();
+    assert_eq!(
+        tail,
+        [
+            "outputs job_1",
+            "outputs job_1",
+            "download https://storage.test/input-2.webp?listing=2",
+            "outputs job_1",
+            "download https://storage.test/input.webp?listing=3",
+        ]
+    );
 }

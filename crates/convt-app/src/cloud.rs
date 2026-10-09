@@ -97,6 +97,10 @@ const MAX_OUTPUT_BYTES: u64 = 4_000_000_000;
 const CREDENTIAL_REUSE: Duration = Duration::from_secs(240);
 /// How long the app keeps polling through network errors before it gives up.
 const OFFLINE_GRACE: Duration = Duration::from_secs(120);
+/// How long output links are used before they're asked for again. The
+/// server signs them for at most five minutes, and one large download can
+/// outlast that before the next starts.
+pub const LINK_REUSE: Duration = Duration::from_secs(120);
 
 /// Whether convt's cloud converts `from` to `to`, by the list the cloud's
 /// workers were built with.
@@ -239,6 +243,8 @@ pub struct Cloud {
     pub api: Arc<dyn CloudApi>,
     pub credentials: Credentials,
     pub poll: Duration,
+    /// [`LINK_REUSE`], shorter in tests.
+    pub link_reuse: Duration,
 }
 
 fn fail(kind: &'static str, message: impl Into<String>) -> JobError {
@@ -556,19 +562,30 @@ impl Session<'_> {
             }
         }
         progress(Some(0.9));
-        let outputs = self.call(|api, c| api.outputs(c, id)).map_err(err)?;
+        let mut outputs = self.call(|api, c| api.outputs(c, id)).map_err(err)?;
+        let mut listed = Instant::now();
         if outputs.is_empty() {
             return Err(fail("cloud_failed", "convt's cloud produced no file."));
         }
+        let names: Vec<String> = outputs.iter().map(|o| o.name.clone()).collect();
         let mut files = Vec::new();
-        for (i, output) in outputs.iter().enumerate() {
+        for (i, name) in names.into_iter().enumerate() {
             if cancel.is_cancelled() {
                 return Err(cancelled());
             }
+            if listed.elapsed() >= self.cloud.link_reuse {
+                outputs = self.call(|api, c| api.outputs(c, id)).map_err(err)?;
+                listed = Instant::now();
+            }
+            let url = outputs
+                .iter()
+                .find(|o| o.name == name)
+                .map(|o| o.url.clone())
+                .ok_or_else(|| fail("cloud_failed", "convt's cloud lost a result."))?;
             // Staged under an index, never the server's name.
             let path = staging.join(format!("{i}.part"));
-            api.download(&output.url, &path, cancel).map_err(err)?;
-            files.push((path, output.name.clone()));
+            api.download(&url, &path, cancel).map_err(err)?;
+            files.push((path, name));
         }
         Ok(files)
     }
