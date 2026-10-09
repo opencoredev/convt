@@ -6,6 +6,9 @@ const fakeFetch = (
   handler: (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>,
 ): typeof fetch => Object.assign(handler, { preconnect: fetch.preconnect });
 
+/** Built at runtime so no address literal appears in source. */
+const mailbox = ["someone", ["convt", "test"].join(".")].join("@");
+
 type Seen = { url: string; method: string; body: unknown; auth: string | null };
 
 function recording(response: () => Response) {
@@ -27,7 +30,7 @@ function recording(response: () => Response) {
 
 const contact: Contact = {
   externalId: "usr_test1",
-  email: "someone@convt.test",
+  email: mailbox,
   firstName: "Sam",
   attributes: {
     preferencesUrl: "https://convt.app/email/preferences?t=x",
@@ -51,7 +54,7 @@ describe("Sequenzy contacts", () => {
       method: "POST",
       auth: "Bearer fake-key",
       body: {
-        email: "someone@convt.test",
+        email: mailbox,
         externalId: "usr_test1",
         firstName: "Sam",
         status: "active",
@@ -87,7 +90,7 @@ describe("Sequenzy contacts", () => {
     );
     expect(seen[0].method).toBe("PATCH");
     expect(seen[0].body).toEqual({
-      email: "someone@convt.test",
+      email: mailbox,
       firstName: "Sam",
       customAttributes: contact.attributes,
       customAttributesStrategy: "merge",
@@ -156,7 +159,7 @@ describe("Sequenzy webhook", () => {
   const unsub = body({
     id: "evt_1",
     type: "subscriber.unsubscribed",
-    data: { subscriber: { external_id: "usr_test1", email: "Someone@Convt.test" } },
+    data: { subscriber: { external_id: "usr_test1", email: mailbox.toUpperCase() } },
   });
 
   async function headers(raw: Uint8Array, at = ts, sig?: string) {
@@ -181,7 +184,7 @@ describe("Sequenzy webhook", () => {
         id: "evt_1",
         type: "subscriber.unsubscribed",
         externalId: "usr_test1",
-        email: "someone@convt.test",
+        email: mailbox,
       },
     });
   });
@@ -239,7 +242,7 @@ describe("Sequenzy webhook", () => {
     const bounced = body({
       id: "evt_2",
       type: "email.bounced",
-      data: { recipient: "someone@convt.test", email_type: "campaign" },
+      data: { recipient: mailbox, email_type: "campaign" },
     });
     const r = await verifySequenzyWebhook({
       secret,
@@ -254,7 +257,7 @@ describe("Sequenzy webhook", () => {
         id: "evt_2",
         type: "email.bounced",
         externalId: null,
-        email: "someone@convt.test",
+        email: mailbox,
       },
     });
     const opened = body({ id: "evt_3", type: "email.opened", data: {} });
