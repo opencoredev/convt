@@ -934,14 +934,11 @@ impl AppState {
 
     fn apply(&mut self, update: crate::jobs::Update, cx: &mut Context<Self>) {
         if let Some(entry) = self.queue.apply(update).cloned() {
-            // Silent jobs stay out of the batch summary and are never revealed.
+            // Silent jobs count toward the batch summary and its notification
+            // like any other, but are never revealed: the file manager that
+            // asked is already showing the folder.
             let silent = self.silent.remove(&entry.id);
-            let mut ignored = Batch::default();
-            let batch = if silent {
-                &mut ignored
-            } else {
-                &mut self.batch
-            };
+            let batch = &mut self.batch;
             let outcome = match &entry.status {
                 Status::Done(outputs) => {
                     batch.done += 1;

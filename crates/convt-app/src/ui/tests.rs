@@ -2439,7 +2439,7 @@ fn a_silent_convert_writes_beside_the_original_whatever_the_save_setting(cx: &mu
 }
 
 #[gpui_kit::test]
-fn silent_conversions_neither_notify_nor_reveal(cx: &mut TestAppContext) {
+fn silent_conversions_notify_but_never_reveal(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let app = f.app.clone();
     cx.update(|cx| {
@@ -2458,10 +2458,11 @@ fn silent_conversions_neither_notify_nor_reveal(cx: &mut TestAppContext) {
     wait_until(cx, "the silent conversion", |cx| {
         f.app.read(cx).recent.len() == 1
     });
-    assert!(cx.shown_system_notifications().is_empty());
+    // A right-click conversion tells you it finished, as one from a window does.
+    assert_eq!(cx.shown_system_notifications().len(), 1);
     cx.read(|cx| assert!(f.app.read(cx).revealed.is_empty()));
 
-    // The same conversion from a window, also in the background, does both.
+    // The same conversion from a window, also in the background, notifies and reveals.
     cx.update(|cx| {
         app.update(cx, |s, cx| {
             let to = convt_core::format_by_id("webp").unwrap();
@@ -2471,7 +2472,7 @@ fn silent_conversions_neither_notify_nor_reveal(cx: &mut TestAppContext) {
     wait_until(cx, "the window's conversion", |cx| {
         f.app.read(cx).recent.len() == 2
     });
-    assert_eq!(cx.shown_system_notifications().len(), 1);
+    assert_eq!(cx.shown_system_notifications().len(), 2);
     cx.read(|cx| assert_eq!(f.app.read(cx).revealed, [f.dir.path().join("a.webp")]));
 }
 
