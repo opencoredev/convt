@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+<style>.ColorScheme-Text{color:#232629}</style>
+<defs><mask id="gap">
+<rect width="16" height="16" fill="#fff"/>
+<rect x="4.508" y="4.508" width="11.27" height="11.27" rx="3.492" fill="#000"/>
+</mask>
+<clipPath id="half"><rect x="0" y="10.143" width="16" height="16"/></clipPath>
+</defs>
+<g class="ColorScheme-Text" fill="currentColor" stroke="currentColor">
+<rect x="2" y="2" width="7.714" height="7.714" rx="1.714" fill="none" stroke-width="1.333" mask="url(#gap)"/>
+<rect x="6.286" y="6.286" width="7.714" height="7.714" rx="1.714" fill="none" stroke-width="1.333"/>
+<rect x="5.619" y="5.619" width="9.048" height="9.048" rx="2.381" stroke="none" clip-path="url(#half)"/>
+</g></svg>
