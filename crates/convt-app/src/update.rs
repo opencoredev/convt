@@ -525,19 +525,23 @@ impl AppState {
         if self.update != Update::Idle {
             return;
         }
-        // The file was checked against the settings and license of the
-        // launch; either may have changed since, so pick again for now.
+        let restored = found.ready.is_some() && self.settings.update_checks;
         if let Some((bytes, version, path, artifact)) = found.ready
             && self.settings.update_checks
         {
             self.update_manifest = Some(Arc::new(bytes));
             self.updater.artifact = Some(artifact);
             self.update = Update::Ready { version, path };
-            self.reselect_update(cx);
         }
         if let Some((version, why)) = found.failed {
             // Try again reuses the download when it's still here.
             self.update = Update::InstallFailed { version, why };
+        }
+        // The file was checked against the settings and license of the
+        // launch; the license may have changed since, so pick again for now.
+        // Last, so a download this starts is never overwritten above.
+        if restored {
+            self.reselect_update(cx);
         }
         cx.notify();
     }
