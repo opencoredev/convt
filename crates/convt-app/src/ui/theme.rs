@@ -101,6 +101,9 @@ pub struct Palette {
     pub green: Hsla,
     /// The accent as text and links; at least 4.5:1 on `window`.
     pub green_text: Hsla,
+    /// A check mark on a `green` fill: white on the deep light-mode green,
+    /// ink on the bright dark-mode one.
+    pub on_green: Hsla,
     pub green_tint: Hsla,
     pub green_border: Hsla,
     pub error: Hsla,
@@ -150,15 +153,16 @@ impl Palette {
             selected: c(0xE6E8E7),       // --line
             green: c(0x127A47),          // --green
             green_text: c(0x127A47),     // --green
-            green_tint: c(0xEEF7F2),     // --green-tint
-            green_border: c(0xCFE6D9),   // --green-line
-            error: c(0xB3261E),          // --error
-            error_tint: c(0xFCF3F2),     // derived: --error over --page, as --green-tint
-            error_border: c(0xF0D4D1),   // --error-line
-            track: c(0xE6E8E7),          // --line
-            toggle_off: c(0xD0D3D1),     // --separator
-            // Derived: a step past --line-strong, so an empty box keeps its edge.
-            mark_off: c(0xB4B9B6),
+            on_green: c(0xFFFFFF),
+            green_tint: c(0xEEF7F2),   // --green-tint
+            green_border: c(0xCFE6D9), // --green-line
+            error: c(0xB3261E),        // --error
+            error_tint: c(0xFCF3F2),   // derived: --error over --page, as --green-tint
+            error_border: c(0xF0D4D1), // --error-line
+            track: c(0xE6E8E7),        // --line
+            toggle_off: c(0xD0D3D1),   // --separator
+            // Derived: dark enough for 3:1 on every ground a checkbox sits on.
+            mark_off: c(0x868B88),
             thumb: c(0xFFFFFF),          // --raised
             thumb_border: c(0xE0E3E1),   // --chip-line
             overlay: c(0xFFFFFF),        // --raised
@@ -188,6 +192,7 @@ impl Palette {
             selected: c(0x232726),        // --line
             green: c(0x3FCB84),           // --green
             green_text: c(0x3FCB84),      // --green
+            on_green: c(0x0A0B0B),        // --page
             green_tint: c(0x12261B),      // --green-tint
             green_border: ca(0x3FCB8433), // --green-line
             error: c(0xF2786D),           // --error
@@ -195,8 +200,8 @@ impl Palette {
             error_border: ca(0xF2786D33), // --error-line
             track: c(0x232726),           // --line
             toggle_off: c(0x2E3331),      // --separator
-            // Derived: a step past --line-strong, so an empty box keeps its edge.
-            mark_off: c(0x5A605D),
+            // Derived: light enough for 3:1 on every ground a checkbox sits on.
+            mark_off: c(0x707673),
             thumb: c(0x161918),           // --sunken
             thumb_border: ca(0xFFFFFF14), // --shadow-float ring
             overlay: c(0x1C201E),         // --hover, as the web's floating cards
@@ -814,7 +819,7 @@ pub fn checkbox(
             .size(px(15.))
             .rounded(px(4.))
             .bg(p.green)
-            .child(icon(IconName::Check, 11., c(0xFFFFFF)))
+            .child(icon(IconName::Check, 11., p.on_green))
     } else {
         div()
             .size(px(15.))
@@ -1731,6 +1736,41 @@ mod contrast {
                 }
             }
         }
+    }
+
+    /// Control marks need 3:1: a check against its fill, an empty box's
+    /// edge against the ground it sits on.
+    #[test]
+    fn control_marks_meet_three_to_one() {
+        for p in [Palette::light(), Palette::dark()] {
+            let r = ratio(p.on_green, p.green);
+            assert!(r >= 3., "check on green is {r:.2}:1 (dark: {})", p.dark);
+            for (ground, bg) in [
+                ("window", p.window),
+                ("chrome", p.chrome),
+                ("recessed", p.recessed),
+                ("surface", p.surface),
+                ("hover", p.hover),
+                ("overlay", p.overlay),
+            ] {
+                let r = ratio(p.mark_off, bg);
+                assert!(
+                    r >= 3.,
+                    "mark_off on {ground} is {r:.2}:1 (dark: {})",
+                    p.dark
+                );
+            }
+        }
+    }
+
+    /// Unpicked tabs and segments draw `secondary` on the pill track.
+    #[test]
+    fn unpicked_segments_meet_aa() {
+        let (light, dark) = (Palette::light(), Palette::dark());
+        assert!(ratio(light.secondary, c(SOFT_FILL.0)) >= 4.5);
+        assert!(ratio(dark.secondary, dark.recessed) >= 4.5);
+        assert!(ratio(light.secondary, light.hover) >= 4.5);
+        assert!(ratio(dark.secondary, dark.hover) >= 4.5);
     }
 
     /// Every pill's label against its fill, resting and hovered.

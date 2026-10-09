@@ -664,7 +664,7 @@ impl QuickView {
                             .size(px(16.))
                             .rounded(px(8.))
                             .bg(p.green)
-                            .child(icon(IconName::Check, 10., rgb(0xFFFFFF).into()))
+                            .child(icon(IconName::Check, 10., p.on_green))
                     })),
             )
             .child(
