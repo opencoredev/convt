@@ -2049,8 +2049,9 @@ fn the_trial_checkout_is_polled_fast_and_rechecked_on_focus(cx: &mut TestAppCont
 
 #[gpui_kit::test]
 fn a_signed_in_relaunch_never_waits_on_the_account_forever(cx: &mut TestAppContext) {
-    // Signed in, no key here, and the launch check already ran today, so
-    // nothing else is going to ask.
+    // Signed in, no key here, and the launch check already ran today. The
+    // launch renewal isn't run here (it would ask on its own thread and race
+    // this test's counts), so onboarding is the only thing that asks.
     let f = Fixture::signed_in(cx, None, "pro-tester");
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
@@ -2061,7 +2062,6 @@ fn a_signed_in_relaunch_never_waits_on_the_account_forever(cx: &mut TestAppConte
                 },
                 cx,
             );
-            s.renew_if_due(cx);
         })
     });
     assert_eq!(f.api.calls(), (0, 0, 0));
