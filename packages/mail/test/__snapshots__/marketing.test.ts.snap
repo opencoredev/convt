@@ -1,0 +1,131 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`marketing templates snapshots 1`] = `
+{
+  "name": "welcome",
+  "subject": "Welcome to convt",
+  "text": 
+"Convert any file with a right-click.
+
+Thanks for making a convt account. convt converts images, video, audio and documents on your own computer, so your files never get uploaded.
+
+1. Download the app
+   convt runs on macOS, Windows and Linux. Every format works offline.
+2. Right-click any file
+   Choose Convert with convt and pick a format. A HEIC photo becomes a JPG, a MOV becomes an MP4.
+3. Or use the command line
+   The same engine, for scripts and whole folders.
+
+    convt photos/ --to jpeg -r
+
+Download convt: https://convt.app/download
+
+The app is free for 7 days from your first conversion. After that, Desktop is a one-time purchase with every future desktop update, or Pro adds cloud conversions from your phone or browser.
+
+See every format: https://convt.app/formats
+
+--
+You're getting this because you have a convt account. Account and license emails, like sign-in codes and keys, still arrive if you unsubscribe.
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+convt · 1 Example Street, Test City
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 2`] = `
+{
+  "name": "lifetime-desktop",
+  "subject": "Your convt Desktop license is now lifetime",
+  "text": 
+"Your Desktop license is now lifetime.
+
+When you bought convt Desktop, it came with a year of updates. We've changed that for everyone who paid: a Desktop license now includes every future desktop update, with no renewal.
+
+You don't need to do anything.
+Your current license key keeps working and now counts as lifetime. Every future desktop update works with it.
+
+- Every format, offline
+- Every future desktop update
+- Batch folders and presets
+- No subscription for the desktop app
+
+View your license: https://convt.app/dashboard/licenses
+
+Thank you for buying convt early. If anything about your license looks wrong, tell us and we'll fix it.
+
+Contact support: https://convt.app/contact
+
+--
+You're getting this because you have a convt account. Account and license emails, like sign-in codes and keys, still arrive if you unsubscribe.
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+convt · 1 Example Street, Test City
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 3`] = `
+{
+  "name": "pro-trial",
+  "subject": "Getting started with convt Pro",
+  "text": 
+"Your Pro trial has started.
+
+For the next 7 days you have everything in convt Pro. Here's how to get the most out of it.
+
+1. Sign in on your computer
+   Open Settings in the convt app and choose Sign in with convt.app. Pro turns on for that computer.
+2. Convert from your phone or browser
+   Upload a file from any device and download the result. Files are deleted after 24 hours.
+3. Send heavy video to the cloud
+   Long exports run on our servers when you choose, so your laptop stays free.
+
+Open your dashboard: https://convt.app/dashboard
+
+We'll email you before the trial ends. You can cancel any time from Billing, and nothing is charged until then.
+
+Manage your plan: https://convt.app/dashboard/billing
+
+--
+You're getting this because you have a convt account. Account and license emails, like sign-in codes and keys, still arrive if you unsubscribe.
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+convt · 1 Example Street, Test City
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 4`] = `
+{
+  "name": "product-update",
+  "subject": "What's new in convt",
+  "text": 
+"What's new in convt
+
+A short roundup of what changed since the last update.
+
+Desktop is now a lifetime license
+Buy it once and get every future desktop update. Existing Desktop keys count as lifetime too.
+
+Save web images as PNG, JPG or WebP
+The convt extension for Chrome and Edge adds Convert with convt to the image right-click menu. It converts in your browser.
+
+Get the latest version: https://convt.app/download
+
+Read the full changelog: https://convt.app/changelog
+
+--
+You're getting this because you have a convt account. Account and license emails, like sign-in codes and keys, still arrive if you unsubscribe.
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+convt · 1 Example Street, Test City
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 5`] = `"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>Welcome to convt</title><style>@media (prefers-color-scheme: dark){.page{background:#0a0b0b !important}.card{background:#111312 !important;border-color:#232726 !important}.ink{color:#edefee !important}.ink2{color:#a1a6a3 !important}.ink3{color:#868b88 !important}.note{background:#12261b !important;border-color:#1d3a2a !important}.rule{border-color:#232726 !important}a.link{color:#3fcb84 !important}.check{color:#3fcb84 !important}}@media (max-width:600px){.card{border-radius:0 !important;border-left:0 !important;border-right:0 !important}.pad{padding:28px 22px !important}.h1{font-size:24px !important;line-height:30px !important}}</style></head><body class="page" style="margin:0;padding:0;background:#f7f8f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased"><div style="display:none;max-height:0;overflow:hidden;opacity:0">Right-click a file, pick a format. Here&#39;s how to start.&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;</div><table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f7f8f7"><tr><td align="center" style="padding:32px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px"><tr><td style="padding:0 4px 18px"><a href="https://convt.app" style="text-decoration:none"><img src="https://convt.app/brand/convt-app-icon.png" width="32" height="32" alt="" style="display:inline-block;vertical-align:middle;border:0"><span class="ink" style="display:inline-block;vertical-align:middle;margin-left:6px;font-size:18px;line-height:32px;font-weight:600;letter-spacing:-0.03em;color:#0a0a0a">convt</span></a></td></tr><tr><td class="card pad" style="background:#ffffff;border:1px solid #e6e8e7;border-radius:16px;padding:36px 36px 20px"><h1 class="ink h1" style="margin:0 0 14px;font-size:28px;line-height:34px;font-weight:600;letter-spacing:-0.035em;color:#0a0a0a">Convert any file with a right-click.</h1><p class="ink2" style="margin:0 0 16px;font-size:15px;line-height:24px;color:#6b6f6d">Thanks for making a convt account. convt converts images, video, audio and documents on your own computer, so your files never get uploaded.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 8px;width:100%"><tr><td valign="top" style="padding:0 14px 16px 0;width:26px"><div class="note" style="width:26px;height:26px;border-radius:13px;background:#eef7f2;border:1px solid #cfe6d9;font-size:13px;line-height:26px;text-align:center;font-weight:600;color:#127a47">1</div></td><td valign="top" style="padding:0 0 16px"><p class="ink" style="margin:2px 0 2px;font-size:15px;line-height:22px;font-weight:600;color:#0a0a0a">Download the app</p><p class="ink2" style="margin:0;font-size:14px;line-height:21px;color:#6b6f6d">convt runs on macOS, Windows and Linux. Every format works offline.</p></td></tr><tr><td valign="top" style="padding:0 14px 16px 0;width:26px"><div class="note" style="width:26px;height:26px;border-radius:13px;background:#eef7f2;border:1px solid #cfe6d9;font-size:13px;line-height:26px;text-align:center;font-weight:600;color:#127a47">2</div></td><td valign="top" style="padding:0 0 16px"><p class="ink" style="margin:2px 0 2px;font-size:15px;line-height:22px;font-weight:600;color:#0a0a0a">Right-click any file</p><p class="ink2" style="margin:0;font-size:14px;line-height:21px;color:#6b6f6d">Choose Convert with convt and pick a format. A HEIC photo becomes a JPG, a MOV becomes an MP4.</p></td></tr><tr><td valign="top" style="padding:0 14px 16px 0;width:26px"><div class="note" style="width:26px;height:26px;border-radius:13px;background:#eef7f2;border:1px solid #cfe6d9;font-size:13px;line-height:26px;text-align:center;font-weight:600;color:#127a47">3</div></td><td valign="top" style="padding:0 0 16px"><p class="ink" style="margin:2px 0 2px;font-size:15px;line-height:22px;font-weight:600;color:#0a0a0a">Or use the command line</p><p class="ink2" style="margin:0;font-size:14px;line-height:21px;color:#6b6f6d">The same engine, for scripts and whole folders.</p></td></tr></table><p style="margin:0 0 20px;padding:12px 14px;border-radius:10px;background:#0f1211;color:#e6e8e7;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:20px">convt photos/ --to jpeg -r</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px"><tr><td style="border-radius:10px;background:#16935a;background-image:linear-gradient(180deg,#1fb36c,#14864f)"><a href="https://convt.app/download" style="display:inline-block;padding:11px 18px;font-size:15px;line-height:18px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px">Download convt</a></td></tr></table><p class="ink2" style="margin:0 0 16px;font-size:15px;line-height:24px;color:#6b6f6d">The app is free for 7 days from your first conversion. After that, Desktop is a one-time purchase with every future desktop update, or Pro adds cloud conversions from your phone or browser.</p><p style="margin:0 0 16px;font-size:15px;line-height:24px"><a class="link" href="https://convt.app/formats" style="color:#127a47;font-weight:600;text-decoration:none">See every format &rarr;</a></p></td></tr><tr><td style="padding:22px 8px 0"><p class="ink3" style="margin:0 0 10px;font-size:12px;line-height:18px;color:#6c716e">You&#39;re getting this because you have a convt account. Account and license emails, like sign-in codes and keys, still arrive if you unsubscribe.</p><p class="ink3" style="margin:0 0 10px;font-size:12px;line-height:18px;color:#6c716e"><a class="link" href="{{preferencesUrl}}" style="color:#6c716e;text-decoration:underline">Email preferences</a> &nbsp;&middot;&nbsp; <a class="link" href="{{unsubscribeUrl}}" style="color:#6c716e;text-decoration:underline">Unsubscribe</a> &nbsp;&middot;&nbsp; <a class="link" href="https://convt.app/privacy" style="color:#6c716e;text-decoration:underline">Privacy</a></p><p class="ink3" style="margin:0;font-size:12px;line-height:18px;color:#6c716e">convt &middot; 1 Example Street, Test City</p></td></tr></table></td></tr></table></body></html>"`;
