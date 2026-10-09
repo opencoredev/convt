@@ -37,8 +37,12 @@ export async function planMarketingBackfill(db: Db): Promise<MarketingBackfillPl
   };
 }
 
+/** Accounts enrolled per transaction; each holds one account lock until it commits. */
+const enrollBatch = 200;
+
 /**
- * Enrolls every account without a row. With `resync`, also queues every
+ * Enrolls every account without a row, in batches of `enrollBatch` committed
+ * separately so locks never pile up. With `resync`, also queues every
  * subscribed row to be pushed again, which refreshes the attributes campaigns
  * are segmented on. Returns how many rows each step touched.
  */
@@ -46,19 +50,28 @@ export async function applyMarketingBackfill(
   db: Db,
   options: { resync: boolean },
 ): Promise<{ enrolled: number; resynced: number }> {
-  return db.transaction(async (tx) => {
-    const enrolled = await tx.execute<{ n: string | number }>(sql`
-      select count(*) filter (where enroll_marketing(u.id, 'backfill')) as n from users u
-      where not exists (select 1 from marketing_subscriptions m where m.user_id = u.id)`);
-    let resynced = 0;
-    if (options.resync) {
-      const r = await tx.execute(sql`
-        update marketing_subscriptions
-          set sync_state = 'pending', sync_attempts = 0, next_sync_at = now(), last_error = null,
-            updated_at = now()
-          where status = 'subscribed' and (sync_state <> 'pending' or next_sync_at > now())`);
-      resynced = r.rowCount ?? 0;
-    }
-    return { enrolled: Number(enrolled.rows[0]?.n ?? 0), resynced };
-  });
+  let enrolled = 0;
+  for (;;) {
+    const batch = await db.transaction(async (tx) => {
+      const r = await tx.execute<{ n: string | number; seen: string | number }>(sql`
+        select count(*) filter (where enroll_marketing(b.id, 'backfill')) as n, count(*) as seen
+        from (select u.id from users u
+          where not exists (select 1 from marketing_subscriptions m where m.user_id = u.id)
+          order by u.created_at, u.id limit ${enrollBatch}) b`);
+      return { n: Number(r.rows[0]?.n ?? 0), seen: Number(r.rows[0]?.seen ?? 0) };
+    });
+    enrolled += batch.n;
+    // A batch that enrolled nothing it saw (accounts deleted meanwhile) ends the loop too.
+    if (batch.seen < enrollBatch || batch.n === 0) break;
+  }
+  let resynced = 0;
+  if (options.resync) {
+    const r = await db.execute(sql`
+      update marketing_subscriptions
+        set sync_state = 'pending', sync_attempts = 0, next_sync_at = now(), last_error = null,
+          updated_at = now()
+        where status = 'subscribed' and (sync_state <> 'pending' or next_sync_at > now())`);
+    resynced = r.rowCount ?? 0;
+  }
+  return { enrolled, resynced };
 }
