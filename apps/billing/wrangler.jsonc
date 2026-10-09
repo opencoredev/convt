@@ -15,8 +15,10 @@
     "ENV": "production",
     "SITE_URL": "https://convt.app",
     "BILLING_CATALOG": "production",
-    "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "SET_IN_WORKER_ENV",
-    "POLAR_DESKTOP_LIFETIME_PRICE_ID": "SET_IN_WORKER_ENV",
+    // The one-time $29 "convt Desktop" product in the production catalog
+    // (packages/billing/src/catalog.ts). A placeholder here would reach checkout.
+    "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "9d3028c1-1e4f-4d12-9641-59960eb58679",
+    "POLAR_DESKTOP_LIFETIME_PRICE_ID": "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
     // Leo's address for the daily billing digest.
@@ -52,8 +54,9 @@
         "POSTHOG_KEY": "",
         "POSTHOG_HOST": "https://us.i.posthog.com",
         "BILLING_CATALOG": "sandbox",
-        "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "SET_IN_WORKER_ENV",
-        "POLAR_DESKTOP_LIFETIME_PRICE_ID": "SET_IN_WORKER_ENV",
+        // The sandbox catalog's one-time "convt Desktop" product.
+        "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "31a1a071-bec9-4b7e-a5dd-e9a52eb7d3ab",
+        "POLAR_DESKTOP_LIFETIME_PRICE_ID": "20024212-c2be-4d23-819e-151b704a3a3e",
         "SITE_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
