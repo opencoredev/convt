@@ -1,6 +1,7 @@
 """Homebrew cask shape, bumping, and the post-release updater."""
 from importlib.util import module_from_spec, spec_from_file_location
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -21,6 +22,9 @@ cli_spec.loader.exec_module(cli)
 
 CASK = (REPO / "Casks" / "convt.rb").read_text()
 CASK_VERSION, CASK_SHA = homebrew.cask_fields(CASK)
+# A release newer than whatever the committed cask holds, so the bump tests keep
+# working after each real release bumps the cask.
+NEXT = f"{int(CASK_VERSION.split('.')[0]) + 1}.0.0"
 
 
 def manifest(version="0.2.1", sha256="b" * 64, url=None):
@@ -104,10 +108,10 @@ class BumpTests(unittest.TestCase):
             homebrew.bump_cask(CASK, version="0.2.1", sha256="C" * 64)
 
     def test_refuses_an_older_version(self):
-        newer = homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64)
-        with self.assertRaisesRegex(ValueError, r"downgrade cask from 0\.3\.0 to 0\.2\.1"):
+        newer = homebrew.bump_cask(CASK, version=NEXT, sha256="d" * 64)
+        with self.assertRaisesRegex(ValueError, rf"downgrade cask from {re.escape(NEXT)} to 0\.2\.1"):
             homebrew.bump_cask(newer, version="0.2.1", sha256="e" * 64)
-        same = homebrew.bump_cask(newer, version="0.3.0", sha256="f" * 64)
+        same = homebrew.bump_cask(newer, version=NEXT, sha256="f" * 64)
         self.assertIn('sha256 "' + "f" * 64 + '"', same)
         self.assertGreater(homebrew.version_key("0.2.10"), homebrew.version_key("0.2.9"))
 
@@ -129,7 +133,7 @@ class BumpTests(unittest.TestCase):
             dest.parent.mkdir()
             dest.write_text(CASK)
             payload = Path(tmp) / "release-manifest.json"
-            payload.write_text(json.dumps(manifest("0.3.0", "d" * 64, url=url)))
+            payload.write_text(json.dumps(manifest(NEXT, "d" * 64, url=url)))
             result = subprocess.run(
                 [
                     sys.executable,
@@ -146,7 +150,7 @@ class BumpTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             text = dest.read_text()
-            self.assertIn('version "0.3.0"', text)
+            self.assertIn(f'version "{NEXT}"', text)
             self.assertIn('sha256 "' + "d" * 64 + '"', text)
             self.assertIn(url, text)
             self.assertNotIn("github.com/opencoredev/convt/releases/download", text)
@@ -156,7 +160,7 @@ class BumpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="convt-cask-old-") as tmp:
             dest = Path(tmp) / "Casks" / "convt.rb"
             dest.parent.mkdir()
-            dest.write_text(homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64))
+            dest.write_text(homebrew.bump_cask(CASK, version=NEXT, sha256="d" * 64))
             original = dest.read_text()
             payload = Path(tmp) / "release-manifest.json"
             payload.write_text(json.dumps(manifest("0.2.9", "e" * 64)))
@@ -207,9 +211,9 @@ class GuardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="convt-cask-retry-") as tmp:
             dest = Path(tmp) / "Casks" / "convt.rb"
             dest.parent.mkdir()
-            dest.write_text(homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64))
+            dest.write_text(homebrew.bump_cask(CASK, version=NEXT, sha256="d" * 64))
             payload = Path(tmp) / "release-manifest.json"
-            payload.write_text(json.dumps(manifest("0.3.0", "d" * 64)))
+            payload.write_text(json.dumps(manifest(NEXT, "d" * 64)))
             with (
                 patch.object(cli.homebrew, "commit_if_changed", return_value=False) as commit,
                 patch.object(cli.homebrew, "push_head") as push,
@@ -243,7 +247,7 @@ class GuardTests(unittest.TestCase):
                 [*homebrew.git_ident_args(), "commit", "-m", "seed", "--", "Casks/convt.rb"],
                 cwd=repo,
             )
-            dest.write_text(homebrew.bump_cask(CASK, version="0.3.0", sha256="d" * 64))
+            dest.write_text(homebrew.bump_cask(CASK, version=NEXT, sha256="d" * 64))
             homebrew.run_git(["add", "--", "NOTES"], cwd=repo)
             self.assertTrue(homebrew.commit_if_changed(repo, dest, "chore(homebrew): bump convt to 0.3.0"))
             committed = homebrew.run_git(
@@ -261,7 +265,7 @@ class GuardTests(unittest.TestCase):
             dest.parent.mkdir()
             dest.write_text(CASK)
             payload = Path(tmp) / "release-manifest.json"
-            payload.write_text(json.dumps(manifest("0.3.0", "d" * 64)))
+            payload.write_text(json.dumps(manifest(NEXT, "d" * 64)))
             with (
                 patch.object(cli.homebrew, "commit_if_changed", side_effect=RuntimeError("hook")),
                 patch.dict("os.environ", {"HOMEBREW_TAP_TOKEN": "tap-token"}, clear=False),
