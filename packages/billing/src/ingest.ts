@@ -136,6 +136,7 @@ export async function checkFacts(
   const prices = new Map(
     Object.entries(catalog.products).map(([k, v]) => [v.priceId, k as CatalogProduct]),
   );
+  for (const legacy of catalog.legacyDesktop ?? []) prices.set(legacy.priceId, "desktop");
   const yearly = catalog.products.pro_year.amountCents!;
 
   const checkCheckout = async (

@@ -10,7 +10,11 @@ let verified = convt_update::verify(&bytes, &trusted, now_unix_seconds, highest_
 let choice = verified.select(
     env!("CARGO_PKG_VERSION"),
     convt_license::BUILD_DATE,
-    &license.updates_until,
+    if license.plan == convt_license::Plan::Desktop {
+        convt_license::LIFETIME_UPDATES_UNTIL
+    } else {
+        &license.updates_until
+    },
     "linux-x86_64",
     "AppImage",
 )?;
@@ -18,7 +22,7 @@ let choice = verified.select(
 
 Persist `verified.manifest().sequence` as the highest accepted metadata revision. Invalid, expired, future-issued, rolled-back or verification-only manifests produce errors before selection. The API rejects unknown JSON fields and malformed dates, versions, HTTPS links, sizes and hashes. Selection never decreases the running version or build date, including same-day versions. `covered` and `covered_artifact` identify the newest update within the license window. `uncovered` and `purchase_url` supply the purchase state when a newer release is outside coverage. An equal running build produces no update. Choose the installed platform and artifact kind; unsupported platforms return no matching update.
 
-The app owns the update setting, at-most-daily request policy, timeout, byte limit, persisted sequence and error presentation. Verify before showing URLs. On explicit download, check the received byte count and SHA-256 against the selected artifact before offering installation. Update discovery must not install or download document packs. About should link to the selected build's matching `source.url`. This note supplies the API contract and does not change app code or claim that its HTTP integration has been tested.
+The app owns the update setting, checks at every launch and every five hours while automatic checks are enabled, timeout, byte limit, persisted sequence and error presentation. It may download a covered artifact in the background, then checks the received byte count and SHA-256 before offering installation. Update discovery must not install or download document packs. About should link to the selected build's matching `source.url`. This note supplies the API contract and does not change app code or claim that its HTTP integration has been tested.
 
 Paid Desktop licenses are lifetime entitlements. New and reissued Desktop keys use
 `9999-12-31` as their signed update date; the clients also treat legacy Desktop keys as

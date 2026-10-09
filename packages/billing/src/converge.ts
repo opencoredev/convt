@@ -65,16 +65,8 @@ export async function convergeDesktop(
     sql`select id, updates_until::text from licenses where order_id = ${o.id} and plan = 'desktop' and reissue_of is null`,
   );
   if (existing) {
-    if (existing.updates_until !== LIFETIME_UPDATES_UNTIL) {
-      const token = await sign(
-        { id: existing.id, email, plan: "desktop", issued, updates_until: LIFETIME_UPDATES_UNTIL },
-        await ctx.signingKey(),
-      );
-      await tx.execute(sql`
-        update licenses
-        set email = ${email}, updates_until = ${LIFETIME_UPDATES_UNTIL}, token = ${token}, updated_at = ${now}
-        where id = ${existing.id}`);
-    }
+    // Existing signed rows are immutable for the billing role. Clients treat
+    // every verified Desktop key as lifetime, so no rewrite is required.
     return;
   }
   const id = newId("lic");

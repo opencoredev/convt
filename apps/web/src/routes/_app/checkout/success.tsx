@@ -236,7 +236,11 @@ function Ready({
         </div>
       </div>
       <ul className="flex flex-col gap-1.5 text-[13px]/5 text-ink-2">
-        <li>Includes lifetime desktop updates.</li>
+        <li>
+          {state.product === "desktop"
+            ? "Includes lifetime desktop updates."
+            : `Covers every build released up to ${state.updatesUntil}.`}
+        </li>
         <li>We also emailed it to {state.maskedEmail}.</li>
         <li>Open in convt asks the app to confirm before it adds the key.</li>
       </ul>

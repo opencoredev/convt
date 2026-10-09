@@ -35,6 +35,7 @@ export type Catalog = {
   /** Switching between monthly and yearly takes effect at once, both ways. */
   switchPolicy: Record<ProProduct, Proration>;
   meterName: "api_conversion";
+  legacyDesktop?: DesktopProductIds[];
 };
 
 export type DesktopProductIds = { productId: string; priceId: string };
@@ -211,9 +212,11 @@ export function validateCatalog(c: Catalog): string[] {
 
 /** Loads the catalog for an environment, refusing one with an invalid price. */
 export function loadCatalog(env: CatalogEnv, desktop?: DesktopProductIds): Catalog {
+  const previous = catalogs[env].products.desktop;
   const c = desktop
     ? {
         ...catalogs[env],
+        legacyDesktop: [{ productId: previous.productId, priceId: previous.priceId }],
         products: {
           ...catalogs[env].products,
           desktop: { ...catalogs[env].products.desktop, ...desktop },
@@ -229,6 +232,7 @@ export function productByProviderId(c: Catalog, productId: string | null): Catal
   if (!productId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.productId === productId) return k as CatalogProduct;
+  if (c.legacyDesktop?.some((p) => p.productId === productId)) return "desktop";
   return null;
 }
 
@@ -236,6 +240,7 @@ export function productByPriceId(c: Catalog, priceId: string | null): CatalogPro
   if (!priceId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.priceId === priceId) return k as CatalogProduct;
+  if (c.legacyDesktop?.some((p) => p.priceId === priceId)) return "desktop";
   return null;
 }
 

@@ -73,11 +73,12 @@ impl State {
             State::AccountTrial { days_left: 1, .. } => "Pro trial: last day.".into(),
             State::AccountTrial { days_left, .. } => format!("Pro trial: {days_left} days left."),
             State::SignInNeeded => "Sign in to start your free trial.".into(),
+            State::Licensed(l) if l.plan == Plan::Desktop => {
+                format!("Licensed to {} (Desktop), with lifetime updates.", l.email)
+            }
             State::Licensed(l) => format!(
                 "Licensed to {} ({}), with updates until {}.",
-                l.email,
-                l.plan.name(),
-                l.updates_until
+                l.email, l.plan.name(), l.updates_until
             ),
             State::TrialEnded | State::NotCovered(_) => self.blocked_reason().unwrap_or_default(),
         }
@@ -498,7 +499,7 @@ impl Licensing {
         }
         self.key = self.config.store.load(LICENSE);
         if let Some(current) = self.license()
-            && current.updates_until >= offered.updates_until
+            && (current.plan == Plan::Desktop || current.updates_until >= offered.updates_until)
         {
             return Ok(Renewed::Kept(current));
         }
@@ -939,6 +940,18 @@ mod tests {
         assert!(matches!(l.state(), State::NotCovered(_)));
         l.offer_key(&pro_key(&f, "2026-11-01")).unwrap();
         assert!(matches!(l.state(), State::Licensed(_)));
+    }
+
+    #[test]
+    fn renewal_never_replaces_a_legacy_desktop_key() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        l.activate(&f.key("2026-09-01")).unwrap();
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2028-01-01")),
+            Ok(Renewed::Kept(k)) if k.plan == Plan::Desktop
+        ));
+        assert!(matches!(l.state(), State::Licensed(k) if k.plan == Plan::Desktop));
     }
 
     #[test]
