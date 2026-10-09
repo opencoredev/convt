@@ -96,7 +96,12 @@ fn run(primary: instance::Primary, first: Request) {
     #[cfg(unix)]
     ignore_hangup();
     let (tx, mut rx) = unbounded::<Request>();
-    let app = gpui_kit::application().with_assets(ui::assets());
+    // GPUI quits with the last window on Linux and Windows by default;
+    // `last_window_closed` decides instead, so the tray can keep convt
+    // running.
+    let app = gpui_kit::application()
+        .with_assets(ui::assets())
+        .with_quit_mode(gpui_kit::QuitMode::Explicit);
     let urls = tx.clone();
     app.on_open_urls(move |links| {
         // The Finder extension's requests, and files opened with convt.
@@ -253,6 +258,15 @@ mod tests {
         assert_eq!(decide(true, 2), KeepRunning);
         assert_eq!(decide(false, 0), Quit);
         assert_eq!(decide(false, 1), QuitWhenIdle);
+    }
+
+    #[test]
+    fn only_the_app_decides_to_quit_after_the_last_window() {
+        // GPUI's default quits on Linux and Windows as soon as the last
+        // window closes, before `last_window_closed` can keep convt running
+        // for the tray. The test platform doesn't do that, so check here.
+        let src = include_str!("main.rs");
+        assert!(src.contains(".with_quit_mode(gpui_kit::QuitMode::Explicit)"));
     }
 
     #[test]
