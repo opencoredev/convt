@@ -9,7 +9,7 @@ Open in convt: convt://activate?key=eyJpZCI6ImxpY18xIn0.c2ln
 
 That link opens the convt app and asks you to confirm. You can also paste the key in the app under Settings, or run convt license activate with it.
 
-This key works forever with every build released up to Oct 5, 2027, and includes 12 months of updates.
+This key works forever and includes lifetime desktop updates.
 
 Download convt: https://convt.app/download/mac
 
@@ -88,7 +88,6 @@ Ids only: look them up in the database or in Polar and Resend by id. No keys or 
 ,
 }
 `;
-
 
 exports[`code email sign-in has the code in text and HTML, and the link 1`] = `
 "Your convt sign-in code:

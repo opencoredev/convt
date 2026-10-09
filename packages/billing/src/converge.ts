@@ -4,10 +4,10 @@
 // See docs/p7-billing-plan.md, section 3.
 
 import { sql } from "drizzle-orm";
-import { newId, sign } from "@convt/license";
+import { LIFETIME_UPDATES_UNTIL, newId, sign } from "@convt/license";
 
 import { licensePurchasedEvent, type AnalyticsEvent } from "./analytics";
-import { addYears, alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
+import { alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
 import { enqueueEmail } from "./outbox";
 
 /** The account's verified email when the purchase has a user, else the purchase's email. */
@@ -58,10 +58,19 @@ export async function convergeDesktop(
   if (o.lost) return revoke(tx, original, "dispute_lost", now);
   if (o.status !== "paid" && o.status !== "partially_refunded") return;
 
-  const id = newId("lic");
   const email = await licenseEmail(tx, o.user_id, o.email);
   const issued = isoDay(o.billed_at);
-  const updatesUntil = addYears(issued, 1);
+  const existing = await one<{ id: string; updates_until: string }>(
+    tx,
+    sql`select id, updates_until::text from licenses where order_id = ${o.id} and plan = 'desktop' and reissue_of is null`,
+  );
+  if (existing) {
+    // Existing signed rows are immutable for the billing role. Clients treat
+    // every verified Desktop key as lifetime, so no rewrite is required.
+    return;
+  }
+  const id = newId("lic");
+  const updatesUntil = LIFETIME_UPDATES_UNTIL;
   const token = await sign(
     { id, email, plan: "desktop", issued, updates_until: updatesUntil },
     await ctx.signingKey(),

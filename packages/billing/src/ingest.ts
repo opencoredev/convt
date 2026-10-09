@@ -136,6 +136,7 @@ export async function checkFacts(
   const prices = new Map(
     Object.entries(catalog.products).map(([k, v]) => [v.priceId, k as CatalogProduct]),
   );
+  for (const legacy of catalog.legacyDesktop ?? []) prices.set(legacy.priceId, "desktop");
   const yearly = catalog.products.pro_year.amountCents!;
 
   const checkCheckout = async (
@@ -533,7 +534,7 @@ async function duplicateCheck(tx: Q, userId: string | null, kind: string, now: D
 }
 
 function describeOrder(o: OrderFact): string {
-  if (o.product === "desktop") return "Desktop License, 12 months of updates";
+  if (o.product === "desktop") return "Desktop License, lifetime updates";
   if (o.product === "api")
     return o.reason === "subscription_create" ? "API enrollment" : "API usage";
   const interval = o.product === "pro_year" ? "yearly" : "monthly";

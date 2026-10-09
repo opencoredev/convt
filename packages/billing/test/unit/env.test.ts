@@ -9,6 +9,8 @@ const prod = {
   SITE_URL: "https://convt.app",
   POLAR_ACCESS_TOKEN: "polar_oat_x",
   POLAR_WEBHOOK_SECRET: "whsec_x",
+  POLAR_DESKTOP_LIFETIME_PRODUCT_ID: "prod_lifetime_test",
+  POLAR_DESKTOP_LIFETIME_PRICE_ID: "price_lifetime_test",
   RESEND_API_KEY: "re_x",
   LICENSE_SIGNING_KEY: seed,
   DEV_LICENSE_PUBKEYS: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",

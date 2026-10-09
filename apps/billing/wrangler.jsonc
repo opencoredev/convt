@@ -12,6 +12,8 @@
     "ENV": "production",
     "SITE_URL": "https://convt.app",
     "BILLING_CATALOG": "production",
+    "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "SET_IN_WORKER_ENV",
+    "POLAR_DESKTOP_LIFETIME_PRICE_ID": "SET_IN_WORKER_ENV",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
     // Leo's address for the daily billing digest.
@@ -47,6 +49,8 @@
         "POSTHOG_KEY": "",
         "POSTHOG_HOST": "https://us.i.posthog.com",
         "BILLING_CATALOG": "sandbox",
+        "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "SET_IN_WORKER_ENV",
+        "POLAR_DESKTOP_LIFETIME_PRICE_ID": "SET_IN_WORKER_ENV",
         "SITE_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",

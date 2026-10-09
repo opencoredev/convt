@@ -4,11 +4,12 @@
 
 import { importSigningKey, parseSeed, publicKeyOf } from "@convt/license";
 
-import type { CatalogEnv } from "./catalog";
+import { loadCatalog, type CatalogEnv } from "./catalog";
 
 export type BillingEnv = {
   env: "production" | "staging" | "development" | "test";
   catalogEnv: CatalogEnv;
+  desktopProduct: { productId: string; priceId: string };
   polar: { accessToken: string; apiUrl: string; webhookSecret: string; portalOrigin: string };
   mail:
     | { transport: "sequenzy"; apiKey: string; from: string }
@@ -68,6 +69,16 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
     (envName === "staging" ? "sandbox" : production ? "production" : "local")) as CatalogEnv;
   if (!["local", "sandbox", "production"].includes(catalogEnv))
     throw new ConfigError(`unknown BILLING_CATALOG ${catalogEnv}`);
+  const desktopProductId = str(raw, "POLAR_DESKTOP_LIFETIME_PRODUCT_ID");
+  const desktopPriceId = str(raw, "POLAR_DESKTOP_LIFETIME_PRICE_ID");
+  if ((desktopProductId && !desktopPriceId) || (!desktopProductId && desktopPriceId))
+    throw new ConfigError(
+      "POLAR_DESKTOP_LIFETIME_PRODUCT_ID and POLAR_DESKTOP_LIFETIME_PRICE_ID must be set together",
+    );
+  if ((envName === "production" || envName === "staging") && (!desktopProductId || !desktopPriceId))
+    throw new ConfigError(
+      "POLAR_DESKTOP_LIFETIME_PRODUCT_ID and POLAR_DESKTOP_LIFETIME_PRICE_ID are required in production",
+    );
   const apiUrl =
     str(raw, "POLAR_API_URL") ??
     (catalogEnv === "sandbox" ? "https://sandbox-api.polar.sh" : "https://api.polar.sh");
@@ -123,6 +134,10 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
   return {
     env: envName,
     catalogEnv,
+    desktopProduct: {
+      productId: desktopProductId ?? loadCatalog(catalogEnv).products.desktop.productId,
+      priceId: desktopPriceId ?? loadCatalog(catalogEnv).products.desktop.priceId,
+    },
     polar: {
       accessToken: need("POLAR_ACCESS_TOKEN"),
       apiUrl,

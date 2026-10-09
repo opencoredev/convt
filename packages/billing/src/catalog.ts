@@ -35,7 +35,10 @@ export type Catalog = {
   /** Switching between monthly and yearly takes effect at once, both ways. */
   switchPolicy: Record<ProProduct, Proration>;
   meterName: "api_conversion";
+  legacyDesktop?: DesktopProductIds[];
 };
+
+export type DesktopProductIds = { productId: string; priceId: string };
 
 // The Product Hunt launch offer: 30% off Desktop, or off the first 3 months of Pro
 // monthly, until the end of 31 October 2026 Pacific time (the code's ends_at in Polar).
@@ -208,8 +211,18 @@ export function validateCatalog(c: Catalog): string[] {
 }
 
 /** Loads the catalog for an environment, refusing one with an invalid price. */
-export function loadCatalog(env: CatalogEnv): Catalog {
-  const c = catalogs[env];
+export function loadCatalog(env: CatalogEnv, desktop?: DesktopProductIds): Catalog {
+  const previous = catalogs[env].products.desktop;
+  const c = desktop
+    ? {
+        ...catalogs[env],
+        legacyDesktop: [{ productId: previous.productId, priceId: previous.priceId }],
+        products: {
+          ...catalogs[env].products,
+          desktop: { ...catalogs[env].products.desktop, ...desktop },
+        },
+      }
+    : catalogs[env];
   const problems = validateCatalog(c).filter((p) => !p.includes("placeholders"));
   if (problems.length) throw new Error(`the ${env} catalog is invalid: ${problems.join("; ")}`);
   return c;
@@ -219,6 +232,7 @@ export function productByProviderId(c: Catalog, productId: string | null): Catal
   if (!productId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.productId === productId) return k as CatalogProduct;
+  if (c.legacyDesktop?.some((p) => p.productId === productId)) return "desktop";
   return null;
 }
 
@@ -226,6 +240,7 @@ export function productByPriceId(c: Catalog, priceId: string | null): CatalogPro
   if (!priceId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.priceId === priceId) return k as CatalogProduct;
+  if (c.legacyDesktop?.some((p) => p.priceId === priceId)) return "desktop";
   return null;
 }
 
@@ -248,7 +263,8 @@ export type ComplimentaryDesktopAmounts = {
 export function complimentaryDesktop(c: Catalog, o: ComplimentaryDesktopAmounts): boolean {
   const price = c.products.desktop;
   if (o.netCents !== 0) return false;
-  if (o.items.length !== 1 || o.items[0].priceId !== price.priceId) return false;
+  const acceptedPrices = new Set([price.priceId, ...(c.legacyDesktop ?? []).map((p) => p.priceId)]);
+  if (o.items.length !== 1 || !acceptedPrices.has(o.items[0].priceId ?? "")) return false;
   const item = o.items[0].amountCents;
   if (item !== price.amountCents && item !== 0) return false;
   if (o.subtotalCents !== price.amountCents && o.subtotalCents !== 0) return false;

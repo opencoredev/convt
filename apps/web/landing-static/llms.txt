@@ -21,7 +21,7 @@ Right-click a file, pick a format, and the converted file is written next to the
 
 ## Pricing (at launch)
 
-- Desktop: $29 once, 12 months of updates, keep your version forever. 7-day free trial.
+- Desktop: $29 once, lifetime updates. 7-day free trial.
 - Pro: $12 a month or $8 a month billed yearly. Adds conversions from phone or browser and cloud conversions for heavy video.
 - API: pay per conversion, no plan needed.
 

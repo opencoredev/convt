@@ -454,6 +454,9 @@ fn newer_than_running(version: &str) -> bool {
 /// (a trial, or a build that checks none) every build is fair game.
 fn updates_until(state: &State) -> String {
     match state {
+        State::Licensed(l) | State::NotCovered(l) if l.plan == convt_license::Plan::Desktop => {
+            convt_license::LIFETIME_UPDATES_UNTIL.into()
+        }
         State::Licensed(l) | State::NotCovered(l) => l.updates_until.clone(),
         _ => "9999-12-31".into(),
     }

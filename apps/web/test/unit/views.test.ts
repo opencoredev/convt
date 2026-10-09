@@ -88,7 +88,7 @@ describe("labels", () => {
   test("license lines", () => {
     expect(licenseView(desktop, 0, now)).toMatchObject({
       product: "Desktop",
-      updatesLabel: "Updates until Aug 20, 2027",
+      updatesLabel: "Lifetime updates",
       detail: "Desktop License, bought Aug 20, 2026",
       revoked: false,
     });
@@ -207,7 +207,7 @@ describe("overview per state", () => {
     expect(o.plan).toEqual({
       name: "Desktop",
       priceLabel: "$29, paid once",
-      meta: "Updates until Aug 20, 2027",
+      meta: "Lifetime updates",
     });
     expect(o.license?.activeMacs).toBe(1);
     expect(o.macs).toEqual([{ id: "dev_1", name: "Mac", os: "macOS 26", lastSeen: "today" }]);
@@ -281,7 +281,7 @@ describe("billing per state", () => {
   ];
   const desktopInvoice = (amountCents: number) => ({
     id: "inv_desk",
-    description: "Desktop License, 12 months of updates",
+    description: "Desktop License, lifetime updates",
     amountCents,
     issuedAt: new Date("2026-10-07T00:00:00Z"),
     status: "paid",
@@ -470,15 +470,14 @@ describe("billing per state", () => {
       status: "active",
       interval: null,
       cancelsOn: null,
-      summary:
-        "Paid once. Updates until Aug 20, 2027. Your license is on this account and works offline.",
+      summary: "Paid once. Lifetime updates. Your license is on this account and works offline.",
     });
     expect(b.ownsDesktop).toBe(true);
     expect(b.invoices).toEqual([
       {
         id: "inv_desk",
         date: "2026-10-07",
-        description: "Desktop License, 12 months of updates",
+        description: "Desktop License, lifetime updates",
         amountCents: 2900,
         statusLabel: null,
       },
@@ -677,7 +676,7 @@ describe("checkout success", () => {
 describe("Desktop ownership and Polar portal", () => {
   const desktopInvoice = (status: string) => ({
     id: "inv_desk_open",
-    description: "Desktop License, 12 months of updates",
+    description: "Desktop License, lifetime updates",
     amountCents: 2900,
     issuedAt: new Date("2026-10-07T00:00:00Z"),
     status,

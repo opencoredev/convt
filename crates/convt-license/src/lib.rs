@@ -38,6 +38,10 @@ pub enum Plan {
     Pro,
 }
 
+/// Paid Desktop licenses do not expire. The date stays in the signed payload
+/// for compatibility with older clients and update manifests.
+pub const LIFETIME_UPDATES_UNTIL: &str = "9999-12-31";
+
 impl Plan {
     pub fn name(self) -> &'static str {
         match self {
@@ -107,6 +111,9 @@ impl License {
     /// Whether a build dated `build_date` (`YYYY-MM-DD`) is covered.
     /// ISO dates compare correctly as strings.
     pub fn covers_build(&self, build_date: &str) -> Result<(), Error> {
+        if self.plan == Plan::Desktop {
+            return Ok(());
+        }
         if build_date > self.updates_until.as_str() {
             Err(Error::UpdatesExpired(self.updates_until.clone()))
         } else {
@@ -169,12 +176,20 @@ mod tests {
 
     #[test]
     fn update_window() {
-        let l = license();
+        let mut l = license();
+        l.plan = Plan::Pro;
         assert!(l.covers_build("2027-10-02").is_ok());
         assert!(matches!(
             l.covers_build("2027-10-03"),
             Err(Error::UpdatesExpired(_))
         ));
+    }
+
+    #[test]
+    fn paid_desktop_license_is_lifetime_even_with_legacy_expiry() {
+        let mut l = license();
+        l.updates_until = "2027-10-02".into();
+        assert!(l.covers_build("2099-01-01").is_ok());
     }
 
     #[test]

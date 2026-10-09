@@ -59,7 +59,7 @@ if (
 
 const { client, db } = await connect(url);
 try {
-  const catalog = loadCatalog(env.catalogEnv);
+  const catalog = loadCatalog(env.catalogEnv, env.desktopProduct);
   const mail =
     env.mail.transport === "resend"
       ? resendTransport({ apiKey: env.mail.apiKey, baseUrl: env.mail.apiUrl })

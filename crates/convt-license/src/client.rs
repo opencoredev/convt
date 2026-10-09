@@ -73,6 +73,9 @@ impl State {
             State::AccountTrial { days_left: 1, .. } => "Pro trial: last day.".into(),
             State::AccountTrial { days_left, .. } => format!("Pro trial: {days_left} days left."),
             State::SignInNeeded => "Sign in to start your free trial.".into(),
+            State::Licensed(l) if l.plan == Plan::Desktop => {
+                format!("Licensed to {} (Desktop), with lifetime updates.", l.email)
+            }
             State::Licensed(l) => format!(
                 "Licensed to {} ({}), with updates until {}.",
                 l.email,
@@ -498,7 +501,7 @@ impl Licensing {
         }
         self.key = self.config.store.load(LICENSE);
         if let Some(current) = self.license()
-            && current.updates_until >= offered.updates_until
+            && (current.plan == Plan::Desktop || current.updates_until >= offered.updates_until)
         {
             return Ok(Renewed::Kept(current));
         }
@@ -760,14 +763,14 @@ mod tests {
     fn a_newer_build_than_the_license_covers() {
         let f = Fixture::new();
         let mut l = f.licensing(true);
-        let license = l.activate(&f.key("2026-10-01")).unwrap();
+        let license = l.activate(&pro_key(&f, "2026-10-01")).unwrap();
         let state = l.state();
         assert_eq!(state, State::NotCovered(license));
         assert!(state.blocked_reason().unwrap().contains("2026-10-01"));
         assert!(l.begin_conversion().is_err());
         // The build made on the last covered day is fine.
         let mut l = f.licensing(true);
-        l.activate(&f.key("2026-10-02")).unwrap();
+        l.activate(&pro_key(&f, "2026-10-02")).unwrap();
         assert!(matches!(l.state(), State::Licensed(_)));
     }
 
@@ -939,6 +942,18 @@ mod tests {
         assert!(matches!(l.state(), State::NotCovered(_)));
         l.offer_key(&pro_key(&f, "2026-11-01")).unwrap();
         assert!(matches!(l.state(), State::Licensed(_)));
+    }
+
+    #[test]
+    fn renewal_never_replaces_a_legacy_desktop_key() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        l.activate(&f.key("2026-09-01")).unwrap();
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2028-01-01")),
+            Ok(Renewed::Kept(k)) if k.plan == Plan::Desktop
+        ));
+        assert!(matches!(l.state(), State::Licensed(k) if k.plan == Plan::Desktop));
     }
 
     #[test]

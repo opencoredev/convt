@@ -5,7 +5,7 @@
 // so a later template change never alters an email that is already queued.
 
 /** Bump when any template's output changes. Stored with each frozen payload. */
-export const templateVersion = 2;
+export const templateVersion = 3;
 
 export type Rendered = { subject: string; text: string; html: string };
 
@@ -97,7 +97,7 @@ export function licenseIssued(input: LicenseIssuedInput): Rendered {
   const window =
     input.product === "pro"
       ? `This key covers every build released up to ${until}. While you're subscribed, a new key appears on your dashboard each billing period.`
-      : `This key works forever with every build released up to ${until}, and includes 12 months of updates.`;
+      : "This key works forever and includes lifetime desktop updates.";
   return render(`Your ${product} license key`, [
     { p: `Thanks for buying ${product}. Here is your license key:` },
     { key: input.token },

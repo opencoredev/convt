@@ -27,7 +27,7 @@ describe("templates", () => {
     expect(m.subject).toBe("Your convt Desktop license key");
     expect(m.text).toMatchSnapshot();
     expect(m.html).toContain("convt://activate?key=eyJpZCI6ImxpY18xIn0.c2ln");
-    expect(m.text).toContain("Oct 5, 2027");
+    expect(m.text).toContain("lifetime desktop updates");
   });
 
   test("license_issued for Pro", () => {
@@ -104,7 +104,7 @@ describe("templates", () => {
       renewalFailed({ kind: "pro", periodStart: "2026-10-05T00:00:00Z", siteUrl: site }),
     ];
     for (const m of all) expect(`${m.subject}${m.text}`).not.toContain("—");
-    expect(templateVersion).toBe(2);
+    expect(templateVersion).toBe(3);
   });
 });
 

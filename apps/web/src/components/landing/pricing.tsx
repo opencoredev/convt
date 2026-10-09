@@ -80,16 +80,12 @@ function DesktopPlan({ launched }: { launched: boolean }) {
           description="The app and the right-click menu, on your machine."
         />
       </div>
-      <Price
-        amount="$29"
-        unit="once"
-        note="Includes 12 months of updates. Keep your version forever."
-      />
+      <Price amount="$29" unit="once" note="One payment. Every future desktop update." />
       <Features
         items={[
           "Every format, offline",
           "macOS, Windows and Linux",
-          "12 months of updates",
+          "Every future desktop update",
           "Batch folders and presets",
         ]}
       />

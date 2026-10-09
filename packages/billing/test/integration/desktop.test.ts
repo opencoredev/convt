@@ -225,7 +225,7 @@ describe("Desktop", () => {
     const { verifyWithCli } = await import("../cli");
     const out = await verifyWithCli(lic.token, h.publicKey);
     expect(out.status).toBe(0);
-    expect(out.text).toContain(lic.updates_until);
+    expect(out.text).toContain("with lifetime updates");
   });
 });
 
