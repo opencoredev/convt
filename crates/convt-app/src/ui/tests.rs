@@ -90,6 +90,8 @@ struct TestApi {
     sign_outs: AtomicUsize,
     exchange: Mutex<Result<Session, ApiError>>,
     key: Mutex<Result<Option<String>, ApiError>>,
+    /// What `current_key` says the account allows; `None` by default.
+    access: Mutex<Option<convt_license::account::Access>>,
     /// The last code and verifier the app traded.
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
@@ -104,6 +106,7 @@ impl Default for TestApi {
             sign_outs: AtomicUsize::new(0),
             exchange: Mutex::new(Err(ApiError::Rejected)),
             key: Mutex::new(Err(ApiError::Offline)),
+            access: Mutex::new(None),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
         }
@@ -120,6 +123,9 @@ impl TestApi {
     }
     fn answer_key(&self, key: Result<Option<String>, ApiError>) {
         *self.key.lock().unwrap() = key;
+    }
+    fn answer_access(&self, access: Option<convt_license::account::Access>) {
+        *self.access.lock().unwrap() = access;
     }
 }
 
@@ -143,7 +149,7 @@ impl Api for TestApi {
         self.renewals.fetch_add(1, Ordering::SeqCst);
         Ok(convt_license::account::LicenseReply {
             key: self.key.lock().unwrap().clone()?,
-            access: None,
+            access: self.access.lock().unwrap().clone(),
         })
     }
     fn sign_out(&self, _: &str) -> Result<(), ApiError> {
@@ -1916,6 +1922,67 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
     // "Not now" goes on without a plan.
     click(cx, window, "onboarding-not-now");
     cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+#[gpui_kit::test]
+fn the_trial_checkout_is_polled_fast_and_rechecked_on_focus(cx: &mut TestAppContext) {
+    use convt_license::account::Access as Remote;
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    let checkout = "https://checkout.example.com/trial";
+    f.api.answer_key(Ok(None));
+    f.api.answer_access(Some(Remote::CanStartTrial {
+        checkout_url: checkout.into(),
+    }));
+    let settled = |cx: &mut TestAppContext| {
+        wait_until(cx, "the account answered", |cx| {
+            f.app.read(cx).account.refresh != Refresh::Running
+        })
+    };
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    // Not waiting on a checkout: a focus asks nothing.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_trial_on_focus(cx)));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 1, 0));
+
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_trial(cx)));
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 2, 0), "one ask as the checkout opens");
+    // Every 2 s in the first minute.
+    cx.executor().advance_clock(Duration::from_millis(1900));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 2, 0));
+    cx.executor().advance_clock(Duration::from_millis(200));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 3, 0));
+    // A focus right after an ask doesn't pile on.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_trial_on_focus(cx)));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 3, 0));
+
+    // Back from the browser with the trial on: the focus finds it at once,
+    // and the polling stops.
+    f.api.answer_access(Some(Remote::Trial {
+        ends_on: "2026-10-16".into(),
+        ends_at: None,
+    }));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.age_trial_check(Duration::from_secs(3));
+            s.check_trial_on_focus(cx)
+        })
+    });
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 4, 0));
+    cx.read(|cx| {
+        let account = &f.app.read(cx).account;
+        assert!(matches!(account.access, Some(Access::Trial { .. })));
+    });
+    cx.executor().advance_clock(Duration::from_secs(300));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 4, 0));
 }
 
 #[gpui_kit::test]

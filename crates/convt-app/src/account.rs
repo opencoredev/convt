@@ -33,9 +33,17 @@ use crate::settings::TrialCache;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// How long to wait before asking again while the trial checkout is open.
+/// Most checkouts finish within a minute, so the first minute asks every 2 s
+/// and "Your free trial is on" follows the payment page closely; then every
+/// 10 s to two minutes and every 60 s after that, 120 s after a 429. That is
+/// about 50 requests over the 15 minutes, under convt.app's 90 an hour per
+/// device (`deviceLimits.renewPerDevice`).
 fn trial_poll_delay(elapsed_secs: u64, rate_limited: bool) -> std::time::Duration {
     if rate_limited {
         std::time::Duration::from_secs(120)
+    } else if elapsed_secs < 60 {
+        std::time::Duration::from_secs(2)
     } else if elapsed_secs < 120 {
         std::time::Duration::from_secs(10)
     } else {
@@ -97,11 +105,21 @@ mod poll_tests {
 
     #[test]
     fn trial_poll_schedule_stays_below_hourly_limit() {
-        assert_eq!(trial_poll_delay(0, false), Duration::from_secs(10));
+        assert_eq!(trial_poll_delay(0, false), Duration::from_secs(2));
+        assert_eq!(trial_poll_delay(59, false), Duration::from_secs(2));
+        assert_eq!(trial_poll_delay(60, false), Duration::from_secs(10));
         assert_eq!(trial_poll_delay(119, false), Duration::from_secs(10));
         assert_eq!(trial_poll_delay(120, false), Duration::from_secs(60));
         assert_eq!(trial_poll_delay(900, false), Duration::from_secs(60));
+        assert_eq!(trial_poll_delay(0, true), Duration::from_secs(120));
         assert_eq!(trial_poll_delay(120, true), Duration::from_secs(120));
+        // The whole 15 minutes, without 429s, stays under the server's 90 an hour.
+        let (mut elapsed, mut calls) = (0, 1);
+        while elapsed < 15 * 60 {
+            elapsed += trial_poll_delay(elapsed, false).as_secs();
+            calls += 1;
+        }
+        assert!(calls < 60, "{calls} calls");
     }
 }
 
@@ -169,6 +187,8 @@ pub struct Account {
     /// comes back as a trial or Pro.
     pub awaiting_trial: bool,
     trial_poll_started: Option<Instant>,
+    /// When the trial poll last asked, so a focus check doesn't pile on.
+    trial_checked_at: Option<Instant>,
     _sign_in_task: Option<Task<()>>,
     _refresh_task: Option<Task<()>>,
 }
@@ -187,6 +207,7 @@ impl Account {
             access: None,
             awaiting_trial: false,
             trial_poll_started: None,
+            trial_checked_at: None,
             _sign_in_task: None,
             _refresh_task: None,
         }
@@ -319,11 +340,35 @@ impl AppState {
         }
     }
 
+    /// A window came to the front while the trial checkout is open: the buyer
+    /// is likely back from the browser, so ask now rather than at the next
+    /// poll. At most once every 2 s, and never on top of a running request.
+    pub fn check_trial_on_focus(&mut self, cx: &mut Context<Self>) {
+        if !self.account.awaiting_trial
+            || self.account.session.is_none()
+            || self.account.refresh == Refresh::Running
+            || !matches!(self.account.access, Some(Access::CanStartTrial { .. }))
+            || self
+                .account
+                .trial_checked_at
+                .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2))
+        {
+            return;
+        }
+        self.refresh_license(cx);
+    }
+
     /// Opens the waiting flow's page again, for a browser tab that was closed.
     pub fn reopen_sign_in(&mut self, cx: &mut Context<Self>) {
         if let (SignIn::Waiting, Some(page)) = (&self.account.sign_in, &self.account.page) {
             cx.open_url(page);
         }
+    }
+
+    /// Makes the trial poll's last ask look `by` older, for the focus check.
+    #[cfg(test)]
+    pub fn age_trial_check(&mut self, by: std::time::Duration) {
+        self.account.trial_checked_at = self.account.trial_checked_at.map(|t| t - by);
     }
 
     /// Makes the waiting sign-in look `by` older, for tests of the timeout.
@@ -469,6 +514,9 @@ impl AppState {
         self.update_settings(|s| s.license_checked = Some(today), cx);
         self.account.notice = None;
         self.account.refresh = Refresh::Running;
+        if self.account.awaiting_trial {
+            self.account.trial_checked_at = Some(Instant::now());
+        }
         let api = self.account.api.clone();
         self.account._refresh_task = Some(background(
             cx,

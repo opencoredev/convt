@@ -135,8 +135,15 @@ impl FirstRunView {
                 cx.notify()
             }),
             _appearance: theme::observe_appearance(window, cx),
-            // The glow only breathes while the window is in front.
-            _activation: cx.observe_window_activation(window, |_, _, cx| cx.notify()),
+            // The glow only breathes while the window is in front. Coming back
+            // from the trial checkout also asks whether the trial is on yet.
+            _activation: cx.observe_window_activation(window, |this, window, cx| {
+                if window.is_window_active() {
+                    this.app
+                        .update(cx, |state, cx| state.check_trial_on_focus(cx));
+                }
+                cx.notify()
+            }),
             app,
             screen,
             provider: Provider::Google,
