@@ -263,7 +263,8 @@ export type ComplimentaryDesktopAmounts = {
 export function complimentaryDesktop(c: Catalog, o: ComplimentaryDesktopAmounts): boolean {
   const price = c.products.desktop;
   if (o.netCents !== 0) return false;
-  if (o.items.length !== 1 || o.items[0].priceId !== price.priceId) return false;
+  const acceptedPrices = new Set([price.priceId, ...(c.legacyDesktop ?? []).map((p) => p.priceId)]);
+  if (o.items.length !== 1 || !acceptedPrices.has(o.items[0].priceId ?? "")) return false;
   const item = o.items[0].amountCents;
   if (item !== price.amountCents && item !== 0) return false;
   if (o.subtotalCents !== price.amountCents && o.subtotalCents !== 0) return false;
