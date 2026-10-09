@@ -324,12 +324,15 @@ impl MainView {
                 .children(notices)
         });
         if rows.is_empty() {
+            // Scrolls too: notices over the empty state can outgrow a short
+            // window, and Choose files must stay reachable.
             return div()
                 .id("activity")
                 .flex()
                 .flex_col()
                 .flex_1()
                 .min_h_0()
+                .overflow_y_scroll()
                 .children(notices)
                 .child(self.empty_state(finder_off, p, cx))
                 .into_any_element();
@@ -371,12 +374,13 @@ impl MainView {
                 .border_1()
                 .border_color(p.green_border.opacity(alpha))
         };
+        // Fills the page when it fits; never shrinks below its content.
         div()
             .relative()
             .overflow_hidden()
             .flex()
-            .flex_1()
-            .min_h_0()
+            .flex_grow(1.)
+            .flex_shrink_0()
             .p(px(GUTTER))
             .child(theme::glow(0.6, 180., p))
             .child(

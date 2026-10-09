@@ -2197,6 +2197,32 @@ fn activity_offers_finder_setup_until_the_extension_is_on(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
+fn empty_activity_scrolls_to_choose_files_in_a_short_window(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx);
+            s.finder_on = Some(false);
+        })
+    });
+    let (window, _) = f.main(cx);
+    gpui_kit::VisualTestContext::from_window(window, cx).simulate_resize(size(px(720.), px(380.)));
+    assert!(shown(cx, window, "finder-setup"));
+    assert!(!fits(cx, window, "empty-add-files"));
+    // The wheel over the Finder card scrolls the page it sits on.
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.scroll(
+            id("finder-setup"),
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(-2000.))),
+            cx,
+        );
+    })
+    .unwrap();
+    assert!(fits(cx, window, "empty-add-files"));
+}
+
+#[gpui_kit::test]
 fn a_build_from_source_never_shows_first_run(cx: &mut TestAppContext) {
     let _f = Fixture::new(cx);
     cx.update(|cx| super::route(Request::default(), cx));
