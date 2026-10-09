@@ -151,9 +151,9 @@ function DevicePage() {
         <dd className="break-all">{email}</dd>
       </dl>
       <p className="text-[13px]/5 text-ink-2">
-        While signed in, the app asks convt.app for your current Pro key once a day at launch and
-        when you click Refresh license. It sends this computer's sign-in token and the app version,
-        never your files. Sign it out any time under Settings on this site.
+        While signed in, the app asks convt.app for your current Pro key at most once a day while it
+        runs, and when you click Refresh license. It sends this computer's sign-in token and the app
+        version, never your files. Sign it out any time under Settings on this site.
       </p>
       <FormError>{error}</FormError>
       <div className="flex gap-3">

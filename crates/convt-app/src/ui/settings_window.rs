@@ -390,7 +390,33 @@ impl SettingsView {
                     .border_t_1()
                     .border_color(p.hairline)
                     .children(finder)
-                    .child(field("Menu bar icon", menu_bar, p))
+                    .child(field_top(
+                        "Background",
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(10.))
+                                    .child(menu_bar)
+                                    .child(
+                                        text(13., 16., p.text)
+                                            .child("Keep running in the background"),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .id("menu-bar-icon-note")
+                                    .test_support()
+                                    .aria_label(SharedString::from(background_note()))
+                                    .max_w(px(330.))
+                                    .child(text(12., 16., p.tertiary).child(background_note())),
+                            ),
+                        p,
+                    ))
                     .child(field(
                         "Jobs at once",
                         div()
@@ -785,13 +811,15 @@ impl SettingsView {
 pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     (
         "network-updates",
-        "Update checks: while they're on, once a day at launch and when you click Check now, \
+        "Update checks: while they're on, at most once a day and when you click Check now, \
          convt downloads the signed list of releases from convt.app. The request carries the \
-         app version and nothing about your files.",
+         app version and nothing about your files. When a new version your license covers is \
+         out, convt downloads its installer from the release's host (GitHub) and checks it \
+         against that list before offering to restart.",
     ),
     (
         "network-refresh",
-        "License refresh: only while you're signed in to convt.app, once a day at launch, \
+        "License refresh: only while you're signed in to convt.app, at most once a day, \
          to fetch your current Pro key. See License.",
     ),
     (
@@ -831,6 +859,15 @@ fn field(label: &'static str, control: impl IntoElement, p: &Palette) -> Div {
                 .child(label),
         )
         .child(control)
+}
+
+/// What "Keep running in the background" does, in this platform's words.
+fn background_note() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Shows convt in the menu bar so conversions start instantly. Quit from there or with ⌘Q."
+    } else {
+        "Shows convt in the system tray so conversions start instantly. Quit from there or with Ctrl+Q."
+    }
 }
 
 /// [`field`] for a control taller than one line.

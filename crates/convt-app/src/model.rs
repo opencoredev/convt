@@ -251,6 +251,10 @@ pub struct AppState {
     /// The last manifest accepted this session, to select again when the
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
+    /// The update download and install, when this install updates itself.
+    pub(crate) updater: crate::update::Updater,
+    /// Runs the day's renewal and update check while convt runs.
+    pub(crate) _daily_checks: Option<Task<()>>,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in a background menu).
     /// Explorer requests that ask to show progress are tracked like normal
@@ -271,6 +275,15 @@ pub struct AppState {
     _automations: Option<Task<()>>,
     _drain: Task<()>,
 }
+
+/// Why a conversion can't start while an update installs.
+pub const INSTALLING: &str =
+    "convt is installing an update and restarts in a moment. Convert again after it does.";
+
+/// Why document support can't download or be removed while an update
+/// installs: quitting for the restart would stop it.
+pub const INSTALLING_PACK: &str =
+    "convt is installing an update and restarts in a moment. Try again after it does.";
 
 /// The app's one [`AppState`].
 pub struct Shared(pub Entity<AppState>);
@@ -340,6 +353,8 @@ impl AppState {
             update: Update::Idle,
             _update_task: None,
             update_manifest: None,
+            updater: Default::default(),
+            _daily_checks: None,
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]
@@ -402,6 +417,10 @@ impl AppState {
         silent: bool,
         cx: &mut Context<Self>,
     ) -> Result<Vec<JobId>, String> {
+        // Quitting after the install would stop them.
+        if self.installing() {
+            return Err(INSTALLING.into());
+        }
         if let Some(reason) = self.documents_locked()
             && files
                 .iter()
@@ -584,6 +603,11 @@ impl AppState {
         {
             return;
         }
+        if self.installing() {
+            self.pack.notice = Some(INSTALLING_PACK.into());
+            cx.notify();
+            return;
+        }
         if matches!(self.pack.status, pack::Status::Installed(_)) && self.documents_converting() {
             self.pack.notice =
                 Some("Wait for the document conversions to finish, then download it again.".into());
@@ -624,6 +648,11 @@ impl AppState {
     pub fn remove_pack(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         if matches!(self.pack.phase, PackPhase::Working(_)) || self.pack.removing {
             return Err("Wait for the download to finish first.".into());
+        }
+        if self.installing() {
+            self.pack.notice = Some(INSTALLING_PACK.into());
+            cx.notify();
+            return Err(INSTALLING_PACK.into());
         }
         if self.documents_converting() {
             let error = "Wait for the document conversions to finish, then remove it.";
@@ -772,7 +801,7 @@ impl AppState {
     pub fn activate(&mut self, key: &str, cx: &mut Context<Self>) -> Result<License, String> {
         let result = self.licensing.activate(key).map_err(|e| e.to_string());
         self.license = self.licensing.state();
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
         result
     }
@@ -781,7 +810,7 @@ impl AppState {
     pub fn deactivate(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         let result = self.licensing.deactivate();
         self.license = self.licensing.state();
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
         result
     }
@@ -877,8 +906,11 @@ impl AppState {
                 actions: Vec::new(),
             });
         }
-        if self.quit_when_idle && cx.windows().is_empty() && !self.settings.menu_bar_icon {
-            cx.quit();
+        if self.quit_when_idle
+            && cx.windows().is_empty()
+            && !crate::tray::keeps_running(self.settings.menu_bar_icon, cx)
+        {
+            crate::menu::quit(cx);
         }
     }
 

@@ -20,7 +20,8 @@ pub struct Settings {
     pub notifications: bool,
     /// Show each finished file in the file manager.
     pub reveal_when_done: bool,
-    /// Show the menu bar (tray) icon where the platform has one.
+    /// "Keep running in the background": show the tray (menu bar) icon and
+    /// keep running after the last window closes. The key predates the label.
     pub menu_bar_icon: bool,
     /// The first-run window was finished (Start converting / Open convt).
     /// Closing or quitting mid-setup leaves this false so the next launch
