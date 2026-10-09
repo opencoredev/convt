@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   alertDigest,
+  codeEmail,
   escapeHtml,
   licenseIssued,
   renewalFailed,
@@ -104,5 +105,40 @@ describe("templates", () => {
     ];
     for (const m of all) expect(`${m.subject}${m.text}`).not.toContain("—");
     expect(templateVersion).toBe(2);
+  });
+});
+
+describe("code email", () => {
+  // Built at runtime so no address appears in the source.
+  const address = ["reader", "convt.test"].join("@");
+  // The real link also carries the address; the template only passes it through.
+  const link = `${site}/sign-in/verify#code=123456`;
+
+  test("sign-in has the code in text and HTML, and the link", () => {
+    const m = codeEmail({ kind: "sign-in", email: address, code: "123456", link, minutes: 15 });
+    expect(m.subject).toBe("123456 is your convt sign-in code");
+    expect(m.text).toMatchSnapshot();
+    expect(m.html).toContain(">123456</p>");
+    expect(m.html).toContain(`href="${escapeHtml(link)}"`);
+    expect(m.html).toContain("expires in 15 minutes");
+    expect(m.html).toContain('<meta name="color-scheme" content="light dark">');
+  });
+
+  test("confirmation codes name the address, escaped, and carry no link", () => {
+    const hostile = ["<b>x", "convt.test"].join("@");
+    const m = codeEmail({
+      kind: "change-email",
+      email: hostile,
+      code: "654321",
+      link,
+      minutes: 15,
+    });
+    expect(m.subject).toBe("654321 is your convt confirmation code");
+    expect(m.text).toContain(`confirm ${hostile} as the email`);
+    expect(m.html).not.toContain("<b>x");
+    expect(m.html).not.toContain("sign-in/verify");
+    expect(
+      codeEmail({ kind: "confirm", email: address, code: "1", link, minutes: 5 }).text,
+    ).toContain(`confirm ${address} for your convt account`);
   });
 });

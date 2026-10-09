@@ -88,3 +88,15 @@ Ids only: look them up in the database or in Polar and Resend by id. No keys or 
 ,
 }
 `;
+
+
+exports[`code email sign-in has the code in text and HTML, and the link 1`] = `
+"Your convt sign-in code:
+
+123456
+
+Or sign in with this link: https://convt.app/sign-in/verify#code=123456
+
+It works once and expires in 15 minutes. If you didn't ask for it, ignore this email.
+"
+`;
