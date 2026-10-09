@@ -6,6 +6,9 @@ import {
   downloadGate,
   isNewAccount,
   landingAfterSignIn,
+  rememberSignInRedirect,
+  takeSignInRedirect,
+  type RedirectStore,
 } from "../../src/lib/sign-in";
 
 const origin = "https://convt.app";
@@ -55,4 +58,54 @@ test("/download sends signed-out visitors to sign-in with redirect, and unverifi
 test("Get convt goes straight to sign-in with one redirect when signed out", () => {
   expect(downloadEntryHref(false)).toBe("/sign-in?redirect=%2Fdownload");
   expect(downloadEntryHref(true)).toBe("/download");
+});
+
+function memoryStore(): RedirectStore & { size: () => number } {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, value),
+    removeItem: (key) => void items.delete(key),
+    size: () => items.size,
+  };
+}
+
+test("the emailed link returns to the page that asked, for that address, once", () => {
+  // Built at run time: the repository holds no address literals.
+  const address = ["Returning", "convt.test"].join("@");
+  const store = memoryStore();
+  rememberSignInRedirect(store, address, "/download", now);
+  expect(takeSignInRedirect(store, ["someone", "convt.test"].join("@"), now)).toBeUndefined();
+  expect(takeSignInRedirect(store, ` ${address.toLowerCase()} `, now + 60_000)).toBe("/download");
+  expect(takeSignInRedirect(store, address, now + 60_000)).toBeUndefined();
+  expect(store.size()).toBe(0);
+});
+
+test("an emailed-link redirect lasts as long as the code, and a plain sign-in clears it", () => {
+  const address = ["returning", "convt.test"].join("@");
+  const store = memoryStore();
+  rememberSignInRedirect(store, address, "/download", now);
+  expect(takeSignInRedirect(store, address, now + 16 * 60_000)).toBeUndefined();
+  rememberSignInRedirect(store, address, "/download", now);
+  rememberSignInRedirect(store, address, undefined, now);
+  expect(takeSignInRedirect(store, address, now)).toBeUndefined();
+  store.setItem("convt.sign-in-redirect", "{not json");
+  expect(takeSignInRedirect(store, address, now)).toBeUndefined();
+});
+
+test("storage that refuses never breaks sign-in", () => {
+  const refusing: RedirectStore = {
+    getItem: () => {
+      throw new Error("denied");
+    },
+    setItem: () => {
+      throw new Error("denied");
+    },
+    removeItem: () => {
+      throw new Error("denied");
+    },
+  };
+  const address = ["returning", "convt.test"].join("@");
+  expect(() => rememberSignInRedirect(refusing, address, "/download")).not.toThrow();
+  expect(takeSignInRedirect(refusing, address)).toBeUndefined();
 });

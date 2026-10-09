@@ -6,7 +6,7 @@ import { usePlaceholderAction } from "#/components/app/notice";
 import { authErrorMessage, sendSignInCode, startSocialSignIn } from "#/lib/auth-client";
 import { links } from "#/lib/config";
 import { safeRedirect } from "#/lib/safe-redirect";
-import { siteOrigin } from "#/lib/sign-in";
+import { rememberSignInRedirect, siteOrigin } from "#/lib/sign-in";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 import { AuthTitle, Rise, authInput, lightPill } from "./auth-screen";
@@ -88,6 +88,7 @@ export function SignInPanel({
               const result = await sendSignInCode(email);
               setBusy(false);
               if (!result.ok) return setError(result.message);
+              rememberSignInRedirect(window.localStorage, email.trim(), redirect);
               void navigate({
                 to: "/sign-in/check-email",
                 search: { email: email.trim(), ...(redirect ? { redirect } : {}) },

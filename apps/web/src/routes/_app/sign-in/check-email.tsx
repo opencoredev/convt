@@ -9,7 +9,13 @@ import { cx, focusRing } from "#/components/app/ui";
 import { Icon } from "#/components/icon";
 import { sendSignInCode, signInWithCode } from "#/lib/auth-client";
 import { magicLinkMinutes, signInCodeLength } from "#/lib/config";
-import { authSearch, isNewAccount, landingAfterSignIn, siteOrigin } from "#/lib/sign-in";
+import {
+  authSearch,
+  isNewAccount,
+  landingAfterSignIn,
+  rememberSignInRedirect,
+  siteOrigin,
+} from "#/lib/sign-in";
 
 // Shown after the sign-in form sent a code. The email holds the same code and a
 // link to /sign-in/verify; either one signs in, once.
@@ -35,6 +41,8 @@ function CheckEmailPage() {
     setStatus(null);
     const result = await signInWithCode(email, code);
     if (result.ok) {
+      // Signed in here, so the emailed link has nothing left to return to.
+      rememberSignInRedirect(window.localStorage, email, undefined);
       window.location.assign(
         landingAfterSignIn({
           redirect: redirectTo,
@@ -98,8 +106,10 @@ function CheckEmailPage() {
             setError(null);
             setStatus(null);
             const result = await sendSignInCode(email);
-            if (result.ok) setStatus("We sent a new code. The old one no longer works.");
-            else setError(result.message);
+            if (result.ok) {
+              rememberSignInRedirect(window.localStorage, email, redirectTo);
+              setStatus("We sent a new code. The old one no longer works.");
+            } else setError(result.message);
           }}
         >
           Resend code
