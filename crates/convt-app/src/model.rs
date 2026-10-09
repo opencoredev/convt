@@ -1148,9 +1148,12 @@ impl AppState {
 fn cached_trial_is_valid(cache: &crate::settings::TrialCache, signed_in: bool, today: i64) -> bool {
     signed_in
         && date::to_days(&cache.fetched_on).is_some_and(|fetched| {
-            cache.ends_at.len() >= 10
-                && date::to_days(&cache.ends_at[..10])
-                    .is_some_and(|ends| ends <= fetched + 8 && ends >= fetched && fetched <= today)
+            // `get` because a hand-edited value may not split at byte 10.
+            cache
+                .ends_at
+                .get(..10)
+                .and_then(date::to_days)
+                .is_some_and(|ends| ends <= fetched + 8 && ends >= fetched && fetched <= today)
         })
 }
 
@@ -1238,6 +1241,14 @@ mod tests {
             true,
             today,
         ));
+        // A malformed saved value is rejected, not sliced mid-character.
+        for ends_at in ["123456789é", "2026-10-1", ""] {
+            let cache = crate::settings::TrialCache {
+                ends_at: ends_at.into(),
+                fetched_on: "2026-10-08".into(),
+            };
+            assert!(!cached_trial_is_valid(&cache, true, today), "{ends_at}");
+        }
     }
 
     #[test]
