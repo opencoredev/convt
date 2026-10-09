@@ -4455,6 +4455,12 @@ fn a_trial_skipped_in_onboarding_can_start_later(cx: &mut TestAppContext) {
     assert_eq!(cx.opened_url().as_deref(), Some(checkout));
 
     // Nothing to start for a lapsed account, or with a key that converts.
+    // Starting the trial asks convt.app again, so it answers the same.
+    f.api
+        .answer_access(Some(convt_license::account::Access::Lapsed));
+    wait_until(cx, "the trial check", |cx| {
+        f.app.read(cx).account.refresh != Refresh::Running
+    });
     f.app.update(cx, |s, cx| {
         s.account.access = Some(Access::Lapsed);
         cx.notify();
