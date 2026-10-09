@@ -16,4 +16,5 @@ export * from "./backfill";
 export * from "./env";
 export * from "./service";
 export * from "./renewal";
+export * from "./marketing";
 export type * from "./rpc";

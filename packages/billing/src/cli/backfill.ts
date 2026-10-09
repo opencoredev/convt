@@ -23,6 +23,7 @@ import { backfillPolarOrders } from "../backfill";
 import type { BillingContext } from "../context";
 import { loadCatalog } from "../catalog";
 import { loadSigningKey, readBillingEnv } from "../env";
+import { marketingDisabled } from "../marketing";
 import { drainOutbox } from "../outbox";
 import { createPolarProvider } from "../polar";
 
@@ -87,6 +88,8 @@ try {
       budgetMs: 20_000,
       checkoutCookie: "convt_checkout",
     },
+    // Pushing to Sequenzy is the Worker's job; this run only marks rows pending.
+    marketing: marketingDisabled,
     log: console.log,
   } satisfies BillingContext;
   const result = await backfillPolarOrders(ctx, { dryRun: !apply });
