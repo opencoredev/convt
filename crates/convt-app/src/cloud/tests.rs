@@ -643,6 +643,17 @@ mod app {
         signed_in: bool,
         fake: Arc<Fake>,
     ) -> (tempfile::TempDir, Entity<AppState>) {
+        app_with_site(cx, key, signed_in, fake, None)
+    }
+
+    /// [`app`], with convt.app refusing cloud credentials with `refuse`.
+    fn app_with_site(
+        cx: &mut TestAppContext,
+        key: Option<String>,
+        signed_in: bool,
+        fake: Arc<Fake>,
+        refuse: Option<ApiError>,
+    ) -> (tempfile::TempDir, Entity<AppState>) {
         let dir = tempfile::tempdir().unwrap();
         if let Some(key) = key {
             std::fs::write(dir.path().join("license.key"), key).unwrap();
@@ -671,7 +682,7 @@ mod app {
             },
             account_url: "https://convt.test".into(),
             account_api: Arc::new(Site {
-                refuse: None,
+                refuse,
                 issued: Mutex::new(0),
             }),
             update: UpdateConfig {
@@ -746,6 +757,34 @@ mod app {
         fake: Arc<Fake>,
     ) -> (tempfile::TempDir, Entity<AppState>) {
         app(cx, key, true, fake)
+    }
+
+    #[gpui_kit::test]
+    fn a_revoked_sign_in_found_by_a_cloud_job_signs_out(cx: &mut TestAppContext) {
+        let fake = Arc::new(Fake::default());
+        let (dir, app) = app_with_site(
+            cx,
+            Some(key(Plan::Pro)),
+            true,
+            fake.clone(),
+            Some(ApiError::SignedOut),
+        );
+        cx.update(|cx| cx.set_global(Probe(app.clone())));
+        app.update(cx, |s, cx| {
+            s.update_settings(|s| s.cloud_consent = true, cx)
+        });
+        cx.read(|cx| assert_eq!(app.read(cx).cloud_access(), CloudAccess::Ready));
+        let png = dir.path().join("photo.png");
+        std::fs::write(&png, b"png bytes").unwrap();
+        convert(cx, &app, &png, Options::default()).unwrap();
+        wait_until(cx, "the job to fail", |s| s.queue.active() == 0);
+        cx.read(|cx| {
+            let s = app.read(cx);
+            assert!(s.account.session.is_none());
+            assert_eq!(s.cloud_access(), CloudAccess::SignedOut);
+        });
+        assert!(!dir.path().join("account.json").exists());
+        assert!(fake.calls().is_empty());
     }
 
     #[gpui_kit::test]

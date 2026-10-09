@@ -2,7 +2,7 @@
 //! presets. Every window reads one [`AppState`] entity and changes it through
 //! the methods here.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -280,6 +280,9 @@ pub struct AppState {
     _finder_watch: Option<Task<()>>,
     /// Jobs whose result should be copied when they finish.
     automation_copies: HashSet<JobId>,
+    /// The sign-in token each cloud job asked for credentials with, so one
+    /// that finds it revoked signs out only that sign-in.
+    cloud_tokens: HashMap<JobId, String>,
     watch: crate::automation::WatchState,
     _automations: Option<Task<()>>,
     _drain: Task<()>,
@@ -398,6 +401,7 @@ impl AppState {
                 None
             },
             automation_copies: HashSet::new(),
+            cloud_tokens: HashMap::new(),
             watch: crate::automation::WatchState::default(),
             // Tests drive the watcher themselves so a live poll cannot see
             // the real Desktop or race a fixture.
@@ -462,7 +466,7 @@ impl AppState {
                     .into(),
             );
         }
-        let Some(session) = &self.account.session else {
+        let Some(session) = self.account.session.clone() else {
             return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
         };
         // One credential serves the whole batch while it lasts.
@@ -483,6 +487,7 @@ impl AppState {
                     output: output.clone(),
                 };
                 let id = self.queue.add_cloud(&job);
+                self.cloud_tokens.insert(id, session.token.clone());
                 self.runner.submit_cloud(id, job, batch.clone());
                 id
             })
@@ -939,6 +944,15 @@ impl AppState {
             // like any other, but are never revealed: the file manager that
             // asked is already showing the folder.
             let silent = self.silent.remove(&entry.id);
+            let cloud_token = self.cloud_tokens.remove(&entry.id);
+            // Revoked from the dashboard: sign out here too, so Settings
+            // offers Sign in instead of an account that can't convert.
+            let revoked = matches!(&entry.status, Status::Failed(e) if e.kind == "cloud_signed_out")
+                && cloud_token.is_some()
+                && self.account.session.as_ref().map(|s| &s.token) == cloud_token.as_ref();
+            if revoked {
+                self.forget_revoked_session(cx);
+            }
             let batch = &mut self.batch;
             let outcome = match &entry.status {
                 Status::Done(outputs) => {

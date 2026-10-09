@@ -454,6 +454,18 @@ impl AppState {
         cx.notify();
     }
 
+    /// Forgets a sign-in convt.app says was revoked, as from the dashboard:
+    /// the token, the account's access and its trial.
+    pub(crate) fn forget_revoked_session(&mut self, cx: &mut Context<Self>) {
+        if let Err(e) = self.licensing.clear_session() {
+            tracing::warn!(error = %e, "could not forget a revoked sign-in");
+        }
+        self.account.session = None;
+        self.account.access = None;
+        self.update_settings(|s| s.trial_cache = None, cx);
+        self.licensing.set_account_trial(None);
+    }
+
     /// Signs this computer out: forgets the token here and revokes it on
     /// convt.app. The license key stays.
     pub fn sign_out(&mut self, cx: &mut Context<Self>) {
@@ -597,14 +609,7 @@ impl AppState {
                 }
             }
             Err(ApiError::SignedOut) => {
-                // Revoked from the dashboard: forget the token here too.
-                if let Err(e) = self.licensing.clear_session() {
-                    tracing::warn!(error = %e, "could not forget a revoked sign-in");
-                }
-                self.account.session = None;
-                self.account.access = None;
-                self.update_settings(|s| s.trial_cache = None, cx);
-                self.licensing.set_account_trial(None);
+                self.forget_revoked_session(cx);
                 Refresh::Failed(format!(
                     "This computer was signed out of convt.app. Sign in again to keep Pro renewing. {kept}"
                 ))
