@@ -9,6 +9,10 @@ use std::time::Duration;
 
 use convt_core::Cancel;
 use convt_license::account::{CloudCredential, secure_url};
+use ureq::unversioned::resolver::DefaultResolver;
+use ureq::unversioned::transport::{
+    Buffers, ConnectionDetails, Connector, DefaultConnector, NextTimeout, Transport, time,
+};
 use ureq::{Agent, SendBody};
 
 use super::{CloudApi, CloudError, Created, MAX_OUTPUT_BYTES, RemoteJob, RemoteOutput};
@@ -18,9 +22,13 @@ pub struct Http {
     calls: Agent,
     /// Uploads and downloads, which take as long as the file does. They run
     /// on a thread of their own, so Stop returns at once even while one is
-    /// stalled inside the network; a connection that stalls times out.
+    /// stalled inside the network; a connection that stalls for
+    /// [`TRANSFER_IDLE`] times out, which ends that thread too.
     transfers: Agent,
 }
+
+/// How long a transfer may wait on the network without a byte moving.
+const TRANSFER_IDLE: Duration = Duration::from_secs(120);
 
 impl Default for Http {
     fn default() -> Self {
@@ -31,19 +39,29 @@ impl Default for Http {
 impl Http {
     /// Builds the clients. Nothing is sent until a cloud job runs.
     pub fn new() -> Self {
+        Self::with_idle(TRANSFER_IDLE)
+    }
+
+    /// [`Self::new`], with transfers timing out after `idle` without
+    /// progress. Tests shorten it.
+    fn with_idle(idle: Duration) -> Self {
         let calls = Agent::config_builder()
             .max_redirects(0)
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(30)))
             .build()
             .new_agent();
-        let transfers = Agent::config_builder()
+        let config = Agent::config_builder()
             .max_redirects(0)
             .http_status_as_error(false)
             .timeout_connect(Some(Duration::from_secs(30)))
             .timeout_recv_response(Some(Duration::from_secs(300)))
-            .build()
-            .new_agent();
+            .build();
+        let transfers = Agent::with_parts(
+            config,
+            DefaultConnector::new().chain(IdleLimit(idle)),
+            DefaultResolver::default(),
+        );
         Self { calls, transfers }
     }
 
@@ -106,6 +124,66 @@ impl Http {
     ) -> Result<RemoteJob, CloudError> {
         let json = self.json(method, credential, path, None)?;
         serde_json::from_value(json).map_err(|_| CloudError::BadResponse)
+    }
+}
+
+/// Wraps each transfer connection so no single wait on the network lasts
+/// longer than its duration. ureq's own timeouts cover whole phases, and a
+/// body read that stalls would otherwise wait forever.
+#[derive(Debug)]
+struct IdleLimit(Duration);
+
+impl Connector<Box<dyn Transport>> for IdleLimit {
+    type Out = Idle;
+
+    fn connect(
+        &self,
+        _: &ConnectionDetails,
+        chained: Option<Box<dyn Transport>>,
+    ) -> Result<Option<Idle>, ureq::Error> {
+        Ok(chained.map(|inner| Idle {
+            inner,
+            limit: self.0,
+        }))
+    }
+}
+
+#[derive(Debug)]
+struct Idle {
+    inner: Box<dyn Transport>,
+    limit: Duration,
+}
+
+impl Idle {
+    fn cap(&self, timeout: NextTimeout) -> NextTimeout {
+        NextTimeout {
+            after: time::Duration::Exact(self.limit.min(*timeout.after)),
+            reason: timeout.reason,
+        }
+    }
+}
+
+impl Transport for Idle {
+    fn buffers(&mut self) -> &mut dyn Buffers {
+        self.inner.buffers()
+    }
+
+    fn transmit_output(&mut self, amount: usize, timeout: NextTimeout) -> Result<(), ureq::Error> {
+        let timeout = self.cap(timeout);
+        self.inner.transmit_output(amount, timeout)
+    }
+
+    fn await_input(&mut self, timeout: NextTimeout) -> Result<bool, ureq::Error> {
+        let timeout = self.cap(timeout);
+        self.inner.await_input(timeout)
+    }
+
+    fn is_open(&mut self) -> bool {
+        self.inner.is_open()
+    }
+
+    fn is_tls(&self) -> bool {
+        self.inner.is_tls()
     }
 }
 
@@ -384,6 +462,38 @@ mod tests {
         let started = Instant::now();
         let result = Http::new().download(&url, &dir.path().join("0.part"), &cancel);
         assert_eq!(result, Err(CloudError::Cancelled));
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn a_body_that_stalls_times_out_without_stop() {
+        use std::io::Write as _;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/out", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut request = [0u8; 4096];
+            let _ = socket.read(&mut request);
+            // Headers and some of the body, then nothing.
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 1000\r\n\r\nabc")
+                .unwrap();
+            std::thread::sleep(Duration::from_secs(30));
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let started = Instant::now();
+        let http = Http::with_idle(Duration::from_millis(300));
+        let result = download(
+            &http.transfers,
+            &url,
+            &dir.path().join("0.part"),
+            &Cancel::new(),
+        );
+        assert_eq!(result, Err(CloudError::Offline));
         assert!(
             started.elapsed() < Duration::from_secs(5),
             "{:?}",
