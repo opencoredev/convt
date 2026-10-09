@@ -5849,9 +5849,7 @@ fn a_license_change_that_still_covers_keeps_the_download(cx: &mut TestAppContext
     // A key whose updates ended before 9.2.0 turns it into a renewal.
     cx.update(|cx| {
         f.app
-            .update(cx, |s, cx| {
-                s.activate(&pro_key("a@b.c", "2026-10-02"), cx)
-            })
+            .update(cx, |s, cx| s.activate(&pro_key("a@b.c", "2026-10-02"), cx))
             .unwrap();
     });
     assert!(matches!(f.update(cx), Update::NotCovered { .. }));
@@ -6066,9 +6064,7 @@ fn a_license_change_during_a_check_is_not_undone_by_it(cx: &mut TestAppContext) 
     // check keeps the state and picks for the new license when it ends.
     cx.update(|cx| {
         f.app
-            .update(cx, |s, cx| {
-                s.activate(&pro_key("a@b.c", "2026-10-02"), cx)
-            })
+            .update(cx, |s, cx| s.activate(&pro_key("a@b.c", "2026-10-02"), cx))
             .unwrap();
     });
     assert_eq!(f.update(cx), Update::Checking);
