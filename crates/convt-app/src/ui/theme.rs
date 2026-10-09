@@ -752,13 +752,15 @@ pub fn text_button(
     size: f32,
 ) -> Clickable {
     let label = label.into();
-    clickable(id, label.clone()).child(
-        text(size, 16., color)
-            .font_weight(FontWeight::MEDIUM)
-            .whitespace_nowrap()
-            .hover(|s| s.opacity(0.7))
-            .child(label),
-    )
+    clickable(id, label.clone())
+        // Underlined rather than faded, so hovered text keeps its contrast.
+        .hover(|s| s.underline())
+        .child(
+            text(size, 16., color)
+                .font_weight(FontWeight::MEDIUM)
+                .whitespace_nowrap()
+                .child(label),
+        )
 }
 
 /// A switch (`small`: 28x16, as in lists, otherwise 32x18). Screen readers
