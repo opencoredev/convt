@@ -5208,7 +5208,15 @@ fn about_and_help_open_what_they_say(cx: &mut TestAppContext) {
         "{version}"
     );
     click(cx, about, "about-source");
-    assert_eq!(cx.opened_url().as_deref(), Some(menus::SOURCE_URL));
+    // The source of this build, not the default branch.
+    assert_eq!(
+        cx.opened_url(),
+        Some(format!(
+            "{}/tree/v{}",
+            menus::SOURCE_URL,
+            crate::account::VERSION
+        ))
+    );
     click(cx, about, "about-notes");
     assert_eq!(
         cx.opened_url(),

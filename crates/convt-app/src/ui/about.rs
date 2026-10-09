@@ -90,7 +90,11 @@ impl Render for AboutView {
                                 "Release notes",
                                 release_notes_url(VERSION),
                             ))
-                            .child(link("about-source", "Source code", SOURCE_URL.into())),
+                            .child(link(
+                                "about-source",
+                                "Source code",
+                                format!("{SOURCE_URL}/tree/v{VERSION}"),
+                            )),
                     )
                     .child(
                         styled(size::CAPTION, p.tertiary)
