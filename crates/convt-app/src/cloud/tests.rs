@@ -53,6 +53,8 @@ struct Fake {
     outputs: Vec<(&'static str, &'static [u8])>,
     /// Blocks the upload until the job is cancelled.
     hang_upload: bool,
+    /// Presses Stop as the last download finishes.
+    stop_on_last_download: bool,
 }
 
 fn remote(status: RemoteStatus, error: Option<&str>) -> RemoteJob {
@@ -140,12 +142,16 @@ impl CloudApi for Fake {
             })
             .collect())
     }
-    fn download(&self, url: &str, to: &Path, _: &Cancel) -> Result<(), CloudError> {
+    fn download(&self, url: &str, to: &Path, cancel: &Cancel) -> Result<(), CloudError> {
         self.log(format!("download {url}"));
         let name = url.rsplit('/').next().unwrap();
         let name = name.split('?').next().unwrap();
         let (_, bytes) = self.outputs.iter().find(|(n, _)| *n == name).unwrap();
-        std::fs::write(to, bytes).map_err(|e| CloudError::Io(e.to_string()))
+        std::fs::write(to, bytes).map_err(|e| CloudError::Io(e.to_string()))?;
+        if self.stop_on_last_download && Some(name) == self.outputs.last().map(|(n, _)| *n) {
+            cancel.cancel();
+        }
+        Ok(())
     }
     fn cancel(&self, _: &CloudCredential, id: &str) -> Result<(), CloudError> {
         self.log(format!("cancel {id}"));
@@ -1078,5 +1084,26 @@ fn later_downloads_ask_for_fresh_links() {
             "outputs job_1",
             "download https://storage.test/input.webp?listing=3",
         ]
+    );
+}
+
+#[test]
+fn stop_after_the_last_download_publishes_nothing() {
+    let fake = Arc::new(Fake {
+        outputs: vec![("input.webp", b"webp")],
+        stop_on_last_download: true,
+        ..Fake::default()
+    });
+    fake.statuses
+        .lock()
+        .unwrap()
+        .push_back(Ok(remote(RemoteStatus::Succeeded, None)));
+    let (dir, file) = input();
+    let e = run_quietly(&cloud(fake.clone(), None), &webp(&file), &Cancel::new()).unwrap_err();
+    assert_eq!(e.kind, "cancelled");
+    assert_eq!(listing(dir.path()), ["photo.png"]);
+    assert_eq!(
+        fake.calls().last().map(String::as_str),
+        Some("cancel job_1")
     );
 }

@@ -419,7 +419,17 @@ pub fn run(cloud: &Cloud, job: &Job, progress: &dyn Fn(Option<f32>), cancel: &Ca
     let id = created.job.id.clone();
     tracing::info!(job = %id, "cloud job created");
     // From here on the job exists on the server: stopping must cancel it there.
-    let result = session.follow(&created, job, bytes, progress, cancel, staging.path());
+    let result = session
+        .follow(&created, job, bytes, progress, cancel, staging.path())
+        // Stop during the last download's final write still stops: nothing
+        // is published, as for a local conversion.
+        .and_then(|files| {
+            if cancel.is_cancelled() {
+                Err(cancelled())
+            } else {
+                Ok(files)
+            }
+        });
     match result {
         Ok(files) => {
             let pages = pages_of(&files);
