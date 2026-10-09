@@ -26,7 +26,7 @@ const osPlatform: Record<Os, Exclude<Platform, "source">> = {
 export const kindLabels: Record<ArtifactKind, { title: string; note: string }> = {
   dmg: { title: "Disk image (.dmg)", note: "Apple silicon" },
   exe: { title: "Installer (.exe)", note: "64-bit Windows" },
-  msi: { title: "Installer (.msi)", note: "64-bit Windows, per-user, unsigned" },
+  msi: { title: "Installer (.msi)", note: "64-bit Windows, unsigned" },
   zip: { title: "Archive (.zip)", note: "No installer" },
   AppImage: { title: "AppImage", note: "Runs on most distributions" },
   deb: { title: "Debian package (.deb)", note: "Debian, Ubuntu and derivatives" },

@@ -93,12 +93,12 @@ test("a phone or unknown system gets every platform, not a guess", () => {
   expect(html).not.toContain("Download for");
 });
 
-test("what happens next is open, sign in, trial", () => {
+test("what happens next is install, sign in, trial", () => {
   const html = renderToStaticMarkup(<NextSteps os="macos" />);
-  expect(html).toContain("Open convt");
+  expect(html).toContain("Install convt");
   expect(html).toContain("drag convt to Applications");
   expect(html).toContain("Sign in");
-  expect(html).toContain("Your trial starts");
+  expect(html).toContain("Start your free trial");
 });
 
 test("checksums are folded away with the source for the build", () => {

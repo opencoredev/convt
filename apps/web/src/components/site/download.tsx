@@ -1,7 +1,7 @@
 import {
   ArrowDown01Icon,
   Copy01Icon,
-  Download04Icon,
+  Download01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useState, type CSSProperties, type ReactNode } from "react";
@@ -54,7 +54,7 @@ export function primaryMeta(slot: Slot, version: string | null) {
 const openStep: Record<Os, string> = {
   macos: "Open the disk image and drag convt to Applications.",
   windows: "Run the installer, then open convt from the Start menu.",
-  linux: "Make the AppImage executable and open it, or install the package.",
+  linux: "Make the AppImage executable and run it, or install a package.",
 };
 
 /** Children arrive in order, 60 ms apart (styles.css .auth-rise; reduced motion: at once). */
@@ -107,9 +107,9 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
             Download convt
           </h1>
           <p className="max-w-[460px] text-[17px]/[26px] text-pretty text-ink-2">
-            The app, the right-click menu and the{" "}
-            <code className="font-mono text-[15px] text-ink">convt</code> command line, in one
-            install.
+            One install gives you the app, the{" "}
+            <span className="whitespace-nowrap">right-click</span> menu and the{" "}
+            <code className="font-mono text-[15px] text-ink">convt</code> command.
           </p>
         </Rise>
         <Rise index={2} className="mt-9 flex w-full flex-col items-center gap-3">
@@ -158,7 +158,7 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
                 focusRing,
               )}
             >
-              Not on {osNames[os]}? Other platforms
+              Other platforms
               <Icon icon={ArrowDown01Icon} size={14} />
             </a>
           </Rise>
@@ -201,7 +201,7 @@ function PrimaryDownload({ slot }: { slot: Slot }) {
         focusRing,
       )}
     >
-      <Icon icon={Download04Icon} size={20} strokeWidth={2} />
+      <Icon icon={Download01Icon} size={20} strokeWidth={2} />
       {label}
     </a>
   );
@@ -233,16 +233,16 @@ function NoDesktop() {
 export function NextSteps({ os }: { os: Os | null }) {
   const steps = [
     {
-      title: "Open convt",
-      body: os ? openStep[os] : "Install it on your Mac, Windows or Linux computer.",
+      title: "Install convt",
+      body: os ? openStep[os] : "Download it for your Mac, Windows or Linux computer.",
     },
     {
       title: "Sign in",
-      body: "Use the account you're signed in with here. The app opens convt.app for you.",
+      body: "Open convt and sign in with this account. Your browser handles the rest.",
     },
     {
-      title: "Your trial starts",
-      body: "A new account gets 7 days of convt Pro. Cancel before it ends and you pay nothing.",
+      title: "Start your free trial",
+      body: "7 days of convt Pro. Cancel before it ends and you won't be charged.",
     },
   ];
   return (
@@ -315,18 +315,22 @@ function PlatformRow({ os, current, slots }: { os: Os; current: boolean; slots: 
       className="flex scroll-mt-6 flex-col gap-4 border-t border-line p-5 first:border-t-0 md:flex-row md:gap-8 md:p-6"
     >
       <div className="flex shrink-0 flex-col gap-1 md:w-[220px]">
-        <div className="flex items-center gap-2.5">
-          <h3 id={`os-${os}`} className="text-[18px]/6 font-semibold tracking-[-0.015em]">
-            {osNames[os]}
-          </h3>
-          {current && (
-            <span className="rounded-full bg-green-tint px-2 py-0.5 text-[11px]/4 font-medium text-green shadow-[inset_0_0_0_1px_var(--green-line)]">
-              This computer
-            </span>
-          )}
-        </div>
-        {/* macOS and Windows say it in each file's note; Linux packages don't. */}
-        {os === "linux" && <p className="font-mono text-[12px]/4 text-ink-2">{slots[0].arch}</p>}
+        <h3 id={`os-${os}`} className="text-[18px]/6 font-semibold tracking-[-0.015em]">
+          {osNames[os]}
+        </h3>
+        {/* macOS and Windows say the architecture in each file's note; Linux packages don't. */}
+        {(current || os === "linux") && (
+          <p className="flex items-center gap-1.5 text-[13px]/5 text-ink-2">
+            {current && (
+              <>
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-green" />
+                <span className="font-medium text-green">Your computer</span>
+              </>
+            )}
+            {current && os === "linux" && <span aria-hidden="true">·</span>}
+            {os === "linux" && <span className="font-mono text-[12px]">{slots[0].arch}</span>}
+          </p>
+        )}
       </div>
       <ul className="flex min-w-0 flex-1 flex-col divide-y divide-divider">
         {slots.map((slot) => (
@@ -366,11 +370,11 @@ export function DownloadButton({ artifact, label }: { artifact: Slot["artifact"]
       download={fileName(artifact.url)}
       aria-label={label}
       className={cx(
-        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-pill px-3.5 text-[13px]/4 font-medium text-ink shadow-[inset_0_0_0_1px_var(--pill-line)] transition-colors duration-150 hover:bg-pill-hover",
+        "inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-pill pr-4 pl-3.5 text-[13px]/4 font-medium text-ink shadow-[inset_0_0_0_1px_var(--pill-line)] transition-colors duration-150 hover:bg-pill-hover",
         focusRing,
       )}
     >
-      <Icon icon={Download04Icon} size={14} strokeWidth={1.8} />
+      <Icon icon={Download01Icon} size={16} strokeWidth={1.75} className="text-ink-2" />
       Download
     </a>
   );
