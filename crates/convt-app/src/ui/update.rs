@@ -77,7 +77,7 @@ fn actions(app: &Entity<AppState>, state: &AppState) -> Vec<(Button, OnClick)> {
             Button::primary("update-restart", "Restart to update").icon(IconName::RotateCw),
             Box::new(act(app, AppState::restart_to_update)),
         )],
-        Update::InstallFailed { .. } => vec![
+        Update::InstallFailed { .. } if self_install => vec![
             (
                 Button::primary("update-retry", "Try again").icon(IconName::RefreshCw),
                 Box::new(act(app, AppState::download_update)),
@@ -87,6 +87,11 @@ fn actions(app: &Entity<AppState>, state: &AppState) -> Vec<(Button, OnClick)> {
                 download_page(),
             ),
         ],
+        // With automatic updates off, convt doesn't download one itself.
+        Update::InstallFailed { .. } => vec![(
+            Button::primary("update-download", "Download").icon(IconName::Download),
+            download_page(),
+        )],
         Update::NotCovered { purchase_url, .. } => vec![(
             Button::secondary("update-renew", "Renew to update"),
             Box::new(open(purchase_url.clone())),

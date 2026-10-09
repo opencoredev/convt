@@ -6162,6 +6162,27 @@ fn a_relaunch_after_a_failed_windows_install_says_so(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_failed_install_offers_only_the_download_page_with_updates_off(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.update_checks = false, cx);
+            s.update = Update::InstallFailed {
+                version: "9.2.0".into(),
+                why: "Windows Installer stopped with error 1603.".into(),
+            };
+        })
+    });
+    let (main, _) = f.main(cx);
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    for window in [main, settings] {
+        assert!(!shown(cx, window, "update-retry"));
+        assert!(shown(cx, window, "update-download"));
+    }
+}
+
+#[gpui_kit::test]
 fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks::default());
     let f = Fixture::with_packs(cx, packs.clone());
