@@ -55,7 +55,7 @@ describe("trials", () => {
     const before = await h.q<{ n: number }>(sql`select count(*)::int as n from checkouts`);
     expect(await h.service.currentProAccess(u.id)).toEqual({
       kind: "can_start_trial",
-      checkoutUrl: "http://localhost:3000/checkout/pro",
+      checkoutUrl: "http://localhost:3000/checkout/pro?from=app",
     });
     const after = await h.q<{ n: number }>(sql`select count(*)::int as n from checkouts`);
     expect(after[0].n).toBe(before[0].n);
@@ -148,6 +148,20 @@ describe("trials", () => {
     expect(co.allow_trial).toBe(false);
     const polarCo = h.mock.lastCheckout()!;
     expect(polarCo.allowTrial).toBe(false);
+  });
+
+  test("a checkout the app opened returns to the success page with from=app", async () => {
+    const u = await h.user(testMailbox("from-app"));
+    const fromApp = await h.service.createCheckout({
+      product: "pro_month",
+      user: u,
+      fromApp: true,
+    });
+    expect(fromApp.ok).toBe(true);
+    expect(h.mock.lastCheckout()!.successUrl).toEndWith("?checkout_id={CHECKOUT_ID}&from=app");
+    const fromWeb = await h.service.createCheckout({ product: "pro_month", user: u });
+    expect(fromWeb.ok).toBe(true);
+    expect(h.mock.lastCheckout()!.successUrl).toEndWith("?checkout_id={CHECKOUT_ID}");
   });
 
   test("a live Pro subscription refuses another Pro checkout", async () => {

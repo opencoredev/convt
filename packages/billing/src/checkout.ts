@@ -58,6 +58,8 @@ export async function createCheckout(
     product: CatalogProduct;
     user: { id: string; email: string } | null;
     spendCapCents?: number | null;
+    /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
+    fromApp?: boolean;
   },
 ): Promise<CreatedCheckout> {
   const now = ctx.clock();
@@ -108,7 +110,7 @@ export async function createCheckout(
     created = await ctx.provider.createCheckout({
       product,
       checkoutRef: id,
-      successUrl: `${ctx.config.siteUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
+      successUrl: `${ctx.config.siteUrl}/checkout/success?checkout_id={CHECKOUT_ID}${input.fromApp ? "&from=app" : ""}`,
       allowTrial,
       externalCustomerId: user?.id ?? null,
       email: user?.email ?? null,

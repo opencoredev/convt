@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { GoogleSignIn, OtherSignIn } from "../../src/components/app/social-sign-in";
-import { checkoutAside, downloadAction } from "../../src/lib/checkout-copy";
+import { checkoutAside, checkoutOrigin, downloadAction } from "../../src/lib/checkout-copy";
 import {
   downloadCtaLabel,
   downloadHref,
@@ -111,19 +111,33 @@ test("checkout success names the visitor's OS, with a neutral fallback", () => {
 
 test("checkout success panel and button follow the visitor's OS", () => {
   const windows = osFromUserAgent(agents.windows);
-  expect(checkoutAside("key", windows).items[0]).toBe("Download convt for Windows");
-  expect(checkoutAside("trial", osFromUserAgent(agents.linux)).items[0]).toBe(
-    "Download convt for Linux",
+  const web = "web" as const;
+  expect(checkoutAside({ kind: "key", os: windows, origin: web }).items[0]).toBe(
+    "Download convt for Windows",
   );
-  expect(checkoutAside("key", osFromUserAgent(agents.mac)).items[0]).toBe(
-    "Download convt for macOS",
-  );
-  expect(checkoutAside("trial", null).items[0]).toBe("Download convt");
+  expect(
+    checkoutAside({ kind: "trial", os: osFromUserAgent(agents.linux), origin: web }).items[0],
+  ).toBe("Download convt for Linux");
+  expect(
+    checkoutAside({ kind: "key", os: osFromUserAgent(agents.mac), origin: web }).items[0],
+  ).toBe("Download convt for macOS");
+  expect(checkoutAside({ kind: "trial", os: null, origin: web }).items[0]).toBe("Download convt");
   expect(downloadAction(windows)).toEqual({
     href: "/download?os=windows",
     label: "Download for Windows",
   });
   expect(downloadAction(null)).toEqual({ href: "/download", label: "Download" });
+});
+
+test("a checkout opened from the app sends the buyer back to it, with no download step", () => {
+  expect(checkoutOrigin("app")).toBe("app");
+  expect(checkoutOrigin(undefined)).toBe("web");
+  expect(checkoutOrigin("elsewhere")).toBe("web");
+  for (const kind of ["trial", "key"] as const) {
+    const items = checkoutAside({ kind, os: osFromUserAgent(agents.linux), origin: "app" }).items;
+    expect(items[0]).toBe("Switch back to convt");
+    expect(items.join(" ")).not.toContain("Download");
+  }
 });
 
 test("account pages no longer say Mac where any computer is meant", () => {

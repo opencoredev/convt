@@ -84,6 +84,6 @@ export async function currentProAccess(
   if (await hasProSubscription(ctx.db, userId)) return { kind: "lapsed" };
   const eligible = await canStartProTrial(ctx.db, userId, ctx.clock());
   return eligible
-    ? { kind: "can_start_trial", checkoutUrl: `${ctx.config.siteUrl}/checkout/pro` }
+    ? { kind: "can_start_trial", checkoutUrl: `${ctx.config.siteUrl}/checkout/pro?from=app` }
     : { kind: "lapsed" };
 }

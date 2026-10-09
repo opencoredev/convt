@@ -20,6 +20,8 @@ export interface BillingRpc {
     product: CatalogProduct;
     user: { id: string; email: string } | null;
     spendCapCents?: number | null;
+    /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
+    fromApp?: boolean;
   }): Promise<
     | { ok: true; url: string; checkoutId: string; cookieValue: string }
     | { ok: false; refusal: CheckoutRefusal }

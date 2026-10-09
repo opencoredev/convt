@@ -6,7 +6,12 @@ import { useNotice } from "#/components/app/notice";
 import { PrimaryButton, SecondaryLink, TextButton, cx, focusRing } from "#/components/app/ui";
 import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
-import { checkoutAside, downloadAction } from "#/lib/checkout-copy";
+import {
+  checkoutAside,
+  checkoutOrigin,
+  downloadAction,
+  type CheckoutOrigin,
+} from "#/lib/checkout-copy";
 import type { Os } from "#/lib/platform";
 import { fetchCheckoutResult } from "#/server/billing-fns";
 import { checkoutGiveUp, type CheckoutView } from "#/server/views";
@@ -17,9 +22,13 @@ import { visitorOs } from "#/server/visitor-os";
 // and only for the browser holding the checkout's cookie or the owning account.
 // No Paper artboard exists for these states; they use the sign-in layout.
 export const Route = createFileRoute("/_app/checkout/success")({
-  validateSearch: (search: Record<string, unknown>): { checkout_id?: string; error?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { checkout_id?: string; error?: string; from?: "app" } => ({
     ...(typeof search.checkout_id === "string" ? { checkout_id: search.checkout_id } : {}),
     ...(typeof search.error === "string" ? { error: search.error } : {}),
+    // Set when the desktop app opened the checkout (convt-billing adds it to the return URL).
+    ...(checkoutOrigin(search.from) === "app" ? { from: "app" as const } : {}),
   }),
   // The visitor's OS names the download step; nothing about the order loads here.
   loader: async () => ({ os: await visitorOs() }),
@@ -49,7 +58,8 @@ const errors: Record<string, string> = {
 };
 
 function SuccessPage() {
-  const { checkout_id: checkoutId, error } = Route.useSearch();
+  const { checkout_id: checkoutId, error, from } = Route.useSearch();
+  const origin = checkoutOrigin(from);
   const { os } = Route.useLoaderData();
   const [state, setState] = useState<State>(
     error
@@ -115,9 +125,11 @@ function SuccessPage() {
   }, [checkoutId, error]);
 
   return (
-    <AuthLayout aside={checkoutAside(state.state === "trial" ? "trial" : "key", os)}>
+    <AuthLayout
+      aside={checkoutAside({ kind: state.state === "trial" ? "trial" : "key", os, origin })}
+    >
       <div aria-live="polite" className="flex flex-col gap-6">
-        <Body state={state} os={os} />
+        <Body state={state} os={os} origin={origin} />
       </div>
     </AuthLayout>
   );
@@ -134,24 +146,37 @@ function Heading({ children, eyebrow }: { children: React.ReactNode; eyebrow?: s
 
 const lead = "text-sm/5 text-ink-2";
 
-function Body({ state, os }: { state: State; os: Os | null }) {
+function Body({ state, os, origin }: { state: State; os: Os | null; origin: CheckoutOrigin }) {
   switch (state.state) {
     case "loading":
-    case "pending":
+    case "pending": {
+      // A trial charges nothing today, so don't call it a payment once we know.
+      const trial = state.state === "pending" && state.allowTrial;
       return (
         <>
-          <Heading eyebrow="CHECKOUT">Confirming your payment</Heading>
+          <Heading eyebrow="CHECKOUT">
+            {trial ? "Starting your trial" : "Confirming your payment"}
+          </Heading>
           <p className={lead}>This usually takes a few seconds. Keep this page open.</p>
           <Progress />
         </>
       );
+    }
     case "ready":
-      return <Ready state={state} os={os} />;
+      return <Ready state={state} os={os} origin={origin} />;
     case "trial":
-      return (
+      return origin === "app" ? (
+        <>
+          <Heading eyebrow="CONVT PRO">Your trial is on</Heading>
+          <p className={lead}>
+            Go back to convt. It shows your trial within a few seconds, and you can close this tab.
+          </p>
+          <Actions secondary={{ href: "/dashboard/billing", label: "Manage billing" }} />
+        </>
+      ) : (
         <>
           <Heading eyebrow="CONVT PRO">Your trial has started</Heading>
-          <p className={lead}>You can go download the app here.</p>
+          <p className={lead}>Download convt and sign in with this account to use Pro.</p>
           <Actions primary={downloadAction(os)} />
         </>
       );
@@ -222,7 +247,15 @@ function Body({ state, os }: { state: State; os: Os | null }) {
   }
 }
 
-function Ready({ state, os }: { state: Extract<CheckoutView, { state: "ready" }>; os: Os | null }) {
+function Ready({
+  state,
+  os,
+  origin,
+}: {
+  state: Extract<CheckoutView, { state: "ready" }>;
+  os: Os | null;
+  origin: CheckoutOrigin;
+}) {
   const notice = useNotice();
   const product = state.product === "pro" ? "convt Pro" : "convt Desktop";
   return (
@@ -259,7 +292,7 @@ function Ready({ state, os }: { state: Extract<CheckoutView, { state: "ready" }>
         <li>Open in convt asks the app to confirm before it adds the key.</li>
       </ul>
       <Actions
-        primary={downloadAction(os)}
+        primary={origin === "app" ? undefined : downloadAction(os)}
         secondary={{ href: "/dashboard/licenses", label: "Go to Licenses" }}
       />
     </>
@@ -270,14 +303,16 @@ function Actions({
   primary,
   secondary,
 }: {
-  primary: { href: string; label: string };
+  primary?: { href: string; label: string };
   secondary?: { href: string; label: string };
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <SecondaryLink href={primary.href} className="px-3.5 py-2">
-        {primary.label}
-      </SecondaryLink>
+      {primary ? (
+        <SecondaryLink href={primary.href} className="px-3.5 py-2">
+          {primary.label}
+        </SecondaryLink>
+      ) : null}
       {secondary ? (
         <a
           href={secondary.href}
