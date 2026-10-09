@@ -23,6 +23,8 @@ fn flags_markdown(cmd: &Command) -> String {
             let _ = writeln!(out, "{line}");
         }
     }
+    let _ = writeln!(out, "- `--help`, `-h` — Print help");
+    let _ = writeln!(out, "- `--version`, `-V` — Print version");
     out
 }
 
@@ -158,6 +160,8 @@ use std::collections::BTreeSet;
 pub(crate) fn clap_long_flags(cmd: &Command) -> BTreeSet<String> {
     let mut flags = BTreeSet::new();
     collect_long_flags(cmd, &mut flags);
+    flags.insert("help".into());
+    flags.insert("version".into());
     flags
 }
 
@@ -198,10 +202,10 @@ pub(crate) fn documented_long_flags(text: &str) -> BTreeSet<String> {
     while let Some(idx) = rest.find("--") {
         let after = &rest[idx + 2..];
         let end = after
-            .find(|c: char| !c.is_ascii_lowercase() && c != '-')
+            .find(|c: char| !c.is_ascii_lowercase() && !c.is_ascii_digit() && c != '-')
             .unwrap_or(after.len());
         let name = &after[..end];
-        if !name.is_empty() {
+        if !name.is_empty() && !name.starts_with('-') {
             flags.insert(name.to_string());
         }
         rest = if end == 0 { &after[1..] } else { &after[end..] };
@@ -328,7 +332,11 @@ mod tests {
 
     #[test]
     fn long_flag_scan_skips_yaml_frontmatter() {
-        let flags = documented_long_flags("---\nname: convt\n---\n\n`--to` and `--out-dir`\n");
-        assert_eq!(flags, BTreeSet::from(["to".into(), "out-dir".into()]));
+        let flags =
+            documented_long_flags("---\nname: convt\n---\n\n`--to`, `--out-dir` and `--sha256`\n");
+        assert_eq!(
+            flags,
+            BTreeSet::from(["to".into(), "out-dir".into(), "sha256".into()])
+        );
     }
 }

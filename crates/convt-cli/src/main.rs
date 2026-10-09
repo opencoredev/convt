@@ -124,6 +124,7 @@ enum PackCmd {
         /// Explicit local/test source; requires --sha256 (released builds have a pinned source)
         #[arg(long, requires = "sha256")]
         source: Option<String>,
+        /// SHA-256 of that source archive; required with --source
         #[arg(long, requires = "source")]
         sha256: Option<String>,
     },
