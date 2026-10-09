@@ -4556,7 +4556,7 @@ fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     click(cx, settings, "update-notes");
     assert_eq!(
         cx.opened_url().as_deref(),
-        Some("https://convt.app/changelog#v9.2.0")
+        Some("https://github.com/opencoredev/convt/releases/tag/v9.2.0")
     );
     click(cx, settings, "update-download");
     assert_eq!(
@@ -5221,7 +5221,7 @@ fn about_and_help_open_what_they_say(cx: &mut TestAppContext) {
     assert_eq!(
         cx.opened_url(),
         Some(format!(
-            "https://convt.app/changelog#v{}",
+            "https://github.com/opencoredev/convt/releases/tag/v{}",
             crate::account::VERSION
         ))
     );

@@ -10,6 +10,7 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use super::menus::SOURCE_URL;
 use super::theme::IconName;
 
 use super::theme::{self, Button, Clickable, Palette, Tone, radius, size, space, styled};
@@ -208,9 +209,11 @@ pub fn sidebar_card(app: &Entity<AppState>, p: &Palette, cx: &App) -> Option<Cli
     )
 }
 
-/// The release notes for `version` on convt.app's changelog.
+/// The release notes for `version`: its GitHub release, which every
+/// published build has, next to its source archive. The site changelog
+/// can lag behind a release.
 pub(super) fn release_notes_url(version: &str) -> String {
-    format!("https://convt.app/changelog#v{version}")
+    format!("{SOURCE_URL}/releases/tag/v{version}")
 }
 
 /// "Oct 3, 2026" for "2026-10-03"; anything else as it is.
