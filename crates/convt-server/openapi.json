@@ -3,7 +3,8 @@
   "info": {
     "title": "convt API",
     "version": "0.1.0",
-    "description": "Paid conversions. Upload directly using PUT to upload_url, then POST start. Poll status and download every output. Upload exactly input_bytes; the PUT signature binds Content-Length. Inputs and outputs expire after 24 hours. Each account may retain at most 100 job prefixes and 50 GB of declared input storage; cancellations retain this commitment until expiry cleanup succeeds. API price: 1 cent per successful job, pending launch price approval. 120 requests per minute per key. No webhooks."
+    "summary": "Convert files with the engines from the convt desktop app, from your own code.",
+    "description": "A conversion is a job. Reserve it with POST /v1/jobs, PUT the file to the returned upload_url, then POST /v1/jobs/{id}/start. Poll GET /v1/jobs/{id} until the job finishes, then GET /v1/jobs/{id}/download for signed output URLs. Inputs and outputs are deleted 24 hours after the job is created. The API sends no webhooks."
   },
   "servers": [
     {
@@ -11,553 +12,177 @@
       "description": "Interim host. https://api.convt.app is the intended canonical host and will replace this once its DNS is live."
     }
   ],
+  "tags": [
+    {
+      "name": "Jobs",
+      "description": "Reserve, upload, start, poll, download and cancel conversions. Every job belongs to the account that owns the credential; another account's job is a 404."
+    },
+    {
+      "name": "Formats",
+      "description": "The format table the API validates against. Public; no credential needed."
+    }
+  ],
+  "security": [{ "bearerAuth": [] }],
   "paths": {
     "/v1/jobs": {
       "post": {
-        "summary": "Reserve a conversion and get a 15-minute upload URL",
+        "tags": ["Jobs"],
+        "summary": "Create a job",
+        "description": "Reserves one conversion against your spend cap and returns a presigned upload URL that works for 15 minutes. PUT exactly input_bytes bytes to it: the signature binds Content-Length. Nothing is charged until the job succeeds. If the upload URL cannot be issued, the job is cancelled and the reservation released.",
         "operationId": "reserveJob",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "job": {
-                      "$ref": "#/components/schemas/Job"
-                    },
-                    "upload_url": {
-                      "type": "string",
-                      "format": "uri"
-                    },
-                    "upload_expires_in": {
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
+        "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["input_format", "target_format", "input_bytes"],
-                "properties": {
-                  "input_format": {
-                    "type": "string"
-                  },
-                  "target_format": {
-                    "type": "string"
-                  },
-                  "input_bytes": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 2000000000
-                  }
-                }
-              }
+              "schema": { "$ref": "#/components/schemas/CreateJob" },
+              "example": { "input_format": "png", "target_format": "webp", "input_bytes": 48213 }
             }
           }
+        },
+        "responses": {
+          "200": {
+            "description": "The job is reserved in status `created`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobReservation" }
+              }
+            }
+          },
+          "400": {
+            "description": "`file_too_large`: input_bytes is below 1 or above 2,000,000,000. `unsupported_format`: an unknown format, the same format twice, or a pair the cloud cannot convert. Malformed JSON also returns 400, as plain text.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/MissingCredential" },
+          "403": {
+            "description": "`unauthorized`: the key is invalid or revoked, or the web credential expired. `not_enrolled`: no active API billing with a card on file. `limit_reached`: this job would pass your monthly spend cap. `storage_limit_reached`: 100 jobs or 50 GB of inputs are still stored; they are freed when their 24-hour cleanup runs.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
+          "415": { "$ref": "#/components/responses/NotJson" },
+          "422": { "$ref": "#/components/responses/InvalidBody" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "502": { "$ref": "#/components/responses/StorageUnavailable" }
         }
       }
     },
     "/v1/jobs/{id}": {
       "get": {
-        "summary": "Read the status of an owned job",
+        "tags": ["Jobs"],
+        "summary": "Retrieve a job",
+        "description": "Returns the job's current status. Poll this after start; a job runs for at most 10 minutes per attempt. Expired jobs return 404.",
         "operationId": "readJob",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
         "responses": {
           "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Job"
-                }
-              }
-            }
+            "description": "The job.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
           },
-          "400": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
+          "401": { "$ref": "#/components/responses/MissingCredential" },
+          "403": { "$ref": "#/components/responses/InvalidCredential" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
       }
     },
     "/v1/jobs/{id}/start": {
       "post": {
-        "summary": "Seal the upload, validate its actual size and queue the job",
+        "tags": ["Jobs"],
+        "summary": "Start a job",
+        "description": "Seals the uploaded file, checks that its size matches input_bytes and queues the job. Call it once the PUT has succeeded. Starting a job that is no longer `created` changes nothing and returns it as it is, so retries are safe.",
         "operationId": "sealStart",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
         "responses": {
           "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Job"
-                }
-              }
-            }
+            "description": "The job, normally in status `queued`.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
           },
           "400": {
-            "description": "Request refused",
+            "description": "`size_mismatch`: the uploaded size differs from input_bytes or passes 2 GB. The job is cancelled and its reservation released.",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
             }
           },
-          "401": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
+          "401": { "$ref": "#/components/responses/MissingCredential" },
+          "403": { "$ref": "#/components/responses/InvalidCredential" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "502": { "$ref": "#/components/responses/StorageUnavailable" }
+        }
       }
     },
     "/v1/jobs/{id}/cancel": {
       "post": {
-        "summary": "Cancel an owned job and release its reservation",
+        "tags": ["Jobs"],
+        "summary": "Cancel a job",
+        "description": "Cancels a job that has not finished and releases its reservation, so it is never charged. A job that already succeeded, failed or was cancelled is returned unchanged; check its status to see which happened.",
         "operationId": "cancelCancel",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
         "responses": {
           "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Job"
-                }
-              }
-            }
+            "description": "The job after cancellation.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
           },
-          "400": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
+          "401": { "$ref": "#/components/responses/MissingCredential" },
+          "403": { "$ref": "#/components/responses/InvalidCredential" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
       }
     },
     "/v1/jobs/{id}/download": {
       "get": {
-        "summary": "Get signed download URLs for completed outputs",
+        "tags": ["Jobs"],
+        "summary": "Download outputs",
+        "description": "Returns a signed GET URL for every output of a succeeded job. A conversion can produce several files, such as one image per PDF page. The URLs last at most 5 minutes and never past the job's expiry; call again for fresh ones.",
         "operationId": "getDownload",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/JobId" }],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Signed output URLs.",
             "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "outputs": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
-                          }
-                        }
-                      }
-                    },
-                    "expires_in": {
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/Downloads" } }
             }
           },
           "400": {
-            "description": "Request refused",
+            "description": "`not_ready`: the job has not succeeded.",
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
             }
           },
-          "401": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Request refused",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
+          "401": { "$ref": "#/components/responses/MissingCredential" },
+          "403": { "$ref": "#/components/responses/InvalidCredential" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "502": { "$ref": "#/components/responses/StorageUnavailable" }
+        }
       }
     },
     "/v1/formats": {
       "get": {
+        "tags": ["Formats"],
         "summary": "List formats",
+        "description": "Every format convt knows, with its id, extensions and MIME type. Use the ids in input_format and target_format. Not every pair converts in the cloud; creating a job for one that does not returns `unsupported_format`.",
+        "operationId": "listFormats",
+        "security": [],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "The format table.",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "category": {
-                        "type": "string"
-                      },
-                      "extensions": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "mime": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                }
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Format" } }
               }
             }
           }
@@ -570,57 +195,276 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "cvt_live_ API key. Browser converters use a 5-minute account-scoped cvt_web_ credential issued by the site Worker."
+        "description": "An API key: `cvt_live_` followed by 32 lowercase letters and digits, sent as `Authorization: Bearer <key>`. Create keys on the dashboard under API once API billing has a card. The browser converter on convt.app uses a 5-minute `cvt_web_` credential that only convt.app can issue."
+      }
+    },
+    "parameters": {
+      "JobId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The job id returned when the job was created.",
+        "schema": { "type": "string", "example": "job_01k6x0d3b2v8m9q4r7t5w1y3z6" }
+      }
+    },
+    "responses": {
+      "MissingCredential": {
+        "description": "`unauthorized`: no `Authorization: Bearer` header.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "InvalidCredential": {
+        "description": "`unauthorized`: the key is invalid or revoked, or the web credential expired.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "`not_found`: no such job for this account, or it expired.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "RateLimited": {
+        "description": "`rate_limited`: more than 120 requests in a minute with this key. The window starts with the first request and lasts 60 seconds; no Retry-After header is sent.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Internal": {
+        "description": "`internal`: the request failed on our side. Retry with backoff.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "StorageUnavailable": {
+        "description": "`storage_unavailable`: object storage did not respond. Retry shortly.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotJson": {
+        "description": "The request has no `Content-Type: application/json` header. The body is plain text, not an Error.",
+        "content": { "text/plain": { "schema": { "type": "string" } } }
+      },
+      "InvalidBody": {
+        "description": "The JSON is valid but a field is missing, has the wrong type, or is not one of the three allowed. The body is plain text, not an Error.",
+        "content": { "text/plain": { "schema": { "type": "string" } } }
       }
     },
     "schemas": {
-      "Job": {
+      "CreateJob": {
         "type": "object",
-        "required": ["id", "status", "expires_at"],
+        "additionalProperties": false,
+        "required": ["input_format", "target_format", "input_bytes"],
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["created", "uploaded", "queued", "running", "succeeded", "failed", "cancelled"]
-          },
           "input_format": {
-            "type": "string"
+            "type": "string",
+            "description": "Format id of the file you will upload, from GET /v1/formats.",
+            "example": "png"
           },
           "target_format": {
-            "type": "string"
+            "type": "string",
+            "description": "Format id to convert to. Must differ from input_format.",
+            "example": "webp"
           },
           "input_bytes": {
-            "type": ["integer", "null"]
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000,
+            "description": "Exact size of the file in bytes. The upload must match it.",
+            "example": 48213
+          }
+        }
+      },
+      "JobReservation": {
+        "type": "object",
+        "required": ["job", "upload_url", "upload_expires_in"],
+        "example": {
+          "job": {
+            "id": "job_01k6x0d3b2v8m9q4r7t5w1y3z6",
+            "status": "created",
+            "input_format": "png",
+            "target_format": "webp",
+            "input_bytes": 48213,
+            "attempt": 0,
+            "error_code": null,
+            "expires_at": "2026-10-08T12:00:00Z"
+          },
+          "upload_url": "https://storage.example/job_01k6x0d3b2v8m9q4r7t5w1y3z6/upload?X-Amz-Signature=0f3a9c",
+          "upload_expires_in": 900
+        },
+        "properties": {
+          "job": { "$ref": "#/components/schemas/Job" },
+          "upload_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Presigned URL. PUT the file body to it with a Content-Length of exactly input_bytes.",
+            "example": "https://storage.example/job_01k6x0d3b2v8m9q4r7t5w1y3z6/upload?X-Amz-Signature=0f3a9c"
+          },
+          "upload_expires_in": {
+            "type": "integer",
+            "description": "Seconds until upload_url stops working. Always 900.",
+            "example": 900
+          }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "input_format",
+          "target_format",
+          "input_bytes",
+          "attempt",
+          "error_code",
+          "expires_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id, prefixed `job_`.",
+            "example": "job_01k6x0d3b2v8m9q4r7t5w1y3z6"
+          },
+          "status": { "$ref": "#/components/schemas/JobStatus" },
+          "input_format": { "type": "string", "example": "png" },
+          "target_format": { "type": "string", "example": "webp" },
+          "input_bytes": {
+            "type": ["integer", "null"],
+            "description": "The reserved input size in bytes.",
+            "example": 48213
           },
           "attempt": {
-            "type": "integer"
+            "type": "integer",
+            "description": "How many times a worker has started this job. 0 until it first runs; a job is tried at most 3 times.",
+            "example": 0
           },
           "error_code": {
-            "type": ["string", "null"]
+            "description": "Why the job failed, or null.",
+            "oneOf": [{ "$ref": "#/components/schemas/JobErrorCode" }, { "type": "null" }],
+            "example": null
           },
           "expires_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "24 hours after creation. After this the job returns 404 and its files are deleted.",
+            "example": "2026-10-08T12:00:00Z"
           }
+        }
+      },
+      "JobStatus": {
+        "type": "string",
+        "description": "Where the job is in its lifecycle. `succeeded`, `failed` and `cancelled` are final.",
+        "enum": ["created", "uploaded", "queued", "running", "succeeded", "failed", "cancelled"],
+        "x-enum-descriptions": {
+          "created": "Reserved and waiting for the upload and start.",
+          "uploaded": "Reserved for future use; the API does not return it today.",
+          "queued": "Upload sealed; waiting for a worker.",
+          "running": "A worker is converting it.",
+          "succeeded": "Outputs are ready to download. The conversion is charged.",
+          "failed": "The conversion did not finish. Not charged; see error_code.",
+          "cancelled": "Cancelled before it finished. Not charged."
+        },
+        "example": "queued"
+      },
+      "JobErrorCode": {
+        "type": "string",
+        "description": "The reason a job ended in `failed`.",
+        "enum": ["conversion_failed", "worker_shutdown", "expired", "expired_or_exhausted"],
+        "x-enum-descriptions": {
+          "conversion_failed": "The engine could not convert this file, or the attempt passed the 10-minute limit.",
+          "worker_shutdown": "The worker stopped during the attempt.",
+          "expired": "The job reached its 24-hour expiry before finishing.",
+          "expired_or_exhausted": "The job expired, or its last attempt's worker stopped responding."
+        }
+      },
+      "Downloads": {
+        "type": "object",
+        "required": ["outputs", "expires_in"],
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Output" }
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Seconds until the URLs stop working: at most 300.",
+            "example": 300
+          }
+        }
+      },
+      "Output": {
+        "type": "object",
+        "required": ["name", "url"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "File name the converter produced, such as `input.webp`. Rename it when saving.",
+            "example": "input.webp"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Signed GET URL for the file.",
+            "example": "https://storage.example/job_01k6x0d3b2v8m9q4r7t5w1y3z6/attempt-1/input.webp?X-Amz-Signature=0f3a9c"
+          }
+        }
+      },
+      "Format": {
+        "type": "object",
+        "required": ["id", "name", "category", "extensions", "mime"],
+        "properties": {
+          "id": { "type": "string", "example": "webp" },
+          "name": { "type": "string", "example": "WebP" },
+          "category": {
+            "type": "string",
+            "enum": ["image", "video", "audio", "document"],
+            "example": "image"
+          },
+          "extensions": { "type": "array", "items": { "type": "string" }, "example": ["webp"] },
+          "mime": { "type": "string", "example": "image/webp" }
         }
       },
       "Error": {
         "type": "object",
+        "required": ["error"],
         "properties": {
           "error": {
             "type": "object",
+            "required": ["code", "message"],
             "properties": {
-              "code": {
-                "type": "string"
-              },
+              "code": { "$ref": "#/components/schemas/ErrorCode" },
               "message": {
-                "type": "string"
+                "type": "string",
+                "description": "A sentence for people. May change; branch on code.",
+                "example": "Your allowance or spend cap has been reached."
               }
             }
           }
         }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "description": "Stable, machine-readable reason a request was refused.",
+        "enum": [
+          "unauthorized",
+          "file_too_large",
+          "unsupported_format",
+          "size_mismatch",
+          "not_ready",
+          "not_enrolled",
+          "limit_reached",
+          "storage_limit_reached",
+          "not_found",
+          "rate_limited",
+          "internal",
+          "storage_unavailable"
+        ],
+        "x-enum-descriptions": {
+          "unauthorized": "401, 403. 401 without a Bearer header; 403 when the key is invalid or revoked, or the web credential expired.",
+          "file_too_large": "400. input_bytes is below 1 or above 2,000,000,000.",
+          "unsupported_format": "400. Unknown format, the same format twice, or a pair the cloud cannot convert.",
+          "size_mismatch": "400. The upload's size differs from input_bytes. The job is cancelled.",
+          "not_ready": "400. Download was called before the job succeeded.",
+          "not_enrolled": "403. API billing is not active with a card on file.",
+          "limit_reached": "403. The job would pass this month's spend cap.",
+          "storage_limit_reached": "403. 100 jobs or 50 GB of inputs are still stored until their 24-hour cleanup.",
+          "not_found": "404. No such job for this account, or it expired.",
+          "rate_limited": "429. More than 120 requests in a minute with this key.",
+          "internal": "500. Our side failed. Retry with backoff.",
+          "storage_unavailable": "502. Object storage did not respond. Retry shortly."
+        },
+        "example": "limit_reached"
       }
     }
   }

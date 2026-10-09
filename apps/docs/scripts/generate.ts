@@ -20,3 +20,4 @@ actions:
 
 await Bun.write(new URL("../openapi/servers.yaml", import.meta.url), servers);
 await import("./generate-formats.ts");
+await import("./check-overlay.ts");
