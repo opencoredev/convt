@@ -100,6 +100,8 @@ struct TestApi {
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
     hold_exchange: AtomicBool,
+    /// The same for `current_key`.
+    hold_key: AtomicBool,
 }
 
 impl Default for TestApi {
@@ -113,6 +115,7 @@ impl Default for TestApi {
             access: Mutex::new(None),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
+            hold_key: AtomicBool::new(false),
         }
     }
 }
@@ -151,6 +154,10 @@ impl Api for TestApi {
         assert_eq!(version, crate::account::VERSION);
         assert!(!token.is_empty());
         self.renewals.fetch_add(1, Ordering::SeqCst);
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while self.hold_key.load(Ordering::SeqCst) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
         Ok(convt_license::account::LicenseReply {
             key: self.key.lock().unwrap().clone()?,
             access: self.access.lock().unwrap().clone(),
@@ -4307,6 +4314,32 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
     });
     cx.run_until_parked();
     assert_eq!(f.api.calls(), (0, 1, 0));
+}
+
+#[gpui_kit::test]
+fn a_refresh_answering_after_a_revocation_is_dropped(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::CanStartTrial {
+            checkout_url: "https://convt.test/checkout".into(),
+        }));
+    f.api.hold_key.store(true, Ordering::SeqCst);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    wait_until(cx, "the refresh asked", |_| f.api.calls().1 == 1);
+    // A cloud job finds the sign-in revoked while the refresh waits.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.forget_revoked_session(cx)));
+    cx.read(|cx| assert_eq!(f.app.read(cx).account.refresh, Refresh::Idle));
+    f.api.hold_key.store(false, Ordering::SeqCst);
+    for _ in 0..5 {
+        std::thread::sleep(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    cx.read(|cx| {
+        let s = f.app.read(cx);
+        assert!(s.account.session.is_none());
+        assert_eq!(s.account.access, None, "the old account's offer stays gone");
+    });
 }
 
 #[gpui_kit::test]

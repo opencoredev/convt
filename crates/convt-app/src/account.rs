@@ -455,15 +455,22 @@ impl AppState {
     }
 
     /// Forgets a sign-in convt.app says was revoked, as from the dashboard:
-    /// the token, the account's access and its trial.
+    /// the token, the account's access and its trial. A refresh still
+    /// running for it is dropped, so its answer can't bring them back or
+    /// hold up the next sign-in's refresh.
     pub(crate) fn forget_revoked_session(&mut self, cx: &mut Context<Self>) {
         if let Err(e) = self.licensing.clear_session() {
             tracing::warn!(error = %e, "could not forget a revoked sign-in");
         }
         self.account.session = None;
         self.account.access = None;
+        self.account.refresh = Refresh::Idle;
+        self.account._refresh_task = None;
+        self.account.awaiting_trial = false;
+        self.account.trial_poll_started = None;
         self.update_settings(|s| s.trial_cache = None, cx);
         self.licensing.set_account_trial(None);
+        self.license = self.licensing.state();
     }
 
     /// Signs this computer out: forgets the token here and revokes it on
