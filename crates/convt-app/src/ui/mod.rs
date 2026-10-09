@@ -340,6 +340,38 @@ pub fn add_files(cx: &mut App) {
     }
 }
 
+/// The tray's Convert Files…: the system file picker, then Quick convert
+/// for what was picked, without the main window. Until first run is done,
+/// the first-run window comes forward instead.
+pub fn convert_files(cx: &mut App) {
+    if first_run_pending(cx) {
+        open_first_run(cx);
+        return;
+    }
+    // With no window open, convt may not be the active app; the picker
+    // should come up in front.
+    cx.activate(true);
+    let picked = cx.prompt_for_paths(main_window::add_files_prompt(
+        cx.can_select_mixed_files_and_dirs(),
+    ));
+    cx.spawn(async move |cx| {
+        if let Ok(Ok(Some(paths))) = picked.await
+            && !paths.is_empty()
+        {
+            cx.update(|cx| {
+                open_quick(
+                    Request {
+                        files: paths,
+                        ..Request::default()
+                    },
+                    cx,
+                )
+            });
+        }
+    })
+    .detach();
+}
+
 /// Opens About convt.
 pub fn show_about(cx: &mut App) {
     let app = model::shared(cx);

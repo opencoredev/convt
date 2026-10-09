@@ -10,7 +10,7 @@ use futures::channel::mpsc::UnboundedSender;
 
 use super::*;
 use crate::menu::Quits;
-use crate::tray::{Event, Icon};
+use crate::tray::{Event, Icon, Item, View};
 use crate::ui::menus;
 
 #[derive(Default)]
@@ -20,6 +20,10 @@ struct FakeTray {
     spawns: usize,
     live: usize,
     tooltip: String,
+    /// What the icon shows now.
+    view: Option<View>,
+    /// How often the app asked the icon to show something new.
+    shows: usize,
     events: Option<UnboundedSender<Event>>,
 }
 
@@ -30,8 +34,13 @@ thread_local! {
 struct FakeIcon;
 
 impl Icon for FakeIcon {
-    fn set_tooltip(&mut self, tooltip: &str) {
-        FAKE.with(|t| t.borrow_mut().tooltip = tooltip.into());
+    fn show(&mut self, view: &View) {
+        FAKE.with(|t| {
+            let mut t = t.borrow_mut();
+            t.tooltip = view.tooltip.clone();
+            t.view = Some(view.clone());
+            t.shows += 1;
+        });
     }
 }
 
@@ -41,7 +50,7 @@ impl Drop for FakeIcon {
     }
 }
 
-fn spawn(events: UnboundedSender<Event>) -> Result<Box<dyn Icon>, String> {
+fn spawn(events: UnboundedSender<Event>, view: &View) -> Result<Box<dyn Icon>, String> {
     FAKE.with(|t| {
         let mut t = t.borrow_mut();
         if t.fail {
@@ -50,6 +59,8 @@ fn spawn(events: UnboundedSender<Event>) -> Result<Box<dyn Icon>, String> {
         t.spawns += 1;
         t.live += 1;
         t.events = Some(events);
+        t.tooltip = view.tooltip.clone();
+        t.view = Some(view.clone());
         Ok(Box::new(FakeIcon) as Box<dyn Icon>)
     })
 }
@@ -142,6 +153,88 @@ fn the_tooltip_counts_running_conversions(cx: &mut TestAppContext) {
         app.read(cx).queue.active() == 0
     });
     assert_eq!(fake(|t| t.tooltip.clone()), "convt");
+}
+
+fn menu_labels(view: &View) -> Vec<String> {
+    view.menu
+        .iter()
+        .map(|item| match item {
+            Item::Note(l) => format!("({l})"),
+            Item::Action(l, _) => l.clone(),
+            Item::Separator => "-".into(),
+        })
+        .collect()
+}
+
+#[gpui_kit::test]
+fn the_tray_menu_follows_conversions_and_shows_the_results(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    background(&f, cx, true);
+    let view = fake(|t| t.view.clone()).unwrap();
+    assert!(!view.busy);
+    assert_eq!(menu_labels(&view)[0], "(Ready)");
+    assert!(!menu_labels(&view).iter().any(|l| l.starts_with("(Show in")));
+
+    let files: Vec<PathBuf> = (0..2).map(|i| f.png(&format!("in_{i}.png"))).collect();
+    let app = f.app.clone();
+    cx.update(|cx| {
+        app.update(cx, |s, cx| {
+            s.update_settings(|s| s.concurrency = Some(1), cx);
+            let to = convt_core::format_by_id("jpeg").unwrap();
+            s.convert(&files, to, &Options::default(), cx).unwrap();
+        })
+    });
+    let view = fake(|t| t.view.clone()).unwrap();
+    assert!(view.busy, "the busy icon while converting");
+    assert_eq!(menu_labels(&view)[0], "(Converting 2 files…)");
+    wait_until(cx, "the batch to finish", |cx| {
+        app.read(cx).queue.active() == 0
+    });
+
+    // Both results, newest first, under the file manager's name.
+    let view = fake(|t| t.view.clone()).unwrap();
+    assert!(!view.busy);
+    let labels = menu_labels(&view);
+    let heading = match crate::tray::Platform::CURRENT {
+        crate::tray::Platform::Mac => "(Show in Finder)",
+        crate::tray::Platform::Windows => "(Show in File Explorer)",
+        crate::tray::Platform::Linux => "(Show in File Manager)",
+    };
+    let at = labels.iter().position(|l| l == heading).unwrap();
+    assert_eq!(labels[at + 1..at + 3], ["in_1.jpg", "in_0.jpg"]);
+    let Some(Item::Action(_, event)) = view.menu.get(at + 1).cloned() else {
+        unreachable!()
+    };
+    let output = f.dir.path().join("in_1.jpg");
+    assert_eq!(event, Event::Reveal(output.clone()));
+    send(cx, event);
+    cx.read(|cx| assert_eq!(app.read(cx).revealed, std::slice::from_ref(&output)));
+
+    // A result deleted meanwhile leaves the list the next time it's built.
+    std::fs::remove_file(&output).unwrap();
+    cx.update(|cx| app.update(cx, |_, cx| cx.notify()));
+    cx.run_until_parked();
+    let labels = menu_labels(&fake(|t| t.view.clone()).unwrap());
+    assert!(!labels.contains(&"in_1.jpg".to_string()), "{labels:?}");
+    assert!(labels.contains(&"in_0.jpg".to_string()));
+
+    // Nothing changed: the icon isn't asked to redraw.
+    let shows = fake(|t| t.shows);
+    cx.update(|cx| app.update(cx, |_, cx| cx.notify()));
+    cx.run_until_parked();
+    assert_eq!(fake(|t| t.shows), shows);
+}
+
+#[gpui_kit::test]
+fn the_tray_checks_for_updates_and_opens_settings(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    background(&f, cx, true);
+    f.releases
+        .serve(Ok(manifest(1, &[("0.1.0", "2026-10-01")], &update_key())));
+    send(cx, Event::CheckForUpdates);
+    window_of::<SettingsView>(cx);
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert_eq!(f.releases.fetches(), 1);
 }
 
 #[gpui_kit::test]
