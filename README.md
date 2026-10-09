@@ -66,6 +66,7 @@ convt targets photo.heic --menu
 convt formats
 convt presets
 convt pack status documents
+convt --skill              # SKILL.md for AI coding agents (also: convt skill)
 ```
 
 `convt --help` lists quality, size, pages, DPI, video and job flags. See [AGENTS.md](AGENTS.md) for the rest of the commands in this repo.
