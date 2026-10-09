@@ -17,19 +17,15 @@ import { GITHUB_URL } from "#/lib/site";
 
 /*
  * /download. Direction, from the Mobbin references (download-refs/):
- * - Reference: Linear's download page (one centered app tile, one big button for the
- *   visitor's system with a quiet meta line, every other build as a plain list) and
- *   Tailscale's ("install the app and sign in"): the page answers one question, which
- *   file do I want, and then says what happens after.
- * - Palette: the shared tokens, the green gradient of .btn-primary for the one primary
- *   action, and the dithered glow from sign-in rising behind it.
- * - Type: Inter; Geist Mono for versions, sizes, commands and checksums.
- * - Layout: a centered stage for the recommended build, then the steps after
- *   installing, then every platform as rows (not three uneven cards), then checksums
- *   folded away.
- * - Signature: the app tile floating on the pixel-grain glow, the same glow the account
- *   pages use, so download and sign-in read as one flow.
- * - Avoiding: raw file names on buttons, wrapping commands, equal feature cards.
+ * - Reference: Linear's and Raycast's download pages: the app icon, one big button for
+ *   the visitor's system with a quiet line under it, and every other build as a plain
+ *   list. The page answers one question, which file do I want, and stops.
+ * - Palette: the shared tokens, the green .btn-primary for the one primary action, and
+ *   the dithered glow from sign-in rising behind it.
+ * - Type: Inter for everything people read; Geist Mono only for commands and checksums.
+ * - Layout: a centered stage for the recommended build, then Homebrew for Mac visitors,
+ *   then every platform as rows in a narrow column, then checksums folded away.
+ * - Avoiding: eyebrow labels, numbered steps, terminal chrome, raw file names on buttons.
  */
 
 /** "Apple silicon", "64-bit", "x86_64": what a person checks against their computer. */
@@ -49,13 +45,6 @@ export function primaryMeta(slot: Slot, version: string | null) {
   ];
   return parts.filter(Boolean).join(" · ");
 }
-
-/** What to do with the file once it's downloaded, per system. */
-const openStep: Record<Os, string> = {
-  macos: "Open the disk image and drag convt to Applications.",
-  windows: "Run the installer, then open convt from the Start menu.",
-  linux: "Make the AppImage executable and run it, or install a package.",
-};
 
 /** Children arrive in order, 60 ms apart (styles.css .auth-rise; reduced motion: at once). */
 function Rise({
@@ -86,41 +75,35 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
   );
   return (
     <section aria-labelledby="download-title" className="relative isolate overflow-hidden">
-      <DitherGlow className="absolute inset-x-0 bottom-0 -z-10 h-[78%] w-full [mask-image:linear-gradient(to_bottom,transparent,black_35%,black_78%,transparent)]" />
-      <div className="mx-auto flex max-w-[640px] flex-col items-center px-5 pt-14 pb-16 text-center md:pt-20 md:pb-24">
+      <DitherGlow className="absolute inset-x-0 bottom-0 -z-10 h-[70%] w-full [mask-image:linear-gradient(to_bottom,transparent,black_45%,black_70%,transparent)]" />
+      <div className="mx-auto flex max-w-[640px] flex-col items-center px-5 pt-16 pb-20 text-center md:pt-24 md:pb-28">
         <Rise index={0}>
-          <span className="flex size-[76px] items-center justify-center rounded-[22px] bg-raised shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/6%),0_12px_32px_rgb(10_60_35/14%)] dark:shadow-[0_0_0_1px_#2e3331,0_12px_32px_rgb(0_0_0/50%)]">
-            <Mark size={40} />
+          <span className="flex size-[72px] items-center justify-center rounded-[20px] bg-raised shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/6%),0_12px_32px_rgb(10_60_35/14%)] dark:shadow-[0_0_0_1px_#2e3331,0_12px_32px_rgb(0_0_0/50%)]">
+            <Mark size={38} />
           </span>
         </Rise>
-        <Rise index={1} className="mt-7 flex flex-col items-center gap-3">
-          {release.version && (
-            <p className="font-mono text-[12px]/4 text-ink-2 uppercase">
-              Version {release.version}
-              {release.date ? ` · ${formatReleaseDate(release.date)}` : ""}
-            </p>
-          )}
+        <Rise index={1} className="mt-8 flex flex-col items-center gap-4">
           <h1
             id="download-title"
             className="text-[40px]/[44px] font-semibold tracking-[-0.035em] text-balance md:text-[52px]/[56px]"
           >
             Download convt
           </h1>
-          <p className="max-w-[460px] text-[17px]/[26px] text-pretty text-ink-2">
+          <p className="max-w-[440px] text-[17px]/[26px] text-pretty text-ink-2">
             One install gives you the app, the{" "}
             <span className="whitespace-nowrap">right-click</span> menu and the{" "}
-            <code className="font-mono text-[15px] text-ink">convt</code> command.
+            <span className="font-medium text-ink">convt</span> command.
           </p>
         </Rise>
-        <Rise index={2} className="mt-9 flex w-full flex-col items-center gap-3">
+        <Rise index={2} className="mt-10 flex w-full flex-col items-center gap-3.5">
           {slot ? (
             <>
               <PrimaryDownload slot={slot} />
-              <p className="font-mono text-[12.5px]/[18px] text-ink-2">
+              <p className="text-[13px]/5 text-ink-2 tabular-nums">
                 {primaryMeta(slot, release.version)}
               </p>
               {extras.length > 0 && (
-                <p className="text-[13px]/5 text-ink-2">
+                <p className="-mt-1.5 text-[13px]/5 text-ink-2">
                   Also as{" "}
                   {extras.map(({ slot: s, artifact }, i, list) => (
                     <span key={s.kind}>
@@ -128,7 +111,7 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
                         href={artifact.url}
                         download={fileName(artifact.url)}
                         className={cx(
-                          "rounded-sm font-medium text-ink underline decoration-line-strong underline-offset-3 hover:decoration-ink",
+                          "rounded-sm font-medium text-ink underline decoration-line-strong underline-offset-3 transition-colors duration-150 hover:decoration-ink",
                           focusRing,
                         )}
                       >
@@ -144,25 +127,6 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
             <NoDesktop />
           )}
         </Rise>
-        {os === "macos" && slot?.artifact && (
-          <Rise index={3} className="mt-8 w-full max-w-[520px]">
-            <CommandBlock label="Or with Homebrew" commands={homebrewCommands} />
-          </Rise>
-        )}
-        {os && (
-          <Rise index={4} className="mt-6">
-            <a
-              href="#platforms"
-              className={cx(
-                "inline-flex items-center gap-1 rounded-sm text-[13px]/5 text-ink-2 hover:text-ink",
-                focusRing,
-              )}
-            >
-              Other platforms
-              <Icon icon={ArrowDown01Icon} size={14} />
-            </a>
-          </Rise>
-        )}
       </div>
     </section>
   );
@@ -170,17 +134,6 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
 
 function shortKind(slot: Slot) {
   return slot.kind === "AppImage" ? "AppImage" : `.${slot.kind}`;
-}
-
-const releaseDate = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-function formatReleaseDate(day: string) {
-  return releaseDate.format(new Date(`${day}T00:00:00Z`));
 }
 
 /** The one big button. Never shows the file name; the meta line under it says what it is. */
@@ -229,73 +182,48 @@ function NoDesktop() {
   );
 }
 
-/** Open, sign in, trial: the account flow after the download. */
-export function NextSteps({ os }: { os: Os | null }) {
-  const steps = [
-    {
-      title: "Install convt",
-      body: os ? openStep[os] : "Download it for your Mac, Windows or Linux computer.",
-    },
-    {
-      title: "Sign in",
-      body: "Open convt and sign in with this account. Your browser handles the rest.",
-    },
-    {
-      title: "Start your free trial",
-      body: "7 days of convt Pro. Cancel before it ends and you won't be charged.",
-    },
-  ];
+/** The Homebrew cask, for Mac visitors who'd rather use the terminal. */
+export function Homebrew() {
   return (
-    <section aria-labelledby="next-title" className="flex flex-col gap-6">
-      <h2 id="next-title" className="font-mono text-[12px]/4 text-ink-2 uppercase">
-        What happens next
-      </h2>
-      <ol className="grid gap-6 md:grid-cols-3 md:gap-0">
-        {steps.map((step, i) => (
-          <li key={step.title} className="relative flex gap-4 md:flex-col md:gap-4 md:pr-8">
-            <span className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-green-tint font-mono text-[13px]/4 font-medium text-green shadow-[inset_0_0_0_1px_var(--green-line)]">
-              {i + 1}
-            </span>
-            {/* The thread between the numbers, desktop only. */}
-            {i < steps.length - 1 && (
-              <span
-                aria-hidden="true"
-                className="absolute top-4 right-0 left-10 hidden h-px bg-[linear-gradient(90deg,var(--green-line),var(--line))] md:block"
-              />
-            )}
-            <div className="flex flex-col gap-1">
-              <h3 className="text-[16px]/6 font-semibold tracking-[-0.01em]">{step.title}</h3>
-              <p className="max-w-[300px] text-[14px]/[22px] text-pretty text-ink-2">{step.body}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
+    <section aria-labelledby="homebrew-title" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="homebrew-title" className="text-[17px]/6 font-semibold tracking-[-0.015em]">
+          Install with Homebrew
+        </h2>
+        <p className="text-[14px]/[22px] text-ink-2">
+          The same app, installed and updated from the terminal.
+        </p>
+      </div>
+      <CommandBlock label="Homebrew" commands={homebrewCommands} />
     </section>
   );
 }
 
-/** Every build, one row per system and a line per file. */
+/** Every build, one group per system and a row per file. */
 export function Platforms({ os, release }: { os: Os | null; release: Release }) {
   return (
     <section
       aria-labelledby="platforms-title"
       id="platforms"
-      className="flex scroll-mt-6 flex-col gap-6"
+      className="flex scroll-mt-6 flex-col gap-4"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 id="platforms-title" className="text-[28px]/9 font-semibold tracking-[-0.025em]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 id="platforms-title" className="text-[17px]/6 font-semibold tracking-[-0.015em]">
           All platforms
         </h2>
         <a
           href={`${GITHUB_URL}/releases`}
-          className={cx("rounded-sm text-[13px]/5 text-ink-2 hover:text-ink", focusRing)}
+          className={cx(
+            "rounded-sm text-[13px]/5 text-ink-2 transition-colors duration-150 hover:text-ink",
+            focusRing,
+          )}
         >
           Older versions on GitHub
         </a>
       </div>
-      <ul className="flex flex-col overflow-hidden rounded-2xl bg-raised shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/4%)] dark:bg-panel">
+      <ul className="flex flex-col rounded-2xl bg-raised shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/4%)] dark:bg-panel">
         {osOrder.map((platform) => (
-          <PlatformRow
+          <PlatformGroup
             key={platform}
             os={platform}
             current={platform === os}
@@ -307,43 +235,36 @@ export function Platforms({ os, release }: { os: Os | null; release: Release }) 
   );
 }
 
-function PlatformRow({ os, current, slots }: { os: Os; current: boolean; slots: Slot[] }) {
+function PlatformGroup({ os, current, slots }: { os: Os; current: boolean; slots: Slot[] }) {
   return (
     <li
       aria-labelledby={`os-${os}`}
       id={os}
-      className="flex scroll-mt-6 flex-col gap-4 border-t border-line p-5 first:border-t-0 md:flex-row md:gap-8 md:p-6"
+      className="flex scroll-mt-6 flex-col gap-3 border-t border-line px-5 py-4 first:border-t-0 sm:flex-row sm:gap-6"
     >
-      <div className="flex shrink-0 flex-col gap-1 md:w-[220px]">
-        <h3 id={`os-${os}`} className="text-[18px]/6 font-semibold tracking-[-0.015em]">
+      <div className="flex shrink-0 items-baseline gap-2 sm:w-[132px] sm:flex-col sm:gap-0.5 sm:pt-2">
+        <h3 id={`os-${os}`} className="text-[15px]/5 font-semibold">
           {osNames[os]}
         </h3>
-        {/* macOS and Windows say the architecture in each file's note; Linux packages don't. */}
+        {/* Every Linux package is built for one architecture; say it once. */}
         {(current || os === "linux") && (
-          <p className="flex items-center gap-1.5 text-[13px]/5 text-ink-2">
-            {current && (
-              <>
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-green" />
-                <span className="font-medium text-green">Your computer</span>
-              </>
+          <p className="flex gap-1.5 text-[13px]/5 text-ink-2 sm:flex-col sm:gap-0">
+            {current && <span className="font-medium text-green">This computer</span>}
+            {current && os === "linux" && (
+              <span aria-hidden="true" className="sm:hidden">
+                ·
+              </span>
             )}
-            {current && os === "linux" && <span aria-hidden="true">·</span>}
-            {os === "linux" && <span className="font-mono text-[12px]">{slots[0].arch}</span>}
+            {os === "linux" && <span>{slots[0].arch}</span>}
           </p>
         )}
       </div>
       <ul className="flex min-w-0 flex-1 flex-col divide-y divide-divider">
         {slots.map((slot) => (
-          <li
-            key={slot.kind}
-            className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0 md:first:pt-0"
-          >
+          <li key={slot.kind} className="flex items-center justify-between gap-4 py-2.5">
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="text-[14px]/5 font-medium">{kindLabels[slot.kind].title}</span>
-              <span className="text-[13px]/[18px] text-ink-2">
-                {kindLabels[slot.kind].note}
-                {slot.artifact ? ` · ${formatBytes(slot.artifact.size)}` : ""}
-              </span>
+              <span className="text-[13px]/[18px] text-ink-2">{slotNote(slot)}</span>
             </div>
             <DownloadButton
               artifact={slot.artifact}
@@ -356,25 +277,27 @@ function PlatformRow({ os, current, slots }: { os: Os; current: boolean; slots: 
   );
 }
 
+/** "Apple silicon · 50.0 MB". */
+function slotNote(slot: Slot) {
+  return [kindLabels[slot.kind].note, slot.artifact ? formatBytes(slot.artifact.size) : null]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** The small button in the platform list; "Shipping today" until the build is published. */
 export function DownloadButton({ artifact, label }: { artifact: Slot["artifact"]; label: string }) {
-  if (!artifact)
-    return (
-      <span className="shrink-0 rounded-full bg-chip px-3 py-1.5 text-[12px]/4 font-medium text-ink-2 shadow-[inset_0_0_0_1px_var(--chip-line)]">
-        Shipping today
-      </span>
-    );
+  if (!artifact) return <span className="shrink-0 text-[13px]/5 text-ink-2">Shipping today</span>;
   return (
     <a
       href={artifact.url}
       download={fileName(artifact.url)}
       aria-label={label}
       className={cx(
-        "inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-pill pr-4 pl-3.5 text-[13px]/4 font-medium text-ink shadow-[inset_0_0_0_1px_var(--pill-line)] transition-colors duration-150 hover:bg-pill-hover",
+        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-raised px-3 text-[13px]/4 font-medium text-ink shadow-[var(--shadow-input)] transition-colors duration-150 hover:bg-hover dark:bg-sunken dark:hover:bg-hover",
         focusRing,
       )}
     >
-      <Icon icon={Download01Icon} size={16} strokeWidth={1.75} className="text-ink-2" />
+      <Icon icon={Download01Icon} size={15} strokeWidth={1.8} className="text-ink-2" />
       Download
     </a>
   );

@@ -6,7 +6,8 @@ import {
   Checksums,
   DownloadButton,
   DownloadStage,
-  NextSteps,
+  Homebrew,
+  Platforms,
   primaryMeta,
 } from "../../src/components/site/download";
 import { releaseFromManifest } from "../../src/lib/platform";
@@ -65,16 +66,28 @@ test("the meta line reads like Apple silicon · v0.3.0 · 50.0 MB", () => {
   expect(primaryMeta(slot("windows"), release.version)).toBe("64-bit · v0.3.0 · 84.2 MB");
 });
 
-test("Homebrew shows only for macOS, as two one-line commands", () => {
-  const mac = renderToStaticMarkup(<DownloadStage os="macos" release={release} />);
-  expect(mac).toContain("Or with Homebrew");
-  expect(mac).toContain("whitespace-pre");
-  for (const command of homebrewCommands) expect(mac).toContain(command);
-  expect(renderToStaticMarkup(<DownloadStage os="windows" release={release} />)).not.toContain(
-    "Homebrew",
+test("Homebrew has a plain heading and two one-line commands", () => {
+  const html = renderToStaticMarkup(<Homebrew />);
+  expect(html).toContain("Install with Homebrew");
+  expect(html).toContain("whitespace-pre");
+  for (const command of homebrewCommands) expect(html).toContain(command);
+  const block = renderToStaticMarkup(<CommandBlock label="Homebrew" commands={homebrewCommands} />);
+  expect(block.match(/class="block/g)?.length).toBe(2);
+  expect(block).toContain('aria-label="Copy Homebrew commands"');
+  // The stage itself stays one button and its meta line.
+  expect(renderToStaticMarkup(<DownloadStage os="macos" release={release} />)).not.toContain(
+    "brew",
   );
-  const block = renderToStaticMarkup(<CommandBlock label="x" commands={homebrewCommands} />);
-  expect(block.match(/class="block"/g)?.length).toBe(2);
+});
+
+test("no eyebrows or monospace in the stage and platform list", () => {
+  for (const html of [
+    renderToStaticMarkup(<DownloadStage os="macos" release={release} />),
+    renderToStaticMarkup(<Platforms os="linux" release={release} />),
+  ]) {
+    expect(html).not.toContain("font-mono");
+    expect(html).not.toContain("uppercase");
+  }
 });
 
 test("an unpublished build says Shipping today and links nothing", () => {
@@ -93,12 +106,12 @@ test("a phone or unknown system gets every platform, not a guess", () => {
   expect(html).not.toContain("Download for");
 });
 
-test("what happens next is install, sign in, trial", () => {
-  const html = renderToStaticMarkup(<NextSteps os="macos" />);
-  expect(html).toContain("Install convt");
-  expect(html).toContain("drag convt to Applications");
-  expect(html).toContain("Sign in");
-  expect(html).toContain("Start your free trial");
+test("the platform list marks this computer and says Linux's architecture once", () => {
+  const html = renderToStaticMarkup(<Platforms os="linux" release={release} />);
+  expect(html).toContain("This computer");
+  expect(html.match(/>x86_64</g)?.length).toBe(1);
+  expect(html).not.toContain("· x86_64");
+  expect(html).toContain('aria-label="Download Debian package (.deb) for Linux"');
 });
 
 test("checksums are folded away with the source for the build", () => {
