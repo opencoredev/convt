@@ -265,7 +265,7 @@ fn load_preset(name: &str) -> anyhow::Result<Preset> {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     if cli.skill || matches!(cli.command, Some(Cmd::Skill)) {
-        skill::print(&Cli::command());
+        skill::print(&Cli::command())?;
         return Ok(());
     }
     let registry = convt_engines::default_registry();

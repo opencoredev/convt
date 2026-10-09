@@ -1,4 +1,5 @@
 use std::fmt::Write as _;
+use std::io::Write as _;
 
 use clap::{ArgAction, Command};
 use convt_core::{Category, FORMATS};
@@ -9,8 +10,17 @@ fn template() -> String {
     TEMPLATE.replace("\r\n", "\n")
 }
 
-pub(crate) fn print(cmd: &Command) {
-    print!("{}", render(cmd));
+/// Writes the skill to stdout. A reader that closes the pipe early, such as
+/// `convt --skill | head`, ends the output quietly instead of panicking.
+pub(crate) fn print(cmd: &Command) -> std::io::Result<()> {
+    let mut out = std::io::stdout().lock();
+    match out
+        .write_all(render(cmd).as_bytes())
+        .and_then(|()| out.flush())
+    {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        result => result,
+    }
 }
 
 pub(crate) fn render(cmd: &Command) -> String {
@@ -212,7 +222,7 @@ pub(crate) fn documented_long_flags(text: &str) -> BTreeSet<String> {
         if !name.is_empty() && !name.starts_with('-') {
             flags.insert(name.to_string());
         }
-        rest = if end == 0 { &after[1..] } else { &after[end..] };
+        rest = &after[end..];
     }
     flags
 }
@@ -275,6 +285,7 @@ pub(crate) fn assert_documented_cli_exists(cmd: &Command, text: &str) {
             continue;
         };
         if first.starts_with('-') || looks_like_file(first) {
+            assert_flags_belong_to(cmd, "convt", &tokens);
             continue;
         }
         assert!(
@@ -301,6 +312,29 @@ pub(crate) fn assert_documented_cli_exists(cmd: &Command, text: &str) {
                 _ => break,
             }
         }
+        assert_flags_belong_to(current, &format!("convt {first}"), &tokens);
+    }
+}
+
+/// Every `--flag` token in one documented invocation must belong to the
+/// command it runs, so `convt formats --menu` fails even though `--menu`
+/// exists on `targets`.
+#[cfg(test)]
+fn assert_flags_belong_to(cmd: &Command, usage: &str, tokens: &[String]) {
+    let mut own: BTreeSet<&str> = cmd
+        .get_arguments()
+        .filter_map(clap::Arg::get_long)
+        .collect();
+    own.extend(["help", "version"]);
+    for token in tokens {
+        let Some(name) = token.strip_prefix("--") else {
+            continue;
+        };
+        let name = name.split('=').next().unwrap_or(name);
+        assert!(
+            own.contains(name),
+            "SKILL.md documents `{usage} --{name}`, but --{name} is not a flag of that command"
+        );
     }
 }
 
@@ -350,6 +384,21 @@ mod tests {
             flags,
             BTreeSet::from(["to".into(), "out-dir".into(), "sha256".into()])
         );
+    }
+
+    #[test]
+    fn long_flag_scan_survives_bare_and_unicode_dashes() {
+        assert!(documented_long_flags("trailing --").is_empty());
+        assert!(documented_long_flags("a --\u{2026} b").is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "is not a flag of that command")]
+    fn invocation_flags_are_checked_against_their_command() {
+        let cmd = Command::new("convt")
+            .subcommand(Command::new("formats"))
+            .subcommand(Command::new("targets").arg(clap::Arg::new("menu").long("menu")));
+        assert_documented_cli_exists(&cmd, "`convt formats --menu`");
     }
 
     #[test]
