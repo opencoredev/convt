@@ -12,6 +12,7 @@ import { magicLinkMinutes, signInCodeLength } from "#/lib/config";
 import {
   authSearch,
   isNewAccount,
+  browserRedirectStore,
   landingAfterSignIn,
   rememberSignInRedirect,
   siteOrigin,
@@ -42,7 +43,7 @@ function CheckEmailPage() {
     const result = await signInWithCode(email, code);
     if (result.ok) {
       // Signed in here, so the emailed link has nothing left to return to.
-      rememberSignInRedirect(window.localStorage, email, undefined);
+      rememberSignInRedirect(browserRedirectStore(), email, undefined);
       window.location.assign(
         landingAfterSignIn({
           redirect: redirectTo,
@@ -107,7 +108,7 @@ function CheckEmailPage() {
             setStatus(null);
             const result = await sendSignInCode(email);
             if (result.ok) {
-              rememberSignInRedirect(window.localStorage, email, redirectTo);
+              rememberSignInRedirect(browserRedirectStore(), email, redirectTo);
               setStatus("We sent a new code. The old one no longer works.");
             } else setError(result.message);
           }}

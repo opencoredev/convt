@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   authSearch,
+  browserRedirectStore,
   downloadEntryHref,
   downloadGate,
   isNewAccount,
@@ -108,4 +109,25 @@ test("storage that refuses never breaks sign-in", () => {
   const address = ["returning", "convt.test"].join("@");
   expect(() => rememberSignInRedirect(refusing, address, "/download")).not.toThrow();
   expect(takeSignInRedirect(refusing, address)).toBeUndefined();
+  // Where reading localStorage itself throws, there is no store at all.
+  expect(() => rememberSignInRedirect(null, address, "/download")).not.toThrow();
+  expect(takeSignInRedirect(null, address)).toBeUndefined();
+});
+
+test("a browser whose localStorage getter throws has no redirect store", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: Object.defineProperty({}, "localStorage", {
+      get: () => {
+        throw new Error("SecurityError");
+      },
+    }),
+  });
+  try {
+    expect(browserRedirectStore()).toBeNull();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "window", descriptor);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
 });

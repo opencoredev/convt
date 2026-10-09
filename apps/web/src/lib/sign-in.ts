@@ -67,6 +67,18 @@ const redirectMs = 15 * 60 * 1000;
 
 type StoredRedirect = { email: string; redirect: string; at: number };
 
+/**
+ * This browser's `localStorage`, or null where reading it throws (storage blocked)
+ * or there is none (the server).
+ */
+export function browserRedirectStore(): RedirectStore | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 const sameEmail = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 function parseStoredRedirect(raw: string | null): StoredRedirect | null {
@@ -90,11 +102,12 @@ function parseStoredRedirect(raw: string | null): StoredRedirect | null {
  * with nowhere to return to clears an older one. Storage that refuses is ignored.
  */
 export function rememberSignInRedirect(
-  store: RedirectStore,
+  store: RedirectStore | null,
   email: string,
   redirect: string | undefined,
   now: number = Date.now(),
 ): void {
+  if (!store) return;
   try {
     if (redirect) store.setItem(redirectKey, JSON.stringify({ email, redirect, at: now }));
     else store.removeItem(redirectKey);
@@ -108,10 +121,11 @@ export function rememberSignInRedirect(
  * while its code still works. Used once.
  */
 export function takeSignInRedirect(
-  store: RedirectStore,
+  store: RedirectStore | null,
   email: string,
   now: number = Date.now(),
 ): string | undefined {
+  if (!store) return undefined;
   try {
     const stored = parseStoredRedirect(store.getItem(redirectKey));
     if (!stored || !sameEmail(stored.email, email)) return undefined;

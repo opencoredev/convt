@@ -5,7 +5,13 @@ import { AuthScreen, AuthTitle, Rise, darkPill } from "#/components/app/auth-scr
 import { FormError } from "#/components/app/form-error";
 import { cx, focusRing } from "#/components/app/ui";
 import { signInWithCode } from "#/lib/auth-client";
-import { isNewAccount, landingAfterSignIn, siteOrigin, takeSignInRedirect } from "#/lib/sign-in";
+import {
+  browserRedirectStore,
+  isNewAccount,
+  landingAfterSignIn,
+  siteOrigin,
+  takeSignInRedirect,
+} from "#/lib/sign-in";
 
 // The link in the sign-in email: /sign-in/verify#email=...&code=... The fragment
 // never reaches the server, logs or referrers. The page reads it, removes it from
@@ -70,7 +76,7 @@ function VerifyPage() {
               if (result.ok)
                 return window.location.assign(
                   landingAfterSignIn({
-                    redirect: takeSignInRedirect(window.localStorage, pending.email),
+                    redirect: takeSignInRedirect(browserRedirectStore(), pending.email),
                     newAccount: isNewAccount(result.data?.user?.createdAt),
                     origin: siteOrigin(),
                   }),
