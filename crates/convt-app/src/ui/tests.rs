@@ -455,6 +455,12 @@ impl Fixture {
             gpui_kit::init(cx);
             theme::init(cx);
             let app = cx.new(|cx| AppState::new(packs, paths, cx));
+            // On macOS onboarding also asks about Finder unless the extension
+            // is on. Tests start with it on, so the same steps hold on every
+            // platform; the Finder tests turn it off themselves.
+            if cfg!(target_os = "macos") {
+                app.update(cx, |s, _| s.finder_on = Some(true));
+            }
             cx.set_global(Shared(app.clone()));
             app
         });
@@ -1915,6 +1921,11 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
         assert_eq!(view.read(cx).stage(cx), Stage::AwaitingTrial);
     });
     // One check from onboarding, one as checkout opens; reopening adds none.
+    // The second runs on a background task, so wait for it rather than race it.
+    wait_until(cx, "the check as checkout opens", |_| {
+        f.api.calls() == (0, 2, 0)
+    });
+    cx.run_until_parked();
     assert_eq!(f.api.calls(), (0, 2, 0));
     // Lapsed buys.
     set(cx, Some(Access::Lapsed));
