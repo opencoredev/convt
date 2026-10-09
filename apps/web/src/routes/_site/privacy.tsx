@@ -193,6 +193,18 @@ const sections: LegalSection[] = [
           how they move through the site, so we can tell what works and fix what does not. PostHog
           processes the data for us in the United States.
         </p>
+        <p>
+          PostHog also receives anonymous desktop usage events and scrubbed crash and error reports
+          from the website and desktop app. Usage events include the app version, operating system,
+          architecture, conversion format, outcome, duration, size bucket, license state and a
+          random install ID; a signed-in account is represented only by an opaque identifier.
+          Reports include a scrubbed error type, message, stack, location, app version, operating
+          system, architecture, locale and error kind. We exclude file contents, filenames and
+          paths, usernames, email addresses, tokens, license keys and account details. The desktop
+          Telemetry setting is the shared opt-out for usage and crash/error reports. Turn it off in
+          Settings, set <code>DO_NOT_TRACK=1</code>, or use Global Privacy Control or Do Not Track
+          in your browser to prevent these reports from being sent.
+        </p>
         <p>When analytics are on, each page you open sends PostHog:</p>
         <List
           items={[

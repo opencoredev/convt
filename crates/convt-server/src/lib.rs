@@ -8,6 +8,7 @@ pub mod ids;
 pub mod jobs;
 pub mod meter;
 pub mod migrations;
+pub mod posthog;
 pub mod routes;
 pub mod storage;
 pub mod tokens;
@@ -20,9 +21,13 @@ mod db_tests;
 #[cfg(test)]
 mod testing;
 
+use axum::extract::Request;
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -64,7 +69,29 @@ pub fn app() -> Router {
             }),
         )
         .layer(CorsLayer::permissive())
+        .layer(CatchPanicLayer::custom(
+            |panic: Box<dyn std::any::Any + Send>| {
+                let message = if let Some(s) = panic.downcast_ref::<&str>() {
+                    (*s).to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "server panic".into()
+                };
+                crate::posthog::capture(&message, "convt-server request");
+                axum::http::Response::builder()
+                    .status(500)
+                    .body(axum::body::Body::from("internal server error"))
+                    .unwrap()
+            },
+        ))
+        .layer(middleware::from_fn(request_privacy_scope))
         .layer(TraceLayer::new_for_http())
+}
+
+async fn request_privacy_scope(request: Request, next: Next) -> Response {
+    let blocked = crate::posthog::request_has_privacy_signal(request.headers());
+    crate::posthog::with_request_privacy(blocked, next.run(request)).await
 }
 
 #[cfg(test)]

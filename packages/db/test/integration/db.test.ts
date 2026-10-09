@@ -27,7 +27,7 @@ import * as t from "../../src/schema";
 import { fixtureId, fixtures, runSeed } from "../../src/seed";
 import { freshDatabase, type TestDatabase } from "../../src/testing";
 
-const now = new Date();
+let now = new Date();
 
 /** Awaits a query (Drizzle builders are thenables, not promises) and checks it fails. */
 async function expectFails(query: PromiseLike<unknown>, pattern: RegExp) {
@@ -48,6 +48,7 @@ beforeAll(async () => {
   tdb = await freshDatabase();
   seedKey = await importSigningKey(crypto.getRandomValues(new Uint8Array(32)));
   const { db } = await tdb.open("owner");
+  now = new Date();
   await runSeed(db, now, seedKey);
 });
 

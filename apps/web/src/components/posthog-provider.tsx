@@ -22,6 +22,7 @@ export function posthogOptions(host: string): Partial<PostHogConfigOptions> {
     person_profiles: "identified_only",
     capture_pageview: false,
     capture_pageleave: true,
+    capture_exceptions: true,
     advanced_disable_flags: true,
     disable_session_recording: true,
     capture_heatmaps: false,

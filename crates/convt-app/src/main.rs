@@ -10,6 +10,7 @@ mod account;
 mod automation;
 mod clipboard;
 mod clock;
+mod crash_report;
 mod finder;
 mod history;
 mod instance;
@@ -46,6 +47,7 @@ fn emit(mut w: impl Write, msg: &str) {
 }
 
 fn main() -> ExitCode {
+    crash_report::install();
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)

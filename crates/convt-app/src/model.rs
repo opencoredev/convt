@@ -19,6 +19,7 @@ use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
 
 use crate::account::Account;
+use crate::crash_report;
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
@@ -869,6 +870,7 @@ impl AppState {
                     Outcome::Done(outputs.clone())
                 }
                 Status::Failed(e) => {
+                    crash_report::report_error(e.kind, &e.message);
                     self.automation_copies.remove(&entry.id);
                     batch.failed += 1;
                     Outcome::Failed(e.message.clone())
