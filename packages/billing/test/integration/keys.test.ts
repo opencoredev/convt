@@ -21,5 +21,5 @@ test("a Desktop key bought on 29 February 2028 is lifetime", async () => {
   expect(lic.updates_until).toBe("9999-12-31");
   const out = await verifyWithCli(lic.token, h.publicKey);
   expect(out.status).toBe(0);
-  expect(out.text).toMatch(/9999-12-31|Dec 31, 9999/);
+  expect(out.text).toContain("with lifetime updates");
 }, 600_000);

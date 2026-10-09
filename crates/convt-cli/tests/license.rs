@@ -163,7 +163,7 @@ fn an_ended_trial_stops_conversions_until_activation() {
     assert!(good.status.success(), "{}", stderr(&good));
     assert_eq!(
         stdout(&good),
-        "Licensed to ada@example.com (Desktop), with updates until 2099-01-01.\n"
+        "Licensed to ada@example.com (Desktop), with lifetime updates.\n"
     );
     let out = f.convert(true);
     assert!(out.status.success(), "{}", stderr(&out));
