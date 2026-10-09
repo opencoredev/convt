@@ -708,18 +708,19 @@ pub mod platform {
         Ok(Box::new(Running(handle)))
     }
 
-    /// Writes the symbolic icons as a small icon theme in convt's runtime
-    /// folder, which only this user can read.
+    /// Writes the symbolic icons to a folder in convt's runtime directory,
+    /// which only this user can read. Hosts look a name up in that folder as
+    /// an icon theme search path, which finds icons at its top level (an
+    /// `index.theme` would be needed for subfolders).
     fn write_theme() -> Option<PathBuf> {
         let root = std::env::var_os("CONVT_RUNTIME_DIR")
             .or_else(|| std::env::var_os("XDG_RUNTIME_DIR"))
             .map(PathBuf::from)?
             .join("convt-icons");
-        let apps = root.join("hicolor/scalable/apps");
-        let written = std::fs::create_dir_all(&apps)
-            .and_then(|()| std::fs::write(apps.join("convt-symbolic.svg"), super::SYMBOLIC))
+        let written = std::fs::create_dir_all(&root)
+            .and_then(|()| std::fs::write(root.join("convt-symbolic.svg"), super::SYMBOLIC))
             .and_then(|()| {
-                std::fs::write(apps.join("convt-busy-symbolic.svg"), super::SYMBOLIC_BUSY)
+                std::fs::write(root.join("convt-busy-symbolic.svg"), super::SYMBOLIC_BUSY)
             });
         match written {
             Ok(()) => Some(root),

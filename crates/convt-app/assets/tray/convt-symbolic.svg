@@ -1,11 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
 <style>.ColorScheme-Text{color:#232629}</style>
-<defs><mask id="gap">
-<rect width="16" height="16" fill="#fff"/>
-<rect x="4.508" y="4.508" width="11.27" height="11.27" rx="3.492" fill="#000"/>
-</mask>
+<defs>
+<clipPath id="gap"><path d="M0 0H16V16H0ZM8 4.508A3.492 3.492 0 0 0 4.508 8V12.286A3.492 3.492 0 0 0 8 15.778H12.286A3.492 3.492 0 0 0 15.778 12.286V8A3.492 3.492 0 0 0 12.286 4.508Z"/></clipPath>
 </defs>
-<g class="ColorScheme-Text" fill="currentColor" stroke="currentColor">
-<rect x="2" y="2" width="7.714" height="7.714" rx="1.714" fill="none" stroke-width="1.333" mask="url(#gap)"/>
-<rect x="5.619" y="5.619" width="9.048" height="9.048" rx="2.381" stroke="none"/>
+<g class="ColorScheme-Text" fill="currentColor">
+<path d="M3.714 1.333H8A2.381 2.381 0 0 1 10.381 3.714V8A2.381 2.381 0 0 1 8 10.381H3.714A2.381 2.381 0 0 1 1.333 8V3.714A2.381 2.381 0 0 1 3.714 1.333ZM3.714 2.667A1.048 1.048 0 0 0 2.667 3.714V8A1.048 1.048 0 0 0 3.714 9.048H8A1.048 1.048 0 0 0 9.048 8V3.714A1.048 1.048 0 0 0 8 2.667Z" clip-path="url(#gap)"/>
+<path d="M8 5.619H12.286A2.381 2.381 0 0 1 14.667 8V12.286A2.381 2.381 0 0 1 12.286 14.667H8A2.381 2.381 0 0 1 5.619 12.286V8A2.381 2.381 0 0 1 8 5.619Z"/>
 </g></svg>

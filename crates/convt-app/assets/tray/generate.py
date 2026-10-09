@@ -73,58 +73,75 @@ def template(busy: bool, px: int = 36) -> Image.Image:
     return out
 
 
+def rounded(x: float, y: float, w: float, h: float, r: float, clockwise: bool = True) -> str:
+    """A rounded rectangle as path data, drawn either way round."""
+    f = lambda v: f"{v:.3f}".rstrip("0").rstrip(".")  # noqa: E731
+    r = min(r, w / 2, h / 2)
+    if clockwise:
+        return (
+            f"M{f(x + r)} {f(y)}H{f(x + w - r)}A{f(r)} {f(r)} 0 0 1 {f(x + w)} {f(y + r)}"
+            f"V{f(y + h - r)}A{f(r)} {f(r)} 0 0 1 {f(x + w - r)} {f(y + h)}"
+            f"H{f(x + r)}A{f(r)} {f(r)} 0 0 1 {f(x)} {f(y + h - r)}"
+            f"V{f(y + r)}A{f(r)} {f(r)} 0 0 1 {f(x + r)} {f(y)}Z"
+        )
+    return (
+        f"M{f(x + r)} {f(y)}A{f(r)} {f(r)} 0 0 0 {f(x)} {f(y + r)}"
+        f"V{f(y + h - r)}A{f(r)} {f(r)} 0 0 0 {f(x + r)} {f(y + h)}"
+        f"H{f(x + w - r)}A{f(r)} {f(r)} 0 0 0 {f(x + w)} {f(y + h - r)}"
+        f"V{f(y + r)}A{f(r)} {f(r)} 0 0 0 {f(x + w - r)} {f(y)}Z"
+    )
+
+
 def symbolic_svg(busy: bool) -> str:
-    """The template glyph as a 16x16 symbolic SVG in currentColor."""
-    # Same proportions as `template` at 16 px: glyph 13.33 px tall.
+    """The template glyph as a 16x16 symbolic SVG in currentColor.
+
+    Symbolic icons may only use fills: GTK recolors one by forcing `fill` on
+    every shape, which would fill a stroked outline. So the outlines are
+    rings (an outer and an inner rounded rectangle, wound opposite ways) and
+    the gap is a clip path.
+    """
     glyph = 16 * 15 / 18
     k = glyph / 28
     off = (16 - 28 * k) / 2 - 2 * k
     stroke = 1.5 / 18 * 16
     gap = 1.25 / 18 * 16
+    rad = RADIUS * k
 
     def rect(r, inset=0.0):
         x0, y0, x1, y1 = r
-        x, y = off + x0 * k + inset, off + y0 * k + inset
-        w, h = (x1 - x0) * k - 2 * inset, (y1 - y0) * k - 2 * inset
-        return x, y, w, h
+        return (
+            off + x0 * k + inset,
+            off + y0 * k + inset,
+            (x1 - x0) * k - 2 * inset,
+            (y1 - y0) * k - 2 * inset,
+        )
+
+    def ring(r):
+        return rounded(*rect(r), rad) + rounded(*rect(r, stroke), rad - stroke, clockwise=False)
 
     f = lambda v: f"{v:.3f}".rstrip("0").rstrip(".")  # noqa: E731
-    bx, by, bw, bh = rect(BACK, stroke / 2)
-    fx, fy, fw, fh = rect(FRONT)
     gx, gy, gw, gh = rect(FRONT, -gap)
-    rad = RADIUS * k
+    fx, fy, fw, fh = rect(FRONT)
+    # Everything but the gap around the file you get.
+    outside_gap = "M0 0H16V16H0Z" + rounded(gx, gy, gw, gh, rad + gap, clockwise=False)
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">',
-        '<style>.ColorScheme-Text{color:#232629}</style>',
-        "<defs><mask id=\"gap\">",
-        '<rect width="16" height="16" fill="#fff"/>',
-        f'<rect x="{f(gx)}" y="{f(gy)}" width="{f(gw)}" height="{f(gh)}" rx="{f(rad + gap)}" fill="#000"/>',
-        "</mask>",
+        "<style>.ColorScheme-Text{color:#232629}</style>",
+        "<defs>",
+        f'<clipPath id="gap"><path d="{outside_gap}"/></clipPath>',
     ]
     if busy:
         parts.append(
-            f'<clipPath id="half"><rect x="0" y="{f(fy + fh / 2)}" width="16" height="16"/></clipPath>'
+            f'<clipPath id="half"><path d="M0 {f(fy + fh / 2)}H16V16H0Z"/></clipPath>'
         )
     parts.append("</defs>")
-    parts.append('<g class="ColorScheme-Text" fill="currentColor" stroke="currentColor">')
-    parts.append(
-        f'<rect x="{f(bx)}" y="{f(by)}" width="{f(bw)}" height="{f(bh)}" rx="{f(rad - stroke / 2)}" '
-        f'fill="none" stroke-width="{f(stroke)}" mask="url(#gap)"/>'
-    )
+    parts.append('<g class="ColorScheme-Text" fill="currentColor">')
+    parts.append(f'<path d="{ring(BACK)}" clip-path="url(#gap)"/>')
     if busy:
-        ix, iy, iw, ih = rect(FRONT, stroke / 2)
-        parts.append(
-            f'<rect x="{f(ix)}" y="{f(iy)}" width="{f(iw)}" height="{f(ih)}" rx="{f(rad - stroke / 2)}" '
-            f'fill="none" stroke-width="{f(stroke)}"/>'
-        )
-        parts.append(
-            f'<rect x="{f(fx)}" y="{f(fy)}" width="{f(fw)}" height="{f(fh)}" rx="{f(rad)}" '
-            'stroke="none" clip-path="url(#half)"/>'
-        )
+        parts.append(f'<path d="{ring(FRONT)}"/>')
+        parts.append(f'<path d="{rounded(fx, fy, fw, fh, rad)}" clip-path="url(#half)"/>')
     else:
-        parts.append(
-            f'<rect x="{f(fx)}" y="{f(fy)}" width="{f(fw)}" height="{f(fh)}" rx="{f(rad)}" stroke="none"/>'
-        )
+        parts.append(f'<path d="{rounded(fx, fy, fw, fh, rad)}"/>')
     parts.append("</g></svg>\n")
     return "\n".join(parts)
 
