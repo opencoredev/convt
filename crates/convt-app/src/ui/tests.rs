@@ -5945,10 +5945,13 @@ fn a_relaunch_offers_restart_to_update_without_a_request(cx: &mut TestAppContext
     let path = ready(&g, cx);
     std::fs::write(&path, b"\x7fELF something else").unwrap();
     forget_updates(&g, cx);
+    // Offline this time, so only the restore could offer it.
+    g.releases.serve(Err(FetchError::Offline));
     cx.update(|cx| g.app.update(cx, |s, cx| s.start_update_checks(cx)));
     wait_until(cx, "the changed file is deleted", |_| !path.exists());
-    cx.run_until_parked();
-    assert_eq!(g.update(cx), Update::Idle);
+    wait_until(cx, "the launch check failed", |cx| {
+        matches!(g.app.read(cx).update, Update::Failed(_))
+    });
 
     // A saved manifest that doesn't verify is not trusted either.
     let h = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
@@ -5963,10 +5966,11 @@ fn a_relaunch_offers_restart_to_update_without_a_request(cx: &mut TestAppContext
     );
     std::fs::write(&saved, forged).unwrap();
     forget_updates(&h, cx);
+    h.releases.serve(Err(FetchError::Offline));
     cx.update(|cx| h.app.update(cx, |s, cx| s.start_update_checks(cx)));
-    std::thread::sleep(Duration::from_millis(200));
-    cx.run_until_parked();
-    assert_eq!(h.update(cx), Update::Idle);
+    wait_until(cx, "the launch check failed", |cx| {
+        matches!(h.app.read(cx).update, Update::Failed(_))
+    });
     assert!(path.is_file(), "an unverified manifest deletes nothing");
 }
 
