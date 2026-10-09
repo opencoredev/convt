@@ -1,49 +1,110 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DownloadButton, HomebrewInstall } from "../../src/components/site/download";
+import { CommandBlock, homebrewCommands } from "../../src/components/app/command-block";
+import {
+  Checksums,
+  DownloadButton,
+  DownloadStage,
+  NextSteps,
+  primaryMeta,
+} from "../../src/components/site/download";
+import { releaseFromManifest } from "../../src/lib/platform";
+import type { ReleaseManifest } from "../../src/lib/release-manifest";
 
-const page = readFileSync(new URL("../../src/routes/_site/download.tsx", import.meta.url), "utf8");
+const base = "https://github.com/opencoredev/convt/releases/download/v0.3.0";
+const artifact = (platform: string, kind: string, name: string, size: number) => ({
+  platform,
+  kind,
+  url: `${base}/${name}`,
+  size,
+  sha256: "a".repeat(64),
+});
+const manifest = {
+  schema_version: 1,
+  sequence: 3,
+  issued_at: 0,
+  expires_at: 0,
+  distribution_ready: true,
+  purchase_url: "https://convt.app/pricing",
+  builds: [
+    {
+      version: "0.3.0",
+      build_date: "2026-10-08",
+      artifacts: [
+        artifact("macos-arm64", "dmg", "convt-macos-arm64.dmg", 50_016_928),
+        artifact("windows-x86_64", "msi", "convt-0.3.0-windows-x86_64.msi", 84_156_416),
+        artifact("linux-x86_64", "AppImage", "convt-linux-x86_64.AppImage", 58_530_296),
+        artifact("linux-x86_64", "deb", "convt_0.3.0-1_amd64.deb", 33_208_072),
+      ],
+      source: artifact("source", "tar.gz", "convt-0.3.0-source.tar.gz", 9_000_000),
+    },
+  ],
+} as ReleaseManifest;
+const release = releaseFromManifest(manifest);
+function slot(os: "macos" | "windows") {
+  const found = release.slots.find((s) => s.os === os);
+  if (!found) throw new Error(`no ${os} slot`);
+  return found;
+}
+const empty = releaseFromManifest(null);
 
-test("unpublished primary download is Shipping today, not a fake URL", () => {
-  const html = renderToStaticMarkup(<DownloadButton artifact={null} large />);
-  expect(html).toContain("Shipping today");
-  expect(html).not.toContain("Coming soon");
-  expect(html).not.toContain("href=");
+test("the primary download names the system, never the file", () => {
+  const html = renderToStaticMarkup(<DownloadStage os="linux" release={release} />);
+  expect(html).toContain("Download for Linux");
+  expect(html).not.toContain(">Download convt-linux");
+  expect(html).toContain(`href="${base}/convt-linux-x86_64.AppImage"`);
+  expect(html).toContain("AppImage · x86_64 · v0.3.0 · 58.5 MB");
+  // The other Linux packages are links under it; the unpublished ones aren't.
+  expect(html).toContain(">.deb</a>");
+  expect(html).not.toContain(">.rpm</a>");
 });
 
-test("published Mac artifact is a real download button", () => {
-  const html = renderToStaticMarkup(
-    <DownloadButton
-      artifact={{
-        platform: "macos-arm64",
-        kind: "dmg",
-        url: "https://downloads.convt.app/0.1.0/convt-0.1.0-macos-arm64.dmg",
-        size: 1234,
-        sha256: "a".repeat(64),
-      }}
-      large
-    />,
+test("the meta line reads like Apple silicon · v0.3.0 · 50.0 MB", () => {
+  expect(primaryMeta(slot("macos"), release.version)).toBe("Apple silicon · v0.3.0 · 50.0 MB");
+  expect(primaryMeta(slot("windows"), release.version)).toBe("64-bit · v0.3.0 · 84.2 MB");
+});
+
+test("Homebrew shows only for macOS, as two one-line commands", () => {
+  const mac = renderToStaticMarkup(<DownloadStage os="macos" release={release} />);
+  expect(mac).toContain("Or with Homebrew");
+  expect(mac).toContain("whitespace-pre");
+  for (const command of homebrewCommands) expect(mac).toContain(command);
+  expect(renderToStaticMarkup(<DownloadStage os="windows" release={release} />)).not.toContain(
+    "Homebrew",
   );
-  expect(html).toContain('href="https://downloads.convt.app/0.1.0/convt-0.1.0-macos-arm64.dmg"');
-  expect(html).toContain("Download convt-0.1.0-macos-arm64.dmg");
-  expect(html).not.toContain("Shipping today");
-  expect(html).not.toContain("Coming soon");
+  const block = renderToStaticMarkup(<CommandBlock label="x" commands={homebrewCommands} />);
+  expect(block.match(/class="block"/g)?.length).toBe(2);
 });
 
-test("/download has no checksum or source Coming soon sections", () => {
-  expect(page).not.toContain("Check your download");
-  expect(page).not.toContain("Source code");
-  expect(page).not.toContain("SourceSection");
-  expect(page).not.toContain("verify-title");
-  expect(page).toContain("DownloadButton");
-  expect(page).toContain("For your computer");
-  expect(page).toContain("HomebrewInstall");
+test("an unpublished build says Shipping today and links nothing", () => {
+  const html = renderToStaticMarkup(<DownloadStage os="macos" release={empty} />);
+  expect(html).toContain("Shipping today");
+  expect(html).not.toContain("download=");
+  expect(renderToStaticMarkup(<DownloadButton artifact={null} label="x" />)).toContain(
+    "Shipping today",
+  );
+  expect(renderToStaticMarkup(<Checksums release={empty} />)).toBe("");
 });
 
-test("Homebrew install block renders the tap commands", () => {
-  const html = renderToStaticMarkup(<HomebrewInstall />);
-  expect(html).toContain("brew tap opencoredev/convt");
-  expect(html).toContain("brew install --cask convt");
+test("a phone or unknown system gets every platform, not a guess", () => {
+  const html = renderToStaticMarkup(<DownloadStage os={null} release={release} />);
+  expect(html).toContain("See all platforms");
+  expect(html).not.toContain("Download for");
+});
+
+test("what happens next is open, sign in, trial", () => {
+  const html = renderToStaticMarkup(<NextSteps os="macos" />);
+  expect(html).toContain("Open convt");
+  expect(html).toContain("drag convt to Applications");
+  expect(html).toContain("Sign in");
+  expect(html).toContain("Your trial starts");
+});
+
+test("checksums are folded away with the source for the build", () => {
+  const html = renderToStaticMarkup(<Checksums release={release} />);
+  expect(html).toContain("<details");
+  expect(html).not.toContain("<details open");
+  expect(html).toContain("a".repeat(64));
+  expect(html).toContain(`href="${base}/convt-0.3.0-source.tar.gz"`);
 });

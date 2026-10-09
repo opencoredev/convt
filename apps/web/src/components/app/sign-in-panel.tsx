@@ -11,6 +11,7 @@ import { GITHUB_URL, routes } from "#/lib/site";
 
 import { AuthTitle, Rise, authInput, lightPill } from "./auth-screen";
 import { GoogleSignIn, OtherSignIn, type SocialProviderId } from "./social-sign-in";
+import { CommandBlock, homebrewCommands } from "./command-block";
 import { cx, focusRing } from "./ui";
 
 /**
@@ -167,9 +168,6 @@ export function SignInPanel({
   );
 }
 
-const homebrew = `brew tap opencoredev/convt https://github.com/opencoredev/convt
-brew install --cask convt`;
-
 /**
  * /download asks for an account, but Homebrew and the GitHub releases cannot be gated,
  * so say so instead of pretending.
@@ -187,9 +185,7 @@ function WithoutAccount() {
         </a>{" "}
         or with Homebrew on a Mac:
       </p>
-      <pre className="w-full rounded-lg bg-sunken/80 px-3 py-2 text-left whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-[11.5px]/[18px] text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]">
-        {homebrew}
-      </pre>
+      <CommandBlock label="Homebrew" commands={homebrewCommands} quiet className="mt-1 w-full" />
     </div>
   );
 }
