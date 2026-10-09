@@ -4638,6 +4638,52 @@ fn a_relaunch_offers_restart_to_update_without_a_request(cx: &mut TestAppContext
 }
 
 #[gpui_kit::test]
+fn a_restored_update_follows_settings_changed_meanwhile(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (_, installer) = f.self_installing(cx);
+    ready(&f, cx);
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_daily_checks(cx)));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    // Update checks went off after the launch looked at the saved download
+    // (the settings file changed, or the switch raced the restore): Restart
+    // to update no longer installs it.
+    cx.update(|cx| f.app.update(cx, |s, _| s.settings.update_checks = false));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.restart_to_update(cx)));
+    cx.run_until_parked();
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+}
+
+#[gpui_kit::test]
+fn try_again_without_a_saved_download_checks_again(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    std::fs::write(
+        f.dir.path().join("updates/install-result.json"),
+        "{\"version\":\"9.2.0\",\"exit_code\":1603}",
+    )
+    .unwrap();
+    // The installer is gone by the next launch, so nothing can be restored.
+    std::fs::remove_file(&path).unwrap();
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_daily_checks(cx)));
+    wait_until(cx, "the failure shows", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(f.releases.fetches(), 2);
+    assert_eq!(downloads.opened(), 2);
+}
+
+#[gpui_kit::test]
 fn a_relaunch_after_a_failed_windows_install_says_so(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
     let (downloads, _) = f.self_installing(cx);

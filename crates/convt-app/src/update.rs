@@ -525,10 +525,15 @@ impl AppState {
         if self.update != Update::Idle {
             return;
         }
-        if let Some((bytes, version, path, artifact)) = found.ready {
+        // The file was checked against the settings and license of the
+        // launch; either may have changed since, so pick again for now.
+        if let Some((bytes, version, path, artifact)) = found.ready
+            && self.settings.update_checks
+        {
             self.update_manifest = Some(Arc::new(bytes));
             self.updater.artifact = Some(artifact);
             self.update = Update::Ready { version, path };
+            self.reselect_update(cx);
         }
         if let Some((version, why)) = found.failed {
             // Try again reuses the download when it's still here.
@@ -670,6 +675,15 @@ impl AppState {
             }
             _ => return,
         };
+        if self.settings.update_checks
+            && self.updater.artifact.is_none()
+            && matches!(self.update, Update::InstallFailed { .. })
+        {
+            // Nothing saved to retry with (the installer or its release
+            // details are gone): fetch the release details again.
+            self.check_updates(cx);
+            return;
+        }
         let (true, Some(install), Some(artifact)) = (
             self.settings.update_checks,
             &self.update_config.install,
@@ -762,6 +776,9 @@ impl AppState {
         let Update::Ready { version, path } = self.update.clone() else {
             return;
         };
+        if !self.settings.update_checks {
+            return;
+        }
         let (Some(installer), Some(artifact)) = (
             self.update_config
                 .install
