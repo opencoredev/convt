@@ -1,7 +1,7 @@
 //! The Settings window: General, Presets and License.
 
 use convt_core::{Category, FORMATS, Format, Options, Preset, format_by_id};
-use convt_license::client::{BUY_URL, State};
+use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -756,15 +756,24 @@ impl SettingsView {
 
     fn license(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx).license.clone();
+        let can_start_trial =
+            self.app.read(cx).account.can_start_trial() && !state.allows_conversion();
         let summary = SharedString::from(match &state {
             State::Licensed(l) if l.plan == convt_license::Plan::Pro => {
                 "You have convt Pro".to_string()
             }
             State::Licensed(_) => "You have a convt license".to_string(),
+            _ if can_start_trial => format!("Start your {TRIAL_DAYS}-day Pro trial."),
             _ => state.summary(),
         });
         let allowed = state.allows_conversion();
         let (glyph, tone, about) = match &state {
+            // An offer, not an error, though nothing converts yet.
+            _ if can_start_trial => (
+                IconName::Calendar,
+                Tone::Green,
+                "Your convt.app account includes a free Pro trial. Start it below, or enter a license key.".to_string(),
+            ),
             State::Unrestricted => (
                 IconName::CircleCheck,
                 Tone::Green,
@@ -832,9 +841,16 @@ impl SettingsView {
                             .test_support()
                             .aria_label(summary.clone())
                             .child(
-                                styled(size::BODY, if allowed { p.text } else { p.error })
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(summary),
+                                styled(
+                                    size::BODY,
+                                    if allowed || can_start_trial {
+                                        p.text
+                                    } else {
+                                        p.error
+                                    },
+                                )
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(summary),
                             ),
                     )
                     .child(styled(size::SMALL, p.secondary).child(about)),

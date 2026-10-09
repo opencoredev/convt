@@ -4416,6 +4416,93 @@ fn signing_out_ends_the_account_trial_on_screen(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_trial_skipped_in_onboarding_can_start_later(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    std::fs::remove_file(f.dir.path().join("trial")).unwrap();
+    let checkout = "https://checkout.example.com/trial";
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        }));
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.license = s.licensing.state();
+        s.account.access = Some(Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        });
+        cx.notify();
+    });
+    let (main, _) = f.main(cx);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    let offer = Some("Start your 7-day Pro trial.".to_string());
+    assert_eq!(label(cx, main, "trial-card"), offer);
+    assert_eq!(label(cx, settings, "license-status"), offer);
+    assert_eq!(
+        label(cx, main, "trial-buy").as_deref(),
+        Some("Start free trial")
+    );
+    assert!(fits(cx, main, "trial-buy"));
+
+    // The sidebar starts it, as onboarding would.
+    click(cx, main, "trial-buy");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    cx.read(|cx| assert!(f.app.read(cx).account.awaiting_trial));
+
+    // So does the License tab.
+    cx.update(|cx| cx.open_url("about:blank"));
+    click(cx, settings, "start-trial");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+
+    // Nothing to start for a lapsed account, or with a key that converts.
+    f.app.update(cx, |s, cx| {
+        s.account.access = Some(Access::Lapsed);
+        cx.notify();
+    });
+    assert!(!shown(cx, settings, "start-trial"));
+    assert_ne!(
+        label(cx, main, "trial-buy").as_deref(),
+        Some("Start free trial")
+    );
+    f.app.update(cx, |s, cx| {
+        s.account.access = Some(Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        });
+        s.activate(&license_key("a@b.c", "2027-10-01"), cx).unwrap();
+    });
+    assert!(!shown(cx, settings, "start-trial"));
+    assert!(!shown(cx, main, "trial-card"));
+}
+
+#[gpui_kit::test]
+fn a_relaunch_the_same_day_asks_what_a_blocked_account_offers(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    std::fs::remove_file(f.dir.path().join("trial")).unwrap();
+    let checkout = "https://checkout.example.com/trial";
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        }));
+    let today = convt_license::date::from_days(client::today());
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.license = s.licensing.state();
+        // Asked earlier today, before "Not now" and a restart.
+        s.update_settings(|s| s.license_checked = Some(today), cx);
+    });
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
+    wait_until(cx, "the offer", |cx| {
+        f.app.read(cx).account.can_start_trial()
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    // Once known, the day's schedule asks no more.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 1, 0));
+}
+
+#[gpui_kit::test]
 fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     for dark in [false, true] {

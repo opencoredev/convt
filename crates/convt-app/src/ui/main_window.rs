@@ -82,6 +82,7 @@ impl MainView {
         let state = self.app.read(cx);
         let active = state.queue.active();
         let license = state.license.clone();
+        let can_start_trial = state.account.can_start_trial();
         let nav = |id: &'static str,
                    label: &'static str,
                    glyph: IconName,
@@ -180,7 +181,7 @@ impl MainView {
             )
             .child(div().flex_1())
             .children(super::update::sidebar_card(&self.app, p, cx))
-            .children(trial_card(&license, p))
+            .children(trial_card(&license, can_start_trial, &self.app, p))
     }
 
     fn header(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -549,10 +550,24 @@ fn finder_setup_card(p: &Palette) -> impl IntoElement {
 }
 
 /// The trial or license card at the bottom of the sidebar. Nothing once
-/// licensed or in a build that doesn't check licenses.
-fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
+/// licensed or in a build that doesn't check licenses. `can_start_trial`:
+/// the signed-in account can start its Pro trial, which the card offers.
+fn trial_card(
+    state: &State,
+    can_start_trial: bool,
+    app: &Entity<AppState>,
+    p: &Palette,
+) -> Option<impl IntoElement + use<>> {
+    let start_trial = can_start_trial && !state.allows_conversion();
     let (title, left, used, ended, link) = match state {
         State::Unrestricted | State::Licensed(_) => return None,
+        _ if start_trial => (
+            "Pro trial",
+            format!("{TRIAL_DAYS} days"),
+            0.,
+            false,
+            "Start free trial".into(),
+        ),
         State::Trial { started: None, .. } => (
             "Free trial",
             format!("{TRIAL_DAYS} days"),
@@ -596,7 +611,7 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
         ),
         State::NotCovered(_) => ("Updates ended", String::new(), 1., true, "Renew".into()),
     };
-    let button = if matches!(state, State::SignInNeeded) {
+    let button = if start_trial || matches!(state, State::SignInNeeded) {
         Button::primary("trial-buy", link)
     } else if ended {
         Button::brand("trial-buy", link)
@@ -604,12 +619,18 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
         Button::secondary("trial-buy", link)
     };
     // Signing in starts from the License tab, which follows the flow.
-    let sign_in = matches!(state, State::SignInNeeded);
+    let sign_in = !start_trial && matches!(state, State::SignInNeeded);
+    let summary = if start_trial {
+        format!("Start your {TRIAL_DAYS}-day Pro trial.")
+    } else {
+        state.summary()
+    };
+    let app = app.clone();
     Some(
         div()
             .id("trial-card")
             .test_support()
-            .aria_label(SharedString::from(state.summary()))
+            .aria_label(SharedString::from(summary))
             .flex()
             .flex_col()
             .gap(px(10.))
@@ -642,7 +663,9 @@ fn trial_card(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
                 if ended { p.error } else { p.green },
             ))
             .child(button.small().build(p).w_full().on_click(move |_, _, cx| {
-                if sign_in {
+                if start_trial {
+                    app.update(cx, AppState::start_trial)
+                } else if sign_in {
                     super::show_settings(SettingsTab::License, cx)
                 } else {
                     cx.open_url(BUY_URL)

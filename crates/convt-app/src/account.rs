@@ -222,6 +222,12 @@ impl Account {
         self.email().map(masked_email)
     }
 
+    /// Whether the signed-in account can start its Pro trial now, so the
+    /// windows offer Start free trial after onboarding too.
+    pub fn can_start_trial(&self) -> bool {
+        self.session.is_some() && matches!(self.access, Some(Access::CanStartTrial { .. }))
+    }
+
     /// The site this build signs in to.
     pub(crate) fn url(&self) -> &str {
         &self.url
@@ -511,11 +517,16 @@ impl AppState {
 
     /// The day's renewal: asks for the current Pro key if signed in and not
     /// yet asked today (UTC). Runs at launch and then periodically
-    /// (`AppState::start_update_checks`).
+    /// (`AppState::start_update_checks`). A signed-in computer that can't
+    /// convert also asks once per run when it doesn't know what the account
+    /// offers, so a trial skipped earlier today is offered again.
     pub fn renew_if_due(&mut self, cx: &mut Context<Self>) {
         let today = date::from_days(today());
+        let unknown_offer = self.account.access.is_none()
+            && self.account.refresh == Refresh::Idle
+            && !self.license.allows_conversion();
         if self.account.session.is_some()
-            && self.settings.license_checked.as_deref() != Some(today.as_str())
+            && (unknown_offer || self.settings.license_checked.as_deref() != Some(today.as_str()))
         {
             self.refresh_license(cx);
         }

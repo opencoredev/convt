@@ -69,6 +69,14 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
         (SignIn::Finishing, _) => body.child(line("account-status", "Finishing sign-in…", p.text)),
         (SignIn::Idle, Some(email)) => {
             let running = account.refresh == Refresh::Running;
+            // Onboarding's "Not now" skips the trial; it stays one click away.
+            let start_trial = (account.can_start_trial() && !state.license.allows_conversion())
+                .then(|| {
+                    Button::primary("start-trial", "Start free trial")
+                        .small()
+                        .build(p)
+                        .on_click(on_app(app, AppState::start_trial))
+                });
             let refresh = match &account.refresh {
                 Refresh::Idle => None,
                 Refresh::Running => Some(line("refresh-status", "Checking convt.app…", p.secondary)),
@@ -86,6 +94,7 @@ pub fn section(app: &Entity<AppState>, p: &Palette, cx: &App) -> Div {
                     .flex()
                     .items_center()
                     .gap(px(space::SM))
+                    .children(start_trial)
                     .child(
                         Button::secondary("refresh-license", "Refresh license")
                             .icon(IconName::RefreshCw)
