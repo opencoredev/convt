@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthLayout } from "#/components/app/auth-layout";
 import { useNotice } from "#/components/app/notice";
@@ -12,9 +12,10 @@ import {
   downloadAction,
   type CheckoutOrigin,
 } from "#/lib/checkout-copy";
+import { pollCheckout } from "#/lib/checkout-poll";
 import type { Os } from "#/lib/platform";
 import { fetchCheckoutResult } from "#/server/billing-fns";
-import { checkoutGiveUp, type CheckoutView } from "#/server/views";
+import type { CheckoutView } from "#/server/views";
 import { visitorOs } from "#/server/visitor-os";
 
 // Where the provider sends the buyer back. The page renders with no order data;
@@ -37,10 +38,6 @@ export const Route = createFileRoute("/_app/checkout/success")({
   }),
   component: SuccessPage,
 });
-
-const pollMs = 2000;
-const giveUpMs = 60_000;
-const callTimeoutMs = 12_000;
 
 type State =
   | CheckoutView
@@ -68,60 +65,12 @@ function SuccessPage() {
         ? { state: "loading" }
         : { state: "not_found", product: null, allowTrial: false },
   );
-  // After the first pending answer, later calls ask convt-billing to sync this
-  // checkout from the provider. Keep asking while Polar is still attaching the
-  // subscription; a single early GET used to give up and show "key by email".
-  const syncNext = useRef(false);
-  const syncedOnce = useRef(false);
-  const lastKnown = useRef<{ product: CheckoutView["product"]; allowTrial: boolean }>({
-    product: null,
-    allowTrial: false,
-  });
-
   useEffect(() => {
     if (!checkoutId || error) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const started = Date.now();
-    const poll = async () => {
-      try {
-        const sync = syncNext.current;
-        if (sync) syncedOnce.current = true;
-        // A call that never answers (a dropped connection) must not stall the page.
-        const r = await Promise.race([
-          fetchCheckoutResult({ data: { checkoutId, sync } }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), callTimeoutMs),
-          ),
-        ]);
-        if (stopped) return;
-        if (r.state !== "ready")
-          lastKnown.current = { product: r.product, allowTrial: r.allowTrial };
-        if (r.state === "pending") {
-          syncNext.current = true;
-          if (Date.now() - started > giveUpMs) {
-            setState(checkoutGiveUp(r.product, r.allowTrial));
-            return;
-          }
-          setState(r);
-          timer = setTimeout(poll, syncedOnce.current ? pollMs : 0);
-          return;
-        }
-        setState(r);
-      } catch {
-        if (stopped) return;
-        if (Date.now() - started > giveUpMs) {
-          setState(checkoutGiveUp(lastKnown.current.product, lastKnown.current.allowTrial));
-          return;
-        }
-        timer = setTimeout(poll, pollMs);
-      }
-    };
-    void poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
+    return pollCheckout({
+      fetch: ({ sync, signal }) => fetchCheckoutResult({ data: { checkoutId, sync }, signal }),
+      onState: setState,
+    });
   }, [checkoutId, error]);
 
   return (
