@@ -58,6 +58,47 @@ fn output_of_copied(binary: &Path, args: &[&str]) -> Output {
 }
 
 #[test]
+fn skill_flag_and_subcommand_print_the_same_skill_md() {
+    let root = tempfile::tempdir().unwrap();
+    let flag = cli(root.path(), &["--skill".as_ref()]);
+    let sub = cli(root.path(), &["skill".as_ref()]);
+    ok(&flag);
+    ok(&sub);
+    assert_eq!(flag.status.code(), Some(0));
+    assert_eq!(sub.status.code(), Some(0));
+    assert_eq!(flag.stdout, sub.stdout);
+    assert!(
+        flag.stderr.is_empty(),
+        "{:?}",
+        String::from_utf8_lossy(&flag.stderr)
+    );
+    let text = String::from_utf8(flag.stdout).unwrap();
+    assert!(text.starts_with("---\nname: convt\n"), "{text}");
+    assert!(text.contains("description:"));
+    assert!(text.contains("\n---\n"));
+    assert!(text.contains("--to"));
+    assert!(text.contains("--json"));
+    assert!(text.contains("`jpeg`"));
+    assert!(
+        !text.contains('@'),
+        "skill must not contain email addresses"
+    );
+}
+
+#[test]
+fn help_mentions_skill() {
+    let root = tempfile::tempdir().unwrap();
+    let out = cli(root.path(), &["--help".as_ref()]);
+    ok(&out);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("--skill"), "{text}");
+    assert!(
+        text.contains("convt --skill") || text.contains("`convt --skill`"),
+        "{text}"
+    );
+}
+
+#[test]
 fn renamed_binary_uses_convt_in_help_and_errors() {
     let root = tempfile::tempdir().unwrap();
     let binary = root.path().join("convt.bin");
