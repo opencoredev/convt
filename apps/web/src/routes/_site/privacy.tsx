@@ -25,7 +25,8 @@ export const Route = createFileRoute("/_site/privacy")({
           convt converts files on your own computer. Your files stay on your machine unless you
           choose to convert one in the cloud. The convt.app website uses PostHog analytics to count
           visits, which you can turn off. This policy covers the convt app, the command line tool,
-          the convt browser extension, convt.app and the convt API.
+          the convt browser extension, convt.app and the convt API. Account holders get occasional
+          product news by email, which you can turn off at any time.
         </p>
       }
       sections={sections}
@@ -186,6 +187,41 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: "email",
+    title: "Email we send",
+    body: (
+      <>
+        <p>We send two kinds of email:</p>
+        <List
+          items={[
+            <>
+              <span className={strong}>Account and license email:</span> sign-in codes, license
+              keys, trial and payment notices, and notices about your account. These arrive as long
+              as you have an account, because the service needs them.
+            </>,
+            <>
+              <span className={strong}>Product news and tips:</span> occasional email about new
+              features, releases and offers, including a welcome email when you sign up. Every
+              account is subscribed when it is created, once its email address is verified.
+            </>,
+          ]}
+        />
+        <p>
+          To stop product news, use the Unsubscribe or Email preferences link at the bottom of any
+          such email, or the Email section of Settings on the dashboard. It takes effect within
+          minutes, and you can subscribe again the same way. If an email to you bounces or you mark
+          one as spam, we stop sending product news to that address.
+        </p>
+        <p>
+          For product news we give our email provider your email address, first name, account ID,
+          whether you bought convt Desktop, whether you have convt Pro, and a personal link to your
+          email preferences. The provider records whether those emails are delivered, opened and
+          clicked, and any unsubscribe. When you delete your account, we delete that record too.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "analytics",
     title: "Website analytics",
     body: (
@@ -241,8 +277,8 @@ const sections: LegalSection[] = [
               payment details and billing address under its own privacy policy.
             </>,
             <>
-              <span className={strong}>Resend</span> delivers our emails: sign-in codes, license
-              keys, receipts and account notices. We send no marketing email.
+              <span className={strong}>Sequenzy</span> delivers our emails: sign-in codes, license
+              keys, account notices and the product news described above, in the United States.
             </>,
             <>
               <span className={strong}>Cloudflare</span> hosts convt.app and stores cloud conversion
@@ -276,6 +312,7 @@ const sections: LegalSection[] = [
           "Account data: until you delete your account. Delete it from Settings on the dashboard; any subscription ends first.",
           "Orders, invoices and license records: kept after you delete your account, as tax and accounting law requires. They keep the email address used for the purchase.",
           "Sign-in codes expire after 15 minutes; sessions end when you sign out or they expire.",
+          "Your email preference and the record of when it changed: until you delete your account.",
         ]}
       />
     ),
@@ -295,7 +332,9 @@ const sections: LegalSection[] = [
         <p>
           We process account, purchase and cloud conversion data to provide what you signed up for
           or bought, security data for our legitimate interest in keeping the service safe, and
-          order and invoice records because tax and accounting law requires them.
+          order and invoice records because tax and accounting law requires them. We send product
+          news for our legitimate interest in telling account holders about convt, and you can
+          object to it at any time by unsubscribing.
         </p>
         <p>
           Our providers may process data outside the country where you live, including in the United

@@ -8,6 +8,7 @@ import { newId } from "@convt/license";
 
 import { alert, type BillingContext, fault, one, rows } from "./context";
 import { ingestFacts } from "./ingest";
+import { removeMarketingContact } from "./marketing";
 import { emptyFacts } from "./provider";
 import { safeError } from "./outbox";
 
@@ -107,6 +108,8 @@ export async function advanceDeletion(ctx: BillingContext, deletionId: string): 
     }
     const still = await rows(ctx.db, liveSql(userId, now));
     if (still.length) throw new Error(`${still.length} subscription(s) still live after revoking`);
+    // The Sequenzy contact goes before the account, while its user id still names it.
+    await removeMarketingContact(ctx, userId);
     await ctx.db.execute(
       sql`update account_deletions set status = 'deleting', updated_at = ${now} where id = ${row.id}`,
     );

@@ -39,6 +39,7 @@
     "billing:outbox": "bun packages/billing/src/cli/outbox.ts",
     "billing:backfill": "bun packages/billing/src/cli/backfill.ts",
     "analytics:backfill-signups": "bun packages/db/src/cli/backfill-signups.ts",
+    "marketing:backfill": "bun packages/db/src/cli/marketing-backfill.ts",
     "license:keygen": "bun packages/billing/src/cli/keygen.ts",
     "release:linux": "bash scripts/release-linux.sh",
     "update:keygen": "bun scripts/release/manifest.ts keygen",

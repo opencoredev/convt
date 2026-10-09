@@ -153,6 +153,10 @@ export const fetchAccountSettings = createServerFn({ method: "GET" })
     return {
       ...settings,
       methods: visibleMethods(settings.methods, availableProviders(appEnv)),
+      // Null when convt-billing cannot answer; the page says so instead of guessing.
+      marketing: await billing()
+        .marketingPreference(userId)
+        .catch(() => null),
     };
   });
 

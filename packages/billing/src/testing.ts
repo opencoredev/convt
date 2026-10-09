@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { connect, type Db } from "@convt/db";
 import { freshDatabase, type TestDatabase } from "@convt/db/testing";
 import { base64urlEncode, importSigningKey, newId, publicKeyOf } from "@convt/license";
-import { resendTransport } from "@convt/mail";
+import { resendTransport, sequenzyContacts } from "@convt/mail";
 import { createBillingMock, type BillingMock, type HeldDelivery } from "@convt/billing-mock";
 import { sql } from "drizzle-orm";
 
@@ -58,7 +58,16 @@ export async function createHarness(opts: { startMs?: number } = {}) {
     send: (e: Parameters<ReturnType<typeof resendTransport>["send"]>[0], k: string) =>
       resendTransport({ apiKey: "re_test", baseUrl: base, timeoutMs: mailTimeoutMs }).send(e, k),
   };
+  // Campaign email through the real Sequenzy client against the mock's routes.
+  const marketing = {
+    contacts: sequenzyContacts({ apiKey: "sqz_test", baseUrl: `${base}/api/v1` }),
+    lists: null,
+    tags: ["convt-account"],
+    linkSecret: randomBytes(32).toString("hex"),
+    webhookSecret: `whsec_${randomBytes(16).toString("hex")}`,
+  };
   const service = createBillingService({
+    marketing,
     connect: async () => {
       const { client, db } = await connect(tdb.billingUrl);
       return { db, close: () => client.end() };
@@ -93,6 +102,7 @@ export async function createHarness(opts: { startMs?: number } = {}) {
     mock,
     base,
     secret,
+    marketing,
     provider,
     catalog,
     service,

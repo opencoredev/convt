@@ -61,12 +61,13 @@ host_args=()
 [[ -f .convt-dev/license.key ]] || bun -e 'await (await import("./packages/db/src/seed.ts")).devSigningKey()'
 POLAR_MOCK_TOKEN=polar_oat_local_$(openssl rand -hex 12)
 RESEND_MOCK_KEY=re_local_$(openssl rand -hex 12)
+SEQUENZY_MOCK_KEY=sqz_local_$(openssl rand -hex 12)
 if ! port_free "$BILLING_MOCK_PORT"; then
   echo "dev-web: port $BILLING_MOCK_PORT is taken; stop the other billing mock or remove BILLING_MOCK_PORT from services.env" >&2
   exit 1
 fi
 MOCK_PORT=$BILLING_MOCK_PORT MOCK_PUBLIC_URL=${BILLING_MOCK_PUBLIC_URL:-} \
-  POLAR_ACCESS_TOKEN=$POLAR_MOCK_TOKEN RESEND_API_KEY=$RESEND_MOCK_KEY \
+  POLAR_ACCESS_TOKEN=$POLAR_MOCK_TOKEN RESEND_API_KEY=$RESEND_MOCK_KEY SEQUENZY_API_KEY=$SEQUENZY_MOCK_KEY \
   POLAR_WEBHOOK_SECRET=$POLAR_WEBHOOK_SECRET WEBHOOK_URL=http://127.0.0.1:$port/webhooks/polar \
   WEBHOOK_SCHEME=${WEBHOOK_SCHEME:-standard} MAILPIT_URL=$MAILPIT_URL \
   bun tools/billing-mock/src/main.ts &
@@ -105,6 +106,10 @@ RESEND_API_URL=$BILLING_MOCK_URL
 MAIL_FROM=convt <hello@convt.test>
 ALERT_EMAIL=alerts@convt.test
 LICENSE_SIGNING_KEY=$(tr -d '\n' <.convt-dev/license.key)
+SEQUENZY_MARKETING_API_KEY=$SEQUENZY_MOCK_KEY
+SEQUENZY_API_URL=$BILLING_MOCK_URL/api/v1
+MARKETING_LINK_SECRET=$(openssl rand -hex 32)
+SEQUENZY_WEBHOOK_SECRET=whsec_local_$(openssl rand -hex 16)
 VARS
 
 for _ in $(seq 40); do curl -fsS "$BILLING_MOCK_URL/health" >/dev/null 2>&1 && break; sleep 0.25; done

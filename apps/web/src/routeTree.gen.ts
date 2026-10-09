@@ -29,6 +29,7 @@ import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
 import { Route as UpdatesManifestDotjsonRouteImport } from './routes/updates/manifest[.]json'
 import { Route as AppShellAccountRouteImport } from './routes/_app/_shell/account'
 import { Route as AppCheckoutSuccessRouteImport } from './routes/_app/checkout/success'
+import { Route as AppEmailPreferencesRouteImport } from './routes/_app/email/preferences'
 import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
 import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/check-email'
 import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
@@ -141,6 +142,11 @@ const AppCheckoutSuccessRoute = AppCheckoutSuccessRouteImport.update({
   path: '/checkout/success',
   getParentRoute: () => AppRoute,
 } as any)
+const AppEmailPreferencesRoute = AppEmailPreferencesRouteImport.update({
+  id: '/email/preferences',
+  path: '/email/preferences',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSignInIndexRoute = AppSignInIndexRouteImport.update({
   id: '/sign-in/',
   path: '/sign-in/',
@@ -233,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
+  '/email/preferences': typeof AppEmailPreferencesRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
+  '/email/preferences': typeof AppEmailPreferencesRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/_app/_shell/account': typeof AppShellAccountRoute
   '/_app/checkout/success': typeof AppCheckoutSuccessRoute
+  '/_app/email/preferences': typeof AppEmailPreferencesRoute
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/_app/sign-in/verify': typeof AppSignInVerifyRoute
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
     | '/updates/manifest.json'
     | '/account'
     | '/checkout/success'
+    | '/email/preferences'
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
@@ -371,6 +381,7 @@ export interface FileRouteTypes {
     | '/updates/manifest.json'
     | '/account'
     | '/checkout/success'
+    | '/email/preferences'
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/updates/manifest.json'
     | '/_app/_shell/account'
     | '/_app/checkout/success'
+    | '/_app/email/preferences'
     | '/_app/sign-in/check-email'
     | '/_app/sign-in/verify'
     | '/_app/sign-in/verify-email'
@@ -583,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCheckoutSuccessRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/email/preferences': {
+      id: '/_app/email/preferences'
+      path: '/email/preferences'
+      fullPath: '/email/preferences'
+      preLoaderRoute: typeof AppEmailPreferencesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/sign-in/': {
       id: '/_app/sign-in/'
       path: '/sign-in'
@@ -710,6 +729,7 @@ interface AppRouteChildren {
   AppShellRoute: typeof AppShellRouteWithChildren
   AppDeviceRoute: typeof AppDeviceRoute
   AppCheckoutSuccessRoute: typeof AppCheckoutSuccessRoute
+  AppEmailPreferencesRoute: typeof AppEmailPreferencesRoute
   AppSignInCheckEmailRoute: typeof AppSignInCheckEmailRoute
   AppSignInVerifyRoute: typeof AppSignInVerifyRoute
   AppSignInVerifyEmailRoute: typeof AppSignInVerifyEmailRoute
@@ -720,6 +740,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppShellRoute: AppShellRouteWithChildren,
   AppDeviceRoute: AppDeviceRoute,
   AppCheckoutSuccessRoute: AppCheckoutSuccessRoute,
+  AppEmailPreferencesRoute: AppEmailPreferencesRoute,
   AppSignInCheckEmailRoute: AppSignInCheckEmailRoute,
   AppSignInVerifyRoute: AppSignInVerifyRoute,
   AppSignInVerifyEmailRoute: AppSignInVerifyEmailRoute,

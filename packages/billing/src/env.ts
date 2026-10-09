@@ -25,6 +25,24 @@ export type BillingEnv = {
   devPublicKeys: string[];
   /** Public PostHog project key + host. Null when unset (staging, local). */
   posthog: { key: string; host: string } | null;
+  marketing: MarketingEnv;
+};
+
+/**
+ * Campaign email. `sync` is null until Sequenzy's marketing key is set; consent
+ * is still recorded and rows wait. `linkSecret` signs the preferences links in
+ * campaign footers; `webhookSecret` checks Sequenzy's unsubscribe webhooks.
+ */
+export type MarketingEnv = {
+  sync: {
+    apiKey: string;
+    apiUrl: string;
+    /** Sequenzy list ids new contacts join; null keeps the workspace defaults. */
+    lists: string[] | null;
+    tags: string[];
+  } | null;
+  linkSecret: string | null;
+  webhookSecret: string | null;
 };
 
 export type RawEnv = Record<string, unknown>;
@@ -48,6 +66,37 @@ export class ConfigError extends Error {
     super(message);
     this.name = "ConfigError";
   }
+}
+
+const csv = (value: string | undefined) =>
+  (value ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+function readMarketingEnv(raw: RawEnv, production: boolean): MarketingEnv {
+  const apiKey = str(raw, "SEQUENZY_MARKETING_API_KEY");
+  const linkSecret = str(raw, "MARKETING_LINK_SECRET") ?? null;
+  const webhookSecret = str(raw, "SEQUENZY_WEBHOOK_SECRET") ?? null;
+  const apiUrl = (str(raw, "SEQUENZY_API_URL") ?? "https://api.sequenzy.com/api/v1").replace(
+    /\/$/,
+    "",
+  );
+  if (linkSecret !== null && linkSecret.length < 32)
+    throw new ConfigError("MARKETING_LINK_SECRET must be at least 32 characters");
+  if (apiKey && !linkSecret)
+    throw new ConfigError(
+      "MARKETING_LINK_SECRET is required with SEQUENZY_MARKETING_API_KEY: every contact gets a preferences link",
+    );
+  if (production && (isLoopback(apiUrl) || !apiUrl.startsWith("https://")))
+    throw new ConfigError("SEQUENZY_API_URL must be a public https URL in production");
+  const lists = csv(str(raw, "SEQUENZY_MARKETING_LIST_IDS"));
+  const tags = csv(str(raw, "SEQUENZY_MARKETING_TAGS") ?? "convt-account");
+  return {
+    sync: apiKey ? { apiKey, apiUrl, lists: lists.length ? lists : null, tags } : null,
+    linkSecret,
+    webhookSecret,
+  };
 }
 
 export function readBillingEnv(raw: RawEnv): BillingEnv {
@@ -155,6 +204,7 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
       .map((s) => s.trim())
       .filter(Boolean),
     posthog,
+    marketing: readMarketingEnv(raw, production),
   };
 }
 

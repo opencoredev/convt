@@ -1,6 +1,6 @@
 import { readWebhookBody, WebhookBodyError } from "./webhook-body";
 // convt-billing: the Worker that owns every write to billing state and every
-// billing secret. Public surface: POST /webhooks/polar only. The site calls the
+// billing secret. Public surface: POST /webhooks/polar and POST /webhooks/sequenzy. The site calls the
 // BillingRpc entrypoint through a service binding. Crons drain the outbox, drive
 // account deletions, and run the reconciler. See docs/p7-billing-plan.md, section 2.
 
@@ -23,7 +23,7 @@ import {
   validateCatalog,
 } from "@convt/billing";
 import { createDb } from "@convt/db";
-import { logTransport, resendTransport, sequenzyTransport } from "@convt/mail";
+import { logTransport, resendTransport, sequenzyContacts, sequenzyTransport } from "@convt/mail";
 import pg from "pg";
 
 type Env = Record<string, unknown> & { HYPERDRIVE_BILLING: { connectionString: string } };
@@ -58,6 +58,18 @@ function setup(raw: Env) {
         : env.mail.transport === "sequenzy"
           ? sequenzyTransport({ apiKey: env.mail.apiKey })
           : logTransport(),
+    marketing: {
+      contacts: env.marketing.sync
+        ? sequenzyContacts({
+            apiKey: env.marketing.sync.apiKey,
+            baseUrl: env.marketing.sync.apiUrl,
+          })
+        : null,
+      lists: env.marketing.sync?.lists ?? null,
+      tags: env.marketing.sync?.tags ?? [],
+      linkSecret: env.marketing.linkSecret,
+      webhookSecret: env.marketing.webhookSecret,
+    },
     signingKey: () => key,
     captureAnalytics: (event) => captureEvent(env.posthog, event),
     config: {
@@ -86,7 +98,11 @@ export async function runCron(service: BillingService, cron: string) {
   if (cron === "*/10 * * * *") return { cleanup: await service.cleanupAuth() };
   if (cron === "*/15 * * * *") return { reconcile: await service.reconcileFrequent() };
   if (cron === "17 3 * * *") return { daily: await service.reconcileDaily() };
-  return { outbox: await service.drainOutbox(), deletions: await service.runDeletions() };
+  return {
+    outbox: await service.drainOutbox(),
+    deletions: await service.runDeletions(),
+    marketing: await service.syncMarketing(),
+  };
 }
 
 async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Response> {
@@ -126,6 +142,17 @@ async function handleFetch(request: Request, raw: Env, ctx: Ctx): Promise<Respon
           .drainOutbox()
           .catch((e) => console.error("[billing] drain", (e as Error).message)),
       );
+    return text(result.status, result.body);
+  }
+  if (url.pathname === "/webhooks/sequenzy") {
+    let body: Uint8Array;
+    try {
+      body = await readWebhookBody(request);
+    } catch (e) {
+      if (e instanceof WebhookBodyError) return text(e.status, e.message);
+      return text(400, "invalid body");
+    }
+    const result = await s.service.handleMarketingWebhook(request.method, body, request.headers);
     return text(result.status, result.body);
   }
   // Local development only: run a cron by name (Wrangler's /__scheduled is not
@@ -200,6 +227,23 @@ export class BillingRpc extends WorkerEntrypoint<Env> implements Rpc {
   }
   async currentProAccess(userId: string) {
     return this.service.withCtx((c) => currentProAccess(c, userId));
+  }
+  marketingPreference(userId: string) {
+    return this.service.marketingPreference(userId);
+  }
+  async setMarketingPreference(userId: string, subscribed: boolean) {
+    const pref = await this.service.setMarketingPreference(userId, subscribed);
+    // Push now; the minute cron picks it up if this is cut short.
+    this.ctx.waitUntil(this.service.syncMarketing().catch(() => {}));
+    return pref;
+  }
+  preferenceByToken(token: string) {
+    return this.service.preferenceByToken(token);
+  }
+  async setPreferenceByToken(token: string, subscribed: boolean) {
+    const pref = await this.service.setPreferenceByToken(token, subscribed);
+    if (pref) this.ctx.waitUntil(this.service.syncMarketing().catch(() => {}));
+    return pref;
   }
   async requestDeletion(userId: string) {
     const d = await this.service.requestDeletion(userId);

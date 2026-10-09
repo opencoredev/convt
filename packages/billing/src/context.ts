@@ -8,6 +8,7 @@ import type { MailTransport } from "@convt/mail";
 
 import type { CaptureAnalytics } from "./analytics";
 import type { Catalog } from "./catalog";
+import type { MarketingDeps } from "./marketing";
 import type { BillingProvider } from "./provider";
 
 /**
@@ -44,6 +45,8 @@ export type BillingContext = {
   clock: () => Date;
   signingKey: () => Promise<CryptoKey>;
   mail: MailTransport;
+  /** Campaign email: the Sequenzy contacts client and link and webhook secrets. */
+  marketing: MarketingDeps;
   config: BillingConfig;
   fault?: (point: FaultPoint) => void | Promise<void>;
   log: (line: string) => void;

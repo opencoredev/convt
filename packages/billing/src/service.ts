@@ -16,6 +16,16 @@ import { drainOutbox, resolveOutbox } from "./outbox";
 import type { BillingProvider } from "./provider";
 import { backfillPolarOrders } from "./backfill";
 import { reconcileDaily, reconcileFrequent } from "./reconcile";
+import {
+  handleMarketingWebhook,
+  marketingDisabled,
+  marketingPreference,
+  preferenceByToken,
+  setMarketingPreference,
+  setPreferenceByToken,
+  syncMarketing,
+  type MarketingDeps,
+} from "./marketing";
 import { handleWebhook } from "./webhook";
 import { currentProAccess } from "./renewal";
 
@@ -24,6 +34,8 @@ export type ServiceDeps = {
   provider: BillingProvider;
   catalog: Catalog;
   mail: MailTransport;
+  /** Defaults to disabled: nothing is pushed, no link or webhook is accepted. */
+  marketing?: MarketingDeps;
   signingKey: () => Promise<CryptoKey>;
   config: BillingConfig;
   clock?: () => Date;
@@ -43,6 +55,7 @@ export function createBillingService(deps: ServiceDeps) {
         clock: deps.clock ?? (() => new Date()),
         signingKey: deps.signingKey,
         mail: deps.mail,
+        marketing: deps.marketing ?? marketingDisabled,
         config: deps.config,
         fault: deps.fault,
         log: deps.log ?? ((l) => console.log(l)),
@@ -105,6 +118,16 @@ export function createBillingService(deps: ServiceDeps) {
     advanceDeletion: (id: string) => withCtx((c) => advanceDeletion(c, id)),
     deletionStatus: (userId: string) => withCtx((c) => deletionStatus(c, userId)),
     currentProAccess: (userId: string) => withCtx((c) => currentProAccess(c, userId)),
+
+    syncMarketing: () => withCtx((c) => syncMarketing(c)),
+    handleMarketingWebhook: (method: string, raw: Uint8Array, headers: Headers) =>
+      withCtx((c) => handleMarketingWebhook(c, method, raw, headers)),
+    marketingPreference: (userId: string) => withCtx((c) => marketingPreference(c, userId)),
+    setMarketingPreference: (userId: string, subscribed: boolean) =>
+      withCtx((c) => setMarketingPreference(c, { userId, subscribed, source: "settings" })),
+    preferenceByToken: (token: string) => withCtx((c) => preferenceByToken(c, token)),
+    setPreferenceByToken: (token: string, subscribed: boolean) =>
+      withCtx((c) => setPreferenceByToken(c, { token, subscribed })),
   };
 }
 

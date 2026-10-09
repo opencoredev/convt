@@ -6,7 +6,10 @@
   "main": "src/index.ts",
   // Production values. Secrets (POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET,
   // SEQUENZY_API_KEY, LICENSE_SIGNING_KEY) are set with `wrangler secret put` on this
-  // Worker only; the site Worker never holds them. Local development overrides
+  // Worker only; the site Worker never holds them. Campaign email adds the secrets
+  // SEQUENZY_MARKETING_API_KEY, MARKETING_LINK_SECRET and SEQUENZY_WEBHOOK_SECRET and
+  // the optional SEQUENZY_MARKETING_LIST_IDS and SEQUENZY_MARKETING_TAGS; until they
+  // are set nothing is pushed (docs/marketing-email.md). Local development overrides
   // these from apps/billing/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",

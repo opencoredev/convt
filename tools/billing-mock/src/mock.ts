@@ -9,6 +9,7 @@
 //             /v1/products, with page-number pagination.
 // Pages:      /checkout/{client_secret} (Pay, Decline, Abandon), /portal/{token}
 // Resend:     POST /emails
+// Sequenzy:   POST /api/v1/subscribers, PATCH and DELETE /api/v1/subscribers/external
 // Admin:      /admin/* moves the clock, ends trials, renews, fails renewals,
 //             refunds, opens and closes disputes, changes settings, and controls
 //             webhook delivery (duplicate, delay, reorder, drop, forge, hold).
@@ -19,6 +20,7 @@ import type { models } from "@polar-sh/sdk/2026-10";
 
 import { abandonedPage, checkoutPage, failedPage, portalPage } from "./pages";
 import { createResend, type ResendFault } from "./resend";
+import { createSequenzy } from "./sequenzy";
 import { deliveryHeaders, type Scheme } from "./sign";
 
 export type ProductKey = "desktop" | "pro_month" | "pro_year" | "api";
@@ -207,6 +209,8 @@ export type MockOptions = {
   publicUrl: string;
   accessToken: string;
   resendApiKey: string;
+  /** The marketing key convt-billing sends to the Sequenzy routes. */
+  sequenzyApiKey?: string;
   webhook: Partial<WebhookConfig> & { secret: string };
   mailpitUrl?: string;
   /** Replaces POSTing deliveries to webhook.url (in-process tests). */
@@ -273,6 +277,7 @@ export function createBillingMock(options: MockOptions) {
   const disputes = new Map<string, Dispute>();
   const sessions = new Map<string, { customerId: string; returnUrl: string | null }>();
 
+  const sequenzy = createSequenzy({ apiKey: options.sequenzyApiKey ?? "sqz_test" });
   const resend = createResend({
     apiKey: options.resendApiKey,
     now: nowMs,
@@ -1900,6 +1905,13 @@ export function createBillingMock(options: MockOptions) {
       })),
       deliveries: log.slice(-200),
       held: held.map((h) => ({ id: h.id, type: h.type })),
+      contacts: [...sequenzy.contacts.values()].map((c) => ({
+        externalId: c.externalId,
+        status: c.status,
+        tags: c.tags,
+        createdAt: c.createdAt,
+        attributes: c.attributes,
+      })),
     };
   }
 
@@ -1908,6 +1920,8 @@ export function createBillingMock(options: MockOptions) {
     try {
       if (url.pathname === "/health") return json(200, { ok: true });
       if (url.pathname === "/emails" && req.method === "POST") return await resend.handle(req);
+      const contact = await sequenzy.handle(req, url);
+      if (contact) return contact;
       if (url.pathname.startsWith("/v1/")) return await api(req, url);
       if (url.pathname.startsWith("/admin/")) return await admin(req, url);
       const p = await pages(req, url);
@@ -1928,6 +1942,7 @@ export function createBillingMock(options: MockOptions) {
     },
     clearApiFaults: () => apiFaults.splice(0),
     resend,
+    sequenzy,
     webhook,
     now: () => new Date(nowMs()),
     advance(msToAdd: number) {
