@@ -1,5 +1,29 @@
 # @convt/desktop
 
+## 0.4.0
+
+### Minor Changes
+
+- [#110](https://github.com/opencoredev/convt/pull/110) [`4a3df83`](https://github.com/opencoredev/convt/commit/4a3df835a9e6ab09cdfc7574cec7d5a72347d491) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The desktop app now installs updates itself. While update checks are on, a new version your license covers downloads in the background, is checked against the signed list of releases, and waits for you to click Restart to update. This works for the Mac app, the Windows installer and the Linux AppImage; the deb, rpm and tarball still link to the download page.
+
+- [#110](https://github.com/opencoredev/convt/pull/110) [`4a3df83`](https://github.com/opencoredev/convt/commit/4a3df835a9e6ab09cdfc7574cec7d5a72347d491) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Closing the convt window no longer quits the app. It keeps running with an icon in the menu bar (the system tray on Windows and Linux) so right-click conversions start at once, and leaves the Dock on macOS. Quit from that icon, or with ⌘Q on a Mac and Ctrl+Q elsewhere. "Keep running in the background" in Settings turns this off on every platform. The menu bar icon is a template glyph that follows the menu bar's color. Its menu shows what convt is doing and offers Convert Files…, your last five converted files (click one to show it in Finder or your file manager), Open convt, Settings…, and Check for Updates… or Restart to Update. The Finder menu shows the colored convt logo.
+
+- [#111](https://github.com/opencoredev/convt/pull/111) [`fa09406`](https://github.com/opencoredev/convt/commit/fa09406faafb6a36e3a327738c25eb4fefb10b40) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The CLI prints a SKILL.md for AI coding agents. Run `convt --skill` or `convt skill`.
+
+- [#68](https://github.com/opencoredev/convt/pull/68) [`18c6a05`](https://github.com/opencoredev/convt/commit/18c6a05b4c5651e854c7a4de387f55babd09202d) Thanks [@leoisadev1](https://github.com/leoisadev1)! - A redesigned desktop app, set in Inter with Hugeicons icons: Activity, Quick convert, Settings and first run share one look in light and dark, with clearer empty, error and trial states.
+
+  First run now starts with your convt.app account. Sign in through your browser with Google or an email code, or enter a license key instead. A new account can then start the 7-day Pro trial through checkout, which charges nothing until the trial ends. If you skip it, Start free trial stays in the sidebar and in Settings > License.
+
+### Patch Changes
+
+- [#68](https://github.com/opencoredev/convt/pull/68) [`18c6a05`](https://github.com/opencoredev/convt/commit/18c6a05b4c5651e854c7a4de387f55babd09202d) Thanks [@leoisadev1](https://github.com/leoisadev1)! - On macOS, the menu bar has convt, File, Edit, Window and Help menus, with About convt, Check for Updates…, Settings… (⌘,) and the usual shortcuts. Quit and Close Window work from the keyboard on every platform: ⌘Q and ⌘W on macOS, Ctrl+Q and Ctrl+W on Linux and Windows. convt checks for updates at every launch and every 5 hours while automatic checks are on, and the Updates card in Settings shows this version, when it last checked, a Check now button and any newer build with its release notes and Download.
+
+- [#68](https://github.com/opencoredev/convt/pull/68) [`18c6a05`](https://github.com/opencoredev/convt/commit/18c6a05b4c5651e854c7a4de387f55babd09202d) Thanks [@leoisadev1](https://github.com/leoisadev1)! - When convt has no tray icon, because "Keep running in the background" is off or the Linux desktop has no system tray, it quits once its last window is closed and its conversions finish, including conversions started from the file manager.
+
+- [#68](https://github.com/opencoredev/convt/pull/68) [`18c6a05`](https://github.com/opencoredev/convt/commit/18c6a05b4c5651e854c7a4de387f55babd09202d) Thanks [@leoisadev1](https://github.com/leoisadev1)! - A conversion started from the file manager's right-click menu now shows a notification when it finishes, like any other conversion, while "Show a notification" is on in Settings.
+
+- [#104](https://github.com/opencoredev/convt/pull/104) [`49d15c8`](https://github.com/opencoredev/convt/commit/49d15c832daf0e545608db2803c66c2c1053ca8f) Thanks [@leoisadev1](https://github.com/leoisadev1)! - On Linux desktops that leave window decorations to the app, such as GNOME on Wayland, convt's windows now have a title bar: drag it to move the window, double-click it to maximize, right-click it for the window menu, and use its minimize, maximize and close buttons. Desktops that draw their own title bars keep them.
+
 ## 0.3.0
 
 ### Minor Changes
