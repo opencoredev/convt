@@ -5,6 +5,7 @@
 mod about;
 mod account;
 mod chrome;
+mod finder_guide;
 mod first_run;
 mod main_window;
 pub mod menus;
@@ -25,6 +26,7 @@ use gpui_kit::*;
 use theme::IconName;
 
 pub use about::AboutView;
+pub use finder_guide::FinderGuideView;
 pub use first_run::FirstRunView;
 pub use main_window::MainView;
 pub use popover::PopoverView;
@@ -126,6 +128,19 @@ const ONBOARDING: &[(&str, &[u8])] = &[
     ),
 ];
 
+/// The Finder guide's drawn pointer (`finder_guide`): its edge and its fill,
+/// drawn in two colors.
+const GUIDE: &[(&str, &[u8])] = &[
+    (
+        "guide/pointer-edge.svg",
+        include_bytes!("../../assets/guide/pointer-edge.svg"),
+    ),
+    (
+        "guide/pointer.svg",
+        include_bytes!("../../assets/guide/pointer.svg"),
+    ),
+];
+
 /// The Lucide paths gpui-kit's components load, and the Hugeicon each gets.
 const COMPONENT_ICONS: &[(&str, &str)] = &[
     ("icons/loader.svg", "loading"),
@@ -149,6 +164,7 @@ impl Assets {
             .iter()
             .chain(std::iter::once(&GOOGLE_G))
             .chain(ONBOARDING)
+            .chain(GUIDE)
             .find(|(p, _)| *p == path)
             .map(|(_, bytes)| *bytes)
     }
@@ -169,6 +185,7 @@ impl AssetSource for Assets {
                 .iter()
                 .chain(std::iter::once(&GOOGLE_G))
                 .chain(ONBOARDING)
+                .chain(GUIDE)
                 .filter(|(p, _)| p.starts_with(path))
                 .map(|(p, _)| SharedString::from(*p)),
         );
@@ -440,6 +457,36 @@ fn open_first_run(cx: &mut App) {
     show_on(display, size, "Welcome to convt", cx, |window, cx| {
         cx.new(|cx| FirstRunView::new(app, first_run::Screen::Account, window, cx))
     });
+}
+
+/// Opens the guide beside System Settings for turning on the Finder
+/// extension, or plays it again from the start if it's open. Only
+/// `finder::open_settings` calls it.
+pub fn show_finder_guide(cx: &mut App) {
+    if let Some((handle, _)) = Open::<FinderGuideView>::get(cx) {
+        let _ = handle.update(cx, |_, window, _| window.remove_window());
+    }
+    let app = model::shared(cx);
+    let (w, h) = finder_guide::SIZE;
+    let options = WindowOptions {
+        titlebar: None,
+        kind: WindowKind::PopUp,
+        focus: false,
+        // macOS shows it once System Settings' window is up, beside it.
+        show: !cfg!(all(target_os = "macos", not(test))),
+        is_movable: false,
+        is_resizable: false,
+        is_minimizable: false,
+        // It is never the active window, and its loop should stay smooth.
+        inactive_frame_interval: None,
+        ..window_options(size(px(w), px(h)), "Turn on convt in Finder", cx)
+    };
+    match open_window(options, cx, |window, cx| {
+        cx.new(|cx| FinderGuideView::new(app, window, cx))
+    }) {
+        Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
+        Err(e) => tracing::error!(error = %e, "could not open the Finder guide"),
+    }
 }
 
 /// Opens Settings on `tab`.

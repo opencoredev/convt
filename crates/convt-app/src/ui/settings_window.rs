@@ -14,7 +14,6 @@ use super::theme::{
 };
 use super::{LICENSE_PRICE, describe, error_text, open_folder};
 use crate::account::masked_email;
-use crate::finder::EXTENSION_SETTINGS;
 use crate::model::AppState;
 use crate::settings::{Settings, auto_concurrency};
 
@@ -412,7 +411,7 @@ impl SettingsView {
                 Button::secondary("manage-finder", button)
                     .small()
                     .build(p)
-                    .on_click(|_, _, cx| cx.open_url(EXTENSION_SETTINGS)),
+                    .on_click(|_, _, cx| crate::finder::open_settings(cx)),
                 p,
             )
             .into_any_element()
