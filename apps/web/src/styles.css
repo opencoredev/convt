@@ -204,25 +204,79 @@ body {
 }
 /* landing tokens */
 /*
- * The landing page is dark only, so these are fixed values from the Paper
- * "convt Landing" artboard rather than light/dark pairs. They cover the extra
- * greys, the code colors and the green button that the shared palette lacks.
+ * Extra values the landing page uses on top of the shared palette: greys, the code
+ * colors, the card and button shadows and the glow behind the hero, engines and closing
+ * panels. Dark values come from the Paper "convt Landing" artboard; light values are
+ * their counterparts on white, each reaching 4.5:1 where they color text.
  */
-@theme {
-  /* Lightened from the Paper values (#6f7571, #5e6662) to reach 4.5:1 on every landing surface. */
-  --color-land-muted: #838985;
-  --color-land-label: #848c88;
-  --color-land-mono: #d6ddd9;
-  --color-land-well: #0b0d0c;
-  --color-land-code: #0f1211;
-  --color-land-accent: #4cc283;
-  --color-land-soft: #c4c9c6;
-
-  --shadow-land-card: 0 0 0 1px #232726, 0 1px 2px #00000066;
-  --shadow-land-float: 0 0 0 1px #ffffff14, 0 24px 60px #00000099, 0 4px 12px #00000066;
-  --shadow-land-secondary: inset 0 1px 0 #ffffff0f, 0 0 0 1px #2e3331, 0 1px 2px #00000066;
+:root {
+  --land-muted: #686d6a;
+  --land-label: #686d6a;
+  --land-mono: #2a2f2c;
+  --land-well: #f3f5f4;
+  --land-code: #0f1211;
+  --land-accent: #127a47;
+  --land-soft: #4f5451;
+  --land-menu: rgb(255 255 255 / 92%);
+  --land-menu-ink: #2a2f2c;
+  --land-menu-line: rgb(0 0 0 / 8%);
+  --land-select: rgb(18 122 71 / 10%);
+  --land-select-ring: rgb(18 122 71 / 28%);
+  --land-pill: rgb(255 255 255 / 85%);
+  --shadow-land-card: 0 0 0 1px #e6e8e7, 0 1px 2px #0000000a;
+  --shadow-land-card-hover: 0 0 0 1px #d5d9d7, 0 12px 32px #0a1e141f;
+  --shadow-land-float: 0 0 0 1px #0000000f, 0 24px 60px #0a1e1429, 0 4px 12px #0a1e1414;
+  --shadow-land-menu: 0 0 0 1px #0000001a, 0 1.2em 3em #0a1e142e;
+  --shadow-land-secondary: inset 0 -1px 0 #0000000a, 0 0 0 1px #d5d9d7, 0 1px 2px #0000000f;
   --shadow-land-primary:
     inset 0 1px 0 #ffffff47, 0 0 0 1px #157f4a, 0 1px 2px #0a3c2340, 0 4px 12px #0a3c2324;
+  --land-glow-color: #ffffff;
+  --land-glow-image: url("/landing/dither-glow-light.png");
+}
+
+.dark {
+  /* Lightened from the Paper values (#6f7571, #5e6662) to reach 4.5:1 on every landing surface. */
+  --land-muted: #838985;
+  --land-label: #848c88;
+  --land-mono: #d6ddd9;
+  --land-well: #0b0d0c;
+  --land-code: #0f1211;
+  --land-accent: #4cc283;
+  --land-soft: #c4c9c6;
+  --land-menu: rgb(27 30 29 / 95%);
+  --land-menu-ink: #d6ddd9;
+  --land-menu-line: #ffffff14;
+  --land-select: rgb(255 255 255 / 8%);
+  --land-select-ring: rgb(255 255 255 / 14%);
+  --land-pill: #0b0d0ccc;
+  --shadow-land-card: 0 0 0 1px #232726, 0 1px 2px #00000066;
+  --shadow-land-card-hover: 0 0 0 1px #2e3331, 0 12px 32px #00000080;
+  --shadow-land-float: 0 0 0 1px #ffffff14, 0 24px 60px #00000099, 0 4px 12px #00000066;
+  --shadow-land-menu: 0 0 0 1px #ffffff1a, 0 1.2em 3em #00000099;
+  --shadow-land-secondary: inset 0 1px 0 #ffffff0f, 0 0 0 1px #2e3331, 0 1px 2px #00000066;
+  --land-glow-color: #0a0b0b;
+  --land-glow-image: url("/landing/dither-glow.png");
+}
+
+@theme inline {
+  --color-land-muted: var(--land-muted);
+  --color-land-label: var(--land-label);
+  --color-land-mono: var(--land-mono);
+  --color-land-well: var(--land-well);
+  --color-land-code: var(--land-code);
+  --color-land-accent: var(--land-accent);
+  --color-land-soft: var(--land-soft);
+  --color-land-menu: var(--land-menu);
+  --color-land-menu-ink: var(--land-menu-ink);
+  --color-land-menu-line: var(--land-menu-line);
+  --color-land-pill: var(--land-pill);
+
+  --shadow-land-card: var(--shadow-land-card);
+  --shadow-land-card-hover: var(--shadow-land-card-hover);
+  --shadow-land-float: var(--shadow-land-float);
+  --shadow-land-menu: var(--shadow-land-menu);
+  --shadow-land-secondary: var(--shadow-land-secondary);
+  --shadow-land-primary: var(--shadow-land-primary);
 }
 
 /*
@@ -238,10 +292,10 @@ body {
   );
 }
 
-/* Dithered green glow behind the hero, engines and closing panels. */
+/* Dithered green glow behind the hero, engines and closing panels, one per theme. */
 @utility bg-land-glow {
-  background-color: #0a0b0b;
-  background-image: url("/landing/dither-glow.png");
+  background-color: var(--land-glow-color);
+  background-image: var(--land-glow-image);
   background-size: cover;
   image-rendering: pixelated;
 }
@@ -425,8 +479,8 @@ body {
   }
   22%,
   47% {
-    background-color: rgb(255 255 255 / 8%);
-    box-shadow: 0 0 0 1px rgb(255 255 255 / 14%);
+    background-color: var(--land-select);
+    box-shadow: 0 0 0 1px var(--land-select-ring);
   }
   50%,
   100% {
@@ -442,6 +496,7 @@ body {
   22%,
   47% {
     background-color: #1f7a4d;
+    color: #ffffff;
   }
   50%,
   100% {
@@ -587,43 +642,43 @@ body {
 @keyframes demo-step-1 {
   0%,
   17% {
-    color: #838985;
+    color: var(--land-muted);
   }
   19%,
   33% {
-    color: #4cc283;
+    color: var(--land-accent);
   }
   35%,
   100% {
-    color: #838985;
+    color: var(--land-muted);
   }
 }
 @keyframes demo-step-2 {
   0%,
   33% {
-    color: #838985;
+    color: var(--land-muted);
   }
   35%,
   48% {
-    color: #4cc283;
+    color: var(--land-accent);
   }
   50%,
   100% {
-    color: #838985;
+    color: var(--land-muted);
   }
 }
 @keyframes demo-step-3 {
   0%,
   52% {
-    color: #838985;
+    color: var(--land-muted);
   }
   55%,
   92% {
-    color: #4cc283;
+    color: var(--land-accent);
   }
   95%,
   100% {
-    color: #838985;
+    color: var(--land-muted);
   }
 }
 

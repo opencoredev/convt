@@ -93,7 +93,7 @@ function FormatCard({
     <li
       data-reveal=""
       style={revealDelay(index)}
-      className="reveal lift flex flex-col overflow-clip rounded-[14px] bg-raised shadow-land-card hover:shadow-[0_0_0_1px_#2e3331,0_12px_32px_#00000080]"
+      className="reveal lift flex flex-col overflow-clip rounded-[14px] bg-raised shadow-land-card hover:shadow-land-card-hover"
     >
       <div className="h-[200px] shrink-0">{preview}</div>
       <div className="flex flex-col gap-3.5 p-5">
@@ -154,8 +154,8 @@ function VideoPreview() {
         </div>
       </div>
       <div className="flex w-full items-center gap-2.5 font-mono text-[10.5px]/[14px]">
-        <span className="text-[#9aa19d]">0:12</span>
-        <div className="h-[3px] flex-1 rounded-[2px] bg-[#ffffff24]">
+        <span className="text-land-muted">0:12</span>
+        <div className="h-[3px] flex-1 rounded-[2px] bg-line-strong">
           <div className="h-[3px] w-[28%] rounded-[2px] bg-land-accent" />
         </div>
         <span className="text-land-muted">0:42</span>
@@ -204,7 +204,7 @@ function AudioPreview() {
   return (
     <div
       aria-hidden="true"
-      className="flex size-full flex-col justify-center gap-3.5 bg-[#0f1a14] px-6"
+      className="flex size-full flex-col justify-center gap-3.5 bg-[#eef7f2] px-6 dark:bg-[#0f1a14]"
     >
       <svg width="240" height="72" viewBox="0 0 240 72" className="max-w-full shrink-0">
         {[...playedBars, ...restBars].map(([y, height], i) => (
@@ -215,7 +215,11 @@ function AudioPreview() {
             width="4"
             height={height}
             rx="2"
-            fill={i < playedBars.length ? "#3fcb84" : "#2a4a39"}
+            className={
+              i < playedBars.length
+                ? "fill-[#1fa463] dark:fill-[#3fcb84]"
+                : "fill-[#c3e2cf] dark:fill-[#2a4a39]"
+            }
           />
         ))}
       </svg>
@@ -234,14 +238,14 @@ function DocumentPreview() {
     <div aria-hidden="true" className="relative size-full overflow-clip bg-sunken">
       {/* Fixed 288px stage, centered, so the stacked pages keep their layout at any card width. */}
       <div className="absolute inset-y-0 left-1/2 w-[288px] -translate-x-1/2">
-        <div className="absolute top-[34px] left-[118px] flex h-[170px] w-[132px] origin-top-left rotate-6 flex-col rounded-md bg-hover p-3 shadow-[0_0_0_1px_#2e3331,0_6px_16px_#00000066]">
-          <div className="h-4 shrink-0 bg-green-tint shadow-[inset_0_-1px_0_#1e3a2a]" />
+        <div className="absolute top-[34px] left-[118px] flex h-[170px] w-[132px] origin-top-left rotate-6 flex-col rounded-md bg-raised p-3 shadow-[0_0_0_1px_#e0e3e1,0_6px_16px_#0a1e1414] dark:bg-hover dark:shadow-[0_0_0_1px_#2e3331,0_6px_16px_#00000066]">
+          <div className="h-4 shrink-0 bg-green-tint shadow-[inset_0_-1px_0_var(--green-line)]" />
           {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="h-4 shrink-0 shadow-[inset_0_-1px_0_#2a2e2d]" />
+            <div key={i} className="h-4 shrink-0 shadow-[inset_0_-1px_0_var(--divider)]" />
           ))}
         </div>
-        <div className="absolute top-7 left-11 flex h-[176px] w-[132px] origin-top-left -rotate-4 flex-col gap-[7px] rounded-md bg-hover px-3.5 py-4 shadow-[0_0_0_1px_#2e3331,0_8px_20px_#00000080]">
-          <div className="h-[7px] w-[70%] shrink-0 rounded-[2px] bg-[#c9cecb]" />
+        <div className="absolute top-7 left-11 flex h-[176px] w-[132px] origin-top-left -rotate-4 flex-col gap-[7px] rounded-md bg-raised px-3.5 py-4 shadow-[0_0_0_1px_#e0e3e1,0_8px_20px_#0a1e141f] dark:bg-hover dark:shadow-[0_0_0_1px_#2e3331,0_8px_20px_#00000080]">
+          <div className="h-[7px] w-[70%] shrink-0 rounded-[2px] bg-ink-3 dark:bg-[#c9cecb]" />
           <div className="h-1.5 shrink-0" />
           {textLines.map((width, i) =>
             width ? (

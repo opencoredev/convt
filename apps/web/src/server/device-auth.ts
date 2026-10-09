@@ -37,7 +37,8 @@ export const deviceLimits = {
   approvePerUser: 10,
   tokenPerIp: 30,
   renewPerIp: 120,
-  renewPerDevice: 30,
+  /** The app polls while a trial checkout is open (about 50 asks in 15 minutes). */
+  renewPerDevice: 90,
   /** A credential lasts five minutes, and a batch of files can share one. */
   cloudPerIp: 600,
   cloudPerDevice: 240,

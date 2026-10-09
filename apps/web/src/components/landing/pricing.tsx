@@ -71,7 +71,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
     <div
       className={cx(
         planCard,
-        "shadow-[0_0_0_1px_#232726,0_1px_2px_#00000066,0_8px_24px_#00000066]",
+        "shadow-[0_0_0_1px_var(--line),0_1px_2px_#0000000a,0_8px_24px_#0a1e140f] dark:shadow-[0_0_0_1px_#232726,0_1px_2px_#00000066,0_8px_24px_#00000066]",
       )}
     >
       <div className="flex flex-col gap-2">
@@ -111,7 +111,12 @@ function DesktopPlan({ launched }: { launched: boolean }) {
 function ProPlan({ launched }: { launched: boolean }) {
   const [yearly, setYearly] = useState(false);
   return (
-    <div className={cx(planCard, "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]")}>
+    <div
+      className={cx(
+        planCard,
+        "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#0a3c231f] dark:shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]",
+      )}
+    >
       <div className="relative flex flex-col gap-2">
         <PlanHeader
           name="Pro"
@@ -178,7 +183,7 @@ function PeriodButton({
       className={cx(
         "flex h-6 cursor-pointer items-center rounded-md px-2.5 text-[12px]/[16px] font-medium transition-colors",
         active
-          ? "bg-hover text-ink shadow-[inset_0_1px_0_#ffffff0f,0_0_0_1px_#2e3331,0_1px_1px_#00000066]"
+          ? "bg-raised text-ink shadow-[0_0_0_1px_var(--line-strong),0_1px_1px_#0000000f] dark:bg-hover dark:shadow-[inset_0_1px_0_#ffffff0f,0_0_0_1px_#2e3331,0_1px_1px_#00000066]"
           : "text-land-muted hover:text-ink-2",
         focusRing,
       )}
@@ -251,7 +256,7 @@ function ApiCard({ available, launched }: { available: boolean; launched: boolea
   return (
     <div
       id="api"
-      className="flex w-full max-w-[840px] scroll-mt-6 flex-col gap-8 rounded-2xl bg-raised p-6 shadow-[0_0_0_1px_#232726,0_8px_24px_#00000066] lg:flex-row lg:items-center lg:justify-between lg:py-7 lg:pr-7 lg:pl-8"
+      className="flex w-full max-w-[840px] scroll-mt-6 flex-col gap-8 rounded-2xl bg-raised p-6 shadow-[0_0_0_1px_var(--line),0_8px_24px_#0a1e140f] lg:flex-row dark:shadow-[0_0_0_1px_#232726,0_8px_24px_#00000066] lg:items-center lg:justify-between lg:py-7 lg:pr-7 lg:pl-8"
     >
       <div className="flex flex-col gap-4 lg:w-[300px] lg:shrink-0">
         <div className="flex flex-col gap-2">
@@ -278,7 +283,8 @@ function ApiCard({ available, launched }: { available: boolean; launched: boolea
           )}
         </div>
       </div>
-      <div className="flex min-w-0 flex-col rounded-[10px] bg-land-code shadow-[inset_0_0_0_1px_#232726] lg:w-[440px] lg:shrink-0">
+      {/* The code sample stays dark in both themes, like a terminal. */}
+      <div className="dark flex min-w-0 flex-col rounded-[10px] bg-land-code text-ink shadow-[inset_0_0_0_1px_#232726] lg:w-[440px] lg:shrink-0">
         <div className="flex h-[34px] shrink-0 items-center px-3.5 font-mono text-[11px]/[14px] text-land-muted shadow-[inset_0_-1px_0_#ffffff0f]">
           convert.ts
         </div>

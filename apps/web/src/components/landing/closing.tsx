@@ -10,7 +10,7 @@ export function CallToAction({ signedIn }: { signedIn: boolean }) {
     <Container>
       <section
         aria-labelledby="cta-title"
-        className="bg-land-glow flex flex-col items-center gap-7 overflow-clip rounded-2xl bg-bottom px-5 pt-16 pb-24 text-center md:h-[460px] md:pt-[88px] md:pb-0"
+        className="bg-land-glow flex flex-col items-center gap-7 overflow-clip rounded-2xl bg-bottom shadow-[inset_0_0_0_1px_var(--line)] dark:shadow-none px-5 pt-16 pb-24 text-center md:h-[460px] md:pt-[88px] md:pb-0"
       >
         <div className="flex flex-col items-center gap-3.5">
           <h2

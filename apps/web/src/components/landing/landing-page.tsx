@@ -10,7 +10,7 @@ import { Nav } from "./nav";
 import { Pricing } from "./pricing";
 import { focusRing } from "./ui";
 
-/** convt.app home page. Always dark; the route sets `dark` on <html>. */
+/** convt.app home page. Follows the visitor's light or dark setting, like every page. */
 export function LandingPage({
   sales,
   account,
