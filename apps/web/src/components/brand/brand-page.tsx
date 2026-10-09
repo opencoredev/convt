@@ -120,7 +120,7 @@ export function BrandPage({ account }: { account: Account | null }) {
         <Colors />
         <Typography />
         <Usage />
-        <CallToAction />
+        <CallToAction signedIn={false} />
       </main>
       <Footer />
     </div>

@@ -1,10 +1,11 @@
 import { Mark } from "#/components/logo";
+import { downloadEntryHref } from "#/lib/sign-in";
 import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
-export function CallToAction() {
+export function CallToAction({ signedIn }: { signedIn: boolean }) {
   return (
     <Container>
       <section
@@ -25,7 +26,7 @@ export function CallToAction() {
         </div>
         <div className="flex flex-wrap justify-center gap-3">
           {LAUNCHED ? (
-            <DownloadActions />
+            <DownloadActions signedIn={signedIn} />
           ) : (
             <ComingSoon className="h-11 rounded-[10px] px-5 text-[15px]/[18px]">
               Not available yet
@@ -37,19 +38,19 @@ export function CallToAction() {
   );
 }
 
-function DownloadActions() {
+function DownloadActions({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <ButtonLink
         variant="primary"
-        href={routes.download}
+        href={downloadEntryHref(signedIn)}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
         Get convt
       </ButtonLink>
       <ButtonLink
         variant="secondary"
-        href={`${routes.download}#platforms`}
+        href={signedIn ? "/download#platforms" : downloadEntryHref(false)}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
         All platforms

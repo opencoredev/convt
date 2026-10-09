@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 
-import { authSearch, downloadGate, isNewAccount, landingAfterSignIn } from "../../src/lib/sign-in";
+import {
+  authSearch,
+  downloadEntryHref,
+  downloadGate,
+  isNewAccount,
+  landingAfterSignIn,
+} from "../../src/lib/sign-in";
 
 const origin = "https://convt.app";
 const now = Date.parse("2026-10-08T12:00:00Z");
@@ -35,11 +41,18 @@ test("a page that asked to come back wins, and only same-origin paths count", ()
   );
 });
 
-test("/download sends signed-out visitors to sign-in with next, and unverified ones to confirm", () => {
-  expect(downloadGate(null, "/download")).toBe("/sign-in?next=%2Fdownload");
-  expect(downloadGate(null, "/download?os=linux")).toBe("/sign-in?next=%2Fdownload%3Fos%3Dlinux");
+test("/download sends signed-out visitors to sign-in with redirect, and unverified ones to confirm", () => {
+  expect(downloadGate(null, "/download")).toBe("/sign-in?redirect=%2Fdownload");
+  expect(downloadGate(null, "/download?os=linux")).toBe(
+    "/sign-in?redirect=%2Fdownload%3Fos%3Dlinux",
+  );
   expect(downloadGate({ emailVerified: false }, "/download")).toBe(
     "/sign-in/verify-email?redirect=%2Fdownload",
   );
   expect(downloadGate({ emailVerified: true }, "/download")).toBeNull();
+});
+
+test("Get convt goes straight to sign-in with one redirect when signed out", () => {
+  expect(downloadEntryHref(false)).toBe("/sign-in?redirect=%2Fdownload");
+  expect(downloadEntryHref(true)).toBe("/download");
 });

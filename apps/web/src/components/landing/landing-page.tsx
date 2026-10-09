@@ -29,14 +29,14 @@ export function LandingPage({
       </a>
       <Nav account={account} path="/" />
       <main id="main">
-        <Hero />
+        <Hero signedIn={account != null} />
         <Formats />
         <Engines />
         <div data-reveal="" className="reveal">
           <Pricing sales={sales} />
         </div>
         <div data-reveal="" className="reveal">
-          <CallToAction />
+          <CallToAction signedIn={account != null} />
         </div>
       </main>
       <Footer />

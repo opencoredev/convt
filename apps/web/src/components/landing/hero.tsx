@@ -1,10 +1,11 @@
-import { GITHUB_URL, LAUNCHED, routes } from "#/lib/site";
+import { downloadEntryHref } from "#/lib/sign-in";
+import { GITHUB_URL, LAUNCHED } from "#/lib/site";
 
 import { ConvertDemo } from "./convert-demo";
 import { ProductHuntBadge } from "./product-hunt-badge";
 import { ButtonLink, ComingSoon, Container, DownloadIcon } from "./ui";
 
-export function Hero() {
+export function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <Container>
       <div className="flex flex-col items-center gap-[22px] pt-14 pb-12 text-center md:pt-[88px] md:pb-16">
@@ -17,7 +18,7 @@ export function Hero() {
         </p>
         <div className="flex flex-wrap justify-center gap-2.5 pt-2.5">
           {LAUNCHED ? (
-            <HeroActions />
+            <HeroActions signedIn={signedIn} />
           ) : (
             <ComingSoon className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]">
               Not available yet
@@ -31,13 +32,14 @@ export function Hero() {
   );
 }
 
-// "Get convt" goes to /download, which asks a new visitor to create an account first.
-function HeroActions() {
+// "Get convt" goes to /download, which asks a new visitor to create an account first, so a
+// signed-out visitor goes straight to sign-in.
+function HeroActions({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <ButtonLink
         variant="primary"
-        href={routes.download}
+        href={downloadEntryHref(signedIn)}
         className="rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px]"
       >
         <DownloadIcon />

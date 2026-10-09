@@ -59,6 +59,14 @@ export function landingAfterSignIn({
 }
 
 /**
+ * Where a "Get convt" link points: /download for a signed-in visitor, otherwise straight
+ * to sign-in with /download as the one `redirect`, so the click costs no extra redirects.
+ */
+export function downloadEntryHref(signedIn: boolean): string {
+  return signedIn ? routes.download : `/sign-in?redirect=${encodeURIComponent(routes.download)}`;
+}
+
+/**
  * Where a visitor to /download goes instead, or null to show the page. The page asks for
  * an account; Homebrew and the GitHub releases stay open, and sign-in says so.
  */
@@ -67,7 +75,7 @@ export function downloadGate(
   href: string,
 ): string | null {
   const back = encodeURIComponent(href);
-  if (!session) return `/sign-in?next=${back}`;
+  if (!session) return `/sign-in?redirect=${back}`;
   if (!session.emailVerified) return `/sign-in/verify-email?redirect=${back}`;
   return null;
 }
