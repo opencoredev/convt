@@ -378,6 +378,65 @@ fn an_expired_credential_is_renewed_once() {
     assert!(calls.contains(&"status job_1 cvt_web_2".to_string()));
 }
 
+/// convt.app's side, issuing one credential and then answering `then`.
+struct OnceThen {
+    then: ApiError,
+    issued: Mutex<bool>,
+}
+
+impl account::Api for OnceThen {
+    fn exchange(&self, _: &str, _: &str) -> Result<Session, ApiError> {
+        unreachable!()
+    }
+    fn current_key(&self, _: &str, _: &str) -> Result<LicenseReply, ApiError> {
+        unreachable!()
+    }
+    fn sign_out(&self, _: &str) -> Result<(), ApiError> {
+        unreachable!()
+    }
+    fn cloud_credential(&self, _: &str) -> Result<CloudCredential, ApiError> {
+        let mut issued = self.issued.lock().unwrap();
+        if *issued {
+            return Err(self.then.clone());
+        }
+        *issued = true;
+        Ok(CloudCredential {
+            base_url: "https://api.test".into(),
+            token: "cvt_web_1".into(),
+        })
+    }
+}
+
+#[test]
+fn only_a_confirmed_revocation_reads_as_signed_out() {
+    let (_dir, file) = input();
+    for (then, kind) in [
+        (ApiError::Offline, "cloud_unauthorized"),
+        (ApiError::SignedOut, "cloud_signed_out"),
+    ] {
+        let fake = Arc::new(Fake::default());
+        fake.create
+            .lock()
+            .unwrap()
+            .push_back(Err(CloudError::Refused {
+                status: 401,
+                code: "unauthorized".into(),
+            }));
+        let cloud = Cloud {
+            credentials: Credentials::new(
+                Arc::new(OnceThen {
+                    then,
+                    issued: Mutex::new(false),
+                }),
+                "cvd_device".into(),
+            ),
+            ..cloud(fake, None)
+        };
+        let e = run_quietly(&cloud, &webp(&file), &Cancel::new()).unwrap_err();
+        assert_eq!(e.kind, kind);
+    }
+}
+
 #[test]
 fn a_blip_while_polling_is_ridden_out() {
     let fake = Arc::new(Fake {

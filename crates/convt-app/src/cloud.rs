@@ -170,6 +170,9 @@ pub enum CloudError {
     BadResponse,
     /// The user stopped the job while a transfer ran.
     Cancelled,
+    /// convt.app confirmed this computer's sign-in was revoked while
+    /// renewing a refused credential.
+    SignedOut,
     /// A file on this computer couldn't be read or written.
     Io(String),
 }
@@ -280,6 +283,7 @@ fn api_error(e: CloudError, to: &Format) -> JobError {
     let target = to.extension().to_uppercase();
     match e {
         CloudError::Cancelled => cancelled(),
+        CloudError::SignedOut => credential_error(ApiError::SignedOut),
         CloudError::Offline => fail(
             "cloud_offline",
             "convt's cloud couldn't be reached. Check your internet connection and try again.",
@@ -308,8 +312,9 @@ fn api_error(e: CloudError, to: &Format) -> JobError {
                 "cloud_pro",
                 "Cloud conversion needs an active paid Pro subscription.",
             ),
+            // Not a sign-out: only convt.app's device endpoint can say that.
             "unauthorized" => fail(
-                "cloud_signed_out",
+                "cloud_unauthorized",
                 "convt's cloud didn't accept this computer's sign-in. Try again.",
             ),
             "rate_limited" => fail(
@@ -501,7 +506,10 @@ impl Session<'_> {
     ) -> Result<T, CloudError> {
         match f(&*self.cloud.api, &self.credential) {
             Err(e) if unauthorized(&e) => {
-                self.credential = self.cloud.credentials.get(true).map_err(|_| e)?;
+                self.credential = self.cloud.credentials.get(true).map_err(|r| match r {
+                    ApiError::SignedOut => CloudError::SignedOut,
+                    _ => e,
+                })?;
                 f(&*self.cloud.api, &self.credential)
             }
             r => r,
