@@ -859,6 +859,24 @@ mod app {
     }
 
     #[gpui_kit::test]
+    fn no_cloud_job_starts_while_an_update_installs(cx: &mut TestAppContext) {
+        let fake = Arc::new(Fake::default());
+        let (dir, app) = app_signed_in(cx, Some(key(Plan::Pro)), fake.clone());
+        app.update(cx, |s, cx| {
+            s.update_settings(|s| s.cloud_consent = true, cx);
+            s.update = crate::update::Update::Installing {
+                version: "9.2.0".into(),
+            };
+        });
+        let png = dir.path().join("photo.png");
+        std::fs::write(&png, b"png bytes").unwrap();
+        let e = convert(cx, &app, &png, Options::default()).unwrap_err();
+        assert_eq!(e, crate::model::INSTALLING);
+        cx.read(|cx| assert_eq!(app.read(cx).queue.active(), 0));
+        assert!(fake.calls().is_empty());
+    }
+
+    #[gpui_kit::test]
     fn a_refusal_shows_as_the_jobs_error(cx: &mut TestAppContext) {
         let fake = Arc::new(Fake::default());
         fake.create

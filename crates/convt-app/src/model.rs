@@ -454,6 +454,10 @@ impl AppState {
         output: Output,
         cx: &mut Context<Self>,
     ) -> Result<Vec<JobId>, String> {
+        // Quitting after the install would cut the upload or download off.
+        if self.installing() {
+            return Err(INSTALLING.into());
+        }
         if let Some(reason) = self.cloud_access().reason() {
             return Err(reason);
         }
