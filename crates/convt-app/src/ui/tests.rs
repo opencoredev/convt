@@ -4640,10 +4640,11 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
         .serve(Ok(manifest(4, &[("0.1.0", "2026-10-01")], &update_key())));
     assert_eq!(manual_check(&f, cx), Update::UpToDate);
     assert!(!shown(cx, main, "update-card"));
+    // Only builds with a package for this install count, so it claims no more.
+    let status = label(cx, settings, "update-status").unwrap();
     assert!(
-        label(cx, settings, "update-status")
-            .unwrap()
-            .starts_with("You're up to date.")
+        status.starts_with("You're up to date.") && status.ends_with("for this install."),
+        "{status}"
     );
     assert!(!shown(cx, settings, "update-notes"));
 }

@@ -405,7 +405,7 @@ fn status(app: &Entity<AppState>, state: &AppState, on: bool, p: &Palette) -> An
         .into_any_element(),
         Update::UpToDate => note(
             lead(IconName::CircleCheck, p.green_text),
-            format!("You're up to date. convt {VERSION} is the newest version."),
+            format!("You're up to date. convt {VERSION} is the latest build for this install."),
             p.text,
         )
         .into_any_element(),
