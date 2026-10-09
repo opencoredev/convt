@@ -74,14 +74,15 @@ exports[`marketing templates snapshots 3`] = `
   "text": 
 "Your Pro trial has started.
 
-For the next 7 days you have everything in convt Pro. Here's how to get the most out of it.
+For the next 7 days the convt app is yours to use. Here's how to start.
 
 1. Sign in on your computer
    Open Settings in the convt app and choose Sign in with convt.app. Pro turns on for that computer.
-2. Convert from your phone or browser
-   Upload a file from any device and download the result. Files are deleted after 24 hours.
-3. Send heavy video to the cloud
-   Long exports run on our servers when you choose, so your laptop stays free.
+2. Right-click any file
+   Choose Convert with convt and pick a format. Everything runs on your computer.
+
+Cloud conversions start when Pro is paid
+Once your trial becomes a paid plan, you can convert from your phone or browser and send heavy video to the cloud.
 
 Open your dashboard: https://convt.app/dashboard
 

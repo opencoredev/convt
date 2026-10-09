@@ -21,6 +21,8 @@ export type SequenzyWebhook =
       /** convt's user id, when the contact has one. */
       externalId: string | null;
       email: string | null;
+      /** The event's `created_at`; null when it is missing or unreadable. */
+      occurredAt: Date | null;
     }
   | { kind: "other"; id: string; type: string };
 
@@ -68,6 +70,13 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
+function parseTime(value: unknown): Date | null {
+  const t = text(value);
+  if (!t) return null;
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -103,6 +112,7 @@ function parseEvent(raw: Uint8Array): SequenzyWebhook | null {
     type: optOut,
     // Sequenzy documents snake_case for webhooks and camelCase for its API.
     externalId: field(data, "external_id", "externalId"),
+    occurredAt: parseTime(body.created_at),
     email: email ? email.toLowerCase() : null,
   };
 }

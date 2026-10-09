@@ -13,7 +13,7 @@ import {
   type ContactsClient,
 } from "@convt/mail";
 
-import { alert, type BillingContext, maskEmail, one, rows } from "./context";
+import { alert, type BillingContext, maskEmail, one } from "./context";
 import { safeError } from "./outbox";
 
 export type MarketingDeps = {
@@ -56,28 +56,38 @@ async function hmac(secret: string, message: string): Promise<Uint8Array> {
 }
 
 /**
- * `<user id>.<HMAC>`: lets whoever holds the email change that account's
- * marketing preference and nothing else. It does not expire, because a link in
- * an old email must keep working; rotating MARKETING_LINK_SECRET revokes them all.
+ * `<user id>.<HMAC of user id and address>`: lets whoever holds the email change
+ * that account's marketing preference and nothing else. It does not expire,
+ * because a link in an old email must keep working, but it stops working when
+ * the account's address changes, so a previous address cannot control the new
+ * one. Rotating MARKETING_LINK_SECRET revokes every link.
  */
-export async function preferencesToken(secret: string, userId: string): Promise<string> {
-  return `${userId}.${base64urlEncode(await hmac(secret, tokenContext + userId))}`;
+export async function preferencesToken(
+  secret: string,
+  userId: string,
+  email: string,
+): Promise<string> {
+  return `${userId}.${base64urlEncode(await hmac(secret, `${tokenContext}${userId}:${email}`))}`;
 }
 
-/** The user id a token was made for, or null. */
-export async function verifyPreferencesToken(
-  secret: string,
-  token: string,
-): Promise<string | null> {
+/** The user id a token names, before checking it. */
+export function tokenUserId(token: string): string | null {
   if (token.length > 200) return null;
   const dot = token.lastIndexOf(".");
-  if (dot <= 0) return null;
-  const userId = token.slice(0, dot);
-  const expected = await preferencesToken(secret, userId);
-  if (expected.length !== token.length) return null;
+  return dot > 0 ? token.slice(0, dot) : null;
+}
+
+/** Whether `token` was made for this account and its current address. */
+export async function checkPreferencesToken(
+  secret: string,
+  token: string,
+  account: { userId: string; email: string },
+): Promise<boolean> {
+  const expected = await preferencesToken(secret, account.userId, account.email);
+  if (expected.length !== token.length) return false;
   let diff = 0;
   for (let i = 0; i < token.length; i++) diff |= token.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0 ? userId : null;
+  return diff === 0;
 }
 
 export function preferencesUrl(siteUrl: string, token: string): string {
@@ -103,7 +113,7 @@ export async function setMarketingPreference(
   input: { userId: string; subscribed: boolean; source: "settings" | "email_link" },
 ): Promise<MarketingPreference> {
   await ctx.db.execute(
-    sql`select set_marketing_consent(${input.userId}, ${input.subscribed}, ${input.source}, null)`,
+    sql`select set_marketing_consent(${input.userId}, ${input.subscribed}, ${input.source}, null, null)`,
   );
   return marketingPreference(ctx, input.userId);
 }
@@ -111,12 +121,16 @@ export async function setMarketingPreference(
 async function tokenUser(ctx: BillingContext, token: string) {
   const secret = ctx.marketing.linkSecret;
   if (!secret) return null;
-  const userId = await verifyPreferencesToken(secret, token);
+  const userId = tokenUserId(token);
   if (!userId) return null;
-  return one<{ id: string; email: string }>(
+  const user = await one<{ id: string; email: string }>(
     ctx.db,
     sql`select id, email from users where id = ${userId}`,
   );
+  if (!user) return null;
+  return (await checkPreferencesToken(secret, token, { userId: user.id, email: user.email }))
+    ? user
+    : null;
 }
 
 export async function preferenceByToken(
@@ -151,6 +165,8 @@ const alertAfterAttempts = 6;
 const batchSize = 100;
 /** Two Sequenzy calls of at most 10 seconds each, with room to spare. */
 const leaseMs = 2 * 60_000;
+/** Stop claiming after this long, well inside a Worker invocation. */
+const runBudgetMs = 40_000;
 
 type DueRow = {
   user_id: string;
@@ -178,7 +194,7 @@ async function contactFor(ctx: BillingContext, row: DueRow, secret: string): Pro
     attributes: {
       preferencesUrl: preferencesUrl(
         ctx.config.siteUrl,
-        await preferencesToken(secret, row.user_id),
+        await preferencesToken(secret, row.user_id, row.email),
       ),
       desktopBuyer: row.desktop_buyer,
       proStatus: row.pro_status,
@@ -193,7 +209,10 @@ async function push(
   secret: string,
 ): Promise<ContactResult> {
   if (row.status === "unsubscribed") {
-    const result = await contacts.unsubscribe(row.user_id);
+    const result = await contacts.unsubscribe({
+      externalId: row.user_id,
+      email: row.email_verified ? row.email : null,
+    });
     // No contact: nothing at Sequenzy to unsubscribe.
     return result.kind === "not_found" ? { kind: "ok" } : result;
   }
@@ -217,7 +236,7 @@ async function push(
  */
 async function record(
   ctx: BillingContext,
-  row: DueRow,
+  row: DueRow & { lease: Date },
   outcome:
     | { state: "synced" }
     | { state: "held" }
@@ -244,44 +263,50 @@ async function record(
   })();
   const written = await ctx.db.execute(sql`
     update marketing_subscriptions set ${set}, sync_lease_until = null, updated_at = ${now}
-    where user_id = ${row.user_id} and xmin::text = ${row.version}`);
+    where user_id = ${row.user_id} and xmin::text = ${row.version} and sync_lease_until = ${row.lease}`);
   if ((written.rowCount ?? 0) > 0) return true;
+  // Release only this run's own lease; a newer claimant keeps its own.
   await ctx.db.execute(
-    sql`update marketing_subscriptions set sync_lease_until = null where user_id = ${row.user_id}`,
+    sql`update marketing_subscriptions set sync_lease_until = null
+      where user_id = ${row.user_id} and sync_lease_until = ${row.lease}`,
   );
   return false;
 }
 
-/** The cron step: pushes every due row. A no-op until Sequenzy is configured. */
-export async function syncMarketing(ctx: BillingContext): Promise<SyncSummary> {
-  const summary: SyncSummary = { synced: 0, held: 0, retry: 0, failed: 0, skipped: 0 };
-  const { contacts, linkSecret } = ctx.marketing;
-  if (!contacts || !linkSecret) return summary;
+/**
+ * Claims the next due row for this run alone and reads what the push needs. Rows
+ * are claimed one at a time, just before their push, so a slow batch never holds
+ * a lease it cannot use in time. Accounts being deleted are skipped: deletion
+ * removes their contact.
+ */
+async function claimNext(ctx: BillingContext): Promise<(DueRow & { lease: Date }) | null> {
   const now = ctx.clock();
-  // Claim due rows first, so no other run pushes them until this one is done.
-  // Accounts being deleted are skipped: deletion removes their contact.
-  const claimed = await rows<{ user_id: string }>(
+  const lease = new Date(now.getTime() + leaseMs);
+  const claimed = await one<{ user_id: string }>(
     ctx.db,
     sql`
-    update marketing_subscriptions set sync_lease_until = ${new Date(now.getTime() + leaseMs)}
-    where user_id in (
+    update marketing_subscriptions set sync_lease_until = ${lease}
+    where user_id = (
       select m.user_id from marketing_subscriptions m
       where m.sync_state = 'pending' and m.next_sync_at <= ${now}
         and (m.sync_lease_until is null or m.sync_lease_until <= ${now})
         and not exists (select 1 from account_deletions d where d.user_id = m.user_id and d.status <> 'done')
       order by m.next_sync_at
-      limit ${batchSize}
+      limit 1
       for update skip locked)
     returning user_id`,
   );
-  if (!claimed.length) return summary;
-  const due = await rows<DueRow>(
+  if (!claimed) return null;
+  const row = await one<DueRow>(
     ctx.db,
     sql`
     select m.user_id, m.xmin::text as version, m.status, m.source, m.reactivate, m.sync_attempts,
       m.synced_at, u.email, u.email_verified, u.name, u.created_at as user_created_at,
+      -- Paid only: a complimentary (zero-cost) Desktop order is not a purchase.
       exists (select 1 from licenses l where l.user_id = m.user_id and l.plan = 'desktop'
-        and not l.trial and l.revoked_at is null) as desktop_buyer,
+        and not l.trial and l.revoked_at is null
+        and (l.order_id is null or exists (
+          select 1 from orders o where o.id = l.order_id and o.amount_cents > 0))) as desktop_buyer,
       (select case
           when count(*) = 0 then 'none'
           when bool_or(s.status in ('active', 'past_due')) then 'active'
@@ -289,13 +314,21 @@ export async function syncMarketing(ctx: BillingContext): Promise<SyncSummary> {
           else 'ended' end
         from subscriptions s where s.user_id = m.user_id and s.kind = 'pro') as pro_status
     from marketing_subscriptions m join users u on u.id = m.user_id
-    where m.user_id in (${sql.join(
-      claimed.map((c) => sql`${c.user_id}`),
-      sql`, `,
-    )})
-    order by m.next_sync_at`,
+    where m.user_id = ${claimed.user_id}`,
   );
-  for (const row of due) {
+  return row ? { ...row, lease } : null;
+}
+
+/** The cron step: pushes every due row. A no-op until Sequenzy is configured. */
+export async function syncMarketing(ctx: BillingContext): Promise<SyncSummary> {
+  const summary: SyncSummary = { synced: 0, held: 0, retry: 0, failed: 0, skipped: 0 };
+  const { contacts, linkSecret } = ctx.marketing;
+  if (!contacts || !linkSecret) return summary;
+  const startedAt = Date.now();
+  for (let n = 0; n < batchSize && Date.now() - startedAt < runBudgetMs; n++) {
+    const row = await claimNext(ctx);
+    if (!row) break;
+    const now = ctx.clock();
     if (row.status === "subscribed" && !row.email_verified) {
       // The address is unproven; the users trigger sets the row pending again once
       // it is verified.
@@ -342,7 +375,8 @@ export async function syncMarketing(ctx: BillingContext): Promise<SyncSummary> {
       }
     }
   }
-  if (due.length) ctx.log(`[billing] marketing sync ${JSON.stringify(summary)}`);
+  if (Object.values(summary).some((n) => n > 0))
+    ctx.log(`[billing] marketing sync ${JSON.stringify(summary)}`);
   return summary;
 }
 
@@ -353,8 +387,9 @@ export type MarketingWebhookResult = { status: number; body: string };
 /**
  * POST /webhooks/sequenzy. An unsubscribe, complaint or bounce at Sequenzy becomes
  * `unsubscribed` here and is pushed back, so a push of an older state that lands
- * late is overwritten. Applying one twice changes nothing, so Sequenzy's retries
- * need no dedupe table.
+ * late is overwritten. An event from before the person last subscribed is
+ * ignored by set_marketing_consent, so a retried or delayed delivery cannot undo
+ * a later resubscribe.
  */
 export async function handleMarketingWebhook(
   ctx: BillingContext,
@@ -379,7 +414,7 @@ export async function handleMarketingWebhook(
       : null;
   if (!user) return { status: 200, body: "no account" };
   await ctx.db.execute(
-    sql`select set_marketing_consent(${user.id}, false, 'provider', ${`${event.type} ${event.id}`})`,
+    sql`select set_marketing_consent(${user.id}, false, 'provider', ${`${event.type} ${event.id}`}, ${event.occurredAt})`,
   );
   return { status: 200, body: "ok" };
 }
@@ -390,6 +425,13 @@ export async function handleMarketingWebhook(
 export async function removeMarketingContact(ctx: BillingContext, userId: string): Promise<void> {
   const contacts = ctx.marketing.contacts;
   if (!contacts) return;
+  // A push that claimed the row before the deletion began may still be running;
+  // removing the contact under it would let it create the contact again.
+  const leased = await one(
+    ctx.db,
+    sql`select 1 as x from marketing_subscriptions where user_id = ${userId} and sync_lease_until > ${ctx.clock()}`,
+  );
+  if (leased) throw new Error("waiting for a marketing push to finish");
   const result = await contacts.remove(userId);
   if (result.kind === "ok" || result.kind === "not_found") return;
   const error = new Error(`Sequenzy contact not removed: ${result.code}`);

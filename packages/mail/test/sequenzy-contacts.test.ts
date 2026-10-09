@@ -100,7 +100,9 @@ describe("Sequenzy contacts", () => {
 
   test("unsubscribe and remove use the external id routes", async () => {
     const { seen, client } = recording(() => new Response(null, { status: 204 }));
-    expect(await client.unsubscribe("usr_a/b")).toEqual({ kind: "ok" });
+    expect(await client.unsubscribe({ externalId: "usr_a/b", email: null })).toEqual({
+      kind: "ok",
+    });
     expect(await client.remove("usr_a/b")).toEqual({ kind: "ok" });
     expect(seen.map((s) => [s.method, s.url, s.body])).toEqual([
       [
@@ -134,7 +136,9 @@ describe("Sequenzy contacts", () => {
     ];
     for (const [response, expected] of cases) {
       const { client } = recording(response);
-      expect(await client.unsubscribe("usr_x")).toEqual(expected as never);
+      expect(await client.unsubscribe({ externalId: "usr_x", email: mailbox })).toEqual(
+        expected as never,
+      );
     }
     const broken = sequenzyContacts({
       apiKey: "k",
@@ -185,6 +189,7 @@ describe("Sequenzy webhook", () => {
         type: "subscriber.unsubscribed",
         externalId: "usr_test1",
         email: mailbox,
+        occurredAt: null,
       },
     });
   });
@@ -242,6 +247,7 @@ describe("Sequenzy webhook", () => {
     const bounced = body({
       id: "evt_2",
       type: "email.bounced",
+      created_at: "2026-10-09T11:59:00Z",
       data: { recipient: mailbox, email_type: "campaign" },
     });
     const r = await verifySequenzyWebhook({
@@ -258,6 +264,7 @@ describe("Sequenzy webhook", () => {
         type: "email.bounced",
         externalId: null,
         email: mailbox,
+        occurredAt: new Date("2026-10-09T11:59:00Z"),
       },
     });
     const opened = body({ id: "evt_3", type: "email.opened", data: {} });

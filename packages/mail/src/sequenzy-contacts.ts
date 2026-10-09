@@ -43,7 +43,8 @@ export type ContactsClient = {
   create(input: CreateContact): Promise<ContactResult>;
   /** Email, name and attributes. `reactivate` also sets the status back to active. */
   update(input: { contact: Contact; reactivate: boolean }): Promise<ContactResult>;
-  unsubscribe(externalId: string): Promise<ContactResult>;
+  /** `email`, when verified, keeps an unsubscribed contact's address current. */
+  unsubscribe(input: { externalId: string; email: string | null }): Promise<ContactResult>;
   remove(externalId: string): Promise<ContactResult>;
 };
 
@@ -146,12 +147,17 @@ export function sequenzyContacts(options: SequenzyContactsOptions): ContactsClie
     update: ({ contact, reactivate }) =>
       call("PATCH", external(contact.externalId), {
         email: contact.email,
-        ...(contact.firstName ? { firstName: contact.firstName } : {}),
+        // Always sent, so clearing the name in convt clears it here too.
+        firstName: contact.firstName,
         customAttributes: contact.attributes,
         customAttributesStrategy: "merge",
         ...(reactivate ? { status: "active" } : {}),
       }),
-    unsubscribe: (externalId) => call("PATCH", external(externalId), { status: "unsubscribed" }),
+    unsubscribe: ({ externalId, email }) =>
+      call("PATCH", external(externalId), {
+        status: "unsubscribed",
+        ...(email ? { email } : {}),
+      }),
     remove: (externalId) => call("DELETE", external(externalId), undefined),
   };
 }

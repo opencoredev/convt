@@ -256,17 +256,21 @@ end
 $$;
 --> statement-breakpoint
 -- The person's own choice (`settings`, `email_link`) or an unsubscribe Sequenzy
--- reported (`provider`). Every change is pushed, a provider one too: a push of
--- an older state may still be landing at Sequenzy, and pushing the unsubscribe
--- again makes this row the final word. Subscribing again by choice sets
--- `reactivate`, the only way the push may make Sequenzy's contact active again.
--- Returns true when the status changed.
-create function set_marketing_consent(p_user_id text, p_subscribed boolean, p_source text, p_detail text)
+-- reported (`provider`) with the time it happened. Every change is pushed, a
+-- provider one too: a push of an older state may still be landing at Sequenzy,
+-- and pushing the unsubscribe again makes this row the final word. A provider
+-- unsubscribe from before the person last subscribed (a late or repeated
+-- webhook) is ignored. Subscribing again by choice sets `reactivate`, the only
+-- way the push may make Sequenzy's contact active again. Returns true when the
+-- status changed.
+create function set_marketing_consent(p_user_id text, p_subscribed boolean, p_source text, p_detail text,
+  p_occurred_at timestamptz)
 returns boolean
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_status text := case when p_subscribed then 'subscribed' else 'unsubscribed' end;
   v_old text;
+  v_changed_at timestamptz;
 begin
   if p_source not in ('settings', 'email_link', 'provider') then
     raise exception 'set_marketing_consent: source % is not a choice', p_source
@@ -276,12 +280,19 @@ begin
     raise exception 'set_marketing_consent: the provider never subscribes anyone'
       using errcode = 'P0001';
   end if;
-  perform 1 from users u where u.id = p_user_id for share;
+  -- Exclusive, so two first choices for an account without a row serialize and
+  -- the second sees the first.
+  perform 1 from users u where u.id = p_user_id for update;
   if not found then
     return false;
   end if;
-  select m.status into v_old from marketing_subscriptions m where m.user_id = p_user_id for update;
+  select m.status, m.status_changed_at into v_old, v_changed_at
+    from marketing_subscriptions m where m.user_id = p_user_id for update;
   if v_old is not distinct from v_status then
+    return false;
+  end if;
+  if p_source = 'provider' and v_old = 'subscribed' and p_occurred_at is not null
+    and v_changed_at > p_occurred_at then
     return false;
   end if;
   insert into marketing_subscriptions (user_id, status, source, status_changed_at, reactivate)
@@ -298,9 +309,9 @@ $$;
 --> statement-breakpoint
 revoke all on function enroll_marketing(text, text) from public;
 --> statement-breakpoint
-revoke all on function set_marketing_consent(text, boolean, text, text) from public;
+revoke all on function set_marketing_consent(text, boolean, text, text, timestamptz) from public;
 --> statement-breakpoint
-grant execute on function set_marketing_consent(text, boolean, text, text) to convt_billing;
+grant execute on function set_marketing_consent(text, boolean, text, text, timestamptz) to convt_billing;
 --> statement-breakpoint
 -- Every new account is subscribed (Leo's decision, 2026-10-09); the privacy policy
 -- says so and every campaign email carries an unsubscribe link. Runs for whichever
@@ -316,7 +327,7 @@ $$;
 create trigger users_enroll_marketing after insert on users
   for each row execute function users_enroll_marketing();
 --> statement-breakpoint
--- A new address or a newly verified one has to reach Sequenzy.
+-- A new address, a newly verified one or a new name has to reach Sequenzy.
 create function users_resync_marketing() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
@@ -328,9 +339,10 @@ begin
 end
 $$;
 --> statement-breakpoint
-create trigger users_resync_marketing after update of email, email_verified on users
+create trigger users_resync_marketing after update of email, email_verified, name on users
   for each row
-  when (old.email is distinct from new.email or old.email_verified is distinct from new.email_verified)
+  when (old.email is distinct from new.email or old.email_verified is distinct from new.email_verified
+    or old.name is distinct from new.name)
   execute function users_resync_marketing();
 --> statement-breakpoint
 -- A purchase, refund or subscription change alters the attributes campaigns are

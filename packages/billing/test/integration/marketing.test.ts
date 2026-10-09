@@ -7,7 +7,7 @@ import { applyMarketingBackfill, planMarketingBackfill } from "@convt/db/queries
 import { signSequenzyWebhook } from "@convt/mail";
 import { sql } from "drizzle-orm";
 
-import { preferencesToken, verifyPreferencesToken } from "../../src/marketing";
+import { checkPreferencesToken, preferencesToken } from "../../src/marketing";
 import { createHarness, testMailbox, type Harness } from "../../src/testing";
 
 let h: Harness;
@@ -74,9 +74,12 @@ describe("marketing email", () => {
     expect(c.createdAt).toBeNull();
     const link = new URL(String(c.attributes.preferencesUrl));
     expect(link.pathname).toBe("/email/preferences");
-    expect(await verifyPreferencesToken(h.marketing.linkSecret, link.searchParams.get("t")!)).toBe(
-      u.id,
-    );
+    expect(
+      await checkPreferencesToken(h.marketing.linkSecret, link.searchParams.get("t")!, {
+        userId: u.id,
+        email: u.email,
+      }),
+    ).toBe(true);
     expect(c.attributes).toMatchObject({ desktopBuyer: false, proStatus: "none" });
   });
 
@@ -96,7 +99,7 @@ describe("marketing email", () => {
     const b = await legacyUser("mkt-legacy-b", false);
     const opted = await legacyUser("mkt-legacy-out");
     await h.service.withCtx((c) =>
-      c.db.execute(sql`select set_marketing_consent(${opted.id}, false, 'settings', null)`),
+      c.db.execute(sql`select set_marketing_consent(${opted.id}, false, 'settings', null, null)`),
     );
     const plan = await planMarketingBackfill(h.owner);
     const ids = plan.missing.map((m) => m.userId);
@@ -157,7 +160,7 @@ describe("marketing email", () => {
 
   test("a preferences link reads and changes only its own account", async () => {
     const u = await h.user(testMailbox("mkt-link"));
-    const token = await preferencesToken(h.marketing.linkSecret, u.id);
+    const token = await preferencesToken(h.marketing.linkSecret, u.id, u.email);
     expect(await h.service.preferenceByToken(token)).toEqual({
       subscribed: true,
       maskedEmail: "m***@convt.test",
@@ -172,6 +175,72 @@ describe("marketing email", () => {
     expect(await h.service.preferenceByToken(`${token}x`)).toBeNull();
     expect(await h.service.preferenceByToken("usr_nothing.short")).toBeNull();
     expect((await row(other.id)).status).toBe("subscribed");
+
+    // After an email change the old address's link no longer works.
+    await h.q(sql`update users set email = ${testMailbox("mkt-link-new")} where id = ${u.id}`);
+    expect(await h.service.preferenceByToken(token)).toBeNull();
+    const fresh = await preferencesToken(h.marketing.linkSecret, u.id, testMailbox("mkt-link-new"));
+    expect(await h.service.preferenceByToken(fresh)).toMatchObject({ subscribed: false });
+  });
+
+  test("a late or repeated Sequenzy unsubscribe does not undo a later resubscribe", async () => {
+    const u = await h.user(testMailbox("mkt-late"));
+    await h.service.syncMarketing();
+    const pause = () => new Promise((r) => setTimeout(r, 20));
+    await pause();
+    const unsubscribedAt = new Date();
+    const hook = {
+      id: "evt_late",
+      type: "subscriber.unsubscribed",
+      created_at: unsubscribedAt.toISOString(),
+      data: { external_id: u.id },
+    };
+    await webhook(hook);
+    expect((await row(u.id)).status).toBe("unsubscribed");
+    await pause();
+    await h.service.setMarketingPreference(u.id, true);
+    // The same delivery again, and a delayed one from before the resubscribe.
+    await webhook(hook);
+    await webhook({
+      ...hook,
+      id: "evt_late_2",
+      created_at: new Date(unsubscribedAt.getTime() + 5).toISOString(),
+    });
+    expect((await row(u.id)).status).toBe("subscribed");
+    // An unsubscribe that happened after the resubscribe still applies.
+    await pause();
+    await webhook({ ...hook, id: "evt_new", created_at: new Date().toISOString() });
+    expect((await row(u.id)).status).toBe("unsubscribed");
+  });
+
+  test("a name change is pushed, and an unsubscribed contact keeps a current address", async () => {
+    const u = await h.user(testMailbox("mkt-name"));
+    await h.service.syncMarketing();
+    await h.q(sql`update users set name = 'Alex Example' where id = ${u.id}`);
+    expect((await row(u.id)).sync_state).toBe("pending");
+    await h.service.syncMarketing();
+    expect(contact(u.id)?.firstName).toBe("Alex");
+
+    await h.service.setMarketingPreference(u.id, false);
+    await h.service.syncMarketing();
+    await h.q(sql`update users set email = ${testMailbox("mkt-name-2")} where id = ${u.id}`);
+    await h.service.syncMarketing();
+    expect(contact(u.id)).toMatchObject({
+      status: "unsubscribed",
+      email: testMailbox("mkt-name-2"),
+    });
+  });
+
+  test("a complimentary Desktop order is not a buyer; --resync includes delayed retries", async () => {
+    const u = await h.user(testMailbox("mkt-comp"));
+    await h.buy("desktop", u);
+    await h.deliverAll();
+    await h.q(sql`update orders set amount_cents = 0 where user_id = ${u.id}`);
+    await h.q(sql`update marketing_subscriptions set next_sync_at = now() + interval '6 hours',
+      sync_state = 'pending' where user_id = ${u.id}`);
+    await applyMarketingBackfill(h.owner, { resync: true });
+    await h.service.syncMarketing();
+    expect(contact(u.id)?.attributes.desktopBuyer).toBe(false);
   });
 
   test("Sequenzy's unsubscribe, complaint and bounce webhooks unsubscribe; bad ones are refused", async () => {
@@ -247,15 +316,13 @@ describe("marketing email", () => {
     } finally {
       h.marketing.contacts.update = realUpdate;
     }
-    expect(contact(u.id)?.status).toBe("active");
-    // The stale push's outcome was not recorded, and the lease is released.
+    // The stale push's outcome was not recorded; the same run claimed the row
+    // again and pushed the newer unsubscribe after it.
+    expect(contact(u.id)?.status).toBe("unsubscribed");
     const [r] = await h.q<{ sync_state: string; lease: Date | null }>(
       sql`select sync_state, sync_lease_until as lease from marketing_subscriptions where user_id = ${u.id}`,
     );
-    expect(r).toEqual({ sync_state: "pending", lease: null });
-    await h.service.syncMarketing();
-    expect(contact(u.id)?.status).toBe("unsubscribed");
-    expect((await row(u.id)).sync_state).toBe("synced");
+    expect(r).toEqual({ sync_state: "synced", lease: null });
   });
 
   test("an account being deleted is not pushed", async () => {
@@ -311,6 +378,16 @@ describe("marketing email", () => {
     const u = await h.user(testMailbox("mkt-delete"));
     await h.service.syncMarketing();
     expect(contact(u.id)).toBeDefined();
+    // A push still holding the row makes deletion wait instead of racing it.
+    await h.q(
+      sql`update marketing_subscriptions set sync_lease_until = now() + interval '1 minute' where user_id = ${u.id}`,
+    );
+    const waiting = await h.service.requestDeletion(u.id);
+    expect(await h.service.advanceDeletion(waiting.id)).toBe("failed");
+    expect(contact(u.id)).toBeDefined();
+    await h.q(
+      sql`update marketing_subscriptions set sync_lease_until = null where user_id = ${u.id}`,
+    );
     const realRemove = h.marketing.contacts.remove;
     h.marketing.contacts.remove = async () => ({
       kind: "retry",
@@ -319,6 +396,7 @@ describe("marketing email", () => {
       retryAfterMs: null,
     });
     const d = await h.service.requestDeletion(u.id);
+    expect(d.id).toBe(waiting.id);
     try {
       expect(await h.service.advanceDeletion(d.id)).toBe("failed");
     } finally {
@@ -349,7 +427,7 @@ describe("marketing email", () => {
         ),
       ).rejects.toThrow("permission denied");
       await expect(
-        run(sql`select set_marketing_consent(${u.id}, true, 'provider', null)`),
+        run(sql`select set_marketing_consent(${u.id}, true, 'provider', null, null)`),
       ).rejects.toThrow("never subscribes");
       await expect(run(sql`select enroll_marketing(${u.id}, 'backfill')`)).rejects.toThrow(
         "permission denied",

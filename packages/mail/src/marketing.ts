@@ -271,12 +271,12 @@ export function proTrialEmail(siteUrl: string): MarketingEmail {
   const site = siteUrl.replace(/\/$/, "");
   return {
     subject: "Getting started with convt Pro",
-    preheader: "Three things to try during your 7-day trial.",
+    preheader: "How to start, and what comes with Pro after the trial.",
     heading: "Your Pro trial has started.",
     blocks: [
       {
         kind: "p",
-        text: "For the next 7 days you have everything in convt Pro. Here's how to get the most out of it.",
+        text: "For the next 7 days the convt app is yours to use. Here's how to start.",
       },
       {
         kind: "steps",
@@ -286,14 +286,15 @@ export function proTrialEmail(siteUrl: string): MarketingEmail {
             body: "Open Settings in the convt app and choose Sign in with convt.app. Pro turns on for that computer.",
           },
           {
-            title: "Convert from your phone or browser",
-            body: "Upload a file from any device and download the result. Files are deleted after 24 hours.",
-          },
-          {
-            title: "Send heavy video to the cloud",
-            body: "Long exports run on our servers when you choose, so your laptop stays free.",
+            title: "Right-click any file",
+            body: "Choose Convert with convt and pick a format. Everything runs on your computer.",
           },
         ],
+      },
+      {
+        kind: "note",
+        title: "Cloud conversions start when Pro is paid",
+        body: "Once your trial becomes a paid plan, you can convert from your phone or browser and send heavy video to the cloud.",
       },
       { kind: "button", href: `${site}/dashboard`, label: "Open your dashboard" },
       {

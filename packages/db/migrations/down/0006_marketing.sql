@@ -5,7 +5,7 @@ drop trigger users_resync_marketing on users;
 drop trigger users_enroll_marketing on users;
 drop function users_resync_marketing();
 drop function users_enroll_marketing();
-drop function set_marketing_consent(text, boolean, text, text);
+drop function set_marketing_consent(text, boolean, text, text, timestamptz);
 drop function enroll_marketing(text, text);
 drop table marketing_consent_events;
 drop table marketing_subscriptions;

@@ -18,31 +18,31 @@ Only two SQL functions change consent, and both write the log:
 | `enroll_marketing(user, 'signup' or 'backfill')`          | the `users` insert trigger, `bun run marketing:backfill` | Subscribes an account that has no row. Never touches an existing row, so an unsubscribe survives.                                  |
 | `set_marketing_consent(user, subscribed, source, detail)` | convt-billing                                            | The person's choice from Settings (`settings`) or a preferences link (`email_link`), or an opt-out Sequenzy reported (`provider`). |
 
-Triggers mark a row `pending` again when the account's email changes or is verified, and when a purchase, refund or subscription change alters its segment attributes.
+Triggers mark a row `pending` again when the account's email or name changes, when the email is verified, and when a purchase, refund or subscription change alters its segment attributes.
 
-convt-billing's per-minute cron (`syncMarketing` in `packages/billing/src/marketing.ts`) pushes pending rows to Sequenzy, keyed by the convt user id as Sequenzy's `externalId`:
+convt-billing's per-minute cron (`syncMarketing` in `packages/billing/src/marketing.ts`) pushes pending rows to Sequenzy, keyed by the convt user id as Sequenzy's `externalId`. It claims one row at a time under a two-minute lease just before pushing it, so two runs never push the same row, and a change made during a push is pushed again afterwards. Accounts with an open deletion are skipped:
 
 - Subscribed, unverified email: held until the address is verified.
 - Subscribed: `PATCH /subscribers/external` with the email, first name and custom attributes, or `POST /subscribers` if no contact exists. A backfilled account is created with its signup date, which stops Sequenzy enrolling it in sequences, so existing users get no welcome email. A new signup is created without one.
-- Unsubscribed: `PATCH ... {"status": "unsubscribed"}`.
+- Unsubscribed: `PATCH ... {"status": "unsubscribed"}`, with the current address when it is verified.
 - Sequenzy's status goes back to `active` only after the person subscribes again themselves.
 - 429, 5xx and network errors back off (1, 5, 15, 60, 180, then 720 minutes) and raise a `marketing_sync` alert after six failures. Other 4xx answers mark the row `failed` and raise an alert. Alerts carry the user id and status code, never an address.
 
 Each contact gets these custom attributes for templates and segments:
 
-| Attribute        | Value                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| `preferencesUrl` | `https://convt.app/email/preferences?t=<token>`, signed with `MARKETING_LINK_SECRET` |
-| `desktopBuyer`   | `true` when the account has an unrevoked, paid Desktop license                       |
-| `proStatus`      | `active`, `trialing`, `ended` or `none`                                              |
+| Attribute        | Value                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preferencesUrl` | `https://convt.app/email/preferences?t=<token>`, signed with `MARKETING_LINK_SECRET` over the user id and current address, so it stops working after an email change |
+| `desktopBuyer`   | `true` when the account has an unrevoked Desktop license from a non-zero order (complimentary keys don't count)                                                      |
+| `proStatus`      | `active`, `trialing`, `ended` or `none`                                                                                                                              |
 
 People change their preference in three places:
 
 - **Settings**, in the Email section on the dashboard.
 - **`/email/preferences?t=...`**, the link in every campaign footer. It works signed out. Opening it changes nothing; the button POSTs, because mail scanners open links.
-- **Sequenzy's own unsubscribe link**. Sequenzy reports it to `POST /webhooks/sequenzy`, which also turns `email.complained` and `email.bounced` into an unsubscribe.
+- **Sequenzy's own unsubscribe link**. Sequenzy reports it to `POST /webhooks/sequenzy`, which also turns `email.complained` and `email.bounced` into an unsubscribe. An event dated before the person last subscribed (a late or repeated delivery) is ignored.
 
-Deleting an account deletes the Sequenzy contact before the user row.
+Deleting an account deletes the Sequenzy contact before the user row, after waiting for any push that still holds the row.
 
 ## Templates
 

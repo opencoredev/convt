@@ -22,7 +22,8 @@ export const Route = createFileRoute("/_app/email/preferences")({
   head: () => ({
     meta: [{ title: "Email preferences · convt" }, { name: "referrer", content: "no-referrer" }],
   }),
-  component: PreferencesPage,
+  // Keyed by the token, so following another link never shows the previous one's state.
+  component: () => <PreferencesPage key={Route.useSearch().t ?? ""} />,
 });
 
 const aside = {

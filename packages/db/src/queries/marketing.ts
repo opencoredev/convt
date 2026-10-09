@@ -56,7 +56,7 @@ export async function applyMarketingBackfill(
         update marketing_subscriptions
           set sync_state = 'pending', sync_attempts = 0, next_sync_at = now(), last_error = null,
             updated_at = now()
-          where status = 'subscribed' and sync_state <> 'pending'`);
+          where status = 'subscribed' and (sync_state <> 'pending' or next_sync_at > now())`);
       resynced = r.rowCount ?? 0;
     }
     return { enrolled: Number(enrolled.rows[0]?.n ?? 0), resynced };
