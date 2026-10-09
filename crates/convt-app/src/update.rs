@@ -1,8 +1,8 @@
-//! The update check: at most once a UTC day, and from "Check now" in
-//! Settings, while update checks are on (the default). convt keeps running
-//! in the background, so it checks at launch and then every
-//! [`DAILY_CHECKS`] whether the day's check (and the day's license renewal,
-//! `account.rs`) is due; each still asks at most once a UTC day. It downloads the
+//! The update check: at every launch and then every [`CHECK_INTERVAL`] while
+//! the app runs, as long as automatic checks are on (the default), and
+//! whenever the user clicks Check now or Check for Updates…. convt keeps
+//! running in the background, so the schedule also runs the day's license
+//! renewal (`account.rs`), which still asks at most once a UTC day. It downloads the
 //! signed manifest, verifies it with `convt_update` against the key this
 //! build trusts, refuses anything older than the highest manifest sequence it
 //! accepted before, and picks the newest build this machine's license covers.
@@ -29,8 +29,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use convt_license::client::{State, today};
-use convt_license::date;
+use convt_license::client::State;
 use convt_update::{Artifact, Error as ManifestError, MAX_MANIFEST_BYTES};
 use ed25519_dalek::VerifyingKey;
 use futures::StreamExt as _;
@@ -39,9 +38,14 @@ use gpui_kit::{Context, Task};
 use crate::account::{VERSION, background};
 use crate::model::AppState;
 
-/// How often the running app looks whether the day's update check and
-/// license renewal are due.
-pub const DAILY_CHECKS: Duration = Duration::from_secs(3 * 60 * 60);
+/// How long a running app waits between automatic checks.
+pub const CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60 * 60);
+
+/// How often the schedule looks at the clock. Timers can stop while the
+/// computer sleeps, so the schedule compares wall-clock times instead of
+/// waiting out one long timer, and a check that came due during sleep runs
+/// soon after waking.
+pub const SCHEDULE_TICK: Duration = Duration::from_secs(15 * 60);
 
 /// Why the manifest couldn't be fetched.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,7 +255,7 @@ pub enum Update {
     Failed(String),
 }
 
-fn now_unix() -> u64 {
+pub(crate) fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
@@ -456,17 +460,20 @@ fn updates_until(state: &State) -> String {
 }
 
 impl AppState {
-    /// Runs the day's license renewal and update check if they are due, now
-    /// and then every [`DAILY_CHECKS`] for as long as convt runs.
-    /// A self-updating install first looks, off the UI thread and offline,
-    /// for a download ready to install and for the result of an install that
-    /// ran after the last quit; the day's checks follow.
-    pub fn start_daily_checks(&mut self, cx: &mut Context<Self>) {
+    /// Runs the day's license renewal and, while automatic checks are on, an
+    /// update check now, then looks again every [`SCHEDULE_TICK`] for as long
+    /// as convt runs. Call once, at launch. A self-updating install first
+    /// looks, off the UI thread and offline, for a download ready to install
+    /// and for the result of an install that ran after the last quit; the
+    /// checks follow.
+    pub fn start_update_checks(&mut self, cx: &mut Context<Self>) {
+        // Every launch checks, however recently the last one did.
+        self.update_attempted = None;
         let restore = self.restore_work();
         if restore.is_none() {
-            self.daily_checks(cx);
+            self.scheduled_checks(cx);
         }
-        self._daily_checks = Some(cx.spawn(async move |this, cx| {
+        self._update_schedule = Some(cx.spawn(async move |this, cx| {
             if let Some(work) = restore {
                 let (tx, rx) = futures::channel::oneshot::channel();
                 std::thread::Builder::new()
@@ -477,7 +484,7 @@ impl AppState {
                 if this
                     .update(cx, |s, cx| {
                         s.restored(found, cx);
-                        s.daily_checks(cx);
+                        s.scheduled_checks(cx);
                     })
                     .is_err()
                 {
@@ -485,20 +492,20 @@ impl AppState {
                 }
             }
             loop {
-                cx.background_executor().timer(DAILY_CHECKS).await;
-                if this.update(cx, |s, cx| s.daily_checks(cx)).is_err() {
+                cx.background_executor().timer(SCHEDULE_TICK).await;
+                if this.update(cx, |s, cx| s.scheduled_checks(cx)).is_err() {
                     break;
                 }
             }
         }));
     }
 
-    fn daily_checks(&mut self, cx: &mut Context<Self>) {
+    fn scheduled_checks(&mut self, cx: &mut Context<Self>) {
         // One of the two network calls the app makes by itself: while signed
         // in, at most once a day, ask convt.app for the current Pro key.
         self.renew_if_due(cx);
-        // The other: when update checks are on, at most once a day, fetch the
-        // signed list of releases.
+        // The other: while automatic checks are on, at launch and then every
+        // few hours, fetch the signed list of releases.
         self.check_updates_if_due(cx);
     }
 
@@ -543,6 +550,11 @@ impl AppState {
         if restored {
             self.reselect_update(cx);
         }
+        // An update waiting from the last run is what to show: the launch
+        // asks nothing, and the schedule checks again later.
+        if self.update.in_flight().is_some() {
+            self.update_attempted = Some(now_unix());
+        }
         cx.notify();
     }
 
@@ -551,43 +563,38 @@ impl AppState {
         matches!(self.update, Update::Installing { .. })
     }
 
-    /// The day's check: once a UTC day, only while update checks are on.
+    /// The scheduled check: only while automatic checks are on, and only
+    /// once [`CHECK_INTERVAL`] has passed since the last check started.
     pub fn check_updates_if_due(&mut self, cx: &mut Context<Self>) {
-        let today = date::from_days(today());
-        if self.settings.update_checks
-            && self.settings.update_checked.as_deref() != Some(today.as_str())
-        {
+        let due = self
+            .update_attempted
+            .is_none_or(|at| now_unix().saturating_sub(at) >= CHECK_INTERVAL.as_secs());
+        if self.settings.update_checks && due {
             self.check_updates(cx);
         }
     }
 
-    /// Checks now. Does nothing while update checks are off or a check runs.
-    /// The day is recorded before the request and the accepted sequence
-    /// before the result shows; if either can't be saved, nothing is accepted,
-    /// so a restart can neither repeat the day's request nor replay an older
-    /// manifest. A check that fails while an update is ready keeps "Restart
-    /// to update". A result applies only while its check still owns the
-    /// state, so it never replaces what came after it, such as an install.
+    /// Checks now: the user asked, so this runs whether or not automatic
+    /// checks are on. Does nothing while a check, a download or an install
+    /// runs. The accepted sequence and the time are saved before the result
+    /// shows; if they can't be, nothing is accepted, so a restart can't
+    /// replay an older manifest. A check that fails while an update is ready
+    /// keeps "Restart to update". A result applies only while its check
+    /// still owns the state, so it never replaces what came after it, such
+    /// as an install.
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.update_checks
-            || matches!(
-                self.update,
-                Update::Checking | Update::Downloading { .. } | Update::Installing { .. }
-            )
-        {
+        if matches!(
+            self.update,
+            Update::Checking | Update::Downloading { .. } | Update::Installing { .. }
+        ) {
             return;
         }
+        self.update_attempted = Some(now_unix());
         let Some(key) = self.update_config.key else {
             self.update = Update::Failed("This build has no key to check updates with.".into());
             cx.notify();
             return;
         };
-        let today = date::from_days(today());
-        if let Err(e) = self.save_settings_now(|s| s.update_checked = Some(today), cx) {
-            self.update = Update::Failed(format!("Settings couldn't be saved: {e}"));
-            cx.notify();
-            return;
-        }
         let ready = matches!(self.update, Update::Ready { .. }).then(|| self.update.clone());
         self.update = Update::Checking;
         self.updater.check += 1;
@@ -604,7 +611,13 @@ impl AppState {
                 let accepted = result.and_then(|(bytes, sequence)| {
                     let seq = sequence.max(state.settings.update_sequence);
                     state
-                        .save_settings_now(|s| s.update_sequence = seq, cx)
+                        .save_settings_now(
+                            |s| {
+                                s.update_sequence = seq;
+                                s.update_checked_at = Some(now_unix());
+                            },
+                            cx,
+                        )
                         .map(|()| bytes)
                         .map_err(|e| {
                             format!(
@@ -837,14 +850,15 @@ impl AppState {
         cx.notify();
     }
 
-    /// Turns update checks on or off. Turning them on checks right away.
+    /// Turns automatic checks on or off. Turning them on checks right away;
+    /// turning them off stops a download in progress but otherwise keeps
+    /// what the last check found.
     pub fn set_update_checks(&mut self, on: bool, cx: &mut Context<Self>) {
         self.update_settings(|s| s.update_checks = on, cx);
         if on {
             self.check_updates(cx);
-        } else if !self.installing() {
-            // An install already running finishes.
-            self._update_task = None;
+        } else if self.update.in_flight().is_some() && !self.installing() {
+            // Downloads stop with them; an install already running finishes.
             self.updater.stop();
             self.update = Update::Idle;
             cx.notify();

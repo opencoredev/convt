@@ -1,7 +1,7 @@
 //! Desktop sign-in and Pro renewal.
 //!
-//! Signing in is optional and only matters for Pro: a Desktop key or the
-//! trial never needs an account. Sign-in opens convt.app/device in the
+//! Sign-in opens convt.app/device in the browser. The account supplies the
+//! online Pro trial and renews paid Pro keys. Sign-in opens convt.app/device in the
 //! browser with a fresh [`Pending`] flow; the site answers with a
 //! `convt://auth` link, which counts only while that flow is pending (see
 //! `convt_license::account`). The device token goes to the credential store
@@ -20,15 +20,108 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use convt_license::account::{Api, ApiError, Pending, Session};
+use convt_license::account::{
+    Access as RemoteAccess, Api, ApiError, LicenseReply, Pending, Session,
+};
 use convt_license::client::{ActivateError, Renewed, today};
 use convt_license::date;
 use gpui_kit::{Context, Task};
 
 use crate::model::AppState;
 use crate::request::AuthReply;
+use crate::settings::TrialCache;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// How long to wait before asking again while the trial checkout is open.
+/// Most checkouts finish within a minute, so the first minute asks every 2 s
+/// and "Your free trial is on" follows the payment page closely; then every
+/// 10 s to two minutes and every 60 s after that, 120 s after a 429. That is
+/// about 50 requests over the 15 minutes, under convt.app's 90 an hour per
+/// device (`deviceLimits.renewPerDevice`).
+fn trial_poll_delay(elapsed_secs: u64, rate_limited: bool) -> std::time::Duration {
+    if rate_limited {
+        std::time::Duration::from_secs(120)
+    } else if elapsed_secs < 60 {
+        std::time::Duration::from_secs(2)
+    } else if elapsed_secs < 120 {
+        std::time::Duration::from_secs(10)
+    } else {
+        std::time::Duration::from_secs(60)
+    }
+}
+
+/// An address as the app shows it: the first letter, `***`, then the domain
+/// (`a***@example.com`), as convt.app's `maskEmail` writes it. The full
+/// address never appears on screen, so a screenshot or screen share doesn't
+/// give it away. Anything without an `@` shows as `***`.
+pub fn masked_email(email: &str) -> String {
+    match email.split_once('@') {
+        Some((local, domain)) => {
+            let first: String = local.chars().take(1).collect();
+            format!("{first}***@{domain}")
+        }
+        None => "***".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod mask_tests {
+    use super::masked_email;
+
+    fn address(local: &str, domain: &str) -> String {
+        [local, domain].join("@")
+    }
+
+    #[test]
+    fn addresses_keep_the_first_letter_and_the_domain() {
+        assert_eq!(
+            masked_email(&address("someone.long", "example.com")),
+            "s***@example.com"
+        );
+        assert_eq!(
+            masked_email(&address("a", "example.com")),
+            "a***@example.com"
+        );
+        assert_eq!(masked_email(&address("", "example.com")), "***@example.com");
+        // Not split inside a character.
+        assert_eq!(
+            masked_email(&address("élodie", "example.fr")),
+            "é***@example.fr"
+        );
+    }
+
+    #[test]
+    fn anything_else_hides_entirely() {
+        assert_eq!(masked_email("pro-tester"), "***");
+        assert_eq!(masked_email(""), "***");
+    }
+}
+
+#[cfg(test)]
+mod poll_tests {
+    use super::trial_poll_delay;
+    use std::time::Duration;
+
+    #[test]
+    fn trial_poll_schedule_stays_below_hourly_limit() {
+        assert_eq!(trial_poll_delay(0, false), Duration::from_secs(2));
+        assert_eq!(trial_poll_delay(59, false), Duration::from_secs(2));
+        assert_eq!(trial_poll_delay(60, false), Duration::from_secs(10));
+        assert_eq!(trial_poll_delay(119, false), Duration::from_secs(10));
+        assert_eq!(trial_poll_delay(120, false), Duration::from_secs(60));
+        assert_eq!(trial_poll_delay(900, false), Duration::from_secs(60));
+        assert_eq!(trial_poll_delay(0, true), Duration::from_secs(120));
+        assert_eq!(trial_poll_delay(120, true), Duration::from_secs(120));
+        // The whole 15 minutes, without 429s, stays under the server's 90 an hour.
+        let (mut elapsed, mut calls) = (0, 1);
+        while elapsed < 15 * 60 {
+            elapsed += trial_poll_delay(elapsed, false).as_secs();
+            calls += 1;
+        }
+        assert!(calls < 60, "{calls} calls");
+    }
+}
 
 /// Where a sign-in stands. Whether the app is signed in is
 /// [`Account::session`]; this is the flow on top of it.
@@ -40,6 +133,30 @@ pub enum SignIn {
     /// The link came back; the app is trading the code for a token.
     Finishing,
     Failed(String),
+}
+
+/// Which sign-in button was pressed. convt.app/device goes straight to that
+/// way of signing in instead of showing its chooser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    Google,
+    Email,
+}
+
+/// What the signed-in account allows on this computer, as of the last
+/// license refresh. `None` on [`Account::access`] until one has answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Access {
+    /// Paid Pro; its key is stored like any other.
+    Pro,
+    /// A Pro trial through Polar. Conversions work through this UTC day
+    /// (`YYYY-MM-DD`). No key is signed for a trial.
+    Trial { ends_on: String },
+    /// No subscription, and the account can still start its one trial:
+    /// [`AppState::start_trial`] opens this checkout.
+    CanStartTrial { checkout_url: String },
+    /// No Pro and no trial left: buying is the way on.
+    Lapsed,
 }
 
 /// Where the last license refresh stands.
@@ -64,6 +181,14 @@ pub struct Account {
     /// Something to tell the user that isn't the state of a flow, such as a
     /// sign-in link the app ignored.
     pub notice: Option<String>,
+    /// What the account allows, from the last refresh.
+    pub access: Option<Access>,
+    /// The trial checkout is open in the browser; refreshes repeat until it
+    /// comes back as a trial or Pro.
+    pub awaiting_trial: bool,
+    trial_poll_started: Option<Instant>,
+    /// When the trial poll last asked, so a focus check doesn't pile on.
+    trial_checked_at: Option<Instant>,
     _sign_in_task: Option<Task<()>>,
     _refresh_task: Option<Task<()>>,
 }
@@ -79,6 +204,10 @@ impl Account {
             sign_in: SignIn::Idle,
             refresh: Refresh::Idle,
             notice: None,
+            access: None,
+            awaiting_trial: false,
+            trial_poll_started: None,
+            trial_checked_at: None,
             _sign_in_task: None,
             _refresh_task: None,
         }
@@ -86,6 +215,27 @@ impl Account {
 
     pub fn email(&self) -> Option<&str> {
         self.session.as_ref().map(|s| s.email.as_str())
+    }
+
+    /// The signed-in address as the windows show it ([`masked_email`]).
+    pub fn masked_email(&self) -> Option<String> {
+        self.email().map(masked_email)
+    }
+
+    /// Whether the signed-in account can start its Pro trial now, so the
+    /// windows offer Start free trial after onboarding too.
+    pub fn can_start_trial(&self) -> bool {
+        self.session.is_some() && matches!(self.access, Some(Access::CanStartTrial { .. }))
+    }
+
+    /// The site this build signs in to.
+    pub(crate) fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// The client for convt.app, which cloud jobs ask for credentials.
+    pub(crate) fn api(&self) -> Arc<dyn Api> {
+        self.api.clone()
     }
 }
 
@@ -145,6 +295,10 @@ impl AppState {
     /// Opens convt.app/device in the browser with a new sign-in flow. A flow
     /// already waiting is replaced, so only the newest page's link counts.
     pub fn start_sign_in(&mut self, cx: &mut Context<Self>) {
+        self.start_sign_in_page(None, cx);
+    }
+
+    fn start_sign_in_page(&mut self, provider: Option<Provider>, cx: &mut Context<Self>) {
         let account = &mut self.account;
         // A link already came back and its code is being traded; a second
         // flow now would race the first one's result.
@@ -160,7 +314,14 @@ impl AppState {
                 return;
             }
         };
-        let page = pending.url(&account.url, &device_name(), os_name(), VERSION);
+        let mut page = pending.url(&account.url, &device_name(), os_name(), VERSION);
+        if let Some(provider) = provider {
+            page.push_str("&provider=");
+            page.push_str(match provider {
+                Provider::Google => "google",
+                Provider::Email => "email",
+            });
+        }
         account.pending = Some(pending);
         account.page = Some(page.clone());
         account.sign_in = SignIn::Waiting;
@@ -168,11 +329,52 @@ impl AppState {
         cx.notify();
     }
 
+    /// [`Self::start_sign_in`], with the page told which button was pressed.
+    pub fn start_sign_in_with(&mut self, provider: Provider, cx: &mut Context<Self>) {
+        self.start_sign_in_page(Some(provider), cx);
+    }
+
+    /// Opens the account's trial checkout and keeps refreshing until the
+    /// trial shows up. Does nothing unless [`Access::CanStartTrial`].
+    pub fn start_trial(&mut self, cx: &mut Context<Self>) {
+        if let Some(Access::CanStartTrial { checkout_url }) = &self.account.access {
+            cx.open_url(checkout_url);
+            self.account.awaiting_trial = true;
+            self.account.trial_poll_started = Some(Instant::now());
+            self.refresh_license(cx);
+            cx.notify();
+        }
+    }
+
+    /// A window came to the front while the trial checkout is open: the buyer
+    /// is likely back from the browser, so ask now rather than at the next
+    /// poll. At most once every 2 s, and never on top of a running request.
+    pub fn check_trial_on_focus(&mut self, cx: &mut Context<Self>) {
+        if !self.account.awaiting_trial
+            || self.account.session.is_none()
+            || self.account.refresh == Refresh::Running
+            || !matches!(self.account.access, Some(Access::CanStartTrial { .. }))
+            || self
+                .account
+                .trial_checked_at
+                .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2))
+        {
+            return;
+        }
+        self.refresh_license(cx);
+    }
+
     /// Opens the waiting flow's page again, for a browser tab that was closed.
     pub fn reopen_sign_in(&mut self, cx: &mut Context<Self>) {
         if let (SignIn::Waiting, Some(page)) = (&self.account.sign_in, &self.account.page) {
             cx.open_url(page);
         }
+    }
+
+    /// Makes the trial poll's last ask look `by` older, for the focus check.
+    #[cfg(test)]
+    pub fn age_trial_check(&mut self, by: std::time::Duration) {
+        self.account.trial_checked_at = self.account.trial_checked_at.map(|t| t - by);
     }
 
     /// Makes the waiting sign-in look `by` older, for tests of the timeout.
@@ -258,6 +460,25 @@ impl AppState {
         cx.notify();
     }
 
+    /// Forgets a sign-in convt.app says was revoked, as from the dashboard:
+    /// the token, the account's access and its trial. A refresh still
+    /// running for it is dropped, so its answer can't bring them back or
+    /// hold up the next sign-in's refresh.
+    pub(crate) fn forget_revoked_session(&mut self, cx: &mut Context<Self>) {
+        if let Err(e) = self.licensing.clear_session() {
+            tracing::warn!(error = %e, "could not forget a revoked sign-in");
+        }
+        self.account.session = None;
+        self.account.access = None;
+        self.account.refresh = Refresh::Idle;
+        self.account._refresh_task = None;
+        self.account.awaiting_trial = false;
+        self.account.trial_poll_started = None;
+        self.update_settings(|s| s.trial_cache = None, cx);
+        self.licensing.set_account_trial(None);
+        self.license = self.licensing.state();
+    }
+
     /// Signs this computer out: forgets the token here and revokes it on
     /// convt.app. The license key stays.
     pub fn sign_out(&mut self, cx: &mut Context<Self>) {
@@ -274,6 +495,12 @@ impl AppState {
         self.account.refresh = Refresh::Idle;
         self.account.notice = Some("Signed out. The license on this computer stays.".into());
         self.account._refresh_task = None;
+        self.account.awaiting_trial = false;
+        self.account.trial_poll_started = None;
+        self.update_settings(|s| s.trial_cache = None, cx);
+        self.licensing.set_account_trial(None);
+        self.account.access = None;
+        self.license = self.licensing.state();
         // Best effort: the dashboard can sign this computer out too.
         let api = self.account.api.clone();
         self.account._sign_in_task = Some(background(
@@ -290,11 +517,16 @@ impl AppState {
 
     /// The day's renewal: asks for the current Pro key if signed in and not
     /// yet asked today (UTC). Runs at launch and then periodically
-    /// (`AppState::start_daily_checks`).
+    /// (`AppState::start_update_checks`). A signed-in computer that can't
+    /// convert also asks once per run when it doesn't know what the account
+    /// offers, so a trial skipped earlier today is offered again.
     pub fn renew_if_due(&mut self, cx: &mut Context<Self>) {
         let today = date::from_days(today());
+        let unknown_offer = self.account.access.is_none()
+            && self.account.refresh == Refresh::Idle
+            && !self.license.allows_conversion();
         if self.account.session.is_some()
-            && self.settings.license_checked.as_deref() != Some(today.as_str())
+            && (unknown_offer || self.settings.license_checked.as_deref() != Some(today.as_str()))
         {
             self.refresh_license(cx);
         }
@@ -313,6 +545,9 @@ impl AppState {
         self.update_settings(|s| s.license_checked = Some(today), cx);
         self.account.notice = None;
         self.account.refresh = Refresh::Running;
+        if self.account.awaiting_trial {
+            self.account.trial_checked_at = Some(Instant::now());
+        }
         let api = self.account.api.clone();
         self.account._refresh_task = Some(background(
             cx,
@@ -322,38 +557,114 @@ impl AppState {
         cx.notify();
     }
 
-    fn renewed(&mut self, result: Result<Option<String>, ApiError>, cx: &mut Context<Self>) {
+    fn renewed(&mut self, result: Result<LicenseReply, ApiError>, cx: &mut Context<Self>) {
         let kept = "The license on this computer stays as it is.";
+        let rate_limited = matches!(&result, Err(ApiError::RateLimited));
         self.account.refresh = match result {
-            Ok(Some(key)) => match self.licensing.offer_key(&key) {
-                Ok(Renewed::Stored(l)) => Refresh::Done(format!(
-                    "Got your Pro key, with updates until {}.",
-                    l.updates_until
-                )),
-                Ok(Renewed::Kept(l)) => Refresh::Done(format!(
-                    "Your license is up to date, with updates until {}.",
-                    l.updates_until
-                )),
-                Err(ActivateError::Store(e)) => {
-                    Refresh::Failed(format!("The new key couldn't be saved: {e}"))
+            Ok(reply) => {
+                let remote_access = reply.access.clone();
+                self.account.access = remote_access.clone().map(|access| match access {
+                    RemoteAccess::Pro => Access::Pro,
+                    RemoteAccess::Trial { ends_on, .. } => Access::Trial { ends_on },
+                    RemoteAccess::CanStartTrial { checkout_url } => {
+                        Access::CanStartTrial { checkout_url }
+                    }
+                    RemoteAccess::Lapsed => Access::Lapsed,
+                });
+                match &self.account.access {
+                    Some(Access::Trial { ends_on }) => {
+                        let ends_on = ends_on.clone();
+                        let ends_at = match &remote_access {
+                            Some(RemoteAccess::Trial { ends_at, .. }) => ends_at.clone(),
+                            _ => None,
+                        };
+                        self.update_settings(
+                            |s| {
+                                s.trial_cache = ends_at.clone().map(|ends_at| TrialCache {
+                                    ends_at,
+                                    fetched_on: date::from_days(today()),
+                                })
+                            },
+                            cx,
+                        );
+                        self.licensing
+                            .set_account_trial_exact(Some(ends_on), ends_at);
+                    }
+                    Some(Access::Pro | Access::CanStartTrial { .. } | Access::Lapsed) | None => {
+                        self.update_settings(|s| s.trial_cache = None, cx);
+                        self.licensing.set_account_trial(None);
+                    }
                 }
-                Err(_) => Refresh::Failed(format!(
-                    "convt.app sent a key this build doesn't accept. {kept}"
-                )),
-            },
-            Ok(None) => Refresh::Done(format!("This account has no Pro key on convt.app. {kept}")),
+                if self
+                    .account
+                    .access
+                    .as_ref()
+                    .is_some_and(|a| matches!(a, Access::Trial { .. } | Access::Pro))
+                {
+                    self.account.awaiting_trial = false;
+                    self.account.trial_poll_started = None;
+                }
+                match reply.key {
+                    Some(key) => match self.licensing.offer_key(&key) {
+                        Ok(Renewed::Stored(l)) => Refresh::Done(format!(
+                            "Got your Pro key, with updates until {}.",
+                            l.updates_until
+                        )),
+                        Ok(Renewed::Kept(l)) => Refresh::Done(format!(
+                            "Your license is up to date, with updates until {}.",
+                            l.updates_until
+                        )),
+                        Err(ActivateError::Store(e)) => {
+                            Refresh::Failed(format!("The new key couldn't be saved: {e}"))
+                        }
+                        Err(_) => Refresh::Failed(format!(
+                            "convt.app sent a key this build doesn't accept. {kept}"
+                        )),
+                    },
+                    None => {
+                        Refresh::Done(format!("This account has no Pro key on convt.app. {kept}"))
+                    }
+                }
+            }
             Err(ApiError::SignedOut) => {
-                // Revoked from the dashboard: forget the token here too.
-                if let Err(e) = self.licensing.clear_session() {
-                    tracing::warn!(error = %e, "could not forget a revoked sign-in");
-                }
-                self.account.session = None;
+                self.forget_revoked_session(cx);
                 Refresh::Failed(format!(
                     "This computer was signed out of convt.app. Sign in again to keep Pro renewing. {kept}"
                 ))
             }
             Err(e) => Refresh::Failed(format!("Couldn't refresh the license. {e} {kept}")),
         };
+        if self.account.awaiting_trial
+            && self
+                .account
+                .trial_poll_started
+                .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(15 * 60))
+            && matches!(self.account.access, Some(Access::CanStartTrial { .. }))
+        {
+            if self.account.session.is_some() {
+                let elapsed = self
+                    .account
+                    .trial_poll_started
+                    .map_or(0, |t| t.elapsed().as_secs());
+                let delay = trial_poll_delay(elapsed, rate_limited);
+                self.account._refresh_task = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(delay).await;
+                    let _ = this.update(cx, |state, cx| {
+                        if state.account.awaiting_trial && state.account.refresh != Refresh::Running
+                        {
+                            state.refresh_license(cx);
+                        }
+                    });
+                }));
+            }
+        } else if self
+            .account
+            .trial_poll_started
+            .is_some_and(|t| t.elapsed() >= std::time::Duration::from_secs(15 * 60))
+        {
+            self.account.awaiting_trial = false;
+            self.account.trial_poll_started = None;
+        }
         self.license = self.licensing.state();
         // A renewed key may cover an update that needed renewing.
         self.reselect_update(cx);

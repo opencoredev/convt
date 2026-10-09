@@ -9,15 +9,18 @@ use std::path::{Path, PathBuf};
 use convt_core::{
     Background, Category, Format, Options, Output, Registry, VideoCodec, format_by_id,
 };
-use gpui_kit::component::input::InputState;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use super::theme::IconName;
+
 use super::theme::{
-    self, Choice, Palette, mono, primary_button, secondary_button, text, text_button,
+    self, Button, Choice, Palette, Tile, Tone, icon, mono, radius, size, space, styled,
 };
 use super::{blocked_banner, error_text, file_size, human_size, time_left};
+use crate::cloud::CloudAccess;
 use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState, PackPhase, Targets};
 use crate::pack;
@@ -70,9 +73,15 @@ pub struct QuickView {
     /// default: Transparent where the format keeps it, White where it can't.
     pub(super) background: Option<Background>,
     open: Option<Open>,
+    /// The Options row is expanded into its controls.
+    pub(super) options_open: bool,
+    /// The file name shows as a field instead of as text.
+    pub(super) editing_name: bool,
     /// Where the files go. `None` is next to each file.
     pub(super) save_dir: Option<PathBuf>,
     pub(super) file_name: Entity<InputState>,
+    /// Why the typed file name can't be used, shown under it.
+    pub(super) name_error: Option<String>,
     pub(super) jobs: Vec<JobId>,
     /// The last state seen of each job, so results stay after the main
     /// window clears finished jobs.
@@ -83,10 +92,14 @@ pub struct QuickView {
     pub(super) wanted: Option<&'static Format>,
     /// Some file needed the document pack when the window opened.
     pub(super) offered_pack: bool,
+    /// Convert on convt's cloud instead of on this computer.
+    pub(super) cloud: bool,
     /// The registry the targets were computed with.
     generation: u64,
     _observe: Subscription,
     _appearance: Subscription,
+    /// Clears the file name's error once it's edited.
+    _name: Subscription,
 }
 
 impl QuickView {
@@ -98,7 +111,9 @@ impl QuickView {
     ) -> Self {
         let state = app.read(cx);
         let expanded = model::expand_keeping_documents(&state.registry, &request.files);
-        let files = expanded.files;
+        let mut files = expanded.files;
+        let mut seen = std::collections::HashSet::new();
+        files.retain(|f| seen.insert(f.clone()));
         let targets = model::common_targets(&state.registry, &files);
         let generation = state.registry_generation;
         let offered_pack = files.iter().any(|f| pack::needs_pack(&state.registry, f));
@@ -130,6 +145,11 @@ impl QuickView {
         }
         let file_name = cx.new(|cx| InputState::new(window, cx));
         let mut view = Self {
+            _name: cx.subscribe(&file_name, |this: &mut Self, _, event, cx| {
+                if matches!(event, InputEvent::Change) && this.name_error.take().is_some() {
+                    cx.notify();
+                }
+            }),
             _observe: cx.observe_in(&app, window, |this: &mut Self, app, window, cx| {
                 this.remember(&app, cx);
                 this.follow_registry(window, cx);
@@ -148,13 +168,17 @@ impl QuickView {
             strip_audio: false,
             background: None,
             open: None,
+            options_open: false,
+            editing_name: false,
             save_dir,
             file_name,
+            name_error: None,
             jobs: Vec::new(),
             seen: HashMap::new(),
             error,
             wanted,
             offered_pack,
+            cloud: false,
             generation,
         };
         view.load_controls();
@@ -226,6 +250,7 @@ impl QuickView {
 
     fn reset_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.default_name().unwrap_or_default();
+        self.name_error = None;
         self.file_name
             .update(cx, |s, cx| s.set_value(name, window, cx));
     }
@@ -308,23 +333,25 @@ impl QuickView {
         options
     }
 
-    fn output(&self, cx: &App) -> Output {
-        let name = self.file_name.read(cx).value().trim().to_string();
-        if let ([file], Some(default)) = (self.files.as_slice(), self.default_name())
-            && !name.is_empty()
-            && name != default
+    /// Where the output goes, or why the typed file name can't be used.
+    fn output(&self, cx: &App) -> Result<Output, String> {
+        if let ([file], Some(default), Some(to)) =
+            (self.files.as_slice(), self.default_name(), self.to)
         {
-            let dir = self
-                .save_dir
-                .clone()
-                .or_else(|| file.parent().map(Path::to_path_buf))
-                .unwrap_or_default();
-            return Output::Exact(dir.join(name));
+            let name = output_name(&self.file_name.read(cx).value(), to.extension())?;
+            if name != default {
+                let dir = self
+                    .save_dir
+                    .clone()
+                    .or_else(|| file.parent().map(Path::to_path_buf))
+                    .unwrap_or_default();
+                return Ok(Output::Exact(dir.join(name)));
+            }
         }
-        match &self.save_dir {
+        Ok(match &self.save_dir {
             Some(dir) => Output::Dir(dir.clone()),
             None => Output::Beside,
-        }
+        })
     }
 
     pub(super) fn convert(&mut self, cx: &mut Context<Self>) {
@@ -333,16 +360,37 @@ impl QuickView {
         if files.is_empty() || !self.jobs.is_empty() {
             return;
         }
-        let options = self.conversion_options();
+        let cloud = self.in_cloud(cx);
+        let options = if cloud {
+            Options::default()
+        } else {
+            self.conversion_options()
+        };
         if let Err(e) = options.validate() {
             self.error = Some(e.to_string());
             cx.notify();
             return;
         }
-        let output = self.output(cx);
-        let queued = self
-            .app
-            .update(cx, |s, cx| s.convert_to(&files, to, &options, output, cx));
+        let output = match self.output(cx) {
+            Ok(output) => output,
+            Err(e) => {
+                self.name_error = Some(e);
+                self.editing_name = true;
+                cx.notify();
+                return;
+            }
+        };
+        self.name_error = None;
+        if cloud && !self.app.read(cx).settings.cloud_consent {
+            return;
+        }
+        let queued = self.app.update(cx, |s, cx| {
+            if cloud {
+                s.convert_in_cloud(&files, to, &options, output, cx)
+            } else {
+                s.convert_to(&files, to, &options, output, cx)
+            }
+        });
         let jobs = match queued {
             Ok(jobs) => jobs,
             Err(e) => {
@@ -360,6 +408,96 @@ impl QuickView {
         let app = self.app.clone();
         self.remember(&app, cx);
         cx.notify();
+    }
+
+    /// Whether Cloud conversions can run, and if not, why.
+    fn cloud_access(&self, cx: &App) -> CloudAccess {
+        #[cfg(test)]
+        if let Some(access) = cx.try_global::<TestCloud>() {
+            return access.0.clone();
+        }
+        self.app.read(cx).cloud_access()
+    }
+
+    /// Cloud is picked and can run.
+    fn in_cloud(&self, cx: &App) -> bool {
+        self.cloud && self.cloud_access(cx).ready()
+    }
+
+    pub(super) fn set_cloud(&mut self, cloud: bool, cx: &mut Context<Self>) {
+        self.cloud = cloud && self.cloud_access(cx).ready();
+        self.error = None;
+        cx.notify();
+    }
+
+    /// The user agreed that Cloud uploads their files. Asked once.
+    pub(super) fn agree_to_cloud(&mut self, cx: &mut Context<Self>) {
+        self.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.cloud_consent = true, cx)
+        });
+        cx.notify();
+    }
+
+    /// Asks, the first time Cloud is picked, whether the files may be
+    /// uploaded.
+    fn consent(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.jobs.is_empty() || !self.in_cloud(cx) || self.app.read(cx).settings.cloud_consent {
+            return None;
+        }
+        let what = if self.files.len() == 1 {
+            "this file"
+        } else {
+            "these files"
+        };
+        let them = if self.files.len() == 1 { "it" } else { "them" };
+        // A strip on the footer, so the question sits next to the choice
+        // that asked it.
+        Some(
+            div()
+                .id("cloud-consent")
+                .test_support()
+                .aria_label("Upload to convt's cloud?")
+                .flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(space::LG))
+                .px(px(GUTTER))
+                .pt(px(14.))
+                .pb(px(2.))
+                .bg(p.chrome)
+                .border_t_1()
+                .border_color(p.chrome_border)
+                .child(
+                    theme::callout_words(
+                        "Upload to convt's cloud?",
+                        format!(
+                            "Cloud uploads {what} to convt's servers to convert, then deletes {them}."
+                        ),
+                        p,
+                    )
+                    .flex_1()
+                    .min_w_0(),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .gap(px(space::SM))
+                        .child(
+                            Button::secondary("cloud-consent-cancel", "Not now")
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(|this, _, _, cx| this.set_cloud(false, cx))),
+                        )
+                        .child(
+                            Button::primary("cloud-consent-agree", "Agree")
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(|this, _, _, cx| this.agree_to_cloud(cx))),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 
     fn choose_folder(&mut self, cx: &mut Context<Self>) {
@@ -433,16 +571,17 @@ impl QuickView {
             }
         };
         let thumb = match self.files.first() {
-            Some(first) => theme::thumbnail(first, 64., 44., p),
-            None => div().w(px(64.)).h(px(44.)).into_any_element(),
+            Some(first) => theme::thumbnail(first, 56., 42., p),
+            None => div().w(px(56.)).h(px(42.)).into_any_element(),
         };
         div()
             .flex()
+            .flex_shrink_0()
             .items_center()
             .gap(px(14.))
-            .px(px(24.))
-            .pt(px(4.))
-            .pb(px(20.))
+            .px(px(GUTTER))
+            .pt(px(space::XS))
+            .pb(px(space::LG))
             .child(thumb)
             .child(
                 div()
@@ -450,19 +589,33 @@ impl QuickView {
                     .flex_col()
                     .flex_1()
                     .min_w_0()
-                    .gap(px(4.))
+                    .gap(px(3.))
                     .child(
-                        text(15., 18., p.text)
+                        styled(size::TITLE, p.text)
                             .font_weight(FontWeight::SEMIBOLD)
                             .truncate()
                             .child(title),
                     )
                     .child(mono(11., 14., p.secondary).truncate().child(meta)),
             )
-            .children(
-                common_folder(&self.files)
-                    .map(|dir| text(12., 16., p.secondary).flex_shrink_0().child(dir)),
-            )
+            .children(common_folder(&self.files).map(|dir| {
+                div()
+                    .flex()
+                    .flex_shrink_0()
+                    .items_center()
+                    .gap(px(5.))
+                    .max_w(px(180.))
+                    .child(icon(IconName::Folder, 13., p.tertiary))
+                    .child(
+                        div().min_w_0().child(
+                            styled(size::SMALL, p.secondary)
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis_start()
+                                .child(dir),
+                        ),
+                    )
+            }))
     }
 
     fn picker(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
@@ -476,37 +629,49 @@ impl QuickView {
         let cards = self.targets.formats.iter().map(|&format| {
             let on = self.to == Some(format);
             let weak = cx.entity().downgrade();
-            theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name)
-                .aria_selected(on)
-                .flex()
-                .flex_col()
-                .flex_shrink_0()
-                .gap(px(2.))
-                .w(px(100.))
-                .px(px(12.))
-                .py(px(10.))
-                .rounded(px(8.))
-                .map(|d| {
-                    if on {
-                        d.bg(p.green_tint)
-                            .shadow(vec![theme::inset_ring(p.green, 1.5)])
-                    } else {
-                        d.shadow(vec![theme::inset_ring(p.card_border, 1.)])
-                    }
-                })
-                .on_click(move |_, window, cx| {
-                    let _ = weak.update(cx, |this, cx| this.pick(format, window, cx));
-                })
-                .child(
-                    mono(13., 16., p.text)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(format.name),
-                )
-                .child(
-                    text(11., 14., if on { p.green } else { p.secondary })
-                        .truncate()
-                        .child(blurb(format, video_input)),
-                )
+            theme::choice(
+                theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name),
+                on,
+                radius::CARD,
+                p,
+            )
+            .aria_selected(on)
+            .relative()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .gap(px(3.))
+            .px(px(space::MD))
+            .py(px(10.))
+            .on_click(move |_, window, cx| {
+                let _ = weak.update(cx, |this, cx| this.pick(format, window, cx));
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        mono(13., 16., p.text)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(format.name),
+                    )
+                    .children(on.then(|| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(16.))
+                            .rounded(px(8.))
+                            .bg(p.green)
+                            .child(icon(IconName::Check, 10., p.on_green))
+                    })),
+            )
+            .child(
+                styled(size::CAPTION, if on { p.green_text } else { p.secondary })
+                    .truncate()
+                    .child(blurb(format, video_input)),
+            )
         });
         let presets: Vec<(String, String)> = self
             .app
@@ -523,53 +688,65 @@ impl QuickView {
         let preset_row = (!presets.is_empty()).then(|| {
             div()
                 .flex()
-                .flex_col()
-                .gap(px(8.))
-                .pt(px(6.))
-                .child(section_label("Presets", p))
+                .items_center()
+                .flex_wrap()
+                .gap(px(6.))
+                .pt(px(space::MD))
                 .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap(px(6.))
-                        .children(presets.into_iter().map(|(name, about)| {
-                            let on = self.preset.as_deref() == Some(&name);
-                            let weak = cx.entity().downgrade();
-                            let label = name.clone();
-                            theme::clickable(
-                                SharedString::from(format!("preset-{name}")),
-                                name.clone(),
-                            )
-                            .aria_selected(on)
-                            .px(px(8.))
-                            .py(px(2.))
-                            .rounded(px(5.))
-                            .bg(if on { p.green_tint } else { p.chip })
-                            .border_1()
-                            .border_color(if on { p.green } else { p.chip_border })
-                            .tooltip(move |window, cx| {
-                                Tooltip::new(about.clone()).build(window, cx)
-                            })
-                            .on_click(move |_, window, cx| {
-                                let _ =
-                                    weak.update(cx, |this, cx| this.pick_preset(&name, window, cx));
-                            })
-                            .child(text(12., 16., if on { p.green } else { p.text }).child(label))
-                        })),
+                    styled(size::SMALL, p.secondary)
+                        .font_weight(FontWeight::MEDIUM)
+                        .pr(px(2.))
+                        .child("Presets"),
                 )
+                .children(presets.into_iter().map(|(name, about)| {
+                    let on = self.preset.as_deref() == Some(&name);
+                    let weak = cx.entity().downgrade();
+                    let label = name.clone();
+                    theme::clickable(SharedString::from(format!("preset-{name}")), name.clone())
+                        .aria_selected(on)
+                        .flex()
+                        .items_center()
+                        .gap(px(4.))
+                        .h(px(26.))
+                        .px(px(11.))
+                        .rounded_full()
+                        .bg(if on { p.green_tint } else { p.surface })
+                        .shadow(vec![theme::inset_ring(
+                            if on { p.green } else { p.border },
+                            if on { 1.5 } else { 1. },
+                        )])
+                        .when(!on, |d| d.hover(|s| s.bg(p.recessed)))
+                        .tooltip(move |window, cx| Tooltip::new(about.clone()).build(window, cx))
+                        .on_click(move |_, window, cx| {
+                            let _ = weak.update(cx, |this, cx| this.pick_preset(&name, window, cx));
+                        })
+                        .children(on.then(|| icon(IconName::Check, 11., p.green_text)))
+                        .child(
+                            styled(size::SMALL, if on { p.green_text } else { p.text })
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(label),
+                        )
+                }))
         });
-        let picker = section(p)
-            .gap(px(10.))
-            .child(section_label("Convert to", p))
+        let picker = section("Convert to", p)
             .child(if self.targets.formats.is_empty() {
-                text(13., 16., p.text)
-                    .child("No format fits every file.")
-                    .into_any_element()
+                theme::callout(
+                    IconName::Info,
+                    Tone::Neutral,
+                    theme::callout_words(
+                        "No format fits every file",
+                        "Convert files of one kind together, or pick fewer files.",
+                        p,
+                    ),
+                    p,
+                )
+                .into_any_element()
             } else {
+                // Four to a row, whatever the window's width.
                 div()
-                    .flex()
-                    .flex_wrap()
-                    .gap(px(8.))
+                    .grid()
+                    .grid_cols(CARDS_PER_ROW)
+                    .gap(px(space::SM))
                     .children(cards)
                     .into_any_element()
             })
@@ -588,7 +765,22 @@ impl QuickView {
         } else {
             return None;
         };
-        Some(section(p).child(content))
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .px(px(GUTTER))
+                .pb(px(space::XL))
+                .child(content),
+        )
+    }
+
+    /// Shows the file name as a field, focused, for typing a new one.
+    pub(super) fn edit_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.editing_name = true;
+        let focus = self.file_name.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+        cx.notify();
     }
 
     fn toggle(&mut self, which: Open, cx: &mut Context<Self>) {
@@ -602,6 +794,18 @@ impl QuickView {
 
     fn options_section(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
         let to = self.to?;
+        if self.in_cloud(cx) {
+            // The cloud API takes no options, so there is nothing to set.
+            return Some(
+                section("Options", p).child(
+                    theme::styled(theme::size::SMALL, p.secondary)
+                        .id("cloud-options")
+                        .test_support()
+                        .aria_label("Cloud converts with the standard settings.")
+                        .child("Cloud converts with the standard settings."),
+                ),
+            );
+        }
         let quality = quality_applies(to).then(|| {
             let mut choices: Vec<(&'static str, SharedString)> = QUALITY
                 .iter()
@@ -648,7 +852,8 @@ impl QuickView {
                 theme::select(
                     "size",
                     current,
-                    180.,
+                    &self.size.map_or("original".into(), |v| v.to_string()),
+                    SELECT_WIDTH,
                     false,
                     self.open == Some(Open::Size),
                     choices
@@ -681,7 +886,8 @@ impl QuickView {
                 theme::select(
                     "codec",
                     self.video_codec.unwrap_or(VideoCodec::H264).name(),
-                    180.,
+                    self.video_codec.unwrap_or(VideoCodec::H264).id(),
+                    SELECT_WIDTH,
                     false,
                     self.open == Some(Open::Codec),
                     VideoCodec::ALL
@@ -729,7 +935,8 @@ impl QuickView {
                     current
                         .or(default)
                         .map_or_else(|| "Automatic".into(), Background::name),
-                    180.,
+                    &current.map_or_else(|| "automatic".to_string(), Background::id),
+                    SELECT_WIDTH,
                     false,
                     self.open == Some(Open::Background),
                     std::iter::once(Choice::new("automatic", "Automatic"))
@@ -752,32 +959,175 @@ impl QuickView {
             )
         });
         let audio = audio_applies(to).then(|| {
-            div().flex().pl(px(110.)).child(
+            row_label(
+                "Audio",
                 theme::checkbox("keep-audio", "Keep audio", !self.strip_audio, p).on_click(
                     cx.listener(|this, _, _, cx| {
                         this.strip_audio = !this.strip_audio;
                         cx.notify();
                     }),
                 ),
+                p,
             )
         });
-        if quality.is_none()
-            && size.is_none()
-            && codec.is_none()
-            && background.is_none()
-            && audio.is_none()
-        {
+        let mut rows: Vec<AnyElement> = [quality, size, codec, background, audio]
+            .into_iter()
+            .flatten()
+            .collect();
+        if rows.is_empty() {
             return None;
         }
+        // One row that says what the options are; a click opens them.
+        let summary = SharedString::from(self.options_summary(to, cx));
+        let open = self.options_open;
+        let header = theme::clickable("options-toggle", summary.clone())
+            .aria_expanded(open)
+            .flex()
+            .items_center()
+            .gap(px(space::MD))
+            .min_h(px(46.))
+            .px(px(space::LG))
+            .hover(|s| s.bg(p.hover))
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.options_open = !this.options_open;
+                this.open = None;
+                cx.notify();
+            }))
+            .child(
+                styled(size::BODY, p.text)
+                    .font_weight(FontWeight::MEDIUM)
+                    .flex_shrink_0()
+                    .child("Options"),
+            )
+            .child(
+                div()
+                    .id("options-summary")
+                    .test_support()
+                    .aria_label(summary.clone())
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .justify_end()
+                    .when(!open, |d| {
+                        d.child(
+                            styled(size::SMALL, p.secondary)
+                                .truncate()
+                                .child(summary.clone()),
+                        )
+                    }),
+            )
+            .child(icon(
+                if open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                },
+                14.,
+                p.tertiary,
+            ))
+            .into_any_element();
+        if !open {
+            rows.clear();
+        }
+        rows.insert(0, header);
         Some(
-            section(p)
-                .gap(px(14.))
-                .children(quality)
-                .children(size)
-                .children(codec)
-                .children(background)
-                .children(audio),
+            div()
+                .flex()
+                .flex_col()
+                .px(px(GUTTER))
+                .pb(px(20.))
+                .child(theme::group(rows, p)),
         )
+    }
+
+    /// "Balanced · Original size · Transparent": the options as they are now.
+    pub(super) fn options_summary(&self, to: &'static Format, cx: &App) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if quality_applies(to) {
+            parts.push(
+                match QUALITY
+                    .iter()
+                    .find(|(k, ..)| *k == quality_key(self.quality))
+                {
+                    Some((_, label, _)) => label.to_string(),
+                    None => format!("Quality {}", self.quality.unwrap_or_default()),
+                },
+            );
+        }
+        if let Some((_, choices)) = size_choices(to) {
+            parts.push(
+                choices
+                    .iter()
+                    .find(|(v, _)| *v == self.size)
+                    .map(|(v, l)| {
+                        if v.is_none() {
+                            "Original size".to_string()
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .or_else(|| self.size.map(|v| size_label(to, v)))
+                    .unwrap_or_else(|| "Original size".into()),
+            );
+        }
+        if codec_applies(to) {
+            parts.push(
+                self.video_codec
+                    .unwrap_or(VideoCodec::H264)
+                    .name()
+                    .to_string(),
+            );
+        }
+        if background_applies(to, &self.files) {
+            let default = default_background(&self.app.read(cx).registry, to, &self.files);
+            parts.push(
+                shown_background(to, self.background)
+                    .or(default)
+                    .map_or_else(|| "Automatic".to_string(), |b| b.name().to_string()),
+            );
+        }
+        if audio_applies(to) && self.strip_audio {
+            parts.push("No audio".into());
+        }
+        parts.join(" · ")
+    }
+
+    /// Where the conversion runs, as two tiles.
+    fn where_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let access = self.cloud_access(cx);
+        let cloud = self.in_cloud(cx);
+        let weak = cx.entity().downgrade();
+        div()
+            .flex()
+            .flex_col()
+            .px(px(GUTTER))
+            .pb(px(20.))
+            .child(theme::tiles(
+                "where",
+                &[
+                    Tile {
+                        key: "local",
+                        icon: IconName::Computer,
+                        title: theme::this_machine_label().into(),
+                        line: "Private, works offline".into(),
+                        disabled: None,
+                    },
+                    Tile {
+                        key: "cloud",
+                        icon: IconName::Cloud,
+                        title: "Cloud".into(),
+                        line: "Faster for big videos".into(),
+                        disabled: access.reason().map(Into::into),
+                    },
+                ],
+                if cloud { "cloud" } else { "local" },
+                p,
+                window,
+                cx,
+                move |key, _, cx| {
+                    let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
+                },
+            ))
     }
 
     fn save_section(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -786,57 +1136,107 @@ impl QuickView {
             None => "Same folder".to_string(),
         };
         let name = (self.files.len() == 1 && self.to.is_some()).then(|| {
-            row_label(
-                "File name",
+            let control = if self.editing_name {
                 div()
-                    .w(px(240.))
+                    .w(px(260.))
                     .flex_shrink_0()
                     .font_family(theme::MONO)
                     .text_size(px(12.))
-                    .child(theme::small_field(&self.file_name, "file-name")),
-                p,
-            )
-        });
-        section(p)
-            .gap(px(14.))
-            .child(
-                div()
+                    .child(theme::small_field(&self.file_name, "file-name"))
+                    .into_any_element()
+            } else {
+                let current = SharedString::from(self.file_name.read(cx).value().to_string());
+                theme::clickable("file-name-edit", current.clone())
                     .flex()
                     .items_center()
-                    .child(
-                        text(13., 16., p.text)
-                            .w(px(110.))
-                            .flex_shrink_0()
-                            .child("Save to"),
+                    .gap(px(6.))
+                    .max_w(px(320.))
+                    .h(px(theme::SMALL_FIELD_HEIGHT))
+                    .px(px(8.))
+                    .mr(px(-8.))
+                    .rounded(px(radius::CONTROL))
+                    .hover(|s| s.bg(p.hover))
+                    .on_click(cx.listener(|this, _, window, cx| this.edit_name(window, cx)))
+                    .child(mono(12., 16., p.text).min_w_0().truncate().child(current))
+                    .child(icon(IconName::Edit, 13., p.tertiary))
+                    .into_any_element()
+            };
+            let error = self.name_error.clone().map(|e| {
+                div()
+                    .id("file-name-error")
+                    .test_support()
+                    .aria_label(SharedString::from(e.clone()))
+                    .flex()
+                    .justify_end()
+                    .px(px(space::LG))
+                    .pb(px(10.))
+                    .mt(px(-4.))
+                    .child(error_text(e, p))
+            });
+            div()
+                .flex()
+                .flex_col()
+                .child(row_label("File name", control, p))
+                .children(error)
+                .into_any_element()
+        });
+        let folder = row_label(
+            "Save to",
+            div()
+                .flex()
+                .items_center()
+                .gap(px(space::SM))
+                .max_w(px(360.))
+                .child(icon(IconName::Folder, 13., p.tertiary))
+                .child(
+                    div()
+                        .id("save-to")
+                        .test_support()
+                        .aria_label(SharedString::from(place.clone()))
+                        .min_w_0()
+                        .child(
+                            styled(size::SMALL, p.text)
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis_start()
+                                .child(place),
+                        ),
+                )
+                .when(self.save_dir.is_some(), |d| {
+                    d.child(
+                        Button::ghost("same-folder", "Same folder")
+                            .small()
+                            .build(p)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.save_dir = None;
+                                cx.notify();
+                            })),
                     )
-                    .child(
-                        div()
-                            .id("save-to")
-                            .test_support()
-                            .aria_label(SharedString::from(place.clone()))
-                            .child(text(13., 16., p.text).truncate().child(place)),
-                    )
-                    .child(
-                        text_button("change-folder", "Change", p.green, 12.)
-                            .pl(px(10.))
-                            .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
-                    )
-                    .when(self.save_dir.is_some(), |d| {
-                        d.child(
-                            text_button("same-folder", "Same folder", p.secondary, 12.)
-                                .pl(px(10.))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.save_dir = None;
-                                    cx.notify();
-                                })),
-                        )
-                    }),
-            )
-            .children(name)
+                })
+                .child(
+                    Button::secondary("change-folder", "Change…")
+                        .small()
+                        .build(p)
+                        .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
+                ),
+            p,
+        );
+        section("Save", p).child(theme::group(
+            name.into_iter().chain(std::iter::once(folder)),
+            p,
+        ))
     }
 
     fn progress_section(&self, p: &Palette) -> Stateful<Div> {
         let now = std::time::Instant::now();
+        // The heading follows the jobs, as the footer's status does.
+        let title = if !self.finished() {
+            "Converting"
+        } else if self.entries().all(|e| matches!(e.status, Status::Done(_))) {
+            "Converted"
+        } else {
+            "Finished"
+        };
         let rows = self.entries().map(|entry| {
             let id = entry.id;
             let status = match &entry.status {
@@ -855,10 +1255,11 @@ impl QuickView {
                 Status::Failed(e) => e.message.clone(),
                 Status::Cancelled => "Cancelled".into(),
             };
-            let color = match entry.status {
-                Status::Done(_) => p.green,
-                Status::Failed(_) => p.error,
-                _ => p.secondary,
+            let (color, glyph) = match entry.status {
+                Status::Done(_) => (p.green_text, Some((IconName::CircleCheck, p.green))),
+                Status::Failed(_) => (p.error, Some((IconName::CircleX, p.error))),
+                Status::Cancelled => (p.secondary, Some((IconName::Ban, p.tertiary))),
+                _ => (p.secondary, None),
             };
             let bar = match entry.status {
                 Status::Running(f) => Some(theme::progress(f.unwrap_or(0.), p.track, p.green)),
@@ -870,8 +1271,9 @@ impl QuickView {
                 .flex()
                 .items_center()
                 .gap(px(14.))
-                .py(px(8.))
-                .child(theme::thumbnail(&entry.input, 48., 34., p))
+                .px(px(space::LG))
+                .py(px(space::MD))
+                .child(theme::thumbnail(&entry.input, 48., 36., p))
                 .child(
                     div()
                         .flex()
@@ -879,114 +1281,217 @@ impl QuickView {
                         .flex_1()
                         .min_w_0()
                         .gap(px(6.))
-                        .child(text(13., 16., p.text).truncate().child(format!(
-                            "{} → {}",
-                            model::file_name(&entry.input),
-                            entry.to.name
-                        )))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(6.))
+                                .min_w_0()
+                                .child(
+                                    styled(size::BODY, p.text)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .truncate()
+                                        .child(model::file_name(&entry.input).to_string()),
+                                )
+                                .child(icon(IconName::ArrowRight, 12., p.tertiary))
+                                .child(theme::badge(entry.to.name, Tone::Neutral, p)),
+                        )
                         .children(bar)
                         .child(
                             div()
                                 .id(SharedString::from(format!("status-{id}")))
                                 .test_support()
                                 .aria_label(SharedString::from(status.clone()))
-                                .child(text(12., 16., color).child(status)),
+                                .flex()
+                                .items_center()
+                                .gap(px(5.))
+                                .children(glyph.map(|(g, c)| icon(g, 13., c)))
+                                .child(styled(size::SMALL, color).child(status)),
                         ),
                 )
+                .into_any_element()
         });
-        section(p)
+        div()
             .id("jobs")
+            .flex()
+            .flex_col()
             .flex_1()
+            .px(px(GUTTER))
+            .pb(px(space::XL))
             .overflow_y_scroll()
-            .children(rows)
+            .child(
+                div()
+                    .id("jobs-title")
+                    .test_support()
+                    .aria_label(title)
+                    .child(theme::section_label(title, p)),
+            )
+            .child(theme::group(rows.collect::<Vec<_>>(), p))
     }
 
-    fn footer(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+    fn footer(
+        &self,
+        asking: bool,
+        p: &Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let bar = div()
             .flex()
             .flex_shrink_0()
             .items_center()
-            .gap(px(10.))
-            .px(px(24.))
-            .py(px(14.))
-            .bg(p.recessed)
-            .border_t_1()
-            .border_color(p.hairline);
+            .gap(px(space::SM))
+            .px(px(GUTTER))
+            .h(px(60.))
+            .bg(p.chrome)
+            .when(!asking, |d| d.border_t_1().border_color(p.chrome_border));
         if !self.jobs.is_empty() {
             let outputs = self.outputs();
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
+            let status = match (done, self.cloud) {
+                (true, _) => "Done",
+                (false, true) => "Converting in the cloud…",
+                (false, false) => "Converting…",
+            };
             return bar
-                .child(mono(11., 14., p.secondary).flex_1().child(if done {
-                    "Done"
-                } else {
-                    "Converting…"
-                }))
+                .child(
+                    styled(size::SMALL, p.secondary)
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .child(status),
+                )
                 .children(first.filter(|_| done).map(|path| {
-                    secondary_button("show-in-folder", "Show in folder", p)
+                    Button::secondary("show-in-folder", "Show in folder")
+                        .icon(IconName::FolderOpen)
+                        .build(p)
                         .on_click(move |_, _, cx| cx.reveal_path(&path))
                 }))
                 .children(only.filter(|_| done).map(|path| {
-                    secondary_button("open", "Open", p)
+                    Button::secondary("open", "Open")
+                        .build(p)
                         .on_click(move |_, _, cx| cx.open_with_system(&path))
                 }))
                 .child(
-                    primary_button("close", "Close", 13., false)
-                        .px(px(16.))
+                    Button::primary("close", "Close")
+                        .build(p)
+                        .px(px(20.))
                         .on_click(|_, window, _| window.remove_window()),
                 );
         }
+        let cloud = self.in_cloud(cx);
         let state = self.app.read(cx);
-        let disabled =
-            self.to.is_none() || self.supported().is_empty() || !state.license.allows_conversion();
-        let count = match self.supported().len() {
-            0 | 1 => String::new(),
-            n => format!("{n} files · "),
+        let disabled = self.to.is_none()
+            || self.supported().is_empty()
+            || !state.license.allows_conversion()
+            || (cloud && !state.settings.cloud_consent);
+        let label = match self.to {
+            Some(to) if !disabled => format!("Convert to {}", to.name),
+            _ => "Convert".to_string(),
         };
-        bar.child(
-            mono(11., 14., p.secondary)
-                .flex_1()
-                .child(format!("{count}Runs on {}", theme::this_machine())),
-        )
-        .child(
-            secondary_button("cancel", "Cancel", p).on_click(|_, window, _| window.remove_window()),
-        )
-        .child(
-            primary_button("convert", "Convert", 13., disabled)
-                .px(px(16.))
-                .on_click(cx.listener(|this, _, _, cx| this.convert(cx))),
-        )
+        let _ = window;
+        bar.child(div().flex_1())
+            .child(
+                Button::secondary("cancel", "Cancel")
+                    .build(p)
+                    .on_click(|_, window, _| window.remove_window()),
+            )
+            .child(
+                Button::primary("convert", label)
+                    .disabled(disabled)
+                    .build(p)
+                    .px(px(20.))
+                    .when(!disabled, |d| {
+                        d.on_click(cx.listener(|this, _, _, cx| this.convert(cx)))
+                    }),
+            )
     }
 }
 
-fn section(p: &Palette) -> Div {
+/// Tests set this to show Cloud as the account would allow it.
+#[cfg(test)]
+pub(super) struct TestCloud(pub CloudAccess);
+
+#[cfg(test)]
+impl Global for TestCloud {}
+
+/// Space between the window edge and the content.
+const GUTTER: f32 = 24.;
+/// Format cards to a row.
+const CARDS_PER_ROW: u16 = 4;
+const SELECT_WIDTH: f32 = 190.;
+
+/// A titled part of the window.
+fn section(label: &'static str, p: &Palette) -> Div {
     div()
         .flex()
         .flex_col()
-        .px(px(24.))
-        .py(px(18.))
-        .border_t_1()
-        .border_color(p.hairline)
+        .px(px(GUTTER))
+        .pb(px(20.))
+        .child(theme::section_label(label, p))
 }
 
-fn section_label(label: &'static str, p: &Palette) -> Div {
-    text(12., 16., p.secondary)
-        .font_weight(FontWeight::SEMIBOLD)
-        .child(label)
-}
-
-fn row_label(label: &'static str, control: impl IntoElement, p: &Palette) -> Div {
+/// An option row: the label on the left, the control on the right.
+fn row_label(label: &'static str, control: impl IntoElement, p: &Palette) -> AnyElement {
     div()
         .flex()
         .items_center()
+        .gap(px(space::LG))
+        .min_h(px(42.))
+        .px(px(space::LG))
+        .py(px(6.))
         .child(
-            text(13., 16., p.text)
-                .w(px(110.))
-                .flex_shrink_0()
+            styled(size::BODY, p.text)
+                .font_weight(FontWeight::MEDIUM)
+                .flex_1()
                 .child(label),
         )
-        .child(control)
+        .child(div().flex().flex_shrink_0().items_center().child(control))
+        .into_any_element()
+}
+
+/// The typed output name as one file name in the save folder, ending in
+/// `extension`: a path, `..` or a separator would put the file somewhere
+/// else, so they're refused rather than followed.
+pub(super) fn output_name(typed: &str, extension: &str) -> Result<String, String> {
+    let name = typed.trim();
+    if name.is_empty() {
+        return Err("Type a name for the file.".into());
+    }
+    let forbidden: &[char] = if cfg!(windows) {
+        &['/', '\\', '\0', ':', '<', '>', '"', '|', '?', '*']
+    } else {
+        &['/', '\\', '\0']
+    };
+    if let Some(c) = name
+        .chars()
+        .find(|c| forbidden.contains(c) || c.is_control())
+    {
+        return Err(match c {
+            '/' | '\\' => "Use a file name, not a folder path.".into(),
+            c if c.is_control() => "The name has a character files can't use.".into(),
+            c => format!("File names can't contain “{c}”."),
+        });
+    }
+    if name.trim_matches('.').is_empty() {
+        return Err("That isn't a file name.".into());
+    }
+    let has_extension = Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(extension));
+    let name = if has_extension {
+        name.to_string()
+    } else {
+        format!("{name}.{extension}")
+    };
+    // Belt and braces: exactly one plain component.
+    let mut parts = Path::new(&name).components();
+    match (parts.next(), parts.next()) {
+        (Some(std::path::Component::Normal(_)), None) => Ok(name),
+        _ => Err("That isn't a file name.".into()),
+    }
 }
 
 /// Whether the Codec control does anything for `to`.
@@ -1108,7 +1613,7 @@ fn blurb(to: &Format, video_input: bool) -> &'static str {
     match to.id {
         "mp4" => "Most players",
         "webm" => "For the web",
-        "gif" => "Short loops",
+        "gif" if video_input => "Short loops",
         "mkv" => "Keeps tracks",
         "mov" => "For editing",
         "avi" => "Older players",
@@ -1120,6 +1625,15 @@ fn blurb(to: &Format, video_input: bool) -> &'static str {
         "png" => "Lossless",
         "webp" => "Small, sharp",
         "avif" => "Smallest",
+        "gif" => "Simple graphics",
+        "bmp" => "Uncompressed",
+        "tiff" => "Print, archive",
+        "ico" => "App icons",
+        "exr" => "HDR",
+        "tga" => "Textures",
+        "ppm" => "Raw pixels",
+        "qoi" => "Fast, lossless",
+        "svg" => "Scales cleanly",
         "pdf" => "Print, share",
         _ => match to.category {
             Category::Image | Category::Vector => "Image",
@@ -1152,7 +1666,7 @@ fn unreachable(to: &Format, files: usize) -> String {
 }
 
 impl Render for QuickView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
         // Documents waiting for the pack have their own card.
         let waiting = self.waiting_for_pack(cx);
@@ -1167,7 +1681,11 @@ impl Render for QuickView {
                     .id("skipped")
                     .test_support()
                     .aria_label(SharedString::from(text.clone()))
-                    .child(theme::text(12., 16., p.secondary).child(text))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(icon(IconName::Info, 13., p.tertiary))
+                    .child(styled(size::SMALL, p.secondary).child(text))
                     .into_any_element()
             }),
             self.error
@@ -1182,9 +1700,10 @@ impl Render for QuickView {
             div()
                 .flex()
                 .flex_col()
-                .gap(px(8.))
-                .px(px(24.))
-                .pb(px(14.))
+                .flex_shrink_0()
+                .gap(px(space::SM))
+                .px(px(GUTTER))
+                .pb(px(space::LG))
                 .children(notices)
         });
         let body: Vec<AnyElement> = if self.jobs.is_empty() {
@@ -1200,12 +1719,17 @@ impl Render for QuickView {
             }
             // Nothing to save while every file waits for the document pack.
             if !self.supported().is_empty() || waiting == 0 {
+                if self.to.is_some() {
+                    body.push(self.where_section(&p, window, cx).into_any_element());
+                }
                 body.push(self.save_section(&p, cx).into_any_element());
             }
             body
         } else {
             vec![self.progress_section(&p).into_any_element()]
         };
+        let consent = self.consent(&p, cx);
+        let asking = consent.is_some();
         div()
             .id("quick")
             .flex()
@@ -1229,9 +1753,11 @@ impl Render for QuickView {
                     .flex()
                     .flex_col()
                     .flex_1()
+                    .pt(px(space::XS))
                     .overflow_y_scroll()
                     .children(body),
             )
-            .child(self.footer(&p, cx))
+            .children(consent)
+            .child(self.footer(asking, &p, window, cx))
     }
 }

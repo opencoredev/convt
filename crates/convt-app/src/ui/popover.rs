@@ -10,14 +10,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use super::theme::IconName;
 use convt_core::format_by_id;
 use convt_license::client::State;
-use gpui_kit::component::{Icon, IconName};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::main_window::Page;
-use super::theme::{self, Palette, mono, text, text_button};
+use super::theme::{self, Button, Palette, icon, mono, size, space, styled};
 use super::{SettingsTab, error_text, file_size, human_size, time_left};
 use crate::automation;
 use crate::clipboard::clipboard_item;
@@ -192,7 +192,7 @@ impl PopoverView {
                         .px(px(16.))
                         .py(px(6.))
                         .child(title(&entry.input, entry.to.name, p))
-                        .child(text(12., 16., p.error).child(e.message.clone())),
+                        .child(styled(size::SMALL, p.error).child(e.message.clone())),
                     Status::Cancelled => return None,
                     _ => job_row(entry, now, p),
                 };
@@ -206,7 +206,7 @@ impl PopoverView {
                 .pt(px(10.))
                 .pb(px(8.))
                 .border_t_1()
-                .border_color(p.popover_hairline)
+                .border_color(p.hairline)
                 .children(rows)
         })
     }
@@ -218,7 +218,7 @@ impl PopoverView {
             .flex_col()
             .py(px(8.))
             .border_t_1()
-            .border_color(p.popover_hairline)
+            .border_color(p.hairline)
             .child(
                 div()
                     .flex()
@@ -228,18 +228,20 @@ impl PopoverView {
                     .pt(px(4.))
                     .pb(px(6.))
                     .child(
-                        text(11., 14., p.tertiary)
+                        styled(size::CAPTION, p.tertiary)
                             .font_weight(FontWeight::SEMIBOLD)
                             .child("Automations"),
                     )
                     .child(
-                        text_button("new-rule", "New rule", p.green, 12.)
-                            .font_weight(FontWeight::MEDIUM)
+                        Button::secondary("manage-rules", "Manage")
+                            .small()
+                            .build(p)
                             .on_click(|_, _, cx| show_page(Page::Automations, cx)),
                     ),
             )
             .children(rules.into_iter().enumerate().map(|(i, rule)| {
                 let to = format_by_id(&rule.to).map_or(rule.to.clone(), |f| f.name.to_string());
+                let title = format!("{} → {to}", rule.name);
                 let app = self.app.clone();
                 let on = rule.enabled;
                 div()
@@ -253,9 +255,15 @@ impl PopoverView {
                             .flex()
                             .flex_col()
                             .flex_1()
+                            .min_w_0()
                             .gap(px(2.))
-                            .child(text(13., 16., p.text).child(format!("{} → {to}", rule.name)))
-                            .child(mono(11., 14., p.secondary).child(format!(
+                            .child(
+                                styled(size::BODY, p.text)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .truncate()
+                                    .child(title.clone()),
+                            )
+                            .child(mono(11., 14., p.secondary).truncate().child(format!(
                                 "{} · {}",
                                 automation::source_line(&rule),
                                 rule.detail
@@ -264,10 +272,12 @@ impl PopoverView {
                     .child(
                         theme::switch(
                             SharedString::from(format!("popover-automation-{i}")),
+                            title,
                             on,
                             true,
                             p,
                         )
+                        .flex_shrink_0()
                         .on_click(move |_, _, cx| {
                             app.update(cx, |s, cx| s.set_automation(i, !on, cx))
                         }),
@@ -284,7 +294,8 @@ fn show_page(page: Page, cx: &mut App) {
 }
 
 fn title(input: &Path, to: &str, p: &Palette) -> Div {
-    text(13., 16., p.text)
+    styled(size::BODY, p.text)
+        .font_weight(FontWeight::MEDIUM)
         .truncate()
         .child(format!("{} → {to}", model::file_name(input)))
 }
@@ -308,9 +319,10 @@ fn copied_chip(job: JobId, p: &Palette) -> Div {
                 .py(px(4.))
                 .rounded(px(6.))
                 .bg(p.green_tint)
-                .child(Icon::new(IconName::Check).size(px(12.)).text_color(p.green))
+                .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                .child(icon(IconName::Check, 12., p.green_text))
                 .child(
-                    text(12., 16., p.green)
+                    styled(size::SMALL, p.green_text)
                         .font_weight(FontWeight::MEDIUM)
                         .child("Copied to your clipboard"),
                 ),
@@ -349,7 +361,7 @@ fn job_row(entry: &Entry, now: Instant, p: &Palette) -> Div {
                         .child(title(&entry.input, entry.to.name, p).flex_1())
                         .child(mono(11., 14., p.secondary).child(pct)),
                 )
-                .child(theme::progress(fraction, p.popover_track, p.green))
+                .child(theme::progress(fraction, p.track, p.green))
                 .child(
                     div()
                         .flex()
@@ -367,6 +379,9 @@ fn license_line(state: &State) -> Option<String> {
         State::Trial { started: None, .. } => Some("Trial · 7 days".into()),
         State::Trial { days_left: 1, .. } => Some("Trial · last day".into()),
         State::Trial { days_left, .. } => Some(format!("Trial · {days_left} days left")),
+        State::AccountTrial { days_left: 1, .. } => Some("Pro trial · last day".into()),
+        State::AccountTrial { days_left, .. } => Some(format!("Pro trial · {days_left} days left")),
+        State::SignInNeeded => Some("Sign in to start trial".into()),
         State::TrialEnded => Some("Trial ended".into()),
         State::Licensed(_) => Some("Licensed".into()),
         State::NotCovered(_) => Some("Updates ended".into()),
@@ -377,7 +392,7 @@ impl Render for PopoverView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
         let state = self.app.read(cx);
-        let active = state.queue.active();
+        let progress = state.queue.progress_line();
         let license = license_line(&state.license);
         let drop_bar = div()
             .id("drop-bar")
@@ -387,51 +402,40 @@ impl Render for PopoverView {
             .flex_1()
             .items_center()
             .justify_center()
-            .gap(px(8.))
-            .h(px(44.))
-            .rounded(px(8.))
-            .bg(p.drop_bar)
+            .gap(px(space::SM))
+            .h(px(56.))
+            .rounded(px(theme::radius::PANEL))
+            .bg(p.surface.opacity(0.85))
             .border_1()
             .border_dashed()
-            .border_color(p.drop_border)
+            .border_color(p.control_border)
             .drag_over::<ExternalPaths>(move |style, _, _, _| {
                 style.border_color(p.green).bg(p.green_tint)
             })
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
                 this.drop_files(paths.paths(), cx);
             }))
-            .child(
-                Icon::new(IconName::ArrowDown)
-                    .size(px(14.))
-                    .text_color(p.secondary),
-            )
-            .child(text(12., 16., p.secondary).child("Drop a file to convert and copy"));
+            .child(icon(IconName::ArrowDown, 14., p.secondary))
+            .child(styled(size::SMALL, p.secondary).child("Drop a file to convert and copy"));
         div()
             .id("popover")
             .flex()
             .flex_col()
             .size_full()
-            .bg(p.popover)
+            .bg(p.window)
             .font_family(theme::SANS)
             .text_color(p.text)
             .child(
+                // The header and the drop bar over a faint glow.
                 div()
+                    .relative()
+                    .overflow_hidden()
                     .flex()
-                    .items_center()
-                    .justify_between()
-                    .px(px(16.))
-                    .pt(px(14.))
-                    .pb(px(10.))
-                    .child(
-                        text(13., 16., p.text)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("convt"),
-                    )
-                    .when(active > 0, |d| {
-                        d.child(text(12., 16., p.secondary).child(format!("{active} converting")))
-                    }),
+                    .flex_col()
+                    .child(theme::glow(0.6, 320., &p))
+                    .child(self.header(progress, &p))
+                    .child(div().flex().px(px(12.)).pb(px(12.)).child(drop_bar)),
             )
-            .child(div().flex().px(px(12.)).pb(px(10.)).child(drop_bar))
             .children(
                 self.error
                     .clone()
@@ -441,31 +445,63 @@ impl Render for PopoverView {
             .children(self.dropped(&p))
             .child(self.automations(&p, cx))
             .child(div().flex_1())
+            .child(self.footer(license, &p))
+    }
+}
+
+impl PopoverView {
+    fn header(&self, progress: Option<String>, p: &Palette) -> Div {
+        let p = *p;
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            // The traffic lights sit at the left of a transparent title bar.
+            .pl(px(if theme::transparent_titlebar() {
+                84.
+            } else {
+                16.
+            }))
+            .pr(px(16.))
+            .pt(px(14.))
+            .pb(px(10.))
+            .child(theme::lockup(13., &p))
+            .children(progress.map(|line| theme::badge(line, theme::Tone::Green, &p)))
+    }
+
+    fn footer(&self, license: Option<String>, p: &Palette) -> Div {
+        let p = *p;
+        div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .justify_between()
+            .px(px(12.))
+            .py(px(8.))
+            .bg(p.chrome)
+            .border_t_1()
+            .border_color(p.chrome_border)
+            .child(
+                styled(size::SMALL, p.secondary)
+                    .pl(px(4.))
+                    .child(license.unwrap_or_default()),
+            )
             .child(
                 div()
                     .flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .justify_between()
-                    .px(px(16.))
-                    .py(px(10.))
-                    .bg(p.popover_footer)
-                    .border_t_1()
-                    .border_color(p.popover_hairline)
-                    .child(text(12., 16., p.secondary).child(license.unwrap_or_default()))
+                    .gap(px(space::XS))
                     .child(
-                        div()
-                            .flex()
-                            .gap(px(14.))
-                            .child(
-                                text_button("open-convt", "Open convt", p.text, 12.)
-                                    .on_click(|_, _, cx| show_page(Page::Activity, cx)),
-                            )
-                            .child(
-                                text_button("open-settings", "Settings", p.text, 12.).on_click(
-                                    |_, _, cx| super::show_settings(SettingsTab::General, cx),
-                                ),
-                            ),
+                        Button::secondary("open-settings", "Settings")
+                            .icon(IconName::Settings)
+                            .small()
+                            .build(&p)
+                            .on_click(|_, _, cx| super::show_settings(SettingsTab::General, cx)),
+                    )
+                    .child(
+                        Button::primary("open-convt", "Open convt")
+                            .small()
+                            .build(&p)
+                            .on_click(|_, _, cx| show_page(Page::Activity, cx)),
                     ),
             )
     }

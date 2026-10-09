@@ -10,6 +10,7 @@ mod account;
 mod automation;
 mod clipboard;
 mod clock;
+mod cloud;
 mod finder;
 mod history;
 mod instance;
@@ -95,7 +96,12 @@ fn run(primary: instance::Primary, first: Request) {
     #[cfg(unix)]
     ignore_hangup();
     let (tx, mut rx) = unbounded::<Request>();
-    let app = gpui_kit::application().with_assets(ui::assets());
+    // GPUI quits with the last window on Linux and Windows by default;
+    // `last_window_closed` decides instead, so the tray can keep convt
+    // running.
+    let app = gpui_kit::application()
+        .with_assets(ui::assets())
+        .with_quit_mode(gpui_kit::QuitMode::Explicit);
     let urls = tx.clone();
     app.on_open_urls(move |links| {
         // The Finder extension's requests, and files opened with convt.
@@ -120,17 +126,19 @@ fn run(primary: instance::Primary, first: Request) {
         cx.set_app_identity("app.convt.desktop", "convt");
         gpui_kit::init(cx);
         ui::theme::init(cx);
-        menu::init(cx);
+        ui::menus::init(cx);
         let state = cx.new(|cx| AppState::new(Arc::new(pack::Engines), Paths::from_env(), cx));
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);
         cx.set_global(Shared(state.clone()));
         tray::init(&state, tray::platform::spawn, cx);
         cx.on_window_closed(last_window_closed).detach();
-        // The two network calls the app makes by itself, each at most once a
-        // UTC day: the Pro key renewal and the update check. Looked at now
-        // and every few hours, since convt keeps running in the background.
-        state.update(cx, |s, cx| s.start_daily_checks(cx));
+        // The two network calls the app makes by itself: while signed in, at
+        // most once a UTC day, the Pro key renewal; while automatic update
+        // checks are on, at launch and then every few hours, the signed list
+        // of releases. convt keeps running in the background, so both are
+        // looked at again on a schedule.
+        state.update(cx, |s, cx| s.start_update_checks(cx));
 
         primary.listen(move |req| drop(tx.unbounded_send(req)));
         cx.spawn(async move |cx| {
@@ -250,6 +258,15 @@ mod tests {
         assert_eq!(decide(true, 2), KeepRunning);
         assert_eq!(decide(false, 0), Quit);
         assert_eq!(decide(false, 1), QuitWhenIdle);
+    }
+
+    #[test]
+    fn only_the_app_decides_to_quit_after_the_last_window() {
+        // GPUI's default quits on Linux and Windows as soon as the last
+        // window closes, before `last_window_closed` can keep convt running
+        // for the tray. The test platform doesn't do that, so check here.
+        let src = include_str!("main.rs");
+        assert!(src.contains(".with_quit_mode(gpui_kit::QuitMode::Explicit)"));
     }
 
     #[test]

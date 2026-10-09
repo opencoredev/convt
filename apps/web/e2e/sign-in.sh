@@ -55,7 +55,7 @@ ab find role button click --name "Continue" >/dev/null
 check "Continue signs in" wait_url /dashboard
 check "with one new session" test "$(trial_sessions)" = "$((before + 1))"
 headers=$(curl -sI "$E2E_URL/sign-in/verify")
-check "the verify page is no-store" grep -qi "cache-control: no-store" <<<"$headers"
+check "the verify page is no-store" grep -qiE "cache-control: (private, )?no-store" <<<"$headers"
 check "the verify page sends no referrer" grep -qi "referrer-policy: no-referrer" <<<"$headers"
 
 # OAuth through the mock.
@@ -63,16 +63,20 @@ oauth_sign_in() { # provider identity [email]
   sign_out_all_cookies
   reset_limits
   open_page "/sign-in"
-  ab find role button click --name "$([[ $1 == github ]] && echo GitHub || echo Google)" >/dev/null
+  ab find role button click --name "$([[ $1 == github ]] && echo GitHub || echo "Continue with Google")" >/dev/null
   wait_url "/$1/authorize"
   local url
   url=$(url_now)
   ab open "$url&identity=$2${3:+&email=$3}" >/dev/null
 }
 
+# A new account lands on /download (CNV-69), a returning one on the dashboard.
+owner_sql "delete from users where split_part(email, '@', 1) = 'gail.mock'" >/dev/null
 oauth_sign_in google google-gmail
-check "Google with a Gmail address lands on the dashboard" wait_url /dashboard
-shot oauth-google-gmail-dashboard-desktop-light
+check "Google sign-up with a Gmail address lands on /download" wait_url /download
+shot oauth-google-gmail-download-desktop-light
+oauth_sign_in google google-gmail
+check "signing in again with the same Google account lands on the dashboard" wait_url /dashboard
 
 oauth_sign_in github github-pro
 check "the GitHub identity linked to pro@ signs in to pro@" wait_url /dashboard
@@ -91,7 +95,7 @@ type_code "$(mail_code "$email")"
 check "the code confirms it and opens the dashboard" wait_url /dashboard
 
 # The rest of the mock identities: where each one lands after sign-up.
-for case in "google google-workspace /dashboard" "google google-unverified /sign-in/verify-email" \
+for case in "google google-workspace /download" "google google-unverified /sign-in/verify-email" \
   "github github-verified /sign-in/verify-email" "github github-public-differs /sign-in/verify-email" \
   "github github-no-email error=email_not_found"; do
   read -r provider identity lands <<<"$case"

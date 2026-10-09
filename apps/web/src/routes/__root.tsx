@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { HeadContent, Scripts, createRootRoute, useMatches } from "@tanstack/react-router";
 
+import { themeScript, useSystemTheme } from "#/components/app/theme";
 import { IdentifyUser } from "#/components/identify-user";
 import { PostHogProvider } from "#/components/posthog-provider";
 import { rememberAttribution } from "#/lib/analytics-attribution";
@@ -10,7 +11,7 @@ import appCss from "../styles.css?url";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
-    /** Pin a route to one theme, e.g. the landing page, which is designed dark only. */
+    /** Pin a route to one theme, e.g. the brand page. Every other page follows the OS. */
     theme?: "light" | "dark";
   }
 }
@@ -54,6 +55,8 @@ export const Route = createRootRoute({
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
+    // Before first paint, so a visitor never sees the other theme flash.
+    scripts: [{ children: themeScript }],
   }),
   shellComponent: RootDocument,
 });
@@ -65,9 +68,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       [...matches].reverse().find((match) => match.staticData.theme)?.staticData.theme,
   });
 
+  useSystemTheme(theme);
+
   return (
-    // The account pages set `dark` from the OS before hydration, so the class can differ.
-    <html lang="en" className={theme === "dark" ? "dark" : undefined} suppressHydrationWarning>
+    // The theme script sets the `dark` class before hydration; see components/app/theme.ts.
+    <html lang="en" data-theme={theme} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

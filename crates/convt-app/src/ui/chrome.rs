@@ -8,7 +8,8 @@
 //! dragging to move, double-clicking to maximize, the window menu on a right
 //! click, and minimize, maximize and close.
 
-use gpui_kit::component::{Icon, IconName};
+use super::theme::IconName;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 

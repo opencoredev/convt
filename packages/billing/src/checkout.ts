@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { base64urlDecode, base64urlEncode, newId, randomBytes } from "@convt/license";
 
 import { isPro, type CatalogProduct } from "./catalog";
-import { type BillingContext, fault, maskEmail, one, rows } from "./context";
+import { type BillingContext, fault, maskEmail, one, rows, type Q } from "./context";
 import { ingestFacts } from "./ingest";
 import { emptyFacts } from "./provider";
 
@@ -39,7 +39,18 @@ const liveSql = (kind: "pro" | "api", userId: string, now: Date) => sql`
   select id from subscriptions
   where user_id = ${userId} and kind = ${kind}
     and status in ('incomplete', 'trialing', 'active', 'past_due', 'unpaid')
-    and (ended_at is null or ended_at > ${now})`;
+  and (ended_at is null or ended_at > ${now})`;
+
+/** Whether this account may start its one Pro trial, without creating anything. */
+export async function canStartProTrial(db: Q, userId: string, now: Date): Promise<boolean> {
+  const live = await rows(db, liveSql("pro", userId, now));
+  if (live.length) return false;
+  const ever = await one(
+    db,
+    sql`select 1 as x from subscriptions where user_id = ${userId} and kind = 'pro' limit 1`,
+  );
+  return !ever;
+}
 
 export async function createCheckout(
   ctx: BillingContext,
@@ -47,6 +58,8 @@ export async function createCheckout(
     product: CatalogProduct;
     user: { id: string; email: string } | null;
     spendCapCents?: number | null;
+    /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
+    fromApp?: boolean;
   },
 ): Promise<CreatedCheckout> {
   const now = ctx.clock();
@@ -64,14 +77,11 @@ export async function createCheckout(
   let allowTrial = false;
   let cap: number | null = null;
   if (product === "pro_month" || product === "pro_year") {
-    if ((await rows(ctx.db, liveSql("pro", user!.id, now))).length)
-      return { ok: false, refusal: "already_pro" };
-    // A trial only for an account that never had a Pro subscription.
-    const ever = await one(
-      ctx.db,
-      sql`select 1 as x from subscriptions where user_id = ${user!.id} and kind = 'pro' limit 1`,
-    );
-    allowTrial = !ever;
+    if (!(await canStartProTrial(ctx.db, user!.id, now))) {
+      const live = await rows(ctx.db, liveSql("pro", user!.id, now));
+      if (live.length) return { ok: false, refusal: "already_pro" };
+    }
+    allowTrial = await canStartProTrial(ctx.db, user!.id, now);
   }
   if (product === "api") {
     cap = input.spendCapCents ?? null;
@@ -100,7 +110,7 @@ export async function createCheckout(
     created = await ctx.provider.createCheckout({
       product,
       checkoutRef: id,
-      successUrl: `${ctx.config.siteUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
+      successUrl: `${ctx.config.siteUrl}/checkout/success?checkout_id={CHECKOUT_ID}${input.fromApp ? "&from=app" : ""}`,
       allowTrial,
       externalCustomerId: user?.id ?? null,
       email: user?.email ?? null,

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { headerLinks } from "#/components/site/links";
 import { Mark } from "#/components/logo";
 import { fetchSignedInAccount } from "#/lib/auth-client";
+import { downloadEntryHref } from "#/lib/sign-in";
 import { LAUNCHED, routes } from "#/lib/site";
 import type { Account } from "#/lib/types";
 
@@ -113,7 +114,7 @@ function NavActions({ account, showDownload }: { account: Account | null; showDo
   const download = showDownload ? (
     <ButtonLink
       variant="primary"
-      href={routes.download}
+      href={downloadEntryHref(account != null)}
       className="rounded-lg px-3 py-[7px] text-[14px]/[18px] shadow-[inset_0_1px_0_#ffffff47,0_0_0_1px_#157f4a,0_1px_2px_#0a3c2340,0_2px_6px_#0a3c231f]!"
     >
       Download

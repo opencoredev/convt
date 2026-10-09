@@ -1,8 +1,10 @@
 import { cx, focusRing } from "#/components/app/ui";
 
-// Sign-in providers. Buttons are text-only by Leo's decision. Each one renders only
-// when the Worker has it configured; Apple waits for the Apple Developer account
-// (CNV-20), so its button is hidden until then.
+import { GitHubMark, GoogleMark, OrDivider, darkPill } from "./auth-screen";
+
+// Sign-in providers. Each one renders only when the Worker has it configured. Google is
+// the dark pill above the email step; GitHub and Apple are quiet text links under it.
+// Apple waits for the Apple Developer account (CNV-20), so it stays hidden until then.
 const providers = [
   { id: "github", label: "GitHub" },
   { id: "google", label: "Google" },
@@ -11,38 +13,57 @@ const providers = [
 
 export type SocialProviderId = (typeof providers)[number]["id"];
 
-/** "or continue with" and a button per configured provider; nothing when none is. */
-export function SocialSignIn({
+/** Continue with Google and the "or" under it; nothing when Google is not configured. */
+export function GoogleSignIn({
+  available,
+  onSelect,
+  busy,
+}: {
+  available: Record<SocialProviderId, boolean>;
+  onSelect: (provider: SocialProviderId) => void;
+  busy?: boolean;
+}) {
+  if (!available.google) return null;
+  return (
+    <div className="flex w-full flex-col gap-5">
+      <button type="button" disabled={busy} onClick={() => onSelect("google")} className={darkPill}>
+        <GoogleMark />
+        Continue with Google
+      </button>
+      <OrDivider />
+    </div>
+  );
+}
+
+/** "Or continue with GitHub" as small links; nothing when no other provider is configured. */
+export function OtherSignIn({
   available,
   onSelect,
 }: {
   available: Record<SocialProviderId, boolean>;
   onSelect: (provider: SocialProviderId) => void;
 }) {
-  const shown = providers.filter((provider) => available[provider.id]);
+  const shown = providers.filter((p) => p.id !== "google" && available[p.id]);
   if (shown.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex items-center gap-3">
-        <span className="h-px flex-1 bg-line" />
-        <span className="text-xs/4 text-ink-3">or continue with</span>
-        <span className="h-px flex-1 bg-line" />
-      </div>
-      <div className="flex gap-2">
-        {shown.map((provider) => (
+    <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px]/5 text-ink-2">
+      <span>Or continue with</span>
+      {shown.map((provider, i) => (
+        <span key={provider.id} className="inline-flex items-center gap-1.5">
+          {i > 0 ? <span aria-hidden="true">·</span> : null}
           <button
-            key={provider.id}
             type="button"
             onClick={() => onSelect(provider.id)}
             className={cx(
-              "h-10 flex-1 cursor-pointer rounded-lg bg-raised text-[13px]/4 font-medium shadow-button hover:bg-hover dark:bg-sunken",
+              "inline-flex cursor-pointer items-center gap-1.5 rounded-sm font-medium text-ink underline-offset-[3px] hover:underline",
               focusRing,
             )}
           >
+            {provider.id === "github" ? <GitHubMark /> : null}
             {provider.label}
           </button>
-        ))}
-      </div>
-    </div>
+        </span>
+      ))}
+    </p>
   );
 }

@@ -1,10 +1,14 @@
 // The /api/device handlers. The desktop app calls them with JSON and no cookies;
 // they answer JSON and are never cached. See device-auth.ts for the flow.
 
+import { env } from "cloudflare:workers";
+
 import { billing } from "./billing";
+import { cloudConfig } from "./cloud-credential";
 import { requestContext } from "./context";
 import {
   bearer,
+  deviceCloudCredential,
   readSmallJson,
   exchangeCode,
   renewDevice,
@@ -21,7 +25,7 @@ function respond(r: DeviceResponse): Response {
 
 const ipOf = (request: Request) => request.headers.get("cf-connecting-ip")?.trim() || "unknown";
 
-export type DeviceRoute = "token" | "license" | "sign-out";
+export type DeviceRoute = "token" | "license" | "sign-out" | "cloud";
 
 export async function handleDevice(
   route: DeviceRoute,
@@ -46,9 +50,14 @@ export async function handleDevice(
           input,
           ipOf(request),
           now,
+          (userId) => billing().currentProAccess(userId),
         ),
       );
     case "sign-out":
       return respond(await signOutDevice(scope.db, token, now));
+    case "cloud":
+      return respond(
+        await deviceCloudCredential(scope.db, cloudConfig(env), token, ipOf(request), now),
+      );
   }
 }

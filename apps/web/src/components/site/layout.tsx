@@ -58,7 +58,7 @@ function SiteFooter() {
           <div className="grid grid-cols-2 gap-x-16 gap-y-10 sm:flex sm:gap-x-20">
             {footerColumns.map((column) => (
               <nav key={column.title} aria-label={column.title} className="flex flex-col gap-3">
-                <h2 className="font-mono text-xs/4 text-ink-2 uppercase">{column.title}</h2>
+                <h2 className="text-[13px]/5 font-medium text-ink-2">{column.title}</h2>
                 <ul className="flex flex-col gap-3">
                   {column.links.map((link) => (
                     <li key={link.label}>

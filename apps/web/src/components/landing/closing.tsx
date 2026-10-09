@@ -1,16 +1,16 @@
 import { Mark } from "#/components/logo";
+import { downloadEntryHref } from "#/lib/sign-in";
 import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
-import { useDownloadCtaLabel } from "./use-download-cta";
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
-export function CallToAction() {
+export function CallToAction({ signedIn }: { signedIn: boolean }) {
   return (
     <Container>
       <section
         aria-labelledby="cta-title"
-        className="bg-land-glow flex flex-col items-center gap-7 overflow-clip rounded-2xl bg-bottom px-5 pt-16 pb-24 text-center md:h-[460px] md:pt-[88px] md:pb-0"
+        className="bg-land-glow flex flex-col items-center gap-7 overflow-clip rounded-2xl bg-bottom shadow-[inset_0_0_0_1px_var(--line)] dark:shadow-none px-5 pt-16 pb-24 text-center md:h-[460px] md:pt-[88px] md:pb-0"
       >
         <div className="flex flex-col items-center gap-3.5">
           <h2
@@ -26,7 +26,7 @@ export function CallToAction() {
         </div>
         <div className="flex flex-wrap justify-center gap-3">
           {LAUNCHED ? (
-            <DownloadActions />
+            <DownloadActions signedIn={signedIn} />
           ) : (
             <ComingSoon className="h-11 rounded-[10px] px-5 text-[15px]/[18px]">
               Not available yet
@@ -38,20 +38,19 @@ export function CallToAction() {
   );
 }
 
-function DownloadActions() {
-  const label = useDownloadCtaLabel();
+function DownloadActions({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <ButtonLink
         variant="primary"
-        href={routes.download}
+        href={downloadEntryHref(signedIn)}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
-        {label}
+        Get convt
       </ButtonLink>
       <ButtonLink
         variant="secondary"
-        href={`${routes.download}#platforms`}
+        href={signedIn ? "/download#platforms" : downloadEntryHref(false)}
         className="h-11 rounded-[10px] px-5 text-[15px]/[18px]"
       >
         All platforms
@@ -85,7 +84,7 @@ export function Footer() {
                 >
                   <h2
                     id={`footer-${column.title}`}
-                    className="font-mono text-[12px]/[16px] font-normal text-land-muted uppercase"
+                    className="text-[13px]/5 font-medium text-land-muted"
                   >
                     {column.title}
                   </h2>
@@ -122,7 +121,7 @@ export function Footer() {
               </a>
             )}
           </p>
-          <p className="font-mono text-[12px]/[16px] text-land-muted">Built with Rust and GPUI</p>
+          <p className="text-[13px]/5 text-land-muted">Built with Rust and GPUI</p>
         </div>
       </Container>
     </footer>

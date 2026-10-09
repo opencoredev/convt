@@ -14,6 +14,10 @@
 //! Renewal ([`Api::current_key`]) sends the device token and gets back the
 //! account's current Pro key, if it has one. The token can be revoked from the
 //! dashboard; the server then answers 401 and the app signs out.
+//!
+//! A cloud conversion ([`Api::cloud_credential`]) sends the device token and
+//! gets back the cloud API's address and a five-minute credential for it,
+//! which convt.app issues only while the account has paid Pro.
 
 use std::time::{Duration, Instant};
 
@@ -178,6 +182,35 @@ pub enum ApiError {
     Server(u16),
     #[error("convt.app sent an answer this version of convt doesn't understand.")]
     BadResponse,
+    /// The account has no paid Pro, which cloud conversion needs.
+    #[error("Cloud conversion needs an active paid Pro subscription.")]
+    NeedsPro,
+    #[error("Cloud conversion isn't available on convt.app yet.")]
+    CloudOff,
+}
+
+/// Where to send a cloud conversion, and the short-lived credential for it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct CloudCredential {
+    pub base_url: String,
+    pub token: String,
+}
+
+impl std::fmt::Debug for CloudCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudCredential")
+            .field("base_url", &self.base_url)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Whether `url` may carry files and credentials: HTTPS, or plain HTTP to a
+/// loopback host, which only a local stack serves.
+pub fn secure_url(url: &str) -> bool {
+    url.starts_with("https://")
+        || ["http://localhost:", "http://127.0.0.1:", "http://[::1]:"]
+            .iter()
+            .any(|p| url.starts_with(p))
 }
 
 /// The calls the app makes to convt.app. Tests script their own.
@@ -185,9 +218,35 @@ pub trait Api: Send + Sync {
     /// Trades a one-time code and its verifier for a device token.
     fn exchange(&self, code: &str, verifier: &str) -> Result<Session, ApiError>;
     /// The account's current Pro key, or `None` if it has none.
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError>;
+    fn current_key(&self, token: &str, version: &str) -> Result<LicenseReply, ApiError>;
     /// Revokes this device's token on the server.
     fn sign_out(&self, token: &str) -> Result<(), ApiError>;
+    /// A five-minute credential for the cloud API, if the account has paid
+    /// Pro. Fakes that don't script it answer like a site without the route.
+    fn cloud_credential(&self, token: &str) -> Result<CloudCredential, ApiError> {
+        let _ = token;
+        Err(ApiError::Server(404))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Access {
+    Pro,
+    Trial {
+        ends_on: String,
+        ends_at: Option<String>,
+    },
+    CanStartTrial {
+        checkout_url: String,
+    },
+    Lapsed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LicenseReply {
+    pub key: Option<String>,
+    pub access: Option<Access>,
 }
 
 /// [`Api`] over HTTPS to [`account_url`].
@@ -200,9 +259,7 @@ impl Http {
     /// Plain HTTP is allowed only for a loopback host, which only a build
     /// from source can be pointed at.
     pub fn new(base: &str) -> Self {
-        let local = ["http://localhost:", "http://127.0.0.1:", "http://[::1]:"]
-            .iter()
-            .any(|p| base.starts_with(p));
+        let local = !base.starts_with("https://") && secure_url(base);
         let agent = ureq::Agent::config_builder()
             .https_only(!local)
             .max_redirects(0)
@@ -272,18 +329,25 @@ impl Api for Http {
         serde_json::from_value(json).map_err(|_| ApiError::BadResponse)
     }
 
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError> {
+    fn current_key(&self, token: &str, version: &str) -> Result<LicenseReply, ApiError> {
         let (status, json) = self.post(
             "/api/device/license",
             Some(token),
             serde_json::json!({ "version": version }),
         )?;
         check(status)?;
-        match json.get("key") {
+        let key = match json.get("key") {
             Some(serde_json::Value::String(key)) => Ok(Some(key.clone())),
             Some(serde_json::Value::Null) => Ok(None),
             _ => Err(ApiError::BadResponse),
-        }
+        }?;
+        let access = json
+            .get("access")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| ApiError::BadResponse)?;
+        Ok(LicenseReply { key, access })
     }
 
     fn sign_out(&self, token: &str) -> Result<(), ApiError> {
@@ -293,6 +357,24 @@ impl Api for Http {
             return Ok(());
         }
         check(status)
+    }
+
+    fn cloud_credential(&self, token: &str) -> Result<CloudCredential, ApiError> {
+        let (status, json) = self.post("/api/device/cloud", Some(token), serde_json::json!({}))?;
+        let error = json.pointer("/error").and_then(|e| e.as_str());
+        match (status, error) {
+            (403, Some("not_pro")) => return Err(ApiError::NeedsPro),
+            (503, Some("not_configured")) => return Err(ApiError::CloudOff),
+            _ => check(status)?,
+        }
+        let text = |key| json.get(key).and_then(|v| v.as_str()).map(str::to_string);
+        match (text("baseUrl"), text("token")) {
+            (Some(base_url), Some(token)) if secure_url(&base_url) => Ok(CloudCredential {
+                base_url: base_url.trim_end_matches('/').to_string(),
+                token,
+            }),
+            _ => Err(ApiError::BadResponse),
+        }
     }
 }
 
@@ -406,13 +488,33 @@ mod tests {
 
         let (base, got) = serve_once(200, r#"{"key":"k.s"}"#);
         let key = Http::new(&base).current_key("cvd_x", "0.1.0").unwrap();
-        assert_eq!(key.as_deref(), Some("k.s"));
+        assert_eq!(key.key.as_deref(), Some("k.s"));
         let request = got.recv().unwrap().to_ascii_lowercase();
         assert!(request.starts_with("post /api/device/license "));
         assert!(request.contains("authorization: bearer cvd_x"));
 
         let (base, _) = serve_once(200, r#"{"key":null}"#);
-        assert_eq!(Http::new(&base).current_key("t", "v"), Ok(None));
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                access: None
+            })
+        );
+        let (base, _) = serve_once(
+            200,
+            r#"{"key":null,"access":{"kind":"trial","ends_on":"2026-10-15","ends_at":"2026-10-15T12:00:00Z"}}"#,
+        );
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                access: Some(Access::Trial {
+                    ends_on: "2026-10-15".into(),
+                    ends_at: Some("2026-10-15T12:00:00Z".into()),
+                })
+            })
+        );
         let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
@@ -432,6 +534,43 @@ mod tests {
         );
         let (base, _) = serve_once(401, "{}");
         assert_eq!(Http::new(&base).sign_out("t"), Ok(()));
+    }
+
+    #[test]
+    fn cloud_credentials_over_http() {
+        let (base, got) = serve_once(
+            200,
+            r#"{"baseUrl":"https://api.example/","token":"cvt_web_a.b","expiresIn":300}"#,
+        );
+        let credential = Http::new(&base).cloud_credential("cvd_x").unwrap();
+        assert_eq!(credential.base_url, "https://api.example");
+        assert_eq!(credential.token, "cvt_web_a.b");
+        assert!(!format!("{credential:?}").contains("cvt_web"));
+        let request = got.recv().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("post /api/device/cloud "));
+        assert!(request.contains("authorization: bearer cvd_x"));
+
+        let (base, _) = serve_once(403, r#"{"error":"not_pro"}"#);
+        assert_eq!(
+            Http::new(&base).cloud_credential("t"),
+            Err(ApiError::NeedsPro)
+        );
+        let (base, _) = serve_once(503, r#"{"error":"not_configured"}"#);
+        assert_eq!(
+            Http::new(&base).cloud_credential("t"),
+            Err(ApiError::CloudOff)
+        );
+        let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);
+        assert_eq!(
+            Http::new(&base).cloud_credential("t"),
+            Err(ApiError::SignedOut)
+        );
+        // A credential is never sent anywhere but HTTPS or this computer.
+        let (base, _) = serve_once(200, r#"{"baseUrl":"http://api.example","token":"t"}"#);
+        assert_eq!(
+            Http::new(&base).cloud_credential("t"),
+            Err(ApiError::BadResponse)
+        );
     }
 
     #[test]

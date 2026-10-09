@@ -2,10 +2,12 @@
 //! convert opens for files sent without a target; Settings and the first-run
 //! window are their own windows; the menu bar popover belongs to the tray.
 
+mod about;
 mod account;
 mod chrome;
 mod first_run;
 mod main_window;
+pub mod menus;
 mod pack;
 mod popover;
 mod quick;
@@ -20,7 +22,9 @@ use std::path::{Path, PathBuf};
 use convt_core::Preset;
 use convt_license::client::{BUY_URL, DOWNLOAD_URL, State};
 use gpui_kit::*;
+use theme::IconName;
 
+pub use about::AboutView;
 pub use first_run::FirstRunView;
 pub use main_window::MainView;
 pub use popover::PopoverView;
@@ -31,11 +35,145 @@ use crate::model;
 use crate::request::Request;
 use theme::Palette;
 
-/// The icons the windows draw: checkmarks, dropdown chevrons and the drop
-/// bar's arrow. Register it with `Application::with_assets`; without it
-/// every icon draws empty.
-pub fn assets() -> gpui_kit::assets::Assets {
-    gpui_kit::assets::Assets
+/// The icons the windows draw, from Hugeicons (see [`theme::IconName`]).
+/// Register it with `Application::with_assets`; without it every icon draws
+/// empty.
+pub fn assets() -> Assets {
+    Assets
+}
+
+/// The bundled Hugeicons and Google's G. The component library's own
+/// controls (the spinner, a text field's clear button) load gpui-kit's
+/// Lucide paths, so those few paths answer with the matching Hugeicon too;
+/// everything else falls through to gpui-kit's set.
+pub struct Assets;
+
+macro_rules! hugeicons {
+    ($($file:literal),* $(,)?) => {
+        &[$((
+            concat!("icons/hugeicons/", $file, ".svg"),
+            include_bytes!(concat!("../../assets/icons/hugeicons/", $file, ".svg")),
+        )),*]
+    };
+}
+
+/// Every file `assets/icons/generate.mjs` writes, at the path
+/// [`theme::IconName`] gives it, and the Google G.
+const ICONS: &[(&str, &[u8])] = hugeicons![
+    "add",
+    "alert-circle",
+    "alert-triangle",
+    "arrow-down",
+    "arrow-right",
+    "calendar",
+    "cancel",
+    "cancel-circle",
+    "check",
+    "check-circle",
+    "chevron-down",
+    "chevron-right",
+    "chevrons-up-down",
+    "cloud",
+    "computer",
+    "document",
+    "download",
+    "edit",
+    "external-link",
+    "folder",
+    "folder-open",
+    "google",
+    "hard-drive",
+    "inbox",
+    "info",
+    "key",
+    "loading",
+    "magic-wand",
+    "mail",
+    "minus",
+    "refresh",
+    "restore",
+    "rotate",
+    "settings",
+    "sparkles",
+    "square",
+    "star",
+    "user-circle",
+];
+
+const GOOGLE_G: (&str, &[u8]) = (
+    "icons/google-g.svg",
+    include_bytes!("../../assets/icons/google-g.svg"),
+);
+
+/// Onboarding's dithered glow and the setup step's spinner
+/// (`assets/onboarding/generate.py`).
+const ONBOARDING: &[(&str, &[u8])] = &[
+    (
+        "onboarding/glow-light.png",
+        include_bytes!("../../assets/onboarding/glow-light.png"),
+    ),
+    (
+        "onboarding/glow-dark.png",
+        include_bytes!("../../assets/onboarding/glow-dark.png"),
+    ),
+    (
+        "onboarding/spinner-track.svg",
+        include_bytes!("../../assets/onboarding/spinner-track.svg"),
+    ),
+    (
+        "onboarding/spinner-arc.svg",
+        include_bytes!("../../assets/onboarding/spinner-arc.svg"),
+    ),
+];
+
+/// The Lucide paths gpui-kit's components load, and the Hugeicon each gets.
+const COMPONENT_ICONS: &[(&str, &str)] = &[
+    ("icons/loader.svg", "loading"),
+    ("icons/loader-circle.svg", "loading"),
+    ("icons/close.svg", "cancel"),
+    ("icons/check.svg", "check"),
+    ("icons/chevron-down.svg", "chevron-down"),
+    ("icons/chevron-right.svg", "chevron-right"),
+    ("icons/minus.svg", "minus"),
+    ("icons/plus.svg", "add"),
+];
+
+impl Assets {
+    fn bundled(path: &str) -> Option<&'static [u8]> {
+        let lucide = COMPONENT_ICONS
+            .iter()
+            .find(|(lucide, _)| *lucide == path)
+            .map(|(_, file)| format!("icons/hugeicons/{file}.svg"));
+        let path = lucide.as_deref().unwrap_or(path);
+        ICONS
+            .iter()
+            .chain(std::iter::once(&GOOGLE_G))
+            .chain(ONBOARDING)
+            .find(|(p, _)| *p == path)
+            .map(|(_, bytes)| *bytes)
+    }
+}
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
+        match Self::bundled(path) {
+            Some(bytes) => Ok(Some(std::borrow::Cow::Borrowed(bytes))),
+            None => gpui_kit::assets::Assets.load(path),
+        }
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        let mut all = gpui_kit::assets::Assets.list(path)?;
+        all.extend(
+            ICONS
+                .iter()
+                .chain(std::iter::once(&GOOGLE_G))
+                .chain(ONBOARDING)
+                .filter(|(p, _)| p.starts_with(path))
+                .map(|(p, _)| SharedString::from(*p)),
+        );
+        Ok(all)
+    }
 }
 
 /// The license price quoted in the trial card and the first-run window.
@@ -61,6 +199,17 @@ fn show<V: Render>(
     cx: &mut App,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> Option<(AnyWindowHandle, Entity<V>)> {
+    show_on(None, size, title, cx, build)
+}
+
+/// [`show`], centered on `display` (the primary display for `None`).
+fn show_on<V: Render>(
+    display: Option<DisplayId>,
+    size: Size<Pixels>,
+    title: &str,
+    cx: &mut App,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Option<(AnyWindowHandle, Entity<V>)> {
     if let Some((handle, view)) = Open::<V>::get(cx)
         && handle
             .update(cx, |_, window, _| window.activate_window())
@@ -68,7 +217,7 @@ fn show<V: Render>(
     {
         return Some((handle, view));
     }
-    let opened = open_window(window_options(size, title, cx), cx, build);
+    let opened = open_window(window_options_on(display, size, title, cx), cx, build);
     cx.activate(true);
     match opened {
         Ok((handle, view)) => {
@@ -155,16 +304,16 @@ pub fn route(request: Request, cx: &mut App) {
 /// launch shows it again. A build from source that doesn't check licenses
 /// never shows the first-run window.
 pub fn show_main(cx: &mut App) {
-    let app = model::shared(cx);
-    let first_run = {
-        let state = app.read(cx);
-        state.license_enforced() && !state.settings.first_run_done
-    };
-    if first_run {
+    if first_run_pending(cx) {
         open_first_run(cx);
     } else {
         open_main(cx);
     }
+}
+
+fn first_run_pending(cx: &App) -> bool {
+    let state = model::shared(cx).read(cx);
+    state.license_enforced() && !state.settings.first_run_done
 }
 
 fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
@@ -181,14 +330,116 @@ fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
     opened
 }
 
-fn open_first_run(cx: &mut App) {
+/// File > Add Files…: the main window's file picker. Until first run is
+/// done, the first-run window comes forward instead.
+pub fn add_files(cx: &mut App) {
+    if first_run_pending(cx) {
+        open_first_run(cx);
+    } else if let Some((_, view)) = open_main(cx) {
+        view.update(cx, |view, cx| view.pick_files(cx));
+    }
+}
+
+/// The tray's Convert Files…: the system file picker, then Quick convert
+/// for what was picked, without the main window. Until first run is done,
+/// the first-run window comes forward instead.
+pub fn convert_files(cx: &mut App) {
+    if first_run_pending(cx) {
+        open_first_run(cx);
+        return;
+    }
+    // With no window open, convt may not be the active app; the picker
+    // should come up in front.
+    cx.activate(true);
+    let picked = cx.prompt_for_paths(main_window::add_files_prompt(
+        cx.can_select_mixed_files_and_dirs(),
+    ));
+    cx.spawn(async move |cx| {
+        if let Ok(Ok(Some(paths))) = picked.await
+            && !paths.is_empty()
+        {
+            cx.update(|cx| {
+                open_quick(
+                    Request {
+                        files: paths,
+                        ..Request::default()
+                    },
+                    cx,
+                )
+            });
+        }
+    })
+    .detach();
+}
+
+/// Opens About convt.
+pub fn show_about(cx: &mut App) {
     let app = model::shared(cx);
     show(
-        size(px(420.), px(420.)),
-        "Welcome to convt",
+        size(px(about::ABOUT_SIZE.0), px(about::ABOUT_SIZE.1)),
+        "About convt",
         cx,
-        |window, cx| cx.new(|cx| FirstRunView::new(app, first_run::first_step(), window, cx)),
+        |window, cx| cx.new(|cx| AboutView::new(app, window, cx)),
     );
+}
+
+/// Quick convert's size: room for a typical image's format cards, the
+/// Options row, where it runs and Save without scrolling. Opened options,
+/// video and long lists scroll.
+pub(super) const QUICK_SIZE: (f32, f32) = (600., 720.);
+
+/// Quick convert's height, plus the title bar macOS draws inside it.
+pub(super) fn quick_height() -> Pixels {
+    px(QUICK_SIZE.1
+        + if theme::transparent_titlebar() {
+            24.
+        } else {
+            0.
+        })
+}
+
+/// The size onboarding would like at least; it opens at three quarters of
+/// the display, centered.
+pub(super) const FIRST_RUN_SIZE: (f32, f32) = (900., 640.);
+
+/// The display onboarding opens on: the one with the window in front (the
+/// user is looking there), else the primary one. GPUI can't tell where the
+/// pointer is before a window exists.
+fn first_run_display(cx: &mut App) -> Option<std::rc::Rc<dyn PlatformDisplay>> {
+    cx.active_window()
+        .and_then(|w| w.update(cx, |_, window, cx| window.display(cx)).ok())
+        .flatten()
+        .or_else(|| cx.primary_display())
+}
+
+/// Onboarding's size on a display whose usable area is `visible`: three
+/// quarters of it, at least [`FIRST_RUN_SIZE`] where that fits, and never
+/// more than 95% of it, so a small screen still shows the whole window.
+pub(super) fn first_run_fit(visible: Size<Pixels>) -> Size<Pixels> {
+    let side = |room: Pixels, least: f32| (room * 0.75).max(px(least)).min(room * 0.95).round();
+    size(
+        side(visible.width, FIRST_RUN_SIZE.0),
+        side(visible.height, FIRST_RUN_SIZE.1),
+    )
+}
+
+/// Where onboarding opens and how big.
+pub(super) fn first_run_bounds(cx: &mut App) -> (Option<DisplayId>, Size<Pixels>) {
+    match first_run_display(cx) {
+        Some(display) => (
+            Some(display.id()),
+            first_run_fit(display.visible_bounds().size),
+        ),
+        None => (None, size(px(FIRST_RUN_SIZE.0), px(FIRST_RUN_SIZE.1))),
+    }
+}
+
+fn open_first_run(cx: &mut App) {
+    let app = model::shared(cx);
+    let (display, size) = first_run_bounds(cx);
+    show_on(display, size, "Welcome to convt", cx, |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, first_run::Screen::Account, window, cx))
+    });
 }
 
 /// Opens Settings on `tab`.
@@ -217,7 +468,7 @@ pub fn open_quick(request: Request, cx: &mut App) {
     let app = model::shared(cx);
     // Status is read offline; it may have changed through the CLI.
     app.update(cx, |s, cx| s.refresh_pack(cx));
-    let options = window_options(size(px(600.), px(560.)), "Convert", cx);
+    let options = window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx);
     match open_window(options, cx, |window, cx| {
         cx.new(|cx| QuickView::new(app, request, window, cx))
     }) {
@@ -240,8 +491,18 @@ pub fn open_popover(cx: &mut App) -> Option<(AnyWindowHandle, Entity<PopoverView
 }
 
 fn window_options(size: Size<Pixels>, title: &str, cx: &App) -> WindowOptions {
+    window_options_on(None, size, title, cx)
+}
+
+fn window_options_on(
+    display: Option<DisplayId>,
+    size: Size<Pixels>,
+    title: &str,
+    cx: &App,
+) -> WindowOptions {
     WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size, cx))),
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(display, size, cx))),
+        display_id: display,
         titlebar: Some(TitlebarOptions {
             title: Some(SharedString::from(title.to_string())),
             appears_transparent: theme::transparent_titlebar(),
@@ -317,11 +578,20 @@ fn error_text(message: impl Into<SharedString>, p: &Palette) -> impl IntoElement
         .id("error")
         .test_support()
         .aria_label(message.clone())
-        .font_family(theme::SANS)
-        .text_size(px(12.))
-        .line_height(px(16.))
-        .text_color(p.error)
-        .child(message)
+        .flex()
+        .items_start()
+        .gap(px(6.))
+        .child(div().flex_shrink_0().pt(px(2.)).child(theme::icon(
+            IconName::CircleAlert,
+            13.,
+            p.error,
+        )))
+        .child(
+            theme::styled(theme::size::SMALL, p.error)
+                .flex_1()
+                .min_w_0()
+                .child(message),
+        )
 }
 
 /// Why conversions stopped, with what the user can do about it. Nothing
@@ -333,37 +603,60 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
     } else {
         "Buy a license"
     };
+    // The License tab has the sign-in button and follows the flow.
+    let sign_in = matches!(state, State::SignInNeeded).then(|| {
+        theme::Button::primary("sign-in-banner", "Sign in")
+            .small()
+            .build(p)
+            .on_click(|_, _, cx| show_license(None, cx))
+    });
     let download = matches!(state, State::NotCovered(_)).then(|| {
-        theme::text_button("download", "Download a covered build", p.green, 12.)
+        theme::Button::secondary("download", "Download a covered build")
+            .small()
+            .build(p)
             .on_click(|_, _, cx| cx.open_url(DOWNLOAD_URL))
     });
-    Some(
+    Some(theme::callout(
+        IconName::TriangleAlert,
+        theme::Tone::Error,
         div()
             .flex()
             .flex_col()
-            .gap(px(6.))
+            .gap(px(8.))
             .child(
                 div()
                     .id("license-banner")
                     .test_support()
                     .aria_label(reason.clone())
-                    .child(theme::text(12., 16., p.error).child(reason)),
+                    .child(
+                        theme::styled(theme::size::BODY, p.text)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(reason),
+                    ),
             )
             .child(
                 div()
                     .flex()
-                    .gap(px(14.))
-                    .children(download)
+                    .items_center()
+                    .flex_wrap()
+                    .gap(px(8.))
+                    .children(sign_in)
                     .child(
-                        theme::text_button("buy", buy, p.green, 12.)
+                        theme::Button::brand("buy", buy)
+                            .small()
+                            .build(p)
                             .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                     )
+                    .children(download)
                     .child(
-                        theme::text_button("enter-license", "Enter license", p.text, 12.)
+                        theme::Button::secondary("enter-license", "Enter license")
+                            .small()
+                            .build(p)
                             .on_click(|_, _, cx| show_license(None, cx)),
                     ),
             ),
-    )
+        p,
+    ))
 }
 
 /// "1.9 MB", "214 KB".

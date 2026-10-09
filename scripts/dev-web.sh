@@ -5,7 +5,8 @@
 #   2. the OAuth mock (tools/oauth-mock) on OAUTH_MOCK_PORT from services.env
 #   3. the billing mock (tools/billing-mock: Polar and Resend) on BILLING_MOCK_PORT,
 #      delivering signed webhooks to the site's /webhooks/polar
-#   4. apps/web/.dev.vars and apps/billing/.dev.vars from .convt-dev/services.env;
+#   4. apps/web/.dev.vars and apps/billing/.dev.vars from .convt-dev/services.env
+#      (plus CONVT_API_URL and CONVT_WEB_TOKEN_SECRET when both are set);
 #      convt-billing signs with the local dev key in .convt-dev/license.key
 #   5. Vite on port 3000, or the next free one, with BETTER_AUTH_URL to match;
 #      convt-billing runs inside it as an auxiliary Worker
@@ -84,6 +85,11 @@ MAILPIT_URL=$MAILPIT_URL
 OAUTH_MOCK_URL=$OAUTH_MOCK_URL
 OAUTH_MOCK_PUBLIC_URL=${MOCK_PUBLIC_URL:-$OAUTH_MOCK_URL}
 VARS
+# A local cloud API (test-convt-server): pass both to let the dashboard
+# converter and the desktop app's cloud jobs reach it.
+if [[ -n ${CONVT_API_URL:-} && -n ${CONVT_WEB_TOKEN_SECRET:-} ]]; then
+  printf 'CONVT_API_URL=%s\nCONVT_WEB_TOKEN_SECRET=%s\n' "$CONVT_API_URL" "$CONVT_WEB_TOKEN_SECRET" >>apps/web/.dev.vars
+fi
 cat >apps/billing/.dev.vars <<VARS
 # Written by scripts/dev-web.sh. Local billing mock and the dev signing key. Never commit.
 ENV=development

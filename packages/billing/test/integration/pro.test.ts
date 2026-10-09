@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
 
 import { localProducts } from "@convt/billing-mock";
-import { createHarness, type Harness } from "../../src/testing";
+import { createHarness, testMailbox, type Harness } from "../../src/testing";
 
 let h: Harness;
 beforeAll(async () => {
@@ -50,6 +50,47 @@ async function startPro(email: string, interval: "month" | "year" = "month") {
 }
 
 describe("trials", () => {
+  test("device access is read-only and points to the session checkout route", async () => {
+    const u = await h.user(testMailbox("device-trial"));
+    const before = await h.q<{ n: number }>(sql`select count(*)::int as n from checkouts`);
+    expect(await h.service.currentProAccess(u.id)).toEqual({
+      kind: "can_start_trial",
+      checkoutUrl: "http://localhost:3000/checkout/pro?from=app",
+    });
+    const after = await h.q<{ n: number }>(sql`select count(*)::int as n from checkouts`);
+    expect(after[0].n).toBe(before[0].n);
+  });
+
+  test("a trial that ended before payment is lapsed", async () => {
+    const { u } = await startPro(testMailbox("ended-trial"));
+    await h.deliverAll();
+    await h.q(
+      sql`update subscriptions set trial_ends_at = now() - interval '1 day', status = 'trialing' where user_id = ${u.id}`,
+    );
+    expect(await h.service.currentProAccess(u.id)).toEqual({ kind: "lapsed" });
+  });
+
+  test("an incomplete subscription with a future trial end is still a trial", async () => {
+    const { u } = await startPro(testMailbox("incomplete-trial"));
+    await h.deliverAll();
+    await h.q(sql`update subscriptions set status = 'incomplete' where user_id = ${u.id}`);
+    const access = await h.service.currentProAccess(u.id);
+    expect(access).toMatchObject({ kind: "trial" });
+    if (access.kind === "trial") {
+      expect(access.endsAt).toMatch(/Z$/);
+      expect(access.endsOn).toBe(access.endsAt.slice(0, 10));
+    }
+  });
+
+  test("an unfinished account deletion lapses access before subscription state", async () => {
+    const { u } = await startPro(testMailbox("deleting-pro"));
+    await h.deliverAll();
+    await h.q(
+      sql`insert into account_deletions (id, user_id, status) values (${`del_${u.id}`}, ${u.id}, 'pending')`,
+    );
+    expect(await h.service.currentProAccess(u.id)).toEqual({ kind: "lapsed" });
+  });
+
   test("a trialing subscription and its $0 paid order issue nothing; conversion issues one key and one email", async () => {
     const { subId } = await startPro("trial1@convt.test");
     await h.deliverAll();
@@ -107,6 +148,20 @@ describe("trials", () => {
     expect(co.allow_trial).toBe(false);
     const polarCo = h.mock.lastCheckout()!;
     expect(polarCo.allowTrial).toBe(false);
+  });
+
+  test("a checkout the app opened returns to the success page with from=app", async () => {
+    const u = await h.user(testMailbox("from-app"));
+    const fromApp = await h.service.createCheckout({
+      product: "pro_month",
+      user: u,
+      fromApp: true,
+    });
+    expect(fromApp.ok).toBe(true);
+    expect(h.mock.lastCheckout()!.successUrl).toEndWith("?checkout_id={CHECKOUT_ID}&from=app");
+    const fromWeb = await h.service.createCheckout({ product: "pro_month", user: u });
+    expect(fromWeb.ok).toBe(true);
+    expect(h.mock.lastCheckout()!.successUrl).toEndWith("?checkout_id={CHECKOUT_ID}");
   });
 
   test("a live Pro subscription refuses another Pro checkout", async () => {

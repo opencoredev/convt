@@ -20,6 +20,8 @@ export interface BillingRpc {
     product: CatalogProduct;
     user: { id: string; email: string } | null;
     spendCapCents?: number | null;
+    /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
+    fromApp?: boolean;
   }): Promise<
     | { ok: true; url: string; checkoutId: string; cookieValue: string }
     | { ok: false; refusal: CheckoutRefusal }
@@ -53,6 +55,14 @@ export interface BillingRpc {
    * it for a signed-in desktop device, with the user id from the device token.
    */
   currentProKey(userId: string): Promise<{ key: string; updatesUntil: string } | null>;
+  currentProAccess(
+    userId: string,
+  ): Promise<
+    | { kind: "pro" }
+    | { kind: "trial"; endsOn: string; endsAt: string }
+    | { kind: "can_start_trial"; checkoutUrl: string }
+    | { kind: "lapsed" }
+  >;
 }
 
 export type { CheckoutRefusal, CheckoutResult, CatalogProduct };

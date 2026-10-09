@@ -1,5 +1,5 @@
 //! Offline update authentication and license coverage. Callers own transport,
-//! the daily check policy, persisted sequence and all downloads.
+//! the check schedule, persisted sequence and all downloads.
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD as B64};
 use convt_license::date;
 use ed25519_dalek::{Signature, VerifyingKey};

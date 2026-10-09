@@ -53,20 +53,21 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Conversions run on your computer. The app and the <code>convt</code> command never upload
-          a file, and contain no advertising code. The trial and your license key are stored on your
-          computer and checked offline.
+          Conversions run on your computer. The <code>convt</code> command never uploads a file, and
+          the app uploads one only when you pick Cloud for a job. Neither contains advertising code.
+          The trial and your license key are stored on your computer and checked offline.
         </p>
         <p>The app connects to the internet only in these cases:</p>
         <List
           items={[
             <>
-              <span className={strong}>Updates.</span> At most once a day, while update checks are
-              on in Settings, the app downloads a list of available versions from convt.app. When a
-              newer version your license covers is out, the app downloads its installer from our
-              GitHub releases and installs it when you click Restart to update. These requests carry
-              your IP address and app version, like any web request, and nothing about your files.
-              You can turn update checks off.
+              <span className={strong}>Updates.</span> While automatic update checks are on in
+              Settings, the app downloads a list of available versions from convt.app at every
+              launch and every 5 hours while it runs, and whenever you click Check now. When a newer
+              version your license covers is out, the app downloads its installer from our GitHub
+              releases and installs it when you click Restart to update. These requests carry your
+              IP address and app version, like any web request, and nothing about your files. You
+              can turn automatic checks off.
             </>,
             <>
               <span className={strong}>Pro renewal.</span> If you have signed in to convt Pro from
@@ -129,8 +130,9 @@ const sections: LegalSection[] = [
       <>
         <p>
           convt Pro can convert a file in the cloud, from the web converter or when you choose the
-          cloud for a job in the app, which asks you each time. The API converts files your code
-          sends. In these cases we receive the file and process it only to convert it for you.
+          cloud for a job in the app, which asks for your agreement before the first upload and
+          remembers it. The API converts files your code sends. In these cases we receive the file
+          and process it only to convert it for you.
         </p>
         <List
           items={[

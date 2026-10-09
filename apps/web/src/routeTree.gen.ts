@@ -34,6 +34,7 @@ import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/c
 import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
 import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/verify-email'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
 import { Route as ApiDeviceSignOutRouteImport } from './routes/api/device/sign-out'
 import { Route as ApiDeviceTokenRouteImport } from './routes/api/device/token'
@@ -165,6 +166,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDeviceCloudRoute = ApiDeviceCloudRouteImport.update({
+  id: '/api/device/cloud',
+  path: '/api/device/cloud',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDeviceLicenseRoute = ApiDeviceLicenseRouteImport.update({
   id: '/api/device/license',
   path: '/api/device/license',
@@ -231,6 +237,7 @@ export interface FileRoutesByFullPath {
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
@@ -263,6 +270,7 @@ export interface FileRoutesByTo {
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/_app/sign-in/verify': typeof AppSignInVerifyRoute
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
@@ -333,6 +342,7 @@ export interface FileRouteTypes {
     | '/sign-in/verify'
     | '/sign-in/verify-email'
     | '/api/auth/$'
+    | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/sign-in/verify'
     | '/sign-in/verify-email'
     | '/api/auth/$'
+    | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
@@ -400,6 +411,7 @@ export interface FileRouteTypes {
     | '/_app/sign-in/verify'
     | '/_app/sign-in/verify-email'
     | '/api/auth/$'
+    | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
@@ -423,6 +435,7 @@ export interface RootRouteChildren {
   CheckoutProRoute: typeof CheckoutProRoute
   UpdatesManifestDotjsonRoute: typeof UpdatesManifestDotjsonRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDeviceCloudRoute: typeof ApiDeviceCloudRoute
   ApiDeviceLicenseRoute: typeof ApiDeviceLicenseRoute
   ApiDeviceSignOutRoute: typeof ApiDeviceSignOutRoute
   ApiDeviceTokenRoute: typeof ApiDeviceTokenRoute
@@ -605,6 +618,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/device/cloud': {
+      id: '/api/device/cloud'
+      path: '/api/device/cloud'
+      fullPath: '/api/device/cloud'
+      preLoaderRoute: typeof ApiDeviceCloudRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/device/license': {
       id: '/api/device/license'
       path: '/api/device/license'
@@ -740,6 +760,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutProRoute: CheckoutProRoute,
   UpdatesManifestDotjsonRoute: UpdatesManifestDotjsonRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDeviceCloudRoute: ApiDeviceCloudRoute,
   ApiDeviceLicenseRoute: ApiDeviceLicenseRoute,
   ApiDeviceSignOutRoute: ApiDeviceSignOutRoute,
   ApiDeviceTokenRoute: ApiDeviceTokenRoute,
@@ -747,3 +768,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

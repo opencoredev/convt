@@ -2,7 +2,7 @@
 //! presets. Every window reads one [`AppState`] entity and changes it through
 //! the methods here.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,11 +14,13 @@ use convt_core::{
 use convt_license::License;
 use convt_license::account::{self, Api};
 use convt_license::client::{self, Licensing};
+use convt_license::date;
 use futures::StreamExt;
 use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
 
 use crate::account::Account;
+use crate::cloud::{self, CloudAccess};
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
@@ -248,13 +250,20 @@ pub struct AppState {
     /// What the last update check found.
     pub update: Update,
     pub(crate) _update_task: Option<Task<()>>,
+    /// When (Unix seconds) the last update check started, this session.
+    pub(crate) update_attempted: Option<u64>,
+    /// Wakes every [`crate::update::SCHEDULE_TICK`] to run checks that are due.
+    pub(crate) _update_schedule: Option<Task<()>>,
     /// The last manifest accepted this session, to select again when the
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
     /// The update download and install, when this install updates itself.
     pub(crate) updater: crate::update::Updater,
-    /// Runs the day's renewal and update check while convt runs.
-    pub(crate) _daily_checks: Option<Task<()>>,
+    /// The cloud jobs API client. Building it sends nothing; only a cloud
+    /// conversion does.
+    cloud_api: Arc<dyn cloud::CloudApi>,
+    /// How often a cloud job asks how it is doing.
+    cloud_poll: std::time::Duration,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in a background menu).
     /// Explorer requests that ask to show progress are tracked like normal
@@ -271,6 +280,9 @@ pub struct AppState {
     _finder_watch: Option<Task<()>>,
     /// Jobs whose result should be copied when they finish.
     automation_copies: HashSet<JobId>,
+    /// The sign-in token each cloud job asked for credentials with, so one
+    /// that finds it revoked signs out only that sign-in.
+    cloud_tokens: HashMap<JobId, String>,
     watch: crate::automation::WatchState,
     _automations: Option<Task<()>>,
     _drain: Task<()>,
@@ -328,8 +340,26 @@ impl AppState {
                 };
             }
         });
-        let licensing = Licensing::new(paths.license);
-        let account = Account::new(paths.account_url, paths.account_api, licensing.session());
+        let mut licensing = Licensing::new(paths.license);
+        #[cfg(not(test))]
+        licensing.disable_local_trial();
+        let session = licensing.session();
+        let cached_trial = settings
+            .trial_cache
+            .clone()
+            .filter(|cache| cached_trial_is_valid(cache, session.is_some(), client::today()));
+        licensing.set_account_trial_exact(
+            cached_trial
+                .as_ref()
+                .map(|cache| cache.ends_at[..10].to_string()),
+            cached_trial.as_ref().map(|cache| cache.ends_at.clone()),
+        );
+        let mut account = Account::new(paths.account_url, paths.account_api, session);
+        if let Some(cache) = cached_trial {
+            account.access = Some(crate::account::Access::Trial {
+                ends_on: cache.ends_at[..10].to_string(),
+            });
+        }
         let mut state = Self {
             registry,
             registry_generation: 0,
@@ -352,9 +382,12 @@ impl AppState {
             update_config: paths.update,
             update: Update::Idle,
             _update_task: None,
+            update_attempted: None,
+            _update_schedule: None,
             update_manifest: None,
             updater: Default::default(),
-            _daily_checks: None,
+            cloud_api: Arc::new(cloud::Http::new()),
+            cloud_poll: std::time::Duration::from_secs(2),
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]
@@ -368,6 +401,7 @@ impl AppState {
                 None
             },
             automation_copies: HashSet::new(),
+            cloud_tokens: HashMap::new(),
             watch: crate::automation::WatchState::default(),
             // Tests drive the watcher themselves so a live poll cannot see
             // the real Desktop or race a fixture.
@@ -394,6 +428,83 @@ impl AppState {
     ) -> Result<Vec<JobId>, String> {
         let output = self.settings.output();
         self.convert_to(files, to, options, output, cx)
+    }
+
+    /// Whether Cloud conversions can run now, and if not, why. Decided from
+    /// what this computer already knows, without a network call, so windows
+    /// can ask on every render.
+    pub fn cloud_access(&self) -> CloudAccess {
+        cloud::access(
+            self.account.url(),
+            self.account.session.is_some(),
+            &self.license,
+            client::today(),
+        )
+    }
+
+    /// Like [`Self::convert_to`], but runs on convt's cloud. The caller has
+    /// checked [`Self::cloud_access`] and the user's consent; this checks
+    /// both again. The cloud takes no conversion options, so a request with
+    /// any is refused rather than converted without them.
+    pub fn convert_in_cloud(
+        &mut self,
+        files: &[PathBuf],
+        to: &'static Format,
+        options: &Options,
+        output: Output,
+        cx: &mut Context<Self>,
+    ) -> Result<Vec<JobId>, String> {
+        // Quitting after the install would cut the upload or download off.
+        if self.installing() {
+            return Err(INSTALLING.into());
+        }
+        if let Some(reason) = self.cloud_access().reason() {
+            return Err(reason);
+        }
+        if !self.settings.cloud_consent {
+            return Err("Agree to upload files to convt's cloud before converting there.".into());
+        }
+        if *options != Options::default() {
+            return Err(
+                "Cloud conversion doesn't take options yet. Convert on this computer to use them."
+                    .into(),
+            );
+        }
+        let Some(session) = self.account.session.clone() else {
+            return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
+        };
+        // One credential serves the whole batch while it lasts.
+        let batch = Arc::new(cloud::Cloud {
+            api: self.cloud_api.clone(),
+            credentials: cloud::Credentials::new(self.account.api(), session.token.clone()),
+            poll: self.cloud_poll,
+            link_reuse: cloud::LINK_REUSE,
+        });
+        let output = absolute_output(output);
+        let ids = files
+            .iter()
+            .map(|file| {
+                let job = Job {
+                    input: file.clone(),
+                    to,
+                    options: Options::default(),
+                    output: output.clone(),
+                };
+                let id = self.queue.add_cloud(&job);
+                self.cloud_tokens.insert(id, session.token.clone());
+                self.runner.submit_cloud(id, job, batch.clone());
+                id
+            })
+            .collect();
+        cx.notify();
+        Ok(ids)
+    }
+
+    /// Replaces the cloud client and how often it polls, for tests.
+    #[cfg(test)]
+    pub fn set_cloud_api(&mut self, api: Arc<dyn cloud::CloudApi>, poll: std::time::Duration) {
+        self.cloud_api = api;
+        self.cloud_poll = poll;
     }
 
     /// [`Self::convert`] with an output other than the one in Settings.
@@ -458,8 +569,8 @@ impl AppState {
         Ok(ids)
     }
 
-    /// The format Add files converts `file` to: the default for its kind, if
-    /// the file can reach it.
+    /// The format the popover's drop bar converts `file` to: the default for
+    /// its kind, if the file can reach it.
     pub fn default_target(&self, file: &Path) -> Option<&'static Format> {
         let from = format_by_extension(file)?;
         let to = self.settings.defaults.get(Kind::of_file(file, from)?)?;
@@ -556,6 +667,9 @@ impl AppState {
     ) -> Result<Vec<JobId>, String> {
         let files = [input.to_path_buf()];
         match setup {
+            Some(setup) if setup.cloud => {
+                self.convert_in_cloud(&files, to, &setup.options, setup.output.clone(), cx)
+            }
             Some(setup) => self.convert_to(&files, to, &setup.options, setup.output.clone(), cx),
             None => self.convert(&files, to, &Options::default(), cx),
         }
@@ -823,18 +937,6 @@ impl AppState {
         self.queue.get(id)
     }
 
-    pub fn clear_finished(&mut self, cx: &mut Context<Self>) {
-        self.queue.clear_finished();
-        cx.notify();
-    }
-
-    /// Clears everything finished from the Activity list: finished jobs and
-    /// the history behind them.
-    pub fn clear_activity(&mut self, cx: &mut Context<Self>) {
-        self.clear_finished(cx);
-        self.clear_history(cx);
-    }
-
     /// Whether this build checks licenses.
     pub fn license_enforced(&self) -> bool {
         self.licensing.enforced()
@@ -842,14 +944,20 @@ impl AppState {
 
     fn apply(&mut self, update: crate::jobs::Update, cx: &mut Context<Self>) {
         if let Some(entry) = self.queue.apply(update).cloned() {
-            // Silent jobs stay out of the batch summary and are never revealed.
+            // Silent jobs count toward the batch summary and its notification
+            // like any other, but are never revealed: the file manager that
+            // asked is already showing the folder.
             let silent = self.silent.remove(&entry.id);
-            let mut ignored = Batch::default();
-            let batch = if silent {
-                &mut ignored
-            } else {
-                &mut self.batch
-            };
+            let cloud_token = self.cloud_tokens.remove(&entry.id);
+            // Revoked from the dashboard: sign out here too, so Settings
+            // offers Sign in instead of an account that can't convert.
+            let revoked = matches!(&entry.status, Status::Failed(e) if e.kind == "cloud_signed_out")
+                && cloud_token.is_some()
+                && self.account.session.as_ref().map(|s| &s.token) == cloud_token.as_ref();
+            if revoked {
+                self.forget_revoked_session(cx);
+            }
+            let batch = &mut self.batch;
             let outcome = match &entry.status {
                 Status::Done(outputs) => {
                     batch.done += 1;
@@ -921,8 +1029,11 @@ impl AppState {
         });
     }
 
-    pub fn clear_history(&mut self, cx: &mut Context<Self>) {
-        if let Err(e) = self.history.clear() {
+    /// Clears some finished conversions from Activity, such as one day's,
+    /// and the finished jobs the list no longer shows.
+    pub fn clear_records(&mut self, ids: &[i64], cx: &mut Context<Self>) {
+        self.queue.clear_finished();
+        if let Err(e) = self.history.remove(ids) {
             self.errors.push(format!("History was not cleared: {e}"));
         }
         self.refresh_history();
@@ -1034,6 +1145,18 @@ impl AppState {
     }
 }
 
+fn cached_trial_is_valid(cache: &crate::settings::TrialCache, signed_in: bool, today: i64) -> bool {
+    signed_in
+        && date::to_days(&cache.fetched_on).is_some_and(|fetched| {
+            // `get` because a hand-edited value may not split at byte 10.
+            cache
+                .ends_at
+                .get(..10)
+                .and_then(date::to_days)
+                .is_some_and(|ends| ends <= fetched + 8 && ends >= fetched && fetched <= today)
+        })
+}
+
 /// The target and options a request or a picker selection resolves to.
 pub fn resolve(
     state: &AppState,
@@ -1099,6 +1222,33 @@ mod tests {
         assert_eq!(b(1, 0, 0).unwrap().1, "Converted 1 file.");
         assert_eq!(b(2, 1, 0).unwrap().1, "Converted 2 files; 1 file failed.");
         assert_eq!(b(0, 2, 0).unwrap().0, "Conversion failed");
+    }
+
+    #[test]
+    fn cached_account_trials_need_a_session_and_a_short_fetch_window() {
+        let today = date::to_days("2026-10-08").unwrap();
+        let valid = crate::settings::TrialCache {
+            ends_at: "2026-10-14T12:00:00Z".into(),
+            fetched_on: "2026-10-08".into(),
+        };
+        assert!(cached_trial_is_valid(&valid, true, today));
+        assert!(!cached_trial_is_valid(&valid, false, today));
+        assert!(!cached_trial_is_valid(
+            &crate::settings::TrialCache {
+                ends_at: "2099-01-01T00:00:00Z".into(),
+                fetched_on: "2026-10-08".into(),
+            },
+            true,
+            today,
+        ));
+        // A malformed saved value is rejected, not sliced mid-character.
+        for ends_at in ["123456789é", "2026-10-1", ""] {
+            let cache = crate::settings::TrialCache {
+                ends_at: ends_at.into(),
+                fetched_on: "2026-10-08".into(),
+            };
+            assert!(!cached_trial_is_valid(&cache, true, today), "{ends_at}");
+        }
     }
 
     #[test]

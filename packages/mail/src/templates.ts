@@ -1,7 +1,7 @@
 // Transactional email templates. Each takes frozen inputs and returns the subject,
 // a plain-text body and minimal escaped HTML. Polar sends receipts as merchant of
 // record, so these cover only what Polar does not: the key, the trial ending, a
-// failed renewal, and Leo's daily digest. The outbox stores the rendered result,
+// failed renewal, Leo's daily digest, and the site's sign-in and confirmation codes. The outbox stores the rendered result,
 // so a later template change never alters an email that is already queued.
 
 /** Bump when any template's output changes. Stored with each frozen payload. */
@@ -41,6 +41,7 @@ const darkCss =
 type Block =
   | { p: string }
   | { key: string }
+  | { code: string }
   | { link: { href: string; label: string } }
   | { list: string[] };
 
@@ -56,6 +57,11 @@ function render(subject: string, blocks: Block[]): Rendered {
       text.push(b.key);
       html.push(
         `<p class="key" style="margin:0 0 14px;padding:12px;border:1px solid #d9d9d6;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:12px;word-break:break-all">${escapeHtml(b.key)}</p>`,
+      );
+    } else if ("code" in b) {
+      text.push(b.code);
+      html.push(
+        `<p class="key" style="margin:0 0 14px;padding:14px 16px;border:1px solid #d9d9d6;border-radius:10px;background:#f7f8f7;font-family:ui-monospace,Menlo,monospace;font-size:28px;line-height:32px;font-weight:600;letter-spacing:6px">${escapeHtml(b.code)}</p>`,
       );
     } else if ("link" in b) {
       text.push(`${b.link.label}: ${b.link.href}`);
@@ -168,5 +174,37 @@ export function alertDigest(input: AlertDigestInput): Rendered {
     {
       p: "Ids only: look them up in the database or in Polar and Resend by id. No keys or bodies are included.",
     },
+  ]);
+}
+
+export type CodeEmailInput = {
+  /** sign-in: the email step; confirm: verify an address; change-email: confirm a new one. */
+  kind: "sign-in" | "confirm" | "change-email";
+  email: string;
+  code: string;
+  /** The sign-in link (its fragment carries the code); used only for `sign-in`. */
+  link: string;
+  minutes: number;
+};
+
+/** The site's one-time code email, sent by Better Auth through apps/web, not the outbox. */
+export function codeEmail(input: CodeEmailInput): Rendered {
+  const expiry = `It works once and expires in ${input.minutes} minutes. If you didn't ask for it, ignore this email.`;
+  if (input.kind === "sign-in")
+    return render(`${input.code} is your convt sign-in code`, [
+      { p: "Your convt sign-in code:" },
+      { code: input.code },
+      { link: { href: input.link, label: "Or sign in with this link" } },
+      { p: expiry },
+    ]);
+  return render(`${input.code} is your convt confirmation code`, [
+    {
+      p:
+        input.kind === "change-email"
+          ? `Use this code to confirm ${input.email} as the email for your convt account:`
+          : `Use this code to confirm ${input.email} for your convt account:`,
+    },
+    { code: input.code },
+    { p: expiry },
   ]);
 }

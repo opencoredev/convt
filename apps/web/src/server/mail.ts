@@ -1,4 +1,4 @@
-import { sequenzyTransport } from "@convt/mail";
+import { codeEmail as renderCodeEmail, sequenzyTransport } from "@convt/mail";
 
 // Outgoing email. `mailpit` posts to a local Mailpit's send API (its web UI shows
 // the messages), `log` prints a redacted line, and the provider transports send
@@ -86,7 +86,7 @@ function parseAddress(text: string): { Email: string; Name?: string } {
 
 export type CodeKind = "sign-in" | "email-verification" | "change-email" | "forget-password";
 
-/** The sign-in email: the code, and a link whose fragment carries the code. */
+/** The sign-in email: the code, and a link whose fragment carries the code. Text and HTML. */
 export function codeEmail(
   kind: CodeKind,
   email: string,
@@ -95,19 +95,12 @@ export function codeEmail(
   minutes: number,
 ): MailMessage {
   const link = `${siteUrl}/sign-in/verify#${new URLSearchParams({ email, code })}`;
-  const lines =
-    kind === "sign-in"
-      ? [`Your convt sign-in code is ${code}.`, "", `Or open this link to sign in: ${link}`]
-      : kind === "change-email"
-        ? [`Use ${code} to confirm ${email} as the email for your convt account.`]
-        : [`Use ${code} to confirm ${email} for your convt account.`];
-  lines.push(
-    "",
-    `It works once and expires in ${minutes} minutes. If you didn't ask for it, ignore this email.`,
-  );
-  const subject =
-    kind === "sign-in"
-      ? `${code} is your convt sign-in code`
-      : `${code} is your convt confirmation code`;
-  return { to: email, subject, text: lines.join("\n"), idempotencyKey: crypto.randomUUID() };
+  const rendered = renderCodeEmail({
+    kind: kind === "sign-in" ? "sign-in" : kind === "change-email" ? "change-email" : "confirm",
+    email,
+    code,
+    link,
+    minutes,
+  });
+  return { to: email, ...rendered, idempotencyKey: crypto.randomUUID() };
 }
