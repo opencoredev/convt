@@ -12,14 +12,14 @@ beforeAll(async () => {
 });
 afterAll(async () => h?.close());
 
-test("a Desktop key bought on 29 February 2028 covers updates until 28 February 2029", async () => {
+test("a Desktop key bought on 29 February 2028 is lifetime", async () => {
   await h.buy("desktop", null, { email: "leap@convt.test" });
   await h.deliverAll();
   const [lic] = await h.q<{ token: string; issued_on: string; updates_until: string }>(sql`
     select token, issued_on::text, updates_until::text from licenses where email = 'leap@convt.test'`);
   expect(lic.issued_on).toBe("2028-02-29");
-  expect(lic.updates_until).toBe("2029-02-28");
+  expect(lic.updates_until).toBe("9999-12-31");
   const out = await verifyWithCli(lic.token, h.publicKey);
   expect(out.status).toBe(0);
-  expect(out.text).toMatch(/2029-02-28|Feb 28, 2029/);
+  expect(out.text).toMatch(/9999-12-31|Dec 31, 9999/);
 }, 600_000);

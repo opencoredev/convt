@@ -24,6 +24,17 @@ fn key(until: &str) -> String {
     sign(&license, &signing_key())
 }
 
+fn pro_key(until: &str) -> String {
+    let license = License {
+        id: "lic_pro_test".into(),
+        email: "pro-tester".into(),
+        plan: Plan::Pro,
+        issued: "2026-01-01".into(),
+        updates_until: until.into(),
+    };
+    sign(&license, &signing_key())
+}
+
 struct Fixture {
     dir: tempfile::TempDir,
 }
@@ -165,10 +176,10 @@ fn an_ended_trial_stops_conversions_until_activation() {
 }
 
 #[test]
-fn a_license_that_ended_before_this_build() {
+fn a_pro_license_that_ended_before_this_build() {
     let f = Fixture::new();
     f.end_trial();
-    let out = f.run(true, &["license", "activate", &key("2000-01-01")], None);
+    let out = f.run(true, &["license", "activate", &pro_key("2000-01-01")], None);
     assert!(out.status.success(), "{}", stderr(&out));
     assert!(stdout(&out).contains("covers builds released up to 2000-01-01"));
     let out = f.convert(true);

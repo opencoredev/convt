@@ -1612,7 +1612,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
 
 #[gpui_kit::test]
 fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
-    let key = license_key("a-tester", "2026-06-30");
+    let key = pro_key("a-tester", "2026-06-30");
     let f = Fixture::licensed(cx, Some("2026-01-01"), Some(&key));
     let (main, view) = f.main(cx);
     let card = label(cx, main, "trial-card").unwrap();
@@ -3306,7 +3306,7 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
     let f = Fixture::licensed(cx, Some("2026-01-01"), None);
     let (window, view) = f.settings(SettingsTab::License, cx);
     let input = cx.read(|cx| view.read(cx).license_key.clone());
-    set_input(cx, window, &input, &license_key("old-tester", "2025-01-01"));
+    set_input(cx, window, &input, &pro_key("old-tester", "2025-01-01"));
     click(cx, window, "activate");
     assert!(f.dir.path().join("license.key").exists());
     assert_eq!(
@@ -3331,7 +3331,7 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
     let (window, view) = window_of::<FirstRunView>(cx);
     click(cx, window, "onboarding-key-link");
     let input = cx.read(|cx| view.read(cx).key.clone());
-    set_input(cx, window, &input, &license_key("old-tester", "2025-01-01"));
+    set_input(cx, window, &input, &pro_key("old-tester", "2025-01-01"));
     click(cx, window, "onboarding-activate");
     assert!(f.dir.path().join("license.key").exists(), "the key is kept");
     assert_eq!(
@@ -4662,7 +4662,7 @@ fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 #[gpui_kit::test]
 fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     // The license covers builds through 2026-10-03.
-    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2026-10-03")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-10-03")));
     let builds = [
         ("0.1.0", "2026-10-01"),
         ("9.2.0", "2026-10-03"),
@@ -4764,7 +4764,7 @@ fn a_running_app_checks_again_every_few_hours(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
         &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
@@ -5850,7 +5850,7 @@ fn a_license_change_that_still_covers_keeps_the_download(cx: &mut TestAppContext
     cx.update(|cx| {
         f.app
             .update(cx, |s, cx| {
-                s.activate(&license_key("a@b.c", "2026-10-02"), cx)
+                s.activate(&pro_key("a@b.c", "2026-10-02"), cx)
             })
             .unwrap();
     });
@@ -6067,7 +6067,7 @@ fn a_license_change_during_a_check_is_not_undone_by_it(cx: &mut TestAppContext) 
     cx.update(|cx| {
         f.app
             .update(cx, |s, cx| {
-                s.activate(&license_key("a@b.c", "2026-10-02"), cx)
+                s.activate(&pro_key("a@b.c", "2026-10-02"), cx)
             })
             .unwrap();
     });
@@ -6084,7 +6084,7 @@ fn a_license_change_during_a_check_is_not_undone_by_it(cx: &mut TestAppContext) 
 
 #[gpui_kit::test]
 fn a_renewal_that_covers_an_update_downloads_it(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a@b.c", "2026-10-02")));
     let (downloads, _) = f.self_installing(cx);
     serve_9_2(&f);
     assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
@@ -6104,7 +6104,7 @@ fn a_renewal_that_covers_an_update_downloads_it(cx: &mut TestAppContext) {
     assert_eq!(f.releases.fetches(), 1);
 
     // With update checks off, the license change downloads nothing.
-    let g = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let g = Fixture::licensed(cx, None, Some(&pro_key("a@b.c", "2026-10-02")));
     let (downloads, _) = g.self_installing(cx);
     serve_9_2(&g);
     assert!(matches!(manual_check(&g, cx), Update::NotCovered { .. }));
