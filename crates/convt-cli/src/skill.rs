@@ -288,9 +288,15 @@ pub(crate) fn assert_documented_cli_exists(cmd: &Command, text: &str) {
             if token.starts_with('-') || looks_like_file(token) {
                 break;
             }
+            let has_subcommands = visible_subcommands(current).next().is_some();
             match current.find_subcommand(token) {
                 Some(sub) if !sub.is_hide_set() && sub.get_name() != "help" => {
                     current = sub;
+                }
+                _ if has_subcommands => {
+                    panic!(
+                        "SKILL.md documents `convt {first} ... {token}`, which is not a subcommand"
+                    );
                 }
                 _ => break,
             }
@@ -344,5 +350,13 @@ mod tests {
             flags,
             BTreeSet::from(["to".into(), "out-dir".into(), "sha256".into()])
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "which is not a subcommand")]
+    fn nested_subcommand_scan_rejects_bogus_names() {
+        let cmd = Command::new("convt")
+            .subcommand(Command::new("pack").subcommand(Command::new("status")));
+        assert_documented_cli_exists(&cmd, "`convt pack bogus`");
     }
 }

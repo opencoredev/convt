@@ -69,7 +69,7 @@ Folder inputs skip files that cannot reach the target (or already are it). Files
 - Prefer `--json` when parsing progress. Human `input -> output` lines go to stderr unless `--json`.
 - Outputs never overwrite existing files; a taken name gets a numbered suffix. Use `--out-dir` to keep results apart from the inputs.
 - Discover before converting: `convt engines`, `convt formats`, `convt targets path/to/file`.
-- `formats`, `targets`, `engines`, `presets` and `--skill` never need a license. Only conversions do. Source builds skip the license check; packaged builds start a 7-day trial on the first conversion.
-- `convt license activate` reads the key from stdin when KEY is omitted. Do not put a license key in a shared command line.
+- `formats`, `targets`, `engines`, `presets` and `--skill` never need a license. Only conversions do. Source builds skip the license check by default; packaged builds start a 7-day trial on the first conversion.
+- In an enforced build, `convt license activate` reads the key from stdin when KEY is omitted. Do not put a license key in a shared command line.
 - `convt pack install documents` is the only pack command that may use the network. `pack status` is offline.
 - Presets are TOML (`to`, `quality`, `max_size`, …) under the config presets directory, or a path to a `.toml` file. List them with `convt presets`. Point `CONVT_CONFIG_DIR` at a private directory instead of the user's real presets.
