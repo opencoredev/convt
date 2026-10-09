@@ -173,24 +173,26 @@ body {
 }
 
 /*
- * Primary green button, same in both themes. The white label on this gradient is
- * about 3:1 contrast; Leo has not picked the fix yet (darker gradient or dark label).
+ * Primary green button, same in both themes. The white label reaches 4.66:1 at the
+ * gradient's lightest point (the top, #138551) and 6.05:1 at the bottom (#0d7143),
+ * so it passes WCAG AA for any label size. Hover darkens rather than brightens to
+ * keep it there. bg-land-green below uses the same stops.
  */
 .btn-primary {
   background-image: linear-gradient(
     in oklab 180deg,
-    oklab(68.8% -0.14 0.06) 0%,
-    oklab(60.6% -0.129 0.06) 100%
+    oklab(54.5% -0.115 0.05) 0%,
+    oklab(48.5% -0.103 0.045) 100%
   );
   box-shadow:
     rgb(255 255 255 / 28%) 0 1px 0 inset,
-    #157f4a 0 0 0 1px,
+    #0b6038 0 0 0 1px,
     rgb(10 60 35 / 25%) 0 1px 2px,
     rgb(10 60 35 / 12%) 0 2px 6px;
   color: #ffffff;
 }
 .btn-primary:hover {
-  filter: brightness(1.05);
+  filter: brightness(0.94);
 }
 
 .dither {
@@ -229,7 +231,7 @@ body {
   --shadow-land-menu: 0 0 0 1px #0000001a, 0 1.2em 3em #0a1e142e;
   --shadow-land-secondary: inset 0 -1px 0 #0000000a, 0 0 0 1px #d5d9d7, 0 1px 2px #0000000f;
   --shadow-land-primary:
-    inset 0 1px 0 #ffffff47, 0 0 0 1px #157f4a, 0 1px 2px #0a3c2340, 0 4px 12px #0a3c2324;
+    inset 0 1px 0 #ffffff47, 0 0 0 1px #0b6038, 0 1px 2px #0a3c2340, 0 4px 12px #0a3c2324;
   --land-glow-color: #ffffff;
   --land-glow-image: url("/landing/dither-glow-light.png");
 }
@@ -279,16 +281,13 @@ body {
   --shadow-land-primary: var(--shadow-land-primary);
 }
 
-/*
- * Primary green button fill. The white label on this gradient is only about 3:1;
- * Leo has not picked a fix yet (darker gradient or dark label), so it matches the design.
- */
+/* Primary green button fill: the .btn-primary gradient, 4.66:1 or better under white text. */
 @utility bg-land-green {
-  background-color: #22a867;
+  background-color: #138551;
   background-image: linear-gradient(
     in oklab 180deg,
-    oklab(68.8% -0.14 0.06) 0%,
-    oklab(60.6% -0.129 0.06) 100%
+    oklab(54.5% -0.115 0.05) 0%,
+    oklab(48.5% -0.103 0.045) 100%
   );
 }
 

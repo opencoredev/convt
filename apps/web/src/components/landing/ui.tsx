@@ -16,8 +16,8 @@ export function Container({ className, ...props }: ComponentProps<"div">) {
 }
 
 const buttonVariants = {
-  // White on green is about 3:1. Matches the design until Leo picks a fix.
-  primary: "bg-land-green text-white shadow-land-primary hover:brightness-110",
+  // White on the green gradient is 4.66:1 or better; see .btn-primary in styles.css.
+  primary: "bg-land-green text-white shadow-land-primary hover:brightness-95",
   secondary: "bg-sunken text-ink shadow-land-secondary hover:bg-hover",
 };
 

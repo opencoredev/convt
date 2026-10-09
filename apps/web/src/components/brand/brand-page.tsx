@@ -190,7 +190,7 @@ function Intro() {
             href="/brand/convt-brand.zip"
             download
             className={cx(
-              "group bg-land-green inline-flex items-center gap-2 rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px] font-medium whitespace-nowrap text-white shadow-land-primary transition-[filter,scale] duration-150 ease-out hover:brightness-110 motion-safe:active:scale-[0.97]",
+              "group bg-land-green inline-flex items-center gap-2 rounded-[10px] px-[18px] py-[11px] text-[15px]/[18px] font-medium whitespace-nowrap text-white shadow-land-primary transition-[filter,scale] duration-150 ease-out hover:brightness-95 motion-safe:active:scale-[0.97]",
               focusRing,
             )}
           >
