@@ -5,12 +5,16 @@ use convt_core::{Category, FORMATS};
 
 const TEMPLATE: &str = include_str!("../SKILL.md");
 
+fn template() -> String {
+    TEMPLATE.replace("\r\n", "\n")
+}
+
 pub(crate) fn print(cmd: &Command) {
     print!("{}", render(cmd));
 }
 
 pub(crate) fn render(cmd: &Command) -> String {
-    TEMPLATE
+    template()
         .replace("{{FLAGS}}", &flags_markdown(cmd))
         .replace("{{COMMANDS}}", &commands_markdown(cmd))
         .replace("{{FORMATS}}", &formats_markdown())
@@ -322,12 +326,14 @@ mod tests {
 
     #[test]
     fn template_has_frontmatter_and_placeholders() {
-        assert!(TEMPLATE.starts_with("---\nname: convt\n"));
-        assert!(TEMPLATE.contains("description:"));
-        assert!(TEMPLATE.contains("{{FLAGS}}"));
-        assert!(TEMPLATE.contains("{{COMMANDS}}"));
-        assert!(TEMPLATE.contains("{{FORMATS}}"));
-        assert!(!TEMPLATE.contains('@'), "SKILL.md must not contain @");
+        let text = template();
+        assert!(text.starts_with("---\nname: convt\n"));
+        assert!(text.contains("description:"));
+        assert!(text.contains("{{FLAGS}}"));
+        assert!(text.contains("{{COMMANDS}}"));
+        assert!(text.contains("{{FORMATS}}"));
+        assert!(!text.contains('@'), "SKILL.md must not contain @");
+        assert!(!text.contains('\r'), "skill newlines are LF");
     }
 
     #[test]
