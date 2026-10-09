@@ -6,10 +6,11 @@ import { Icon } from "#/components/icon";
 import { cx, focusRing } from "./ui";
 
 /**
- * Shell commands, one per line with a `$` prompt, in a dark terminal panel in both
- * themes. Lines never wrap: a long one scrolls sideways, so a single command can't look
- * like several. Copy copies the commands without the prompts, one per line. `quiet` is
- * a light panel that follows the theme, for a side path such as sign-in's.
+ * Shell commands, one per line with a `$` prompt, on a panel that follows the theme.
+ * Lines never wrap: a long one scrolls sideways, so a single command can't look like
+ * several. Copy copies the commands without the prompts, one per line. `label` names
+ * the commands for screen readers ("Copy Homebrew commands"); the page shows its own
+ * heading. `quiet` is the smaller size, for a side path such as sign-in's.
  */
 export function CommandBlock({
   label,
@@ -40,52 +41,20 @@ export function CommandBlock({
   return (
     <div
       className={cx(
-        "flex min-w-0 flex-col overflow-hidden rounded-xl text-left",
-        quiet
-          ? "bg-sunken/80 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)] backdrop-blur-sm"
-          : "dark bg-code text-code-ink shadow-[0_0_0_1px_rgb(0_0_0/6%),0_8px_24px_rgb(10_30_20/10%)] dark:shadow-[inset_0_0_0_1px_#232726]",
+        "flex min-w-0 items-start rounded-xl bg-sunken text-left text-ink shadow-[inset_0_0_0_1px_var(--line)]",
         className,
       )}
     >
-      <div
-        className={cx(
-          "flex items-center justify-between gap-3 border-b pr-1.5 pl-4",
-          quiet ? "h-8 border-line" : "h-9 border-[#ffffff12]",
-        )}
-      >
-        <span
-          className={cx(
-            "font-mono text-[11px]/4 tracking-[0.04em] uppercase",
-            quiet ? "text-ink-2" : "text-[#8a908c]",
-          )}
-        >
-          {label}
-        </span>
-        <button
-          type="button"
-          onClick={copy}
-          className={cx(
-            "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-[12px]/4 font-medium transition-colors duration-150",
-            quiet
-              ? "text-ink-2 hover:bg-hover hover:text-ink"
-              : "text-[#c4c9c6] hover:bg-[#ffffff12] hover:text-white",
-            focusRing,
-          )}
-        >
-          <Icon icon={copied ? Tick02Icon : Copy01Icon} size={14} strokeWidth={1.8} />
-          <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
-        </button>
-      </div>
       <pre
         className={cx(
           // The fade at the right edge hints that a long line scrolls.
-          "overflow-x-auto px-4 font-mono whitespace-pre [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] [scrollbar-width:thin]",
-          quiet ? "py-2.5 text-[11.5px]/5" : "py-3 text-[12.5px]/[22px]",
+          "min-w-0 flex-1 overflow-x-auto font-mono whitespace-pre [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)] [scrollbar-width:thin]",
+          quiet ? "py-2.5 pl-3.5 text-[11.5px]/5" : "py-3.5 pl-4 text-[13px]/6",
         )}
       >
         <code>
           {commands.map((command) => (
-            <span key={command} className="block">
+            <span key={command} className="block pr-6">
               <span aria-hidden="true" className="text-ink-3 select-none">
                 ${" "}
               </span>
@@ -94,6 +63,29 @@ export function CommandBlock({
           ))}
         </code>
       </pre>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${label} commands`}
+        className={cx(
+          "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink",
+          quiet ? "m-1.5 h-7 px-2 text-[12px]/4" : "m-2 h-8 px-2 text-[13px]/4 sm:px-2.5",
+          focusRing,
+        )}
+      >
+        <Icon
+          icon={copied ? Tick02Icon : Copy01Icon}
+          size={quiet ? 14 : 15}
+          strokeWidth={1.8}
+          className={copied ? "text-green" : undefined}
+        />
+        <span aria-hidden="true" className={quiet ? undefined : "max-sm:hidden"}>
+          {copied ? "Copied" : "Copy"}
+        </span>
+        <span className="sr-only" aria-live="polite">
+          {copied ? "Copied" : ""}
+        </span>
+      </button>
     </div>
   );
 }
