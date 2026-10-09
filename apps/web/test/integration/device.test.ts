@@ -28,6 +28,9 @@ import {
 } from "../../src/server/device-auth";
 import { startHarness, type Harness } from "./harness";
 
+// Fixture addresses are built at runtime: the repo is public and holds no address literals.
+const fixture = (name: string) => [name, "convt.test"].join("@");
+
 let h: Harness;
 let web: Db;
 let billingDb: Db;
@@ -83,7 +86,7 @@ async function signIn(email: string, now = new Date()) {
 
 describe("device sign-in", () => {
   test("approve, exchange and renew: the token is stored hashed and returns the Pro key", async () => {
-    const pro = await userId("pro@convt.test");
+    const pro = await userId(fixture("pro"));
     const { req, verifier } = await appFlow();
     const approved = await approveDevice(web, pro, req, new Date());
     expect(approved.ok).toBe(true);
@@ -100,7 +103,7 @@ describe("device sign-in", () => {
       new Date(),
     );
     expect(res.status).toBe(200);
-    expect(res.body.email).toBe("pro@convt.test");
+    expect(res.body.email).toBe(fixture("pro"));
     const token = res.body.token as string;
     expect(bearer(`Bearer ${token}`)).toBe(token);
     const [device] = await h.owner
@@ -133,7 +136,7 @@ describe("device sign-in", () => {
   });
 
   test("a code works once, only with its verifier, and only for five minutes", async () => {
-    const pro = await userId("pro@convt.test");
+    const pro = await userId(fixture("pro"));
     const now = new Date();
     const { req, verifier } = await appFlow();
     const a = await approveDevice(web, pro, req, now);
@@ -163,7 +166,7 @@ describe("device sign-in", () => {
   });
 
   test("a code for a user who lost their verified email is refused", async () => {
-    const id = await userId("new@convt.test");
+    const id = await userId(fixture("new"));
     const { req, verifier } = await appFlow();
     const a = await approveDevice(web, id, req, new Date());
     if (!a.ok) throw new Error("refused");
@@ -200,8 +203,8 @@ describe("device sign-in", () => {
 
 describe("revocation", () => {
   test("Sign out on the dashboard makes the token answer 401", async () => {
-    const pro = await userId("pro@convt.test");
-    const token = await signIn("pro@convt.test");
+    const pro = await userId(fixture("pro"));
+    const token = await signIn(fixture("pro"));
     const [device] = await h.owner
       .select()
       .from(t.devices)
@@ -213,14 +216,14 @@ describe("revocation", () => {
   });
 
   test("signing out every other session signs devices out too", async () => {
-    const pro = await userId("pro@convt.test");
-    const token = await signIn("pro@convt.test");
+    const pro = await userId(fixture("pro"));
+    const token = await signIn(fixture("pro"));
     await revokeOtherSessions(web, pro, "ses_none", new Date());
     expect((await renewDevice(web, proKey, token, {}, nextIp(), new Date())).status).toBe(401);
   });
 
   test("the app's Sign out revokes its own device, once", async () => {
-    const token = await signIn("pro@convt.test");
+    const token = await signIn(fixture("pro"));
     expect((await signOutDevice(web, token, new Date())).status).toBe(200);
     expect((await signOutDevice(web, token, new Date())).status).toBe(401);
     expect((await renewDevice(web, proKey, token, {}, nextIp(), new Date())).status).toBe(401);
@@ -230,9 +233,9 @@ describe("revocation", () => {
 
 describe("cross-account isolation", () => {
   test("one account can neither revoke nor renew through another's device", async () => {
-    const pro = await userId("pro@convt.test");
-    const desktop = await userId("desktop@convt.test");
-    const token = await signIn("pro@convt.test");
+    const pro = await userId(fixture("pro"));
+    const desktop = await userId(fixture("desktop"));
+    const token = await signIn(fixture("pro"));
     const [device] = await h.owner
       .select()
       .from(t.devices)
@@ -255,20 +258,20 @@ describe("cross-account isolation", () => {
     expect(res.status).toBe(200);
     expect(asked).toEqual([pro]);
     // A Desktop-only account has no Pro key to renew to.
-    const desktopToken = await signIn("desktop@convt.test");
+    const desktopToken = await signIn(fixture("desktop"));
     const none = await renewDevice(web, proKey, desktopToken, {}, nextIp(), new Date());
     expect(none.body.key).toBeNull();
     // A lapsed account gets its last Pro key, and refunded or revoked keys never come back.
-    const lapsed = await proKey(await userId("lapsed@convt.test"));
+    const lapsed = await proKey(await userId(fixture("lapsed")));
     expect(lapsed?.key).toBeTruthy();
-    const refunded = await proKey(await userId("refunded@convt.test"));
+    const refunded = await proKey(await userId(fixture("refunded")));
     expect(refunded).toBeNull();
   });
 });
 
 describe("trial access", () => {
   test("renewal returns the exact end alongside its display day", async () => {
-    const token = await signIn("pro@convt.test");
+    const token = await signIn(fixture("pro"));
     const end = new Date(Date.now() + 3 * 86_400_000);
     const res = await renewDevice(web, proKey, token, {}, nextIp(), new Date(), async () => ({
       kind: "trial",
@@ -286,7 +289,7 @@ describe("trial access", () => {
 
 describe("rate limits", () => {
   test("approvals per user, exchanges per IP and renewals per device", async () => {
-    const id = await userId("api@convt.test");
+    const id = await userId(fixture("api"));
     const now = new Date();
     for (let i = 0; i < deviceLimits.approvePerUser; i++) {
       expect((await approveDevice(web, id, (await appFlow()).req, now)).ok).toBe(true);
@@ -304,7 +307,7 @@ describe("rate limits", () => {
     // Another IP is not affected.
     expect((await exchangeCode(web, {}, nextIp(), now)).status).toBe(400);
 
-    const token = await signIn("pro@convt.test");
+    const token = await signIn(fixture("pro"));
     for (let i = 0; i < deviceLimits.renewPerDevice; i++) {
       expect((await renewDevice(web, proKey, token, {}, nextIp(), now)).status).toBe(200);
     }
