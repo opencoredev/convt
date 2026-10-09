@@ -1954,6 +1954,39 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_stored_key_beats_the_accounts_offers_in_onboarding(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    let app = f.app.clone();
+    let (window, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    for (key, stage) in [
+        (license_key("a@b.c", "2027-10-01"), Stage::Licensed),
+        (pro_key("pro-tester", "2027-10-01"), Stage::Pro),
+    ] {
+        for access in [
+            Access::CanStartTrial {
+                checkout_url: "https://checkout.example.com/trial".into(),
+            },
+            Access::Lapsed,
+        ] {
+            cx.update(|cx| {
+                f.app.update(cx, |s, cx| {
+                    s.activate(&key, cx).unwrap();
+                    s.account.access = Some(access.clone());
+                    cx.notify();
+                })
+            });
+            cx.read(|cx| assert_eq!(view.read(cx).stage(cx), stage, "{access:?}"));
+            assert_eq!(
+                label(cx, window, "onboarding-primary").as_deref(),
+                Some("Continue")
+            );
+        }
+    }
+}
+
+#[gpui_kit::test]
 fn the_trial_checkout_is_polled_fast_and_rechecked_on_focus(cx: &mut TestAppContext) {
     use convt_license::account::Access as Remote;
     let f = Fixture::signed_in(cx, None, "pro-tester");

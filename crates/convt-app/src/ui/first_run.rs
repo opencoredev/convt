@@ -186,22 +186,26 @@ impl FirstRunView {
                 (SignIn::Idle, None) => Stage::SignIn,
             };
         }
-        match &account.access {
-            Some(Access::Pro) => Stage::Pro,
-            Some(Access::Trial { ends_on }) => Stage::Trial {
+        match (&account.access, licensed) {
+            (Some(Access::Pro), _) => Stage::Pro,
+            (Some(Access::Trial { ends_on }), _) => Stage::Trial {
                 ends_on: ends_on.clone(),
             },
-            Some(Access::CanStartTrial { .. }) if account.awaiting_trial => Stage::AwaitingTrial,
-            Some(Access::CanStartTrial { .. }) => Stage::CanStartTrial,
-            Some(Access::Lapsed) => Stage::Lapsed,
-            None => match (licensed, &account.refresh) {
-                (Some(convt_license::Plan::Pro), _) => Stage::Pro,
-                (Some(convt_license::Plan::Desktop), _) => Stage::Licensed,
-                (None, Refresh::Running) => Stage::Checking,
+            // A valid key on this computer beats the account's offers: it
+            // already converts, so there's nothing to start or buy.
+            (_, Some(convt_license::Plan::Pro)) => Stage::Pro,
+            (_, Some(convt_license::Plan::Desktop)) => Stage::Licensed,
+            (Some(Access::CanStartTrial { .. }), None) if account.awaiting_trial => {
+                Stage::AwaitingTrial
+            }
+            (Some(Access::CanStartTrial { .. }), None) => Stage::CanStartTrial,
+            (Some(Access::Lapsed), None) => Stage::Lapsed,
+            (None, None) => match &account.refresh {
+                Refresh::Running => Stage::Checking,
                 // [`Self::ask_account`] is about to ask.
-                (None, Refresh::Idle) if !self.asked => Stage::Checking,
-                (None, Refresh::Failed(e)) => Stage::CheckFailed(e.clone()),
-                (None, _) => Stage::CheckFailed(
+                Refresh::Idle if !self.asked => Stage::Checking,
+                Refresh::Failed(e) => Stage::CheckFailed(e.clone()),
+                _ => Stage::CheckFailed(
                     "convt.app didn't say what this account includes. Try again in a moment."
                         .into(),
                 ),
