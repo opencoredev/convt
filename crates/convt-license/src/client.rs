@@ -78,7 +78,9 @@ impl State {
             }
             State::Licensed(l) => format!(
                 "Licensed to {} ({}), with updates until {}.",
-                l.email, l.plan.name(), l.updates_until
+                l.email,
+                l.plan.name(),
+                l.updates_until
             ),
             State::TrialEnded | State::NotCovered(_) => self.blocked_reason().unwrap_or_default(),
         }
