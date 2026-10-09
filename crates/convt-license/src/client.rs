@@ -760,14 +760,14 @@ mod tests {
     fn a_newer_build_than_the_license_covers() {
         let f = Fixture::new();
         let mut l = f.licensing(true);
-        let license = l.activate(&f.key("2026-10-01")).unwrap();
+        let license = l.activate(&pro_key(&f, "2026-10-01")).unwrap();
         let state = l.state();
         assert_eq!(state, State::NotCovered(license));
         assert!(state.blocked_reason().unwrap().contains("2026-10-01"));
         assert!(l.begin_conversion().is_err());
         // The build made on the last covered day is fine.
         let mut l = f.licensing(true);
-        l.activate(&f.key("2026-10-02")).unwrap();
+        l.activate(&pro_key(&f, "2026-10-02")).unwrap();
         assert!(matches!(l.state(), State::Licensed(_)));
     }
 

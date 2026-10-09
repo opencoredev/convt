@@ -5071,7 +5071,7 @@ fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext
 
 #[gpui_kit::test]
 fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
         &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
@@ -5082,7 +5082,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     cx.update(|cx| {
         f.app
             .update(cx, |s, cx| {
-                s.activate(&license_key("a-tester", "2027-10-01"), cx)
+                s.activate(&pro_key("a-tester", "2027-10-01"), cx)
             })
             .unwrap();
     });
@@ -5113,7 +5113,7 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
 #[gpui_kit::test]
 fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppContext) {
     // The license ended before this build (2026-10-01) too.
-    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2026-09-15")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-09-15")));
     f.releases.serve(Ok(manifest(
         2,
         &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],

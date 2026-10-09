@@ -176,7 +176,8 @@ mod tests {
 
     #[test]
     fn update_window() {
-        let l = license();
+        let mut l = license();
+        l.plan = Plan::Pro;
         assert!(l.covers_build("2027-10-02").is_ok());
         assert!(matches!(
             l.covers_build("2027-10-03"),
