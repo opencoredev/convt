@@ -1016,3 +1016,22 @@ mod live {
         assert_eq!(e.kind, "cloud_pro");
     }
 }
+
+#[test]
+fn pages_follow_the_names_workers_publish() {
+    let files = |names: &[&str]| -> Vec<(PathBuf, String)> {
+        names
+            .iter()
+            .map(|n| (PathBuf::from(n), n.to_string()))
+            .collect()
+    };
+    // Listed sorted, as the server returns them: page 2 before page 1.
+    assert_eq!(
+        pages_of(&files(&["input-10.png", "input-2.png", "input.png"])),
+        [9, 1, 0]
+    );
+    assert_eq!(pages_of(&files(&["2.png", "1.png"])), [1, 0]);
+    assert_eq!(pages_of(&files(&["input.webp"])), [0]);
+    // Names that don't tell pages apart keep their order.
+    assert_eq!(pages_of(&files(&["a.png", "b.png"])), [0, 1]);
+}

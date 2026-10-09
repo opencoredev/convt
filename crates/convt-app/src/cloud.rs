@@ -441,19 +441,33 @@ pub fn run(cloud: &Cloud, job: &Job, progress: &dyn Fn(Option<f32>), cancel: &Ca
     }
 }
 
-/// The page each downloaded output came from. Workers name outputs `1.png`,
-/// `2.png`, ... by page, like engines do; anything else keeps its order.
+/// The page each downloaded output came from. Workers publish pages as
+/// engines do locally: `input.png`, `input-2.png`, ... (a bare number, `2.png`,
+/// counts too). Names that don't say keep their order, as do names that
+/// would put two outputs on one page.
 fn pages_of(files: &[(PathBuf, String)]) -> Vec<usize> {
-    files
-        .iter()
-        .enumerate()
-        .map(|(n, (_, name))| {
-            Path::new(name)
-                .file_stem()
-                .and_then(|s| s.to_str()?.parse::<usize>().ok())
-                .map_or(n, |k| k.saturating_sub(1))
-        })
-        .collect()
+    let page = |name: &str| -> usize {
+        let stem = Path::new(name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        if let Ok(k) = stem.parse::<usize>() {
+            return k.saturating_sub(1);
+        }
+        stem.rsplit_once('-')
+            .and_then(|(_, n)| n.parse::<usize>().ok())
+            .filter(|&n| n >= 2)
+            .map_or(0, |n| n - 1)
+    };
+    let pages: Vec<usize> = files.iter().map(|(_, name)| page(name)).collect();
+    let mut seen = pages.clone();
+    seen.sort_unstable();
+    seen.dedup();
+    if seen.len() == pages.len() {
+        pages
+    } else {
+        (0..files.len()).collect()
+    }
 }
 
 /// One job's calls, with a credential that is renewed when it runs out.
