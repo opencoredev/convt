@@ -84,7 +84,7 @@ export function Footer() {
                 >
                   <h2
                     id={`footer-${column.title}`}
-                    className="font-mono text-[12px]/[16px] font-normal text-land-muted uppercase"
+                    className="text-[13px]/5 font-medium text-land-muted"
                   >
                     {column.title}
                   </h2>
@@ -121,7 +121,7 @@ export function Footer() {
               </a>
             )}
           </p>
-          <p className="font-mono text-[12px]/[16px] text-land-muted">Built with Rust and GPUI</p>
+          <p className="text-[13px]/5 text-land-muted">Built with Rust and GPUI</p>
         </div>
       </Container>
     </footer>
