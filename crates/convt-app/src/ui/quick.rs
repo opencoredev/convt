@@ -852,6 +852,7 @@ impl QuickView {
                 theme::select(
                     "size",
                     current,
+                    &self.size.map_or("original".into(), |v| v.to_string()),
                     SELECT_WIDTH,
                     false,
                     self.open == Some(Open::Size),
@@ -885,6 +886,7 @@ impl QuickView {
                 theme::select(
                     "codec",
                     self.video_codec.unwrap_or(VideoCodec::H264).name(),
+                    self.video_codec.unwrap_or(VideoCodec::H264).id(),
                     SELECT_WIDTH,
                     false,
                     self.open == Some(Open::Codec),
@@ -933,6 +935,7 @@ impl QuickView {
                     current
                         .or(default)
                         .map_or_else(|| "Automatic".into(), Background::name),
+                    &current.map_or_else(|| "automatic".to_string(), Background::id),
                     SELECT_WIDTH,
                     false,
                     self.open == Some(Open::Background),

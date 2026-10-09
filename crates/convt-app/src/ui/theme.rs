@@ -874,11 +874,14 @@ impl Choice {
 }
 
 /// A dropdown box showing `value`. Clicking it calls `on_toggle`; while
-/// `open`, it lists `choices` below, each with the id `{id}-{choice id}`.
+/// `open`, it lists `choices` below, each with the id `{id}-{choice id}`,
+/// and checks the one whose id is `selected`. The shown value can differ
+/// from the pick: an unset Background shows the default it converts with.
 #[allow(clippy::too_many_arguments)]
 pub fn select(
     id: &str,
     value: impl Into<SharedString>,
+    selected: &str,
     width: f32,
     mono_value: bool,
     open: bool,
@@ -893,7 +896,6 @@ pub fn select(
     } else {
         text(12., 16., p.text)
     };
-    let current = value.clone();
     let button = clickable(SharedString::from(id.to_string()), value.clone())
         .flex()
         .flex_shrink_0()
@@ -928,11 +930,12 @@ pub fn select(
         let items = choices.into_iter().map(|choice| {
             let on_pick = on_pick.clone();
             let pick = choice.id.clone();
-            let on = choice.label == current;
+            let on = choice.id.as_ref() == selected;
             clickable(
                 SharedString::from(format!("{id}-{}", choice.id)),
                 choice.label.clone(),
             )
+            .aria_selected(on)
             .flex()
             .items_center()
             .justify_between()

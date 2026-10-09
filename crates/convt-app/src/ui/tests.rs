@@ -600,6 +600,16 @@ fn toggled(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Opti
     .unwrap()
 }
 
+/// Whether a menu item or tab is the selected one, as screen readers get it.
+fn selected(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Option<bool> {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.try_find(id(name)).and_then(|e| e.selected())
+    })
+    .unwrap()
+}
+
 fn shown(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> bool {
     label(cx, handle, name).is_some()
 }
@@ -2615,8 +2625,15 @@ fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
     click(cx, window, "background");
     assert!(shown(cx, window, "background-white") && shown(cx, window, "background-black"));
     assert!(!shown(cx, window, "background-transparent"));
+    // The box shows the White it converts with, but the pick is Automatic.
+    assert_eq!(selected(cx, window, "background-automatic"), Some(true));
+    assert_eq!(selected(cx, window, "background-white"), Some(false));
     click(cx, window, "background-black");
     assert_eq!(label(cx, window, "background").as_deref(), Some("Black"));
+    click(cx, window, "background");
+    assert_eq!(selected(cx, window, "background-black"), Some(true));
+    assert_eq!(selected(cx, window, "background-automatic"), Some(false));
+    click(cx, window, "background");
     cx.read(|cx| {
         assert_eq!(
             view.read(cx).conversion_options().background,

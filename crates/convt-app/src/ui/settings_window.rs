@@ -246,6 +246,11 @@ impl SettingsView {
         let output_select = theme::select(
             "output",
             output,
+            if settings.output_dir.is_none() {
+                "beside"
+            } else {
+                ""
+            },
             SELECT_WIDTH,
             false,
             self.open == Some(Open::Output),
@@ -279,6 +284,9 @@ impl SettingsView {
         let jobs_select = theme::select(
             "jobs",
             jobs,
+            &settings
+                .concurrency
+                .map_or_else(|| "auto".to_string(), |n| n.to_string()),
             SELECT_WIDTH,
             false,
             self.open == Some(Open::Jobs),
