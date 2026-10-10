@@ -25,7 +25,7 @@ use super::first_run::{FirstRunView, Question, Screen, Stage};
 use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
-use super::{AboutView, Open, PopoverView, menus, theme};
+use super::{AboutView, FinderGuideView, Open, PopoverView, menus, theme};
 use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::cloud::CloudAccess;
 use crate::history::Outcome;
@@ -2168,6 +2168,7 @@ fn no_to_documents_downloads_nothing(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_finder_question_opens_system_settings_on_yes(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
     let app = f.app.clone();
     let (window, view) = open(cx, move |window, cx| {
         cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Finder), window, cx))
@@ -2181,7 +2182,96 @@ fn the_finder_question_opens_system_settings_on_yes(cx: &mut TestAppContext) {
         cx.opened_url().as_deref(),
         Some(crate::finder::EXTENSION_SETTINGS)
     );
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    assert_eq!(
+        label(cx, guide, "finder-guide-title").as_deref(),
+        Some("Turn on convt in Finder")
+    );
     cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+/// Onboarding ends while the user is still in System Settings: the main
+/// window waits for the guide, so it doesn't cover System Settings mid-step.
+#[gpui_kit::test]
+fn onboarding_opens_the_main_window_once_the_finder_guide_closes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    let app = f.app.clone();
+    let (window, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Finder), window, cx))
+    });
+    click(cx, window, "question-yes");
+    cx.executor()
+        .advance_clock(super::first_run::CALIBRATE + Duration::from_millis(50));
+    cx.run_until_parked();
+    assert!(cx.read(|cx| Open::<MainView>::get(cx).is_none()));
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    click(cx, guide, "finder-guide-close");
+    cx.run_until_parked();
+    assert!(cx.read(|cx| Open::<MainView>::get(cx).is_some()));
+}
+
+/// The guide beside System Settings: it shows the steps, says so once the
+/// extension is on, then closes by itself.
+#[gpui_kit::test]
+fn the_finder_guide_closes_once_the_extension_is_on(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    cx.update(crate::finder::open_settings);
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    assert!(shown(cx, guide, "finder-guide-steps"));
+    assert!(!shown(cx, guide, "finder-guide-done"));
+
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.finder_on = Some(true);
+            cx.notify();
+        })
+    });
+    assert_eq!(
+        label(cx, guide, "finder-guide-done").as_deref(),
+        Some("You're all set")
+    );
+    assert!(!shown(cx, guide, "finder-guide-steps"));
+    cx.executor().advance_clock(Duration::from_millis(2000));
+    cx.run_until_parked();
+    assert!(
+        cx.update_window(guide, |_, _, _| ()).is_ok(),
+        "closed too soon"
+    );
+    cx.executor().advance_clock(Duration::from_millis(700));
+    cx.run_until_parked();
+    assert!(cx.update_window(guide, |_, _, _| ()).is_err(), "still open");
+}
+
+#[gpui_kit::test]
+fn the_finder_guide_closes_from_its_button_and_skips_a_finder_menu_already_on(
+    cx: &mut TestAppContext,
+) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    cx.update(crate::finder::open_settings);
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    // Opening it again plays it from the start in one window.
+    cx.update(crate::finder::open_settings);
+    let (again, _) = window_of::<FinderGuideView>(cx);
+    assert!(cx.update_window(guide, |_, _, _| ()).is_err());
+    click(cx, again, "finder-guide-close");
+    assert!(cx.update_window(again, |_, _, _| ()).is_err());
+
+    // Managing a Finder menu that is already on needs no guide.
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(true)));
+    let before = cx.update(|cx| cx.windows().len());
+    cx.update(crate::finder::open_settings);
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    assert_eq!(cx.update(|cx| cx.windows().len()), before);
 }
 
 #[gpui_kit::test]
@@ -2205,6 +2295,8 @@ fn activity_offers_finder_setup_until_the_extension_is_on(cx: &mut TestAppContex
         cx.opened_url().as_deref(),
         Some(crate::finder::EXTENSION_SETTINGS)
     );
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    assert!(shown(cx, guide, "finder-guide-steps"));
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
             s.finder_on = Some(true);
@@ -3088,8 +3180,13 @@ fn the_icons_the_windows_draw_are_bundled() {
         );
     }
     assert!(assets.load("icons/google-g.svg").unwrap().is_some());
-    // Onboarding's setup spinner.
-    for path in ["onboarding/spinner-track.svg", "onboarding/spinner-arc.svg"] {
+    // Onboarding's setup spinner and the Finder guide's pointer.
+    for path in [
+        "onboarding/spinner-track.svg",
+        "onboarding/spinner-arc.svg",
+        "guide/pointer-edge.svg",
+        "guide/pointer.svg",
+    ] {
         assert!(assets.load(path).unwrap().is_some(), "{path}");
     }
 }

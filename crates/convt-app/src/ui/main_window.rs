@@ -14,7 +14,6 @@ use super::theme::{self, Button, Palette, Tone, icon, mono, radius, size, space,
 use super::{LICENSE_PRICE, SettingsTab, file_size, human_size, time_left};
 use crate::automation;
 use crate::clock::Local;
-use crate::finder::EXTENSION_SETTINGS;
 use crate::history::{Outcome, Record};
 use crate::jobs::{Entry, Status};
 use crate::model::{self, AppState};
@@ -543,7 +542,7 @@ fn finder_setup_card(p: &Palette) -> impl IntoElement {
                     Button::primary("enable-finder", "Open System Settings")
                         .small()
                         .build(p)
-                        .on_click(|_, _, cx| cx.open_url(EXTENSION_SETTINGS)),
+                        .on_click(|_, _, cx| crate::finder::open_settings(cx)),
                 ),
             p,
         ))

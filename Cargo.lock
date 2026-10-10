@@ -1502,6 +1502,7 @@ dependencies = [
  "ksni",
  "libc",
  "objc",
+ "raw-window-handle",
  "rusqlite",
  "semver",
  "serde",

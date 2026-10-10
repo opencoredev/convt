@@ -24,7 +24,6 @@ use gpui_kit::*;
 
 use super::theme::{self, IconName, Look, Palette, icon, styled, text};
 use crate::account::{Access, Provider, Refresh, SignIn};
-use crate::finder::EXTENSION_SETTINGS;
 use crate::model::{AppState, PackPhase};
 
 /// How long the "Setting convt up" moment lasts before the main window
@@ -290,7 +289,7 @@ impl FirstRunView {
                 // A click on Yes is the user asking for the download, as the
                 // Download button is.
                 Question::Documents => super::pack::start_install(&self.app, cx),
-                Question::Finder => cx.open_url(EXTENSION_SETTINGS),
+                Question::Finder => crate::finder::open_settings(cx),
             }
         }
         let questions = self.questions(cx);
@@ -326,7 +325,7 @@ impl FirstRunView {
         self.app.update(cx, |s, cx| {
             s.update_settings(|s| s.first_run_done = true, cx)
         });
-        super::show_main(cx);
+        super::show_main_after_finder_guide(cx);
         window.remove_window();
     }
 

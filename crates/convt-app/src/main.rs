@@ -23,6 +23,9 @@ mod pack;
 mod placeholder;
 mod request;
 mod settings;
+// Tests never track the real System Settings window.
+#[cfg(all(target_os = "macos", not(test)))]
+mod system_settings;
 mod thumbs;
 mod tray;
 mod ui;
