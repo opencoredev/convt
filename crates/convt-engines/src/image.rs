@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufWriter, Cursor, Write};
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, format_by_id};
@@ -259,11 +259,9 @@ pub(crate) fn encode_with_pixel_aspect(
         }
         "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut w, ImageFormat::Pnm),
         "bmp" => {
-            let mut bmp = Cursor::new(Vec::new());
-            img.write_to(&mut bmp, ImageFormat::Bmp).and_then(|()| {
-                w.write_all(&bmp_v5_header(bmp.into_inner()))
-                    .map_err(image::ImageError::IoError)
-            })
+            let mut bmp = BmpV5Writer::new(&mut w);
+            img.write_with_encoder(image::codecs::bmp::BmpEncoder::new(&mut bmp))
+                .and_then(|()| bmp.finish().map_err(image::ImageError::IoError))
         }
         id => {
             let format = ImageFormat::from_extension(id)
@@ -276,28 +274,71 @@ pub(crate) fn encode_with_pixel_aspect(
     Ok(())
 }
 
-/// Rewrites the BITMAPV4HEADER the BMP encoder uses for transparency as a
-/// BITMAPV5HEADER. Apple's ImageIO refuses every V4 file, so Preview and
-/// Finder couldn't open an RGBA BMP; V5 keeps the same alpha mask.
-fn bmp_v5_header(mut bmp: Vec<u8>) -> Vec<u8> {
-    const V4: u32 = 108;
-    const V5: u32 = 124;
-    let field = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
-    if bmp.len() < 14 + V4 as usize || field(&bmp, 14) != V4 {
-        return bmp;
+const BMP_V4: u32 = 108;
+const BMP_V5: u32 = 124;
+const BMP_V4_END: usize = 14 + BMP_V4 as usize;
+
+/// Passes BMP output through, rewriting a BITMAPV4HEADER (what the encoder
+/// writes for transparency) as a BITMAPV5HEADER. Apple's ImageIO refuses
+/// every V4 file, so Preview and Finder couldn't open an RGBA BMP; V5 keeps
+/// the same alpha mask. Only the headers are held back, so pixels stream.
+struct BmpV5Writer<W: Write> {
+    inner: W,
+    /// The bytes held back until the headers are complete; `None` after.
+    head: Option<Vec<u8>>,
+}
+
+impl<W: Write> BmpV5Writer<W> {
+    fn new(inner: W) -> Self {
+        Self {
+            inner,
+            head: Some(Vec::with_capacity(BMP_V4_END)),
+        }
     }
-    let grow = V5 - V4;
-    let file_size = field(&bmp, 2) + grow;
-    let pixel_offset = field(&bmp, 10) + grow;
-    bmp[2..6].copy_from_slice(&file_size.to_le_bytes());
-    bmp[10..14].copy_from_slice(&pixel_offset.to_le_bytes());
-    bmp[14..18].copy_from_slice(&V5.to_le_bytes());
+
+    /// Writes a file shorter than the V4 headers unchanged.
+    fn finish(mut self) -> std::io::Result<()> {
+        if let Some(head) = self.head.take() {
+            self.inner.write_all(&head)?;
+        }
+        self.inner.flush()
+    }
+}
+
+impl<W: Write> Write for BmpV5Writer<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let Some(head) = &mut self.head else {
+            return self.inner.write(buf);
+        };
+        let n = buf.len().min(BMP_V4_END - head.len());
+        head.extend_from_slice(&buf[..n]);
+        if head.len() == BMP_V4_END {
+            let head = self.head.take().unwrap_or_default();
+            self.inner.write_all(&bmp_v5_header(head))?;
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn bmp_v5_header(mut head: Vec<u8>) -> Vec<u8> {
+    let field = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+    if field(&head, 14) != BMP_V4 {
+        return head;
+    }
+    let grow = BMP_V5 - BMP_V4;
+    let file_size = field(&head, 2) + grow;
+    let pixel_offset = field(&head, 10) + grow;
+    head[2..6].copy_from_slice(&file_size.to_le_bytes());
+    head[10..14].copy_from_slice(&pixel_offset.to_le_bytes());
+    head[14..18].copy_from_slice(&BMP_V5.to_le_bytes());
     // bV5Intent LCS_GM_IMAGES, then no profile data, profile size or reserved.
-    let mut tail = [0u8; 16];
-    tail[..4].copy_from_slice(&4u32.to_le_bytes());
-    let end = 14 + V4 as usize;
-    bmp.splice(end..end, tail);
-    bmp
+    head.extend_from_slice(&4u32.to_le_bytes());
+    head.extend_from_slice(&[0; 12]);
+    head
 }
 
 #[cfg(test)]
@@ -358,6 +399,29 @@ mod tests {
         let bytes = std::fs::read(&out).unwrap();
         assert_eq!(bytes[14..18], 124u32.to_le_bytes(), "BITMAPV5HEADER");
         assert_eq!(bytes[2..6], (bytes.len() as u32).to_le_bytes());
+    }
+
+    #[test]
+    fn bmp_header_rewrite_survives_one_byte_writes() {
+        let rgba = DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            3,
+            2,
+            image::Rgba([10, 20, 30, 128]),
+        ));
+        let mut plain = Vec::new();
+        rgba.write_with_encoder(image::codecs::bmp::BmpEncoder::new(&mut plain))
+            .unwrap();
+        let mut out = Vec::new();
+        let mut writer = BmpV5Writer::new(&mut out);
+        for byte in &plain {
+            writer.write_all(std::slice::from_ref(byte)).unwrap();
+        }
+        writer.finish().unwrap();
+        assert_eq!(out.len(), plain.len() + 16);
+        assert_eq!(out[14..18], 124u32.to_le_bytes());
+        assert_eq!(out[out.len() - 24..], plain[plain.len() - 24..]);
+        let back = image::load_from_memory_with_format(&out, ImageFormat::Bmp).unwrap();
+        assert_eq!(back.to_rgba8(), rgba.to_rgba8());
     }
 
     #[test]
