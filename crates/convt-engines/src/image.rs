@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Cursor, Write};
 use std::path::{Path, PathBuf};
 
 use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, format_by_id};
@@ -258,6 +258,13 @@ pub(crate) fn encode_with_pixel_aspect(
             DynamicImage::ImageRgba32F(img.to_rgba32f()).write_to(&mut w, ImageFormat::OpenExr)
         }
         "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut w, ImageFormat::Pnm),
+        "bmp" => {
+            let mut bmp = Cursor::new(Vec::new());
+            img.write_to(&mut bmp, ImageFormat::Bmp).and_then(|()| {
+                w.write_all(&bmp_v5_header(bmp.into_inner()))
+                    .map_err(image::ImageError::IoError)
+            })
+        }
         id => {
             let format = ImageFormat::from_extension(id)
                 .ok_or_else(|| failed(format!("no encoder for {id}")))?;
@@ -267,6 +274,30 @@ pub(crate) fn encode_with_pixel_aspect(
     .map_err(failed)?;
     w.into_inner().map_err(|e| Error::Io(e.into_error()))?;
     Ok(())
+}
+
+/// Rewrites the BITMAPV4HEADER the BMP encoder uses for transparency as a
+/// BITMAPV5HEADER. Apple's ImageIO refuses every V4 file, so Preview and
+/// Finder couldn't open an RGBA BMP; V5 keeps the same alpha mask.
+fn bmp_v5_header(mut bmp: Vec<u8>) -> Vec<u8> {
+    const V4: u32 = 108;
+    const V5: u32 = 124;
+    let field = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+    if bmp.len() < 14 + V4 as usize || field(&bmp, 14) != V4 {
+        return bmp;
+    }
+    let grow = V5 - V4;
+    let file_size = field(&bmp, 2) + grow;
+    let pixel_offset = field(&bmp, 10) + grow;
+    bmp[2..6].copy_from_slice(&file_size.to_le_bytes());
+    bmp[10..14].copy_from_slice(&pixel_offset.to_le_bytes());
+    bmp[14..18].copy_from_slice(&V5.to_le_bytes());
+    // bV5Intent LCS_GM_IMAGES, then no profile data, profile size or reserved.
+    let mut tail = [0u8; 16];
+    tail[..4].copy_from_slice(&4u32.to_le_bytes());
+    let end = 14 + V4 as usize;
+    bmp.splice(end..end, tail);
+    bmp
 }
 
 #[cfg(test)]
@@ -324,6 +355,9 @@ mod tests {
             image::open(&out).unwrap().to_rgba8().get_pixel(0, 0).0[3],
             0
         );
+        let bytes = std::fs::read(&out).unwrap();
+        assert_eq!(bytes[14..18], 124u32.to_le_bytes(), "BITMAPV5HEADER");
+        assert_eq!(bytes[2..6], (bytes.len() as u32).to_le_bytes());
     }
 
     #[test]
