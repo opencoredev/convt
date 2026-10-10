@@ -325,7 +325,7 @@ impl FirstRunView {
         self.app.update(cx, |s, cx| {
             s.update_settings(|s| s.first_run_done = true, cx)
         });
-        super::show_main(cx);
+        super::show_main_after_finder_guide(cx);
         window.remove_window();
     }
 

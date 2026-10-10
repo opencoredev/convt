@@ -2190,6 +2190,27 @@ fn the_finder_question_opens_system_settings_on_yes(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
 }
 
+/// Onboarding ends while the user is still in System Settings: the main
+/// window waits for the guide, so it doesn't cover System Settings mid-step.
+#[gpui_kit::test]
+fn onboarding_opens_the_main_window_once_the_finder_guide_closes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    let app = f.app.clone();
+    let (window, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Finder), window, cx))
+    });
+    click(cx, window, "question-yes");
+    cx.executor()
+        .advance_clock(super::first_run::CALIBRATE + Duration::from_millis(50));
+    cx.run_until_parked();
+    assert!(cx.read(|cx| Open::<MainView>::get(cx).is_none()));
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    click(cx, guide, "finder-guide-close");
+    cx.run_until_parked();
+    assert!(cx.read(|cx| Open::<MainView>::get(cx).is_some()));
+}
+
 /// The guide beside System Settings: it shows the steps, says so once the
 /// extension is on, then closes by itself.
 #[gpui_kit::test]
