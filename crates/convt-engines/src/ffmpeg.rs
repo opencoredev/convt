@@ -91,6 +91,22 @@ impl FfmpegEngine {
     }
 }
 
+/// Targets are offered per format, so a silent video still lists audio ones.
+/// Name the cause instead of passing on FFmpeg's empty-output message.
+fn no_audio_error(e: Error, to: &str) -> Error {
+    match e {
+        Error::EngineFailed { message, .. }
+            if AUDIO.contains(&to) && message.contains("does not contain any stream") =>
+        {
+            Error::EngineFailed {
+                engine: "ffmpeg",
+                message: "this file has no audio track to convert".into(),
+            }
+        }
+        e => e,
+    }
+}
+
 /// FFmpeg writes the extracted frame's (possibly scaled) pixel ratio in pHYs.
 /// Read that generated PNG before decoding discards its metadata; this also
 /// follows FFmpeg's chosen stream without running another subprocess.
@@ -251,7 +267,10 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
             None => push(&["-vn", "-c:a", "libmp3lame", "-q:a", "2"]),
         },
         "wav" => push(&["-vn", "-c:a", "pcm_s16le"]),
-        "flac" => push(&["-vn", "-c:a", "flac"]),
+        // FFmpeg 9 otherwise keeps the first decoded frame's length as the
+        // block size: 47 samples from an MP3 after gapless trimming, which
+        // Apple's decoder refuses to open.
+        "flac" => push(&["-vn", "-c:a", "flac", "-frame_size", "4096"]),
         "aac" => push(&["-vn", "-c:a", "aac", "-b:a", &aac, "-f", "adts"]),
         "m4a" => push(&["-vn", "-c:a", "aac", "-b:a", &aac]),
         "ogg" => match &bitrate {
@@ -335,7 +354,8 @@ impl Engine for FfmpegEngine {
             if let (Some(us), Some(total)) = (us, total) {
                 ctx.progress((us / total) as f32);
             }
-        })?;
+        })
+        .map_err(|e| no_audio_error(e, to))?;
         if via_png {
             let img = image::open(&frame).map_err(|e| Error::EngineFailed {
                 engine: "ffmpeg",
@@ -374,6 +394,24 @@ mod tests {
         let mp3 = output_args("mp3", &o).join(" ");
         assert!(mp3.contains("-b:a 96k") && !mp3.contains("-q:a"), "{mp3}");
         assert!(!output_args("png", &o).join(" ").contains("scale"));
+    }
+
+    #[test]
+    fn silent_video_to_audio_names_the_missing_track() {
+        let empty = || Error::EngineFailed {
+            engine: "ffmpeg",
+            message: "Output file does not contain any stream".into(),
+        };
+        assert!(
+            no_audio_error(empty(), "mp3")
+                .to_string()
+                .contains("no audio track")
+        );
+        assert!(
+            no_audio_error(empty(), "mp4")
+                .to_string()
+                .contains("does not contain")
+        );
     }
 
     #[test]
