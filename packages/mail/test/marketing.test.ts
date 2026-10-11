@@ -56,10 +56,11 @@ describe("marketing templates", () => {
     expect(welcomeEmailForSegment("https://convt.app", "paid").subject).toBe(
       "thanks for buying convt",
     );
+    expect(all["welcome-paid"].html).toContain("<title>thank you</title>");
   });
 
   test("snapshots", () => {
-    expect(marketingTemplateVersion).toBe(2);
+    expect(marketingTemplateVersion).toBe(3);
     for (const [name, email] of Object.entries(all)) {
       expect({ name, subject: email.subject, text: email.text }).toMatchSnapshot();
     }
