@@ -136,6 +136,11 @@ export function sequenzyContacts(options: SequenzyContactsOptions): ContactsClie
         externalId: contact.externalId,
         ...(contact.firstName ? { firstName: contact.firstName } : {}),
         status: "active",
+        // Explicitly bypass every provider-side enrollment and consent prompt.
+        // createdAt defaults this for backfills, but signup contacts need the
+        // flag too; optInMode=confirmed prevents a workspace DOI email.
+        enrollInSequences: false,
+        optInMode: "confirmed",
         tags,
         ...(lists ? { lists } : {}),
         customAttributes: contact.attributes,
