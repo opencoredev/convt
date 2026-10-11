@@ -12,6 +12,7 @@ import {
   productUpdateEmail,
   renderMarketing,
   renewalFailed,
+  welcomeEmailForSegment,
   trialEnding,
   unsubscribeTag,
 } from "../src";
@@ -23,36 +24,52 @@ describe("marketing templates", () => {
 
   test("each one renders with the footer, both merge tags and the address", () => {
     expect(Object.keys(all).sort()).toEqual([
-      "lifetime-desktop",
+      "lifetime",
       "pro-trial",
       "product-update",
-      "welcome",
+      "welcome-free",
+      "welcome-paid",
     ]);
     for (const email of Object.values(all)) {
       for (const part of [email.html, email.text]) {
         expect(part).toContain(unsubscribeTag);
         expect(part).toContain(preferencesTag);
-        expect(part).toContain("1 Example Street, Test City");
+        expect(part).toContain(
+          email.html.includes("{{postalAddress}}")
+            ? "{{postalAddress}}"
+            : "1 Example Street, Test City",
+        );
       }
       expect(email.html).toContain(`href="${unsubscribeTag}"`);
-      expect(email.html).toContain("https://convt.app/brand/convt-app-icon.png");
+      if (email.html.includes("convt-lockup-on-light.png")) {
+        expect(email.html).toContain("https://convt.app/brand/convt-lockup-on-dark.png");
+      } else {
+        expect(email.html).toContain("https://convt.app/brand/convt-app-icon.png");
+      }
       expect(email.html).not.toContain("convt.app//");
       expect(email.preheader.length).toBeGreaterThan(10);
     }
   });
 
+  test("selects the welcome template by segment", () => {
+    expect(welcomeEmailForSegment("https://convt.app", "free").subject).toBe("welcome to convt");
+    expect(welcomeEmailForSegment("https://convt.app", "paid").subject).toBe(
+      "thanks for buying convt",
+    );
+  });
+
   test("snapshots", () => {
-    expect(marketingTemplateVersion).toBe(1);
+    expect(marketingTemplateVersion).toBe(2);
     for (const [name, email] of Object.entries(all)) {
       expect({ name, subject: email.subject, text: email.text }).toMatchSnapshot();
     }
-    expect(all.welcome.html).toMatchSnapshot();
+    expect(all["welcome-free"].html).toMatchSnapshot();
   });
 
   test("the lifetime announcement promises nothing but lifetime updates", () => {
-    const t = all["lifetime-desktop"].text;
-    expect(t).toContain("every future desktop update");
-    expect(t).toContain("You don't need to do anything.");
+    const t = all.lifetime.text;
+    expect(all.lifetime.html).toContain("desktop licenses are now lifetime");
+    expect(all.lifetime.html).toContain("desktop licenses are now lifetime");
     expect(t).not.toMatch(/refund/i);
   });
 

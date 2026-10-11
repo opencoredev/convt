@@ -14,7 +14,7 @@
 import { escapeHtml, type Rendered } from "./templates";
 
 /** Bump when any marketing template's output changes. */
-export const marketingTemplateVersion = 1;
+export const marketingTemplateVersion = 2;
 
 export const unsubscribeTag = "{{unsubscribeUrl}}";
 export const preferencesTag = "{{preferencesUrl}}";
@@ -159,6 +159,23 @@ const footerReason =
 
 /** Every marketing email goes through here, so none can leave out the footer. */
 export function renderMarketing(email: MarketingEmail, footer: FooterInput): MarketingRendered {
+  const lifecycle =
+    email.subject === "welcome to convt"
+      ? "welcome-free"
+      : email.subject === "thanks for buying convt"
+        ? "welcome-paid"
+        : email.subject === "your convt license is now lifetime"
+          ? "lifetime"
+          : null;
+  if (lifecycle) {
+    const html = lifecycleHtml(lifecycle);
+    return {
+      subject: email.subject,
+      preheader: email.preheader,
+      text: `${email.subject} | Email preferences: ${preferencesTag} | Unsubscribe: ${unsubscribeTag} | {{postalAddress}}`,
+      html,
+    };
+  }
   const site = footer.siteUrl.replace(/\/$/, "");
   const html =
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
@@ -190,80 +207,51 @@ export function renderMarketing(email: MarketingEmail, footer: FooterInput): Mar
   return { subject: email.subject, preheader: email.preheader, text, html };
 }
 
-/** Sent once by the signup sequence. */
-export function welcomeEmail(siteUrl: string): MarketingEmail {
-  const site = siteUrl.replace(/\/$/, "");
-  return {
-    subject: "Welcome to convt",
-    preheader: "Right-click a file, pick a format. Here's how to start.",
-    heading: "Convert any file with a right-click.",
-    blocks: [
-      {
-        kind: "p",
-        text: "Thanks for making a convt account. convt converts images, video, audio and documents on your own computer, so your files never get uploaded.",
-      },
-      {
-        kind: "steps",
-        items: [
-          {
-            title: "Download the app",
-            body: "convt runs on macOS, Windows and Linux. Every format works offline.",
-          },
-          {
-            title: "Right-click any file",
-            body: "Choose Convert with convt and pick a format. A HEIC photo becomes a JPG, a MOV becomes an MP4.",
-          },
-          {
-            title: "Or use the command line",
-            body: "The same engine, for scripts and whole folders.",
-          },
-        ],
-      },
-      { kind: "code", text: "convt photos/ --to jpeg -r" },
-      { kind: "button", href: `${site}/download`, label: "Download convt" },
-      {
-        kind: "p",
-        text: "The app is free for 7 days from your first conversion. After that, Desktop is a one-time purchase with every future desktop update, or Pro adds cloud conversions from your phone or browser.",
-      },
-      { kind: "link", href: `${site}/formats`, label: "See every format" },
-    ],
-  };
+type ApprovedLifecycle = "welcome-free" | "welcome-paid" | "lifetime";
+const lifecycleCss = `<style>:root{color-scheme:light dark;supported-color-schemes:light dark}@media (prefers-color-scheme: dark){.bg{background:#0a0b0b!important}.ink{color:#edefee!important}.ink2{color:#a1a6a3!important}.ink3{color:#868b88!important}.brand,.link{color:#3fcb84!important}.rule{border-color:#232726!important}.lt{display:none!important}.dk{display:block!important;max-height:none!important}}[data-ogsc] .ink{color:#edefee!important}[data-ogsc] .ink2{color:#a1a6a3!important}[data-ogsc] .brand,[data-ogsc] .link{color:#3fcb84!important}</style>`;
+const lifecycleLogo = `<img class="lt" src="https://convt.app/brand/convt-lockup-on-light.png" width="89" height="22" alt="convt" style="display:block;width:89px;height:22px;border:0"><!--[if !mso]><!--><img class="dk" src="https://convt.app/brand/convt-lockup-on-dark.png" width="89" height="22" alt="convt" style="display:none;width:89px;height:22px;border:0;max-height:0;overflow:hidden;mso-hide:all"><!--<![endif]-->`;
+const lifecycleFooter = `{{postalAddress}} &middot; <a class="ink3" href="${unsubscribeTag}" style="color:#6c716e;text-decoration:underline">unsubscribe</a> &middot; <a class="ink3" href="${preferencesTag}" style="color:#6c716e;text-decoration:underline">preferences</a>`;
+function lifecycleHtml(kind: ApprovedLifecycle): string {
+  const copy =
+    kind === "welcome-free"
+      ? `<p style="margin:0 0 16px 0">i'm leo, i'm making convt. thanks for giving it a try.</p><p style="margin:0 0 16px 0">you've got 7 days free. download it, right-click any file, pick a format. that's it, and it all stays on your computer.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px 0"><tr><td bgcolor="#127a47" style="background:#127a47;border-radius:8px"><a href="https://convt.app/download" style="display:inline-block;padding:11px 20px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">download convt</a></td></tr></table><p style="margin:0">if you have any feature requests, suggestions, bug reports or questions, just reply here.</p>`
+      : kind === "welcome-paid"
+        ? `<p style="margin:0 0 16px 0">i'm leo, i'm making convt. thank you for buying it. that genuinely means a lot.</p><p style="margin:0 0 16px 0">if you haven't grabbed it yet, here it is. right-click any file, pick a format, done.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px 0"><tr><td bgcolor="#127a47" style="background:#127a47;border-radius:8px"><a href="https://convt.app/download" style="display:inline-block;padding:11px 20px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">download convt</a></td></tr></table><p style="margin:0">if you have any feature requests, suggestions, bug reports or questions, just reply here.</p>`
+        : `<p style="margin:0 0 16px 0">when i launched convt desktop, i made it a yearly license. that was the wrong call on my part, and i'm sorry. you paid for an app, not a subscription.</p><p style="margin:0 0 16px 0">so i've fixed it. desktop licenses are now lifetime, including yours. same key, no renewal, nothing to do.</p><p style="margin:0 0 16px 0">thank you for backing convt this early. it means more than you'd think.</p><p style="margin:0">if you have any feature requests, suggestions, bug reports or questions, just reply here.</p>`;
+  const subject =
+    kind === "welcome-free"
+      ? "welcome to convt"
+      : kind === "welcome-paid"
+        ? "thanks for buying convt"
+        : "your convt license is now lifetime";
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${subject}</title>${lifecycleCss}</head><body class="bg" style="margin:0;padding:0;background:#ffffff"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg" bgcolor="#ffffff"><tr><td align="center"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px"><tr><td style="padding:48px 48px 0 48px">${lifecycleLogo}</td></tr><tr><td class="ink" style="padding:36px 48px 0 48px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:26px;color:#0a0a0a"><p style="margin:0 0 16px 0">hey {{firstName|there}},</p>${copy}<p class="ink" style="margin:28px 0 0 0">leo</p></td></tr><tr><td style="padding:40px 48px 0 48px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="rule" style="border-top:1px solid #e6e8e7;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr><tr><td class="ink3" style="padding:14px 48px 40px 48px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#6c716e">${lifecycleFooter}</td></tr></table></td></tr></table></body></html>`;
 }
-
-/** For accounts that bought Desktop before it became lifetime. */
+function lifecycleEmail(kind: ApprovedLifecycle): MarketingEmail {
+  const subject =
+    kind === "welcome-free"
+      ? "welcome to convt"
+      : kind === "welcome-paid"
+        ? "thanks for buying convt"
+        : "your convt license is now lifetime";
+  return { subject, preheader: subject, heading: subject, blocks: [] };
+}
+export function welcomeFreeEmail(_siteUrl: string): MarketingEmail {
+  return lifecycleEmail("welcome-free");
+}
+export function welcomePaidEmail(_siteUrl: string): MarketingEmail {
+  return lifecycleEmail("welcome-paid");
+}
+export function welcomeEmailForSegment(_siteUrl: string, segment: "paid" | "free"): MarketingEmail {
+  return segment === "paid" ? welcomePaidEmail(_siteUrl) : welcomeFreeEmail(_siteUrl);
+}
+export function lifetimeEmail(_siteUrl: string): MarketingEmail {
+  return lifecycleEmail("lifetime");
+}
+export function welcomeEmail(siteUrl: string): MarketingEmail {
+  return welcomeFreeEmail(siteUrl);
+}
 export function lifetimeDesktopEmail(siteUrl: string): MarketingEmail {
-  const site = siteUrl.replace(/\/$/, "");
-  return {
-    subject: "Your convt Desktop license is now lifetime",
-    preheader: "Every future desktop update, no renewal. Nothing for you to do.",
-    heading: "Your Desktop license is now lifetime.",
-    blocks: [
-      {
-        kind: "p",
-        text: "When you bought convt Desktop, it came with a year of updates. We've changed that for everyone who paid: a Desktop license now includes every future desktop update, with no renewal.",
-      },
-      {
-        kind: "note",
-        title: "You don't need to do anything.",
-        body: "Your current license key keeps working and now counts as lifetime. Every future desktop update works with it.",
-      },
-      {
-        kind: "checks",
-        items: [
-          "Every format, offline",
-          "Every future desktop update",
-          "Batch folders and presets",
-          "No subscription for the desktop app",
-        ],
-      },
-      { kind: "button", href: `${site}/dashboard/licenses`, label: "View your license" },
-      {
-        kind: "p",
-        text: "Thank you for buying convt early. If anything about your license looks wrong, tell us and we'll fix it.",
-      },
-      { kind: "link", href: `${site}/contact`, label: "Contact support" },
-    ],
-  };
+  return lifetimeEmail(siteUrl);
 }
 
 /** The first email of the Pro trial sequence. The trial-ending notice stays transactional. */
@@ -362,15 +350,21 @@ export function sampleProductUpdate(siteUrl: string): MarketingEmail {
   });
 }
 
-export type MarketingTemplateName = "welcome" | "lifetime-desktop" | "pro-trial" | "product-update";
+export type MarketingTemplateName =
+  | "welcome-free"
+  | "welcome-paid"
+  | "lifetime"
+  | "pro-trial"
+  | "product-update";
 
 /** Every template, rendered for export and previews. */
 export function marketingTemplates(
   footer: FooterInput,
 ): Record<MarketingTemplateName, MarketingRendered> {
   return {
-    welcome: renderMarketing(welcomeEmail(footer.siteUrl), footer),
-    "lifetime-desktop": renderMarketing(lifetimeDesktopEmail(footer.siteUrl), footer),
+    "welcome-free": renderMarketing(welcomeFreeEmail(footer.siteUrl), footer),
+    "welcome-paid": renderMarketing(welcomePaidEmail(footer.siteUrl), footer),
+    lifetime: renderMarketing(lifetimeEmail(footer.siteUrl), footer),
     "pro-trial": renderMarketing(proTrialEmail(footer.siteUrl), footer),
     "product-update": renderMarketing(sampleProductUpdate(footer.siteUrl), footer),
   };
