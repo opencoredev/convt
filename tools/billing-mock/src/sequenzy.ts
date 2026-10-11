@@ -63,6 +63,29 @@ export function createSequenzy(options: { apiKey: string }) {
       });
       return json(200, { success: true, subscriber: { created: true, updated: false } });
     }
+    const tagRoute =
+      url.pathname === "/api/v1/subscribers/bulk/tags/add"
+        ? "add"
+        : url.pathname === "/api/v1/subscribers/bulk/tags/remove"
+          ? "remove"
+          : null;
+    if (tagRoute && req.method === "POST") {
+      const body = object(await req.json());
+      const ids = strings(body.externalIds);
+      const tags = strings(body.tags);
+      // The real endpoint requires this explicit false for silent adds.
+      if (tagRoute === "add" && body.triggerAutomations !== false)
+        return json(400, { success: false, code: "AUTOMATIONS_FLAG_REQUIRED" });
+      for (const id of ids) {
+        const contact = contacts.get(id);
+        if (!contact) continue;
+        contact.tags =
+          tagRoute === "add"
+            ? [...new Set([...contact.tags, ...tags])]
+            : contact.tags.filter((tag) => !tags.includes(tag));
+      }
+      return json(200, { success: true });
+    }
     if (url.pathname === "/api/v1/subscribers/external") {
       const id = url.searchParams.get("externalId") ?? "";
       const contact = contacts.get(id);

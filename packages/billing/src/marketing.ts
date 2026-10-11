@@ -187,7 +187,20 @@ type DueRow = {
 
 export type SyncSummary = Record<"synced" | "held" | "retry" | "failed" | "skipped", number>;
 
+export type MarketingSegment = "paid" | "free";
+
+/** Paid means a valid paid Desktop lifetime license or paid Pro coverage.
+ * Trialing and ended Pro, refunded/revoked Desktop, and accounts without either
+ * are free. `past_due` and canceled-but-active Pro remain paid while coverage
+ * is active. */
+export function marketingSegment(
+  row: Pick<DueRow, "desktop_buyer" | "pro_status">,
+): MarketingSegment {
+  return row.desktop_buyer || row.pro_status === "active" ? "paid" : "free";
+}
+
 async function contactFor(ctx: BillingContext, row: DueRow, secret: string): Promise<Contact> {
+  const segment = marketingSegment(row);
   return {
     externalId: row.user_id,
     email: row.email,
@@ -199,6 +212,7 @@ async function contactFor(ctx: BillingContext, row: DueRow, secret: string): Pro
       ),
       desktopBuyer: row.desktop_buyer,
       proStatus: row.pro_status,
+      paidSegment: segment,
     },
   };
 }
@@ -219,7 +233,10 @@ async function push(
   }
   const contact = await contactFor(ctx, row, secret);
   const updated = await contacts.update({ contact, reactivate: row.reactivate });
-  if (updated.kind !== "not_found") return updated;
+  if (updated.kind !== "not_found") {
+    if (updated.kind !== "ok") return updated;
+    return contacts.setSegment({ externalId: row.user_id, segment: marketingSegment(row) });
+  }
   const created = await contacts.create({
     contact,
     tags: ctx.marketing.tags,
@@ -230,8 +247,12 @@ async function push(
   });
   // A create may merge into an existing contact with this address, which keeps
   // that contact's unsubscribed status. A resubscribe has to be applied again.
-  if (created.kind !== "ok" || !row.reactivate) return created;
-  return contacts.update({ contact, reactivate: true });
+  if (created.kind !== "ok") return created;
+  if (row.reactivate) {
+    const reactivated = await contacts.update({ contact, reactivate: true });
+    if (reactivated.kind !== "ok") return reactivated;
+  }
+  return contacts.setSegment({ externalId: row.user_id, segment: marketingSegment(row) });
 }
 
 /**
@@ -314,7 +335,7 @@ async function claimNext(ctx: BillingContext): Promise<(DueRow & { lease: Date }
           select 1 from orders o where o.id = l.order_id and o.amount_cents > 0))) as desktop_buyer,
       (select case
           when count(*) = 0 then 'none'
-          when bool_or(s.status in ('active', 'past_due')) then 'active'
+          when bool_or(s.status in ('active', 'past_due') or (s.status = 'canceled' and s.current_period_end > ${now})) then 'active'
           when bool_or(s.status = 'trialing') then 'trialing'
           else 'ended' end
         from subscriptions s where s.user_id = m.user_id and s.kind = 'pro') as pro_status

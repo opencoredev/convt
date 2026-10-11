@@ -192,5 +192,5 @@ $$;
 create trigger licenses_resync_marketing after insert or update of user_id, revoked_at on licenses
   for each row execute function owner_resync_marketing();
 --> statement-breakpoint
-create trigger subscriptions_resync_marketing after insert or update of user_id, status on subscriptions
+create trigger subscriptions_resync_marketing after insert or update of user_id, status, current_period_end, cancel_at_period_end, trial_ends_at on subscriptions
   for each row execute function owner_resync_marketing();

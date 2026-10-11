@@ -8,6 +8,7 @@ export type ContactAttributes = {
   preferencesUrl: string;
   desktopBuyer: boolean;
   proStatus: "active" | "trialing" | "ended" | "none";
+  paidSegment: "paid" | "free";
 };
 
 export type Contact = {
@@ -43,6 +44,8 @@ export type ContactsClient = {
   create(input: CreateContact): Promise<ContactResult>;
   /** Email, name and attributes. `reactivate` also sets the status back to active. */
   update(input: { contact: Contact; reactivate: boolean }): Promise<ContactResult>;
+  /** Adds the current segment and removes the previous one without tag automations. */
+  setSegment(input: { externalId: string; segment: "paid" | "free" }): Promise<ContactResult>;
   /** `email`, when verified, keeps an unsubscribed contact's address current. */
   unsubscribe(input: { externalId: string; email: string | null }): Promise<ContactResult>;
   remove(externalId: string): Promise<ContactResult>;
@@ -129,6 +132,8 @@ export function sequenzyContacts(options: SequenzyContactsOptions): ContactsClie
     return { kind: "refused", status: res.status, code };
   }
 
+  const segmentTag = (segment: "paid" | "free") => `convt-${segment}`;
+
   return {
     create: ({ contact, tags, lists, createdAt }) =>
       call("POST", `${base}/subscribers`, {
@@ -158,6 +163,21 @@ export function sequenzyContacts(options: SequenzyContactsOptions): ContactsClie
         customAttributesStrategy: "merge",
         ...(reactivate ? { status: "active" } : {}),
       }),
+    setSegment: async ({ externalId, segment }) => {
+      const add = await call("POST", `${base}/subscribers/bulk/tags/add`, {
+        externalIds: [externalId],
+        tags: [segmentTag(segment)],
+        // This endpoint defaults to false; send it explicitly so a provider
+        // default change cannot enroll a tag automation.
+        triggerAutomations: false,
+      });
+      if (add.kind !== "ok") return add;
+      const remove = await call("POST", `${base}/subscribers/bulk/tags/remove`, {
+        externalIds: [externalId],
+        tags: [segmentTag(segment === "paid" ? "free" : "paid")],
+      });
+      return remove.kind === "not_found" ? { kind: "ok" } : remove;
+    },
     unsubscribe: ({ externalId, email }) =>
       call("PATCH", external(externalId), {
         status: "unsubscribed",

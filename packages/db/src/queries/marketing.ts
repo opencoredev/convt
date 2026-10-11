@@ -10,7 +10,9 @@ import type { Db } from "../client";
 
 export type MarketingBackfillPlan = {
   /** Accounts with no row, oldest first. Ids only: the plan is printed. */
-  missing: Array<{ userId: string; createdAt: Date; verified: boolean }>;
+  missing: Array<{ userId: string; createdAt: Date; verified: boolean; segment: "paid" | "free" }>;
+  /** Count of missing accounts by segment for the dry-run report. */
+  segments: { paid: number; free: number; total: number };
   /** Existing rows by status and sync state, e.g. `subscribed/synced`. */
   existing: Record<string, number>;
 };
@@ -20,8 +22,16 @@ export async function planMarketingBackfill(db: Db): Promise<MarketingBackfillPl
     id: string;
     created_at: Date | string;
     email_verified: boolean;
+    paid: boolean;
   }>(sql`
-    select u.id, u.created_at, u.email_verified from users u
+    select u.id, u.created_at, u.email_verified, (
+      exists (select 1 from licenses l where l.user_id = u.id and l.plan = 'desktop'
+        and not l.trial and l.revoked_at is null
+        and (l.order_id is null or exists (
+          select 1 from orders o where o.id = l.order_id and o.amount_cents > 0)))
+      or exists (select 1 from subscriptions s where s.user_id = u.id and s.kind = 'pro'
+        and (s.status in ('active', 'past_due') or (s.status = 'canceled' and s.current_period_end > now())))
+    ) as paid from users u
     where not exists (select 1 from marketing_subscriptions m where m.user_id = u.id)
     order by u.created_at, u.id`);
   const existing = await db.execute<{ key: string; n: string | number }>(sql`
@@ -32,7 +42,13 @@ export async function planMarketingBackfill(db: Db): Promise<MarketingBackfillPl
       userId: r.id,
       createdAt: new Date(r.created_at),
       verified: r.email_verified,
+      segment: r.paid ? "paid" : "free",
     })),
+    segments: {
+      paid: missing.rows.filter((r) => r.paid).length,
+      free: missing.rows.filter((r) => !r.paid).length,
+      total: missing.rows.length,
+    },
     existing: Object.fromEntries(existing.rows.map((r) => [r.key, Number(r.n)])),
   };
 }

@@ -69,8 +69,8 @@ describe("marketing email", () => {
     expect(await row(u.id)).toMatchObject({ sync_state: "synced", sync_attempts: 0 });
     const c = contact(u.id)!;
     expect(c.status).toBe("active");
-    expect(c.tags).toEqual(["convt-account"]);
-    // A signup gets no createdAt, so Sequenzy may enroll it in the welcome sequence.
+    expect(c.tags).toEqual(["convt-account", "convt-free"]);
+    // Signup creates a free contact and never enrolls provider automations.
     expect(c.createdAt).toBeNull();
     const link = new URL(String(c.attributes.preferencesUrl));
     expect(link.pathname).toBe("/email/preferences");
@@ -80,7 +80,11 @@ describe("marketing email", () => {
         email: u.email,
       }),
     ).toBe(true);
-    expect(c.attributes).toMatchObject({ desktopBuyer: false, proStatus: "none" });
+    expect(c.attributes).toMatchObject({
+      desktopBuyer: false,
+      proStatus: "none",
+      paidSegment: "free",
+    });
   });
 
   test("an unverified address is held until it is verified", async () => {
@@ -132,6 +136,36 @@ describe("marketing email", () => {
     expect((await row(u.id)).sync_state).toBe("pending");
     await h.service.syncMarketing();
     expect(contact(u.id)?.attributes.desktopBuyer).toBe(true);
+    expect(contact(u.id)?.attributes.paidSegment).toBe("paid");
+    expect(contact(u.id)?.tags).toContain("convt-paid");
+    expect(contact(u.id)?.tags).not.toContain("convt-free");
+
+    // A refund revokes the lifetime license and moves the contact back to free.
+    await h.q(
+      sql`update licenses set revoked_at = now(), revoke_reason = 'refunded' where user_id = ${u.id}`,
+    );
+    await h.service.syncMarketing();
+    expect(contact(u.id)?.attributes.paidSegment).toBe("free");
+    expect(contact(u.id)?.tags).toContain("convt-free");
+    expect(contact(u.id)?.tags).not.toContain("convt-paid");
+  });
+
+  test("a canceled Pro subscription remains paid until its period ends", async () => {
+    const u = await h.user(testMailbox("mkt-cancel"));
+    await h.service.syncMarketing();
+    await h.buy("pro_month", u);
+    await h.deliverAll();
+    await h.service.syncMarketing();
+    await h.q(
+      sql`update subscriptions set status = 'canceled', current_period_end = now() + interval '1 day' where user_id = ${u.id}`,
+    );
+    await h.service.syncMarketing();
+    expect(contact(u.id)?.attributes.paidSegment).toBe("paid");
+    await h.q(
+      sql`update subscriptions set current_period_end = now() - interval '1 second' where user_id = ${u.id}`,
+    );
+    await h.service.syncMarketing();
+    expect(contact(u.id)?.attributes.paidSegment).toBe("free");
   });
 
   test("unsubscribing and subscribing again in Settings; only the latter reactivates", async () => {

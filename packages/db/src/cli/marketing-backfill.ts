@@ -52,14 +52,13 @@ const { client, db } = await connect(url);
 try {
   const plan = await planMarketingBackfill(db);
   const unverified = plan.missing.filter((m) => !m.verified).length;
-  for (const m of plan.missing)
-    console.log(
-      `${apply ? "enroll" : "dry-run"} ${m.userId} ${m.createdAt.toISOString()}${m.verified ? "" : " (held until verified)"}`,
-    );
+  console.log(
+    `${apply ? "enroll" : "dry-run"}: paid=${plan.segments.paid} free=${plan.segments.free} total=${plan.segments.total}`,
+  );
   console.log(`existing rows: ${JSON.stringify(plan.existing)}`);
   if (!apply) {
     console.log(
-      `marketing:backfill: ${plan.missing.length} account(s) to enroll, ${unverified} of them unverified (dry run; pass --apply to write)`,
+      `marketing:backfill: ${plan.segments.total} account(s) to enroll (${plan.segments.paid} paid, ${plan.segments.free} free), ${unverified} of them unverified (dry run; pass --apply to write)`,
     );
   } else {
     const result = await applyMarketingBackfill(db, { resync });
