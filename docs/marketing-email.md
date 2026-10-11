@@ -23,7 +23,7 @@ Triggers mark a row `pending` again when the account's email or name changes, wh
 convt-billing's per-minute cron (`syncMarketing` in `packages/billing/src/marketing.ts`) pushes pending rows to Sequenzy, keyed by the convt user id as Sequenzy's `externalId`. It claims one row at a time under a two-minute lease just before pushing it, so two runs never push the same row, and a change made during a push is pushed again afterwards. Accounts with an open deletion are skipped:
 
 - Subscribed, unverified email: held until the address is verified.
-- Subscribed: `PATCH /subscribers/external` with the email, first name and custom attributes, or `POST /subscribers` if no contact exists. A backfilled account is created with its signup date, which stops Sequenzy enrolling it in sequences, so existing users get no welcome email. A new signup is created without one.
+- Subscribed: `PATCH /subscribers/external` with the email, first name and custom attributes, or `POST /subscribers` if no contact exists. A backfilled account is created with its signup date, and both backfills and new signups set `enrollInSequences: false` and `optInMode: "confirmed"`, so adding a contact does not enroll it or send a confirmation/welcome email.
 - Unsubscribed: `PATCH ... {"status": "unsubscribed"}`, with the current address when it is verified.
 - Sequenzy's status goes back to `active` only after the person subscribes again themselves.
 - 429, 5xx and network errors back off (1, 5, 15, 60, 180, then 720 minutes) and raise a `marketing_sync` alert after six failures. Other 4xx answers mark the row `failed` and raise an alert. Alerts carry the user id and status code, never an address.
@@ -46,7 +46,7 @@ Deleting an account deletes the Sequenzy contact before the user row, after wait
 
 ## Templates
 
-`packages/mail/src/marketing.ts` holds the campaign templates: welcome, the lifetime Desktop announcement, Pro trial onboarding, and a product update frame. Every one ends with the same footer, which uses Sequenzy's `{{unsubscribeUrl}}` and the `{{preferencesUrl}}` attribute.
+`packages/mail/src/marketing.ts` holds the campaign templates: `welcome-free`, `welcome-paid`, the `lifetime` Desktop announcement, Pro trial onboarding, and a product update frame. Every one ends with the same footer, which uses Sequenzy's `{{unsubscribeUrl}}` and the `{{preferencesUrl}}` attribute.
 
 Export them as HTML and text to paste into Sequenzy:
 
@@ -73,7 +73,7 @@ Do these in order. Each step is reversible until the backfill runs and mail goes
    | `SEQUENZY_MARKETING_LIST_IDS` | var, optional | comma-separated list ids; empty uses the workspace default lists                                                    |
    | `SEQUENZY_MARKETING_TAGS`     | var, optional | comma-separated tags for new contacts; default `convt-account`                                                      |
 
-5. Apply migration `0006_marketing` (`bun run db:migrate` against production as usual). From then on every new account is subscribed and pushed.
+5. Apply the pending marketing migrations (`0006_marketing` for the base tables and `0007_marketing_resync` for subscription lifecycle resync; run `bun run db:migrate` against production as usual). From then on every new account is subscribed and pushed.
 6. Dry-run the backfill and read the plan. It prints user ids, never addresses:
 
    ```sh

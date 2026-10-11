@@ -60,11 +60,38 @@ describe("marketing templates", () => {
   });
 
   test("snapshots", () => {
-    expect(marketingTemplateVersion).toBe(3);
+    expect(marketingTemplateVersion).toBe(4);
     for (const [name, email] of Object.entries(all)) {
       expect({ name, subject: email.subject, text: email.text }).toMatchSnapshot();
     }
     expect(all["welcome-free"].html).toMatchSnapshot();
+  });
+
+  test("lifecycle plain text keeps the complete approved body", () => {
+    expect(all["welcome-free"].text).toContain("hey {{firstName|there}},");
+    expect(all["welcome-free"].text).toContain("thanks for giving it a try.");
+    expect(all["welcome-free"].text).toContain("https://convt.app/download");
+    expect(all["welcome-free"].text).toContain("just reply here.");
+    expect(all["welcome-paid"].text).toContain("thank you for buying it.");
+    expect(all["welcome-paid"].text).toContain("https://convt.app/download");
+    expect(all["welcome-paid"].text).toContain("just reply here.");
+    expect(all.lifetime.text).toContain("desktop licenses are now lifetime");
+    expect(all.lifetime.text).toContain("same key, no renewal, nothing to do.");
+    expect(all.lifetime.text).toContain("just reply here.");
+    for (const email of [all["welcome-free"], all["welcome-paid"], all.lifetime]) {
+      expect(email.text).toContain(unsubscribeTag);
+      expect(email.text).toContain(preferencesTag);
+      expect(email.text).toContain("{{postalAddress}}");
+    }
+  });
+
+  test("lifecycle layout is fluid and responsive", () => {
+    for (const name of ["welcome-free", "welcome-paid", "lifetime"] as const) {
+      expect(all[name].html).toContain('class="wrap"');
+      expect(all[name].html).toContain("max-width:620px");
+      expect(all[name].html).toContain("width:100%!important");
+      expect(all[name].html).toContain("padding-left:24px!important");
+    }
   });
 
   test("the lifetime announcement promises nothing but lifetime updates", () => {

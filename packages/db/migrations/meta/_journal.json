@@ -50,6 +50,13 @@
       "when": 1791577709314,
       "tag": "0006_marketing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791757867963,
+      "tag": "0007_marketing_resync",
+      "breakpoints": true
     }
   ]
 }
