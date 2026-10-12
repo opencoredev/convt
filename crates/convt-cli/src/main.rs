@@ -88,9 +88,14 @@ enum Cmd {
     /// List the formats a file can be converted to
     Targets {
         file: PathBuf,
-        /// Only the few popular targets right-click menus offer
+        /// Only the few targets right-click menus offer (see `convt menu`)
         #[arg(long)]
         menu: bool,
+    },
+    /// Show or change which formats right-click menus offer, by kind of file
+    Menu {
+        #[command(subcommand)]
+        action: Option<MenuCmd>,
     },
     /// Show the engines available on this machine
     Engines,
@@ -108,6 +113,80 @@ enum Cmd {
     },
     /// Print a SKILL.md for AI coding agents
     Skill,
+}
+
+#[derive(Subcommand)]
+enum MenuCmd {
+    /// List each kind of file and the formats its menu offers
+    Show,
+    /// Offer these formats, in this order, for one kind of file
+    Set {
+        /// image, vector, video, audio, pdf, document, spreadsheet or presentation
+        kind: String,
+        /// Format ids, e.g. flac mp3
+        #[arg(required = true)]
+        formats: Vec<String>,
+    },
+    /// Go back to the default formats for one kind of file, or every kind
+    Reset {
+        /// A kind of file; leave out to reset them all
+        kind: Option<String>,
+    },
+}
+
+fn menu_kind(kind: &str) -> anyhow::Result<Category> {
+    convt_core::category_by_key(kind).with_context(|| {
+        let kinds: Vec<_> = convt_core::MENU_KINDS
+            .iter()
+            .map(|c| convt_core::category_key(*c))
+            .collect();
+        format!("unknown kind of file: {kind} (one of {})", kinds.join(", "))
+    })
+}
+
+fn menu(action: MenuCmd, registry: &convt_core::Registry) -> anyhow::Result<()> {
+    use convt_core::MenuChoices;
+    let path = convt_engines::paths::menu_file().context("no config directory on this system")?;
+    let mut choices = MenuChoices::load(&path)?;
+    match action {
+        MenuCmd::Show => {
+            for kind in convt_core::MENU_KINDS {
+                let ids: Vec<_> = choices.effective(kind).iter().map(|f| f.id).collect();
+                let note = if choices.get(kind).is_some() {
+                    ""
+                } else {
+                    " (default)"
+                };
+                println!(
+                    "{:<13} {}{note}",
+                    convt_core::category_key(kind),
+                    ids.join(" ")
+                );
+            }
+            return Ok(());
+        }
+        MenuCmd::Set { kind, formats } => {
+            let kind = menu_kind(&kind)?;
+            let offered = registry.category_targets(kind);
+            let mut picked = Vec::new();
+            for id in &formats {
+                let f = format_by_id(id).with_context(|| format!("unknown format: {id}"))?;
+                if !offered.contains(&f) {
+                    bail!(
+                        "no {} file converts to {} on this machine",
+                        convt_core::category_key(kind),
+                        f.id
+                    );
+                }
+                picked.push(f);
+            }
+            choices.set(kind, picked);
+        }
+        MenuCmd::Reset { kind: Some(kind) } => choices.reset(menu_kind(&kind)?),
+        MenuCmd::Reset { kind: None } => choices = MenuChoices::default(),
+    }
+    choices.save(&path)?;
+    Ok(())
 }
 
 #[derive(Subcommand)]
@@ -294,7 +373,7 @@ fn main() -> anyhow::Result<()> {
             let from = format_by_extension(&file)
                 .with_context(|| format!("unknown format: {}", file.display()))?;
             let targets = if menu {
-                registry.menu_targets(from)
+                registry.menu_targets_with(from, &convt_engines::paths::menu_choices())
             } else {
                 registry.targets(from)
             };
@@ -324,6 +403,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Some(Cmd::Menu { action }) => menu(action.unwrap_or(MenuCmd::Show), &registry)?,
         Some(Cmd::Pack { action }) => pack(action)?,
         Some(Cmd::License { action }) => license(action.unwrap_or(LicenseCmd::Status))?,
         Some(Cmd::Skill) => unreachable!("printed before the registry loads"),

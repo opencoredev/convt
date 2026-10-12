@@ -339,6 +339,7 @@ pub enum IconName {
     Info,
     Loader,
     Mail,
+    Menu,
     Minus,
     Plus,
     RefreshCw,
@@ -352,7 +353,7 @@ pub enum IconName {
 
 impl IconName {
     #[cfg(test)]
-    pub const ALL: [IconName; 36] = {
+    pub const ALL: [IconName; 37] = {
         use IconName::*;
         [
             ArrowDown,
@@ -382,6 +383,7 @@ impl IconName {
             Info,
             Loader,
             Mail,
+            Menu,
             Minus,
             Plus,
             RefreshCw,
@@ -425,6 +427,7 @@ impl IconName {
             Info => "info",
             Loader => "loading",
             Mail => "mail",
+            Menu => "menu",
             Minus => "minus",
             Plus => "add",
             RefreshCw => "refresh",

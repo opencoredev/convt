@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use convt_core::{
-    Format, Job, Options, Output, Preset, Registry, expand_inputs, format_by_extension,
-    format_by_id,
+    Format, Job, MenuChoices, Options, Output, Preset, Registry, expand_inputs,
+    format_by_extension, format_by_id,
 };
 use convt_license::License;
 use convt_license::account::{self, Api};
@@ -38,6 +38,8 @@ pub struct Paths {
     /// `None` keeps history in memory only.
     pub history: Option<PathBuf>,
     pub presets: Option<PathBuf>,
+    /// The right-click menu lists. `None` keeps them in memory only.
+    pub menu: Option<PathBuf>,
     /// The trial file, the key store and whether this build checks licenses.
     pub license: client::Config,
     /// The site desktop sign-in and renewal talk to, and how. Tests script
@@ -56,6 +58,7 @@ impl Paths {
             settings: Settings::path(),
             history: History::path(),
             presets: paths::presets_dir(),
+            menu: paths::menu_file(),
             license: client::Config::from_env(paths::config_dir(), paths::data_dir()),
             account_url: account::account_url(),
             account_api: Arc::new(account::Http::new(&account::account_url())),
@@ -239,6 +242,14 @@ pub struct AppState {
     settings_path: Option<PathBuf>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
+    /// The formats right-click menus offer, by kind of file. The CLI reads
+    /// the same file, so Explorer and the Linux menus follow it too.
+    pub menu: MenuChoices,
+    menu_path: Option<PathBuf>,
+    /// Counts menu changes, so the Finder target list is published again.
+    pub menu_generation: u64,
+    /// Why the menu choices couldn't be read or saved, shown in the Menu tab.
+    pub menu_error: Option<String>,
     /// Problems loading or saving app files, shown in the Settings tab.
     pub errors: Vec<String>,
     pub(crate) licensing: Licensing,
@@ -322,6 +333,16 @@ impl AppState {
             }),
             None => Settings::default(),
         };
+        let mut menu_error = None;
+        let menu = match &paths.menu {
+            Some(path) => MenuChoices::load(path).unwrap_or_else(|e| {
+                menu_error = Some(format!(
+                    "Right-click menu choices were not loaded: {e}. Changing one replaces the file."
+                ));
+                MenuChoices::default()
+            }),
+            None => MenuChoices::default(),
+        };
         let history = paths
             .history
             .as_deref()
@@ -375,6 +396,10 @@ impl AppState {
             settings_path: paths.settings,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
+            menu,
+            menu_path: paths.menu,
+            menu_generation: 0,
+            menu_error,
             errors,
             license: licensing.state(),
             licensing,
@@ -1121,6 +1146,51 @@ impl AppState {
             self.errors.push(format!("Settings were not saved: {e}"));
         }
         cx.notify();
+    }
+
+    /// Changes the right-click menu lists and saves them.
+    /// Starts from the saved file, so a `convt menu` change made while the
+    /// app runs is kept.
+    pub fn update_menu(&mut self, change: impl FnOnce(&mut MenuChoices), cx: &mut Context<Self>) {
+        if let Some(path) = &self.menu_path
+            && let Ok(saved) = MenuChoices::load(path)
+        {
+            self.menu = saved;
+        }
+        change(&mut self.menu);
+        self.menu_generation += 1;
+        self.menu_error = match &self.menu_path {
+            Some(path) => self
+                .menu
+                .save(path)
+                .err()
+                .map(|e| format!("Right-click menu choices were not saved: {e}")),
+            None => None,
+        };
+        cx.notify();
+    }
+
+    /// Reads the menu choices again, so a `convt menu` change made while the
+    /// app runs shows in Settings and reaches the Finder menu.
+    pub fn reload_menu(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = &self.menu_path else {
+            return;
+        };
+        match MenuChoices::load(path) {
+            Ok(saved) if saved != self.menu => {
+                self.menu = saved;
+                self.menu_generation += 1;
+                self.menu_error = None;
+                cx.notify();
+            }
+            Ok(_) => {}
+            Err(e) => {
+                self.menu_error = Some(format!(
+                    "Right-click menu choices were not loaded: {e}. Changing one replaces the file."
+                ));
+                cx.notify();
+            }
+        }
     }
 
     /// [`Self::update_settings`] for a change that must reach the disk, such

@@ -1,6 +1,8 @@
-//! The Settings window: General, Presets and License.
+//! The Settings window: General, Menu, Presets and License.
 
-use convt_core::{Category, FORMATS, Format, Options, Preset, format_by_id};
+use convt_core::{
+    Category, FORMATS, Format, MENU_KINDS, Options, Preset, category_key, format_by_id,
+};
 use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
@@ -21,17 +23,19 @@ use crate::settings::{Settings, auto_concurrency};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
     General,
+    Menu,
     Presets,
     License,
 }
 
-const TABS: [(SettingsTab, &str, &str, IconName); 3] = [
+const TABS: [(SettingsTab, &str, &str, IconName); 4] = [
     (
         SettingsTab::General,
         "tab-general",
         "General",
         IconName::Settings,
     ),
+    (SettingsTab::Menu, "tab-menu", "Menu", IconName::Menu),
     (
         SettingsTab::Presets,
         "tab-presets",
@@ -64,6 +68,10 @@ pub struct SettingsView {
     open: Option<Open>,
     /// Formats some input can become, for the preset form.
     outputs: Vec<&'static Format>,
+    /// What each kind of file can become, for the Menu tab, and the
+    /// registry rebuild it was worked out for.
+    menu_options: Vec<(Category, Vec<&'static Format>)>,
+    menu_options_generation: u64,
     pub(super) preset_name: Entity<InputState>,
     pub(super) preset_quality: Entity<InputState>,
     pub(super) preset_max_size: Entity<InputState>,
@@ -85,6 +93,8 @@ pub struct SettingsView {
 impl SettingsView {
     pub fn new(app: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let registry = app.read(cx).registry.clone();
+        let menu_options_generation = app.read(cx).registry_generation;
+        let menu_options = kinds_and_targets(&registry);
         let outputs = FORMATS
             .iter()
             .filter(|f| {
@@ -97,12 +107,22 @@ impl SettingsView {
             cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
         };
         Self {
-            _observe: cx.observe(&app, |_, _, cx| cx.notify()),
+            _observe: cx.observe(&app, |this, app, cx| {
+                // Document support was installed or removed.
+                let state = app.read(cx);
+                if state.registry_generation != this.menu_options_generation {
+                    this.menu_options_generation = state.registry_generation;
+                    this.menu_options = kinds_and_targets(&state.registry);
+                }
+                cx.notify()
+            }),
             _appearance: theme::observe_appearance(window, cx),
             app,
             tab: SettingsTab::General,
             open: None,
             outputs,
+            menu_options,
+            menu_options_generation,
             preset_name: input("Name, e.g. web", window, cx),
             preset_quality: input("Quality 1-100", window, cx),
             preset_max_size: input("Longest edge in px", window, cx),
@@ -118,6 +138,9 @@ impl SettingsView {
     }
 
     pub fn set_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
+        if tab == SettingsTab::Menu {
+            self.app.update(cx, |s, cx| s.reload_menu(cx));
+        }
         self.tab = tab;
         self.open = None;
         cx.notify();
@@ -518,6 +541,205 @@ impl SettingsView {
                 p,
             ))
             .child(section("What reaches the network", network(p), p))
+    }
+
+    /// One card per kind of file: every format it can become, with the
+    /// ones its right-click menu offers picked and numbered in menu order.
+    fn menu(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+        let state = self.app.read(cx);
+        let choices = state.menu.clone();
+        let error = state.menu_error.clone();
+        let cards =
+            self.menu_options.iter().map(|(kind, options)| {
+                let kind = *kind;
+                let key = category_key(kind);
+                // Picks this machine can't convert to (document support was
+                // removed) get no chip and no number, but stay saved for when
+                // they can.
+                let (picked, hidden): (Vec<_>, Vec<_>) = choices
+                    .effective(kind)
+                    .into_iter()
+                    .partition(|f| options.contains(f));
+                let custom = choices.get(kind).is_some();
+                let chip = |to: &'static Format| {
+                    let place = picked.iter().position(|f| *f == to);
+                    let on = place.is_some();
+                    let app = self.app.clone();
+                    let picked = picked.clone();
+                    let hidden = hidden.clone();
+                    theme::clickable(SharedString::from(format!("menu-{key}-{}", to.id)), to.name)
+                        .aria_selected(on)
+                        .flex()
+                        .items_center()
+                        .gap(px(5.))
+                        .h(px(26.))
+                        .pl(px(if on { 4. } else { 11. }))
+                        .pr(px(11.))
+                        .rounded_full()
+                        .map(|d| {
+                            if on {
+                                d.bg(p.green_tint)
+                                    .shadow(vec![theme::inset_ring(p.green, 1.5)])
+                            } else {
+                                d.bg(p.surface)
+                                    .shadow(vec![theme::inset_ring(p.border, 1.)])
+                                    .hover(|s| s.bg(p.recessed))
+                            }
+                        })
+                        .on_click(move |_, _, cx| {
+                            let mut next = picked.clone();
+                            match next.iter().position(|f| *f == to) {
+                                // The menu keeps at least one format; Reset
+                                // brings the defaults back.
+                                Some(_) if next.len() == 1 => return,
+                                Some(i) => {
+                                    next.remove(i);
+                                }
+                                None => next.push(to),
+                            }
+                            next.extend(hidden.iter().copied());
+                            app.update(cx, |s, cx| s.update_menu(|m| m.set(kind, next), cx));
+                        })
+                        .children(place.map(|i| {
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size(px(18.))
+                                .rounded_full()
+                                .bg(p.green)
+                                .child(
+                                    mono(10., 12., p.window)
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child((i + 1).to_string()),
+                                )
+                        }))
+                        .child(
+                            mono(11., 14., if on { p.green_text } else { p.text })
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(to.name),
+                        )
+                };
+                let app = self.app.clone();
+                let summary = format!("Offers {}", list_names(&picked));
+                // GIFs have their own default (MP4, WebP, PNG) until Images is
+                // changed; then they follow it.
+                let gif_note = (kind == Category::Image && !custom)
+                    .then_some("GIFs offer MP4, WebP and PNG until you change this.");
+                // Group the chips by what they are, as the Finder menu does, when
+                // a kind can become more than one sort of file.
+                let mut groups: Vec<(Category, Vec<&'static Format>)> = Vec::new();
+                for f in options.iter().copied() {
+                    match groups.iter_mut().find(|(c, _)| *c == f.category) {
+                        Some((_, list)) => list.push(f),
+                        None => groups.push((f.category, vec![f])),
+                    }
+                }
+                let grouped = groups.len() > 1;
+                theme::card(p)
+                    .id(SharedString::from(format!("menu-kind-{key}")))
+                    .gap(px(space::MD))
+                    .p(px(space::LG))
+                    .child(
+                        div()
+                            .flex()
+                            .items_start()
+                            .justify_between()
+                            .gap(px(space::MD))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.))
+                                    .child(
+                                        styled(size::BODY, p.text)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child(kind_label(kind)),
+                                    )
+                                    .child(
+                                        div()
+                                            .id(SharedString::from(format!("menu-summary-{key}")))
+                                            .test_support()
+                                            .aria_label(SharedString::from(summary.clone()))
+                                            .child(styled(size::SMALL, p.secondary).child(summary)),
+                                    )
+                                    .children(
+                                        gif_note.map(|note| {
+                                            styled(size::SMALL, p.tertiary).child(note)
+                                        }),
+                                    ),
+                            )
+                            .child(if custom {
+                                text_button(
+                                    SharedString::from(format!("menu-reset-{key}")),
+                                    "Reset",
+                                    p.green_text,
+                                    12.,
+                                )
+                                .on_click(move |_, _, cx| {
+                                    app.update(cx, |s, cx| s.update_menu(|m| m.reset(kind), cx))
+                                })
+                                .into_any_element()
+                            } else {
+                                styled(size::SMALL, p.tertiary)
+                                    .child("Default")
+                                    .into_any_element()
+                            }),
+                    )
+                    .child(div().flex().flex_col().gap(px(space::SM)).children(
+                        groups.into_iter().map(|(category, formats)| {
+                            div()
+                                .flex()
+                                .items_start()
+                                .gap(px(space::MD))
+                                .when(grouped, |row| {
+                                    row.child(
+                                        styled(size::SMALL, p.secondary)
+                                            .w(px(84.))
+                                            .flex_shrink_0()
+                                            .pt(px(4.))
+                                            .child(match (kind, category) {
+                                                (Category::Video, Category::Audio) => "Audio only",
+                                                _ => kind_label(category),
+                                            }),
+                                    )
+                                })
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_1()
+                                        .flex_wrap()
+                                        .gap(px(6.))
+                                        .children(formats.into_iter().map(chip)),
+                                )
+                        }),
+                    ))
+            });
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(space::MD))
+            .px(px(GUTTER))
+            .pt(px(space::XL))
+            .pb(px(space::XXL))
+            .children(error.map(|e| {
+                theme::callout(
+                    IconName::TriangleAlert,
+                    Tone::Error,
+                    div()
+                        .id("menu-error")
+                        .test_support()
+                        .aria_label(SharedString::from(e.clone()))
+                        .child(styled(size::SMALL, p.error).child(e)),
+                    p,
+                )
+            }))
+            .child(
+                styled(size::SMALL, p.secondary)
+                    .px(px(2.))
+                    .child(MENU_INTRO),
+            )
+            .children(cards)
     }
 
     fn presets(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -1090,6 +1312,47 @@ fn network(p: &Palette) -> Div {
     )
 }
 
+/// What the Menu tab is for, above its cards.
+const MENU_INTRO: &str = "Click formats in the order you want \"Convert with convt\" to list them \
+     when you right-click a file. The number is each one's place in the menu. Every other \
+     format stays under More options…";
+
+/// Every kind of file with something to convert to, and what it can become.
+fn kinds_and_targets(registry: &convt_core::Registry) -> Vec<(Category, Vec<&'static Format>)> {
+    MENU_KINDS
+        .into_iter()
+        .map(|kind| (kind, registry.category_targets(kind)))
+        .filter(|(_, options)| !options.is_empty())
+        .collect()
+}
+
+/// A kind of file as the Menu tab names it.
+fn kind_label(kind: Category) -> &'static str {
+    match kind {
+        Category::Image => "Images",
+        Category::Vector => "SVG",
+        Category::Video => "Video",
+        Category::Audio => "Audio",
+        Category::Pdf => "PDFs",
+        Category::Document => "Documents",
+        Category::Spreadsheet => "Spreadsheets",
+        Category::Presentation => "Presentations",
+    }
+}
+
+/// "MP3, M4A and WAV".
+fn list_names(formats: &[&Format]) -> String {
+    match formats {
+        [] => String::new(),
+        [one] => one.name.to_string(),
+        [rest @ .., last] => format!(
+            "{} and {}",
+            rest.iter().map(|f| f.name).collect::<Vec<_>>().join(", "),
+            last.name
+        ),
+    }
+}
+
 /// A labelled section of a tab: the small label, then its card.
 fn section(label: impl Into<SharedString>, content: impl IntoElement, p: &Palette) -> Div {
     div()
@@ -1166,6 +1429,7 @@ impl Render for SettingsView {
             )));
         let body = match self.tab {
             SettingsTab::General => self.general(&p, cx),
+            SettingsTab::Menu => self.menu(&p, cx),
             SettingsTab::Presets => self.presets(&p, cx),
             SettingsTab::License => self.license(&p, cx),
         };

@@ -89,6 +89,7 @@ const ICONS: &[(&str, &[u8])] = hugeicons![
     "loading",
     "magic-wand",
     "mail",
+    "menu",
     "minus",
     "refresh",
     "restore",
@@ -263,6 +264,9 @@ fn open_window<V: Render>(
 ///   to try again once convt restarts.
 pub fn route(request: Request, cx: &mut App) {
     let app = model::shared(cx);
+    // Every right-click lands here, so the next menu follows a `convt menu`
+    // change made since.
+    app.update(cx, |s, cx| s.reload_menu(cx));
     if !request.files.is_empty() && request.auth.is_none() && app.read(cx).installing() {
         cx.show_system_notification(SystemNotification {
             tag: "convt-update".into(),

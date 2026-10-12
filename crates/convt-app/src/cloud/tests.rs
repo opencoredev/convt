@@ -732,6 +732,7 @@ mod app {
             settings: None,
             history: Some(dir.path().join("history.db")),
             presets: None,
+            menu: None,
             license: client::Config {
                 enforce: true,
                 public_key: Some(SigningKey::from_bytes(&[7; 32]).verifying_key()),
@@ -1018,6 +1019,7 @@ mod live {
             settings: None,
             history: Some(dir.path().join("history.db")),
             presets: None,
+            menu: None,
             license: client::Config {
                 enforce: true,
                 public_key: convt_license::public_key(),

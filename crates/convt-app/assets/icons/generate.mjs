@@ -45,6 +45,7 @@ const ICONS = {
   loading: "Loading03Icon",
   mail: "Mail01Icon",
   "magic-wand": "MagicWand01Icon",
+  menu: "Menu01Icon",
   minus: "MinusSignIcon",
   refresh: "RefreshIcon",
   restore: "Copy02Icon",

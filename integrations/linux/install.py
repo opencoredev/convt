@@ -5,7 +5,8 @@ The menus open the convt app (`convt-app open --to <format> <files>`), which
 shows progress, lets the user cancel and reports errors. Dolphin, Nemo and
 Thunar use static menu files, so this script generates them from
 `convt formats --json` and `convt targets`, then writes them to the user's
-config. Rerun it after updating convt. Nautilus uses the dynamic extension in
+config. Rerun it after updating convt or changing the menu (Settings → Menu in
+the app, or `convt menu`). Nautilus uses the dynamic extension in
 nautilus/ instead.
 
 It also installs convt-app.desktop, which handles convt:// links and lists

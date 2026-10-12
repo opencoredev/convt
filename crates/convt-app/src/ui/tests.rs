@@ -445,6 +445,7 @@ impl Fixture {
             settings: Some(dir.path().join("settings.toml")),
             history: Some(dir.path().join("history.db")),
             presets: Some(dir.path().join("presets")),
+            menu: Some(dir.path().join("menu.toml")),
             license: license(dir.path()),
             account_url: ACCOUNT_URL.into(),
             account_api: api.clone(),
@@ -1208,6 +1209,108 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     click(cx, window, &format!("retry-{}", record.id));
     assert_eq!(f.jobs(cx), before + 1);
     wait_until(cx, "the retry", |cx| f.app.read(cx).recent.len() == 2);
+}
+
+#[gpui_kit::test]
+fn the_menu_tab_picks_what_right_click_menus_offer(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (window, _) = f.settings(SettingsTab::Menu, cx);
+    let file = f.dir.path().join("menu.toml");
+    let menu_for = |cx: &mut TestAppContext, input: &str| {
+        cx.read(|cx| {
+            let state = f.app.read(cx);
+            state
+                .registry
+                .menu_targets_with(format_by_id(input).unwrap(), &state.menu)
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        })
+    };
+
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers JPEG, PNG and WebP")
+    );
+    assert_eq!(selected(cx, window, "menu-image-png"), Some(true));
+    assert_eq!(selected(cx, window, "menu-image-tiff"), Some(false));
+    assert!(!shown(cx, window, "menu-reset-image"));
+    assert!(!file.exists(), "nothing is saved until something changes");
+
+    // Picking appends in click order; unpicking removes.
+    click(cx, window, "menu-image-tiff");
+    click(cx, window, "menu-image-jpeg");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers PNG, WebP and TIFF")
+    );
+    assert_eq!(selected(cx, window, "menu-image-tiff"), Some(true));
+    let saved = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        saved.contains(r#"image = ["png", "webp", "tiff"]"#),
+        "{saved}"
+    );
+    // A PNG skips its own format; a JPEG gets the whole list.
+    assert_eq!(menu_for(cx, "png"), ["webp", "tiff"]);
+    assert_eq!(menu_for(cx, "jpeg"), ["png", "webp", "tiff"]);
+    // Other kinds keep their defaults.
+    let svg_default = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .registry
+            .menu_targets(format_by_id("svg").unwrap())
+    });
+    assert_eq!(
+        menu_for(cx, "svg"),
+        svg_default.iter().map(|t| t.id).collect::<Vec<_>>()
+    );
+
+    // The CLI reads the same file.
+    let loaded = convt_core::MenuChoices::load(&file).unwrap();
+    cx.read(|cx| assert_eq!(loaded, f.app.read(cx).menu));
+
+    click(cx, window, "menu-reset-image");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers JPEG, PNG and WebP")
+    );
+    assert!(!shown(cx, window, "menu-reset-image"));
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("image"));
+    assert_eq!(menu_for(cx, "png"), ["jpeg", "webp"]);
+
+    // The last pick stays: an empty menu is not an option.
+    click(cx, window, "menu-image-jpeg");
+    click(cx, window, "menu-image-png");
+    click(cx, window, "menu-image-webp");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers WebP")
+    );
+    assert_eq!(selected(cx, window, "menu-image-webp"), Some(true));
+
+    // A `convt menu` change made while the app runs is kept by the next
+    // click, and shows when the tab opens again.
+    std::fs::write(&file, "image = [\"webp\"]\nvector = [\"jpeg\"]\n").unwrap();
+    click(cx, window, "menu-image-tiff");
+    let saved = std::fs::read_to_string(&file).unwrap();
+    assert!(saved.contains(r#"vector = ["jpeg"]"#), "{saved}");
+    std::fs::write(&file, "image = [\"tiff\"]\n").unwrap();
+    click(cx, window, "tab-general");
+    click(cx, window, "tab-menu");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers TIFF")
+    );
+
+    // A broken file is reported on this tab, not only under General.
+    std::fs::write(&file, "image = 3").unwrap();
+    click(cx, window, "tab-general");
+    click(cx, window, "tab-menu");
+    assert!(
+        label(cx, window, "menu-error").is_some_and(|e| e.contains("menu.toml")),
+        "{:?}",
+        label(cx, window, "menu-error")
+    );
 }
 
 #[gpui_kit::test]
@@ -2465,6 +2568,7 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
         assert!(shown(cx, quick, "convert"));
         for tab in [
             SettingsTab::General,
+            SettingsTab::Menu,
             SettingsTab::Presets,
             SettingsTab::License,
         ] {

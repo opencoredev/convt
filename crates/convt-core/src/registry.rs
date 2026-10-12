@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::menu::{MenuChoices, default_menu};
 use crate::publish::publish;
 use crate::{
     Cancel, Category, Ctx, Engine, Error, Format, Options, Progress, Result, Step,
@@ -150,28 +151,55 @@ impl Registry {
     /// targets [`targets`](Self::targets) reaches are listed; a format with
     /// none of its preferred targets gets the first few it can reach.
     pub fn menu_targets(&self, from: &'static Format) -> Vec<&'static Format> {
+        self.menu_targets_with(from, &MenuChoices::default())
+    }
+
+    /// [`menu_targets`](Self::menu_targets), with the lists someone picked
+    /// in `choices`. A picked list that `from` can reach none of (an audio
+    /// list of only MP3, for an MP3) falls back to the default, so the menu
+    /// never comes up empty.
+    pub fn menu_targets_with(
+        &self,
+        from: &'static Format,
+        choices: &MenuChoices,
+    ) -> Vec<&'static Format> {
         const MENU_SIZE: usize = 4;
-        let preferred: &[&str] = match (from.id, from.category) {
-            ("gif", _) => &["mp4", "webp", "png"],
-            (_, Category::Image) => &["jpeg", "png", "webp"],
-            (_, Category::Vector) => &["png", "jpeg", "pdf"],
-            (_, Category::Video) => &["mp4", "mov", "gif", "mp3"],
-            (_, Category::Audio) => &["mp3", "m4a", "wav"],
-            (_, Category::Pdf) => &["png", "jpeg", "docx"],
-            (_, Category::Document) => &["pdf", "docx", "txt"],
-            (_, Category::Spreadsheet) => &["pdf", "xlsx", "csv"],
-            (_, Category::Presentation) => &["pdf", "pptx"],
-        };
         let reachable = self.targets(from);
-        let picked: Vec<_> = preferred
-            .iter()
-            .filter_map(|id| reachable.iter().find(|f| f.id == *id).copied())
-            .collect();
+        let pick = |ids: &mut dyn Iterator<Item = &str>| -> Vec<&'static Format> {
+            ids.filter_map(|id| reachable.iter().find(|f| f.id == id).copied())
+                .collect()
+        };
+        if let Some(list) = choices.get(from.category) {
+            let picked = pick(&mut list.iter().map(|f| f.id));
+            if !picked.is_empty() {
+                return picked;
+            }
+        }
+        let preferred: &[&str] = match from.id {
+            "gif" => &["mp4", "webp", "png"],
+            _ => default_menu(from.category),
+        };
+        let picked = pick(&mut preferred.iter().copied());
         if picked.is_empty() {
             reachable.into_iter().take(MENU_SIZE).collect()
         } else {
             picked
         }
+    }
+
+    /// Every format some file of `category` can be converted to, sorted like
+    /// [`targets`](Self::targets): what a menu for that kind may offer.
+    pub fn category_targets(&self, category: Category) -> Vec<&'static Format> {
+        let mut out: Vec<&'static Format> = Vec::new();
+        for from in crate::FORMATS.iter().filter(|f| f.category == category) {
+            for to in self.targets(from) {
+                if !out.contains(&to) {
+                    out.push(to);
+                }
+            }
+        }
+        out.sort_by_key(|f| (f.category as u8, f.name));
+        out
     }
 
     /// Runs a job: routes it, runs every hop on every artifact the previous
@@ -522,6 +550,48 @@ mod tests {
         assert_eq!(ids("png"), ["jpeg", "webp"]);
         // No preferred target is reachable: fall back to what is.
         assert_eq!(ids("flac"), ["opus"]);
+    }
+
+    #[test]
+    fn menus_follow_the_lists_people_pick() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "audio",
+            0,
+            vec![
+                ("mp3", "wav"),
+                ("wav", "mp3"),
+                ("wav", "flac"),
+                ("wav", "opus"),
+                ("wav", "m4a"),
+            ],
+        )));
+        let mut choices = MenuChoices::default();
+        let ids = |from, c: &MenuChoices| {
+            r.menu_targets_with(f(from), c)
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids("mp3", &choices), ["m4a", "wav"]);
+        choices.set(
+            Category::Audio,
+            vec![f("opus"), f("mp3"), f("flac"), f("aac")],
+        );
+        // In the picked order, without the input's own format or what it
+        // can't reach.
+        assert_eq!(ids("mp3", &choices), ["opus", "flac"]);
+        assert_eq!(ids("wav", &choices), ["opus", "mp3", "flac"]);
+        // Nothing picked is reachable: the default, not an empty menu.
+        choices.set(Category::Audio, vec![f("mp3")]);
+        assert_eq!(ids("mp3", &choices), ["m4a", "wav"]);
+        assert_eq!(
+            r.category_targets(Category::Audio)
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>(),
+            ["flac", "m4a", "mp3", "opus", "wav"]
+        );
     }
 
     #[test]
