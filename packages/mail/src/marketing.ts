@@ -14,10 +14,12 @@
 import { escapeHtml, type Rendered } from "./templates";
 
 /** Bump when any marketing template's output changes. */
-export const marketingTemplateVersion = 6;
+export const marketingTemplateVersion = 7;
 
 export const unsubscribeTag = "{{unsubscribeUrl}}";
 export const preferencesTag = "{{preferencesUrl}}";
+/** Sequenzy fills this from the company address in its settings. */
+export const companyAddressTag = "{{company.address}}";
 
 const color = {
   page: "#f7f8f7",
@@ -196,7 +198,7 @@ const letterKinds = ["welcome-free", "welcome-paid", "lifetime", "lifetime-free"
 type ApprovedLifecycle = (typeof letterKinds)[number];
 const lifecycleCss = `<style>:root{color-scheme:light dark;supported-color-schemes:light dark}@media (max-width:620px){.wrap{width:100%!important;max-width:100%!important}.pad{padding-left:24px!important;padding-right:24px!important}}@media (prefers-color-scheme: dark){.bg{background:#0a0b0b!important}.ink{color:#edefee!important}.ink2{color:#a1a6a3!important}.ink3{color:#868b88!important}.brand,.link{color:#3fcb84!important}.rule{border-color:#232726!important}.lt{display:none!important}.dk{display:block!important;max-height:none!important}}[data-ogsc] .ink{color:#edefee!important}[data-ogsc] .ink2{color:#a1a6a3!important}[data-ogsc] .brand,[data-ogsc] .link{color:#3fcb84!important}</style>`;
 const lifecycleLogo = `<img class="lt" src="https://convt.app/brand/convt-lockup-on-light.png" width="89" height="22" alt="convt" style="display:block;width:89px;height:22px;border:0"><!--[if !mso]><!--><img class="dk" src="https://convt.app/brand/convt-lockup-on-dark.png" width="89" height="22" alt="convt" style="display:none;width:89px;height:22px;border:0;max-height:0;overflow:hidden;mso-hide:all"><!--<![endif]-->`;
-const lifecycleFooter = `{{postalAddress}} &middot; <a class="ink3" href="${unsubscribeTag}" style="color:#6c716e;text-decoration:underline">unsubscribe</a> &middot; <a class="ink3" href="${preferencesTag}" style="color:#6c716e;text-decoration:underline">preferences</a>`;
+const lifecycleFooter = `${companyAddressTag} &middot; <a class="ink3" href="${unsubscribeTag}" style="color:#6c716e;text-decoration:underline">unsubscribe</a> &middot; <a class="ink3" href="${preferencesTag}" style="color:#6c716e;text-decoration:underline">preferences</a>`;
 const letterFont = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const greeting = "hey {{firstName|there}},";
 const downloadUrl = "https://convt.app/download";
@@ -338,7 +340,7 @@ function letterBlockText(b: LetterBlock): string {
 
 function letterText(letter: Letter): string {
   const body = [greeting, ...letter.blocks.map(letterBlockText), "leo"];
-  return `${body.join("\n\n")}\n\n--\nEmail preferences: ${preferencesTag}\nUnsubscribe: ${unsubscribeTag}\n{{postalAddress}}\n`;
+  return `${body.join("\n\n")}\n\n--\nEmail preferences: ${preferencesTag}\nUnsubscribe: ${unsubscribeTag}\n${companyAddressTag}\n`;
 }
 
 function letterHtml(letter: Letter): string {

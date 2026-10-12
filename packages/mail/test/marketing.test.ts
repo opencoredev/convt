@@ -8,6 +8,7 @@ import {
   licenseIssued,
   marketingTemplates,
   marketingTemplateVersion,
+  companyAddressTag,
   preferencesTag,
   renderProductUpdate,
   renewalFailed,
@@ -35,8 +36,8 @@ describe("marketing templates", () => {
         expect(part).toContain(unsubscribeTag);
         expect(part).toContain(preferencesTag);
         expect(part).toContain(
-          email.html.includes("{{postalAddress}}")
-            ? "{{postalAddress}}"
+          email.html.includes(companyAddressTag)
+            ? companyAddressTag
             : "1 Example Street, Test City",
         );
       }
@@ -60,7 +61,7 @@ describe("marketing templates", () => {
   });
 
   test("snapshots", () => {
-    expect(marketingTemplateVersion).toBe(6);
+    expect(marketingTemplateVersion).toBe(7);
     for (const [name, email] of Object.entries(all)) {
       expect({ name, subject: email.subject, text: email.text }).toMatchSnapshot();
     }
@@ -89,7 +90,7 @@ describe("marketing templates", () => {
       expect(email.text).toContain("\n\nleo\n");
       expect(email.text).toContain(unsubscribeTag);
       expect(email.text).toContain(preferencesTag);
-      expect(email.text).toContain("{{postalAddress}}");
+      expect(email.text).toContain(companyAddressTag);
     }
   });
 

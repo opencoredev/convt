@@ -56,6 +56,8 @@ MARKETING_POSTAL_ADDRESS="..." bun run --cwd packages/mail export:marketing /tmp
 
 US law (CAN-SPAM) requires a postal address in commercial email. Without `MARKETING_POSTAL_ADDRESS`, the footer shows `[postal address required]` so a campaign cannot go out with a blank one.
 
+The letter-style emails (`welcome-free`, `welcome-paid`, `lifetime`, `lifetime-free` and `product-update`) use `{{company.address}}` instead, which Sequenzy fills from the company address in its settings. That setting must hold a full mailing address, not only a country, before any of them goes out. `lifetime` goes to Desktop buyers (`desktopBuyer` is `true`); `lifetime-free` goes to everyone else and offers a 30% code by reply, which Leo sends by hand.
+
 ## Turn it on in production
 
 Do these in order. Each step is reversible until the backfill runs and mail goes out.
