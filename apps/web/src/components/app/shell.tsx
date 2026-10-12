@@ -81,12 +81,14 @@ function Tabs() {
     setMeasured(true);
   }, [path, measured]);
 
-  // Snap when the row changes size: a resize, or the font arriving.
+  // Snap when a tab changes size: a resize, or the font arriving. Below md the
+  // list is as wide as the nav, so watch the links, not just the list.
   useLayoutEffect(() => {
     const ul = list.current;
     if (!ul) return;
     const observer = new ResizeObserver(() => placeBar(ul, bar.current, false));
     observer.observe(ul);
+    for (const link of ul.querySelectorAll("a")) observer.observe(link);
     return () => observer.disconnect();
   }, []);
 
