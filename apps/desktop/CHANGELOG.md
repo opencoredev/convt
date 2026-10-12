@@ -1,5 +1,19 @@
 # @convt/desktop
 
+## 0.5.0
+
+### Minor Changes
+
+- [#116](https://github.com/opencoredev/convt/pull/116) [`b1b1e31`](https://github.com/opencoredev/convt/commit/b1b1e31c8a0b29b1f4fb20b8fabaa814876331b7) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Turning on the Finder menu now opens a small guide beside System Settings on macOS 15 and later. It shows where the switch is (scroll down to Extensions, click ⓘ next to convt, turn it on), follows the System Settings window, and closes once convt is on.
+
+- [#120](https://github.com/opencoredev/convt/pull/120) [`e218e71`](https://github.com/opencoredev/convt/commit/e218e7115fc0e6d9a11c4ae1bff7630341733f14) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Choose which formats the "Convert with convt" right-click menu offers for each kind of file: images, SVG, video, audio, PDFs, documents, spreadsheets and presentations. Pick them in the new Settings → Menu tab, in the order you want them, or with `convt menu set audio flac mp3`. Finder, Explorer, Nautilus and `convt targets --menu` follow the choice; for Dolphin, Nemo and Thunar, run `integrations/linux/install.py` again.
+
+### Patch Changes
+
+- [#117](https://github.com/opencoredev/convt/pull/117) [`3ff6a7f`](https://github.com/opencoredev/convt/commit/3ff6a7f5e5f3eb820dfb1d566261fa1e00f2ee54) Thanks [@leoisadev1](https://github.com/leoisadev1)! - FLAC files converted from MP3 (or from a video with MP3 audio) now open in QuickTime and Music instead of failing with "An unknown error occurred (1718449215)". BMP files with transparency now open in Preview and Finder, and keep their transparency. Converting a video that has no sound to an audio format now says the file has no audio track instead of showing an FFmpeg error.
+
+- [#119](https://github.com/opencoredev/convt/pull/119) [`61f1ca3`](https://github.com/opencoredev/convt/commit/61f1ca30501e231ec944564b2eceb5ccd7fe53e7) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Settings moved from the sidebar list to a gear beside the convt logo. It opens its own window, so it no longer sits with Activity and Automations, which switch the page in the main window.
+
 ## 0.4.0
 
 ### Minor Changes
