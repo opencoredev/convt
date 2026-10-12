@@ -118,6 +118,9 @@ pub struct FinderGuideView {
     /// System Settings is frontmost with its window on screen, so the panel
     /// is up. Always true where nothing tracks System Settings.
     visible: bool,
+    /// Onboarding ended while the guide was up: open the main window once
+    /// the user is done with System Settings.
+    pub(super) then_main: bool,
     #[cfg(all(target_os = "macos", not(test)))]
     tracking: Tracking,
     _track: Option<Task<()>>,
@@ -139,6 +142,8 @@ struct Tracking {
     opened: Instant,
     /// When System Settings was last running, once it has been.
     last_seen: Option<Instant>,
+    /// The panel has been on screen.
+    shown: bool,
     at: Option<(f64, f64)>,
 }
 
@@ -153,10 +158,12 @@ impl FinderGuideView {
             app,
             done: false,
             visible: !cfg!(all(target_os = "macos", not(test))),
+            then_main: false,
             #[cfg(all(target_os = "macos", not(test)))]
             tracking: Tracking {
                 opened: Instant::now(),
                 last_seen: None,
+                shown: false,
                 at: None,
             },
             _track: None,
@@ -234,6 +241,18 @@ impl FinderGuideView {
             _ => None,
         };
         let visible = frame.is_some() && settings::frontmost();
+        t.shown |= visible;
+        // The user left System Settings and convt has no other window, so
+        // nothing would bring the hidden panel back or let convt quit.
+        if !visible && cx.windows().len() == 1 && (t.shown || now - t.opened > STARTUP) {
+            if std::mem::take(&mut self.then_main) {
+                cx.defer(super::show_main);
+            } else {
+                window.remove_window();
+                return Step::Close;
+            }
+        }
+        let t = &mut self.tracking;
         let at = frame
             .map(|f| crate::finder::dock(f, (SIZE.0 as f64, SIZE.1 as f64), &settings::screens()));
         let moved = at.is_some() && at != t.at;

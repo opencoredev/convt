@@ -316,23 +316,30 @@ pub fn route(request: Request, cx: &mut App) {
     }
 }
 
-/// Opens the main window, or the first-run window until a licensed build
-/// finishes it. Closing mid-setup leaves first run unfinished, so the next
-/// launch shows it again. A build from source that doesn't check licenses
-/// never shows the first-run window.
 /// The end of onboarding: [`show_main`], or, while the Finder guide is up
-/// beside System Settings, once it closes (the extension came on, or the
-/// user closed it or System Settings), so the main window doesn't pull the
-/// user out of System Settings in the middle of the steps.
+/// beside System Settings, once the user is done there (the extension came
+/// on, they closed the guide or System Settings, or they left System
+/// Settings), so the main window doesn't pull them out of it in the middle
+/// of the steps.
 pub fn show_main_after_finder_guide(cx: &mut App) {
     match Open::<FinderGuideView>::get(cx) {
-        Some((_, guide)) => cx
-            .observe_release(&guide, |_, cx| cx.defer(show_main))
-            .detach(),
+        Some((_, guide)) => {
+            guide.update(cx, |guide, _| guide.then_main = true);
+            cx.observe_release(&guide, |guide, cx| {
+                if guide.then_main {
+                    cx.defer(show_main);
+                }
+            })
+            .detach();
+        }
         None => show_main(cx),
     }
 }
 
+/// Opens the main window, or the first-run window until a licensed build
+/// finishes it. Closing mid-setup leaves first run unfinished, so the next
+/// launch shows it again. A build from source that doesn't check licenses
+/// never shows the first-run window.
 pub fn show_main(cx: &mut App) {
     if first_run_pending(cx) {
         open_first_run(cx);

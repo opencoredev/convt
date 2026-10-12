@@ -61,6 +61,7 @@ pub fn watch(cx: &mut Context<AppState>) -> Task<()> {
     })
 }
 
+#[cfg(any(target_os = "macos", test))]
 /// A rectangle in screen points, measured from the top left of the primary
 /// display, as the window server reports windows.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -71,6 +72,7 @@ pub struct Frame {
     pub h: f64,
 }
 
+#[cfg(any(target_os = "macos", test))]
 impl Frame {
     fn right(&self) -> f64 {
         self.x + self.w
@@ -86,9 +88,11 @@ impl Frame {
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
 /// The space between System Settings and the guide.
 const DOCK_GAP: f64 = 12.;
 
+#[cfg(any(target_os = "macos", test))]
 /// Where the guide's top left corner goes for a System Settings window at
 /// `settings`: beside its right edge, top edges level; beside the left edge
 /// when the right has no room on that screen; tucked inside its bottom right
