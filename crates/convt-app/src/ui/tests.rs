@@ -1044,6 +1044,27 @@ fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
     );
 }
 
+/// The sidebar's nav switches pages in the main window; Settings opens its
+/// own window, so it is a gear beside the brand rather than a third page.
+#[gpui_kit::test]
+fn settings_is_a_gear_beside_the_brand_not_a_page(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (main, view) = f.main(cx);
+    assert!(!shown(cx, main, "nav-settings"));
+    assert_eq!(selected(cx, main, "nav-activity"), Some(true));
+    click(cx, main, "nav-automations");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+
+    assert_eq!(
+        label(cx, main, "open-settings").as_deref(),
+        Some("Settings")
+    );
+    click(cx, main, "open-settings");
+    let (_, settings) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(settings.read(cx).tab, SettingsTab::General));
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+}
+
 #[gpui_kit::test]
 fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);

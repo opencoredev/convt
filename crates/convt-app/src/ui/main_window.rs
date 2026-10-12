@@ -7,10 +7,13 @@ use std::time::Instant;
 use super::theme::IconName;
 use convt_core::{format_by_extension, format_by_id};
 use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::theme::{self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text};
+use super::theme::{
+    self, Button, Clickable, Palette, Tone, icon, mono, radius, size, space, styled, text,
+};
 use super::{LICENSE_PRICE, SettingsTab, file_size, human_size, time_left};
 use crate::automation;
 use crate::clock::Local;
@@ -143,9 +146,12 @@ impl MainView {
                 div()
                     .id("brand")
                     .flex()
-                    .px(px(space::SM))
-                    .pb(px(18.))
-                    .child(theme::lockup(14., p)),
+                    .items_center()
+                    .justify_between()
+                    .pl(px(space::SM))
+                    .pb(px(12.))
+                    .child(theme::lockup(14., p))
+                    .child(settings_button(p)),
             )
             .child(
                 div()
@@ -173,10 +179,6 @@ impl MainView {
                         .on_click(
                             cx.listener(|this, _, _, cx| this.set_page(Page::Automations, cx)),
                         ),
-                    )
-                    .child(
-                        nav("nav-settings", "Settings", IconName::Settings, false, None)
-                            .on_click(|_, _, cx| super::show_settings(SettingsTab::General, cx)),
                     ),
             )
             .child(div().flex_1())
@@ -547,6 +549,23 @@ fn finder_setup_card(p: &Palette) -> impl IntoElement {
                 ),
             p,
         ))
+}
+
+/// The gear beside the brand. Settings opens its own window, so it sits
+/// apart from the nav, whose items switch the page in this one.
+fn settings_button(p: &Palette) -> Clickable {
+    let hover = p.hover;
+    theme::clickable("open-settings", "Settings")
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .size(px(28.))
+        .rounded_full()
+        .hover(move |s| s.bg(hover))
+        .tooltip(|window, cx| Tooltip::new("Settings").build(window, cx))
+        .child(icon(IconName::Settings, 15., p.secondary))
+        .on_click(|_, _, cx| super::show_settings(SettingsTab::General, cx))
 }
 
 /// The trial or license card at the bottom of the sidebar. Nothing once
