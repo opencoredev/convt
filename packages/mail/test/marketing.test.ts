@@ -9,8 +9,7 @@ import {
   marketingTemplates,
   marketingTemplateVersion,
   preferencesTag,
-  productUpdateEmail,
-  renderMarketing,
+  renderProductUpdate,
   renewalFailed,
   welcomeEmailForSegment,
   trialEnding,
@@ -60,7 +59,7 @@ describe("marketing templates", () => {
   });
 
   test("snapshots", () => {
-    expect(marketingTemplateVersion).toBe(4);
+    expect(marketingTemplateVersion).toBe(5);
     for (const [name, email] of Object.entries(all)) {
       expect({ name, subject: email.subject, text: email.text }).toMatchSnapshot();
     }
@@ -71,22 +70,37 @@ describe("marketing templates", () => {
     expect(all["welcome-free"].text).toContain("hey {{firstName|there}},");
     expect(all["welcome-free"].text).toContain("thanks for giving it a try.");
     expect(all["welcome-free"].text).toContain("https://convt.app/download");
-    expect(all["welcome-free"].text).toContain("just reply here.");
+    expect(all["welcome-free"].text).toContain("hit reply and tell me.");
     expect(all["welcome-paid"].text).toContain("thank you for buying it.");
     expect(all["welcome-paid"].text).toContain("https://convt.app/download");
-    expect(all["welcome-paid"].text).toContain("just reply here.");
+    expect(all["welcome-paid"].text).toContain("not a support queue.");
     expect(all.lifetime.text).toContain("desktop licenses are now lifetime");
     expect(all.lifetime.text).toContain("same key, no renewal, nothing to do.");
-    expect(all.lifetime.text).toContain("just reply here.");
-    for (const email of [all["welcome-free"], all["welcome-paid"], all.lifetime]) {
+    expect(all.lifetime.text).toContain("i'd love to hear it. just reply.");
+    expect(all["product-update"].text).toContain("reply and let me know.");
+    for (const email of [
+      all["welcome-free"],
+      all["welcome-paid"],
+      all.lifetime,
+      all["product-update"],
+    ]) {
+      expect(email.text.startsWith("hey {{firstName|there}},")).toBe(true);
+      expect(email.text).toContain("\n\nleo\n");
       expect(email.text).toContain(unsubscribeTag);
       expect(email.text).toContain(preferencesTag);
       expect(email.text).toContain("{{postalAddress}}");
     }
   });
 
+  test("each letter asks for a reply in its own words", () => {
+    const closings = (["welcome-free", "welcome-paid", "lifetime", "product-update"] as const).map(
+      (name) => all[name].text.split("\n\nleo\n")[0]?.split("\n\n").at(-1),
+    );
+    expect(new Set(closings).size).toBe(closings.length);
+  });
+
   test("lifecycle layout is fluid and responsive", () => {
-    for (const name of ["welcome-free", "welcome-paid", "lifetime"] as const) {
+    for (const name of ["welcome-free", "welcome-paid", "lifetime", "product-update"] as const) {
       expect(all[name].html).toContain('class="wrap"');
       expect(all[name].html).toContain("max-width:620px");
       expect(all[name].html).toContain("width:100%!important");
@@ -102,18 +116,15 @@ describe("marketing templates", () => {
   });
 
   test("campaign content is escaped; merge tags stay intact", () => {
-    const email = renderMarketing(
-      productUpdateEmail({
-        siteUrl: "https://convt.app",
-        subject: "x",
-        preheader: "<b>p</b>",
-        heading: "A & B",
-        intro: "<script>alert(1)</script>",
-        items: [{ title: '"quoted"', body: "it's" }],
-        cta: { href: 'https://convt.app/?a=1&b="2"', label: "Go" },
-      }),
-      footer,
-    );
+    const email = renderProductUpdate({
+      siteUrl: "https://convt.app",
+      subject: "A & B",
+      preheader: "<b>p</b>",
+      intro: "<script>alert(1)</script>",
+      items: [{ title: '"quoted"', body: "it's" }],
+      cta: { href: 'https://convt.app/?a=1&b="2"', label: "Go" },
+      outro: "reply",
+    });
     expect(email.html).not.toContain("<script>");
     expect(email.html).toContain("&#60;script&#62;");
     expect(email.html).toContain("A &#38; B");
