@@ -1289,11 +1289,12 @@ fn the_menu_tab_picks_what_right_click_menus_offer(cx: &mut TestAppContext) {
     assert_eq!(selected(cx, window, "menu-image-webp"), Some(true));
 
     // A `convt menu` change made while the app runs is kept by the next
-    // click, and shows when the tab opens again.
-    std::fs::write(&file, "image = [\"webp\"]\nvector = [\"jpeg\"]\n").unwrap();
+    // click, even for the kind clicked, and shows when the tab opens again.
+    std::fs::write(&file, "image = [\"png\"]\nvector = [\"jpeg\"]\n").unwrap();
     click(cx, window, "menu-image-tiff");
     let saved = std::fs::read_to_string(&file).unwrap();
     assert!(saved.contains(r#"vector = ["jpeg"]"#), "{saved}");
+    assert!(saved.contains(r#"image = ["png", "tiff"]"#), "{saved}");
     std::fs::write(&file, "image = [\"tiff\"]\n").unwrap();
     click(cx, window, "tab-general");
     click(cx, window, "tab-menu");
@@ -1311,6 +1312,11 @@ fn the_menu_tab_picks_what_right_click_menus_offer(cx: &mut TestAppContext) {
         "{:?}",
         label(cx, window, "menu-error")
     );
+    // Fixing the file clears the error, even when it holds what the app has.
+    std::fs::write(&file, "image = [\"tiff\"]\n").unwrap();
+    click(cx, window, "tab-general");
+    click(cx, window, "tab-menu");
+    assert_eq!(label(cx, window, "menu-error"), None);
 }
 
 #[gpui_kit::test]

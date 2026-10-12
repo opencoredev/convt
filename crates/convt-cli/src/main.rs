@@ -147,7 +147,11 @@ fn menu_kind(kind: &str) -> anyhow::Result<Category> {
 fn menu(action: MenuCmd, registry: &convt_core::Registry) -> anyhow::Result<()> {
     use convt_core::MenuChoices;
     let path = convt_engines::paths::menu_file().context("no config directory on this system")?;
-    let mut choices = MenuChoices::load(&path)?;
+    // Resetting everything doesn't read the file, so it can repair a broken one.
+    let mut choices = match action {
+        MenuCmd::Reset { kind: None } => MenuChoices::default(),
+        _ => MenuChoices::load(&path)?,
+    };
     match action {
         MenuCmd::Show => {
             for kind in convt_core::MENU_KINDS {
@@ -183,7 +187,7 @@ fn menu(action: MenuCmd, registry: &convt_core::Registry) -> anyhow::Result<()> 
             choices.set(kind, picked);
         }
         MenuCmd::Reset { kind: Some(kind) } => choices.reset(menu_kind(&kind)?),
-        MenuCmd::Reset { kind: None } => choices = MenuChoices::default(),
+        MenuCmd::Reset { kind: None } => {}
     }
     choices.save(&path)?;
     Ok(())

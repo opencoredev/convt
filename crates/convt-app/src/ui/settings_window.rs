@@ -1,7 +1,7 @@
 //! The Settings window: General, Menu, Presets and License.
 
 use convt_core::{
-    Category, FORMATS, Format, MENU_KINDS, Options, Preset, category_key, format_by_id,
+    Category, FORMATS, Format, MENU_KINDS, MenuChoices, Options, Preset, category_key, format_by_id,
 };
 use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
 use gpui_kit::component::input::InputState;
@@ -556,17 +556,13 @@ impl SettingsView {
                 // Picks this machine can't convert to (document support was
                 // removed) get no chip and no number, but stay saved for when
                 // they can.
-                let (picked, hidden): (Vec<_>, Vec<_>) = choices
-                    .effective(kind)
-                    .into_iter()
-                    .partition(|f| options.contains(f));
+                let (picked, _hidden) = shown_and_hidden(&choices, kind, options);
                 let custom = choices.get(kind).is_some();
                 let chip = |to: &'static Format| {
                     let place = picked.iter().position(|f| *f == to);
                     let on = place.is_some();
                     let app = self.app.clone();
-                    let picked = picked.clone();
-                    let hidden = hidden.clone();
+                    let options = options.clone();
                     theme::clickable(SharedString::from(format!("menu-{key}-{}", to.id)), to.name)
                         .aria_selected(on)
                         .flex()
@@ -587,18 +583,9 @@ impl SettingsView {
                             }
                         })
                         .on_click(move |_, _, cx| {
-                            let mut next = picked.clone();
-                            match next.iter().position(|f| *f == to) {
-                                // The menu keeps at least one format; Reset
-                                // brings the defaults back.
-                                Some(_) if next.len() == 1 => return,
-                                Some(i) => {
-                                    next.remove(i);
-                                }
-                                None => next.push(to),
-                            }
-                            next.extend(hidden.iter().copied());
-                            app.update(cx, |s, cx| s.update_menu(|m| m.set(kind, next), cx));
+                            app.update(cx, |s, cx| {
+                                s.update_menu(|m| toggle(m, kind, to, &options), cx)
+                            });
                         })
                         .children(place.map(|i| {
                             div()
@@ -1327,6 +1314,40 @@ fn kinds_and_targets(registry: &convt_core::Registry) -> Vec<(Category, Vec<&'st
 }
 
 /// A kind of file as the Menu tab names it.
+/// The picks for `kind` this machine can convert to, in menu order, and the
+/// ones it can't.
+fn shown_and_hidden(
+    choices: &MenuChoices,
+    kind: Category,
+    options: &[&'static Format],
+) -> (Vec<&'static Format>, Vec<&'static Format>) {
+    choices
+        .effective(kind)
+        .into_iter()
+        .partition(|f| options.contains(f))
+}
+
+/// Adds `to` at the end of the menu for `kind`, or takes it out. It works on
+/// the choices as saved, so a `convt menu` change made since the tab drew is
+/// kept. The menu keeps at least one format; Reset brings the defaults back.
+fn toggle(
+    choices: &mut MenuChoices,
+    kind: Category,
+    to: &'static Format,
+    options: &[&'static Format],
+) {
+    let (mut next, hidden) = shown_and_hidden(choices, kind, options);
+    match next.iter().position(|f| *f == to) {
+        Some(_) if next.len() == 1 => return,
+        Some(i) => {
+            next.remove(i);
+        }
+        None => next.push(to),
+    }
+    next.extend(hidden);
+    choices.set(kind, next);
+}
+
 fn kind_label(kind: Category) -> &'static str {
     match kind {
         Category::Image => "Images",

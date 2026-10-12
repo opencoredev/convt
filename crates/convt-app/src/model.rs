@@ -289,6 +289,7 @@ pub struct AppState {
     /// none, or macOS has not registered it. Tests set this directly.
     pub finder_on: Option<bool>,
     _finder_watch: Option<Task<()>>,
+    _menu_watch: Option<Task<()>>,
     /// Jobs whose result should be copied when they finish.
     automation_copies: HashSet<JobId>,
     /// The sign-in token each cloud job asked for credentials with, so one
@@ -422,6 +423,13 @@ impl AppState {
             // Tests set `finder_on` themselves; a live poll would overwrite it.
             _finder_watch: if cfg!(all(target_os = "macos", not(test))) {
                 Some(crate::finder::watch(cx))
+            } else {
+                None
+            },
+            // Finder reads the targets the app publishes, so a `convt menu`
+            // change has to reach the app without a window opening.
+            _menu_watch: if cfg!(all(target_os = "macos", not(test))) {
+                Some(watch_menu(cx))
             } else {
                 None
             },
@@ -1183,12 +1191,19 @@ impl AppState {
                 self.menu_error = None;
                 cx.notify();
             }
-            Ok(_) => {}
+            Ok(_) => {
+                if self.menu_error.take().is_some() {
+                    cx.notify();
+                }
+            }
             Err(e) => {
-                self.menu_error = Some(format!(
+                let error = format!(
                     "Right-click menu choices were not loaded: {e}. Changing one replaces the file."
-                ));
-                cx.notify();
+                );
+                if self.menu_error.as_ref() != Some(&error) {
+                    self.menu_error = Some(error);
+                    cx.notify();
+                }
             }
         }
     }
@@ -1213,6 +1228,21 @@ impl AppState {
         cx.notify();
         Ok(())
     }
+}
+
+/// Reads `menu.toml` again every couple of seconds, so a `convt menu` change
+/// reaches the Finder menu while the app runs.
+fn watch_menu(cx: &mut Context<AppState>) -> Task<()> {
+    cx.spawn(async move |this, cx| {
+        loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(2))
+                .await;
+            if this.update(cx, |s, cx| s.reload_menu(cx)).is_err() {
+                break;
+            }
+        }
+    })
 }
 
 fn cached_trial_is_valid(cache: &crate::settings::TrialCache, signed_in: bool, today: i64) -> bool {
