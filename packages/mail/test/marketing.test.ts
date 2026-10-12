@@ -24,6 +24,7 @@ describe("marketing templates", () => {
   test("each one renders with the footer, both merge tags and the address", () => {
     expect(Object.keys(all).sort()).toEqual([
       "lifetime",
+      "lifetime-free",
       "pro-trial",
       "product-update",
       "welcome-free",
@@ -59,7 +60,7 @@ describe("marketing templates", () => {
   });
 
   test("snapshots", () => {
-    expect(marketingTemplateVersion).toBe(5);
+    expect(marketingTemplateVersion).toBe(6);
     for (const [name, email] of Object.entries(all)) {
       expect({ name, subject: email.subject, text: email.text }).toMatchSnapshot();
     }
@@ -93,14 +94,20 @@ describe("marketing templates", () => {
   });
 
   test("each letter asks for a reply in its own words", () => {
-    const closings = (["welcome-free", "welcome-paid", "lifetime", "product-update"] as const).map(
-      (name) => all[name].text.split("\n\nleo\n")[0]?.split("\n\n").at(-1),
-    );
+    const closings = (
+      ["welcome-free", "welcome-paid", "lifetime", "lifetime-free", "product-update"] as const
+    ).map((name) => all[name].text.split("\n\nleo\n")[0]?.split("\n\n").at(-1));
     expect(new Set(closings).size).toBe(closings.length);
   });
 
   test("lifecycle layout is fluid and responsive", () => {
-    for (const name of ["welcome-free", "welcome-paid", "lifetime", "product-update"] as const) {
+    for (const name of [
+      "welcome-free",
+      "welcome-paid",
+      "lifetime",
+      "lifetime-free",
+      "product-update",
+    ] as const) {
       expect(all[name].html).toContain('class="wrap"');
       expect(all[name].html).toContain("max-width:620px");
       expect(all[name].html).toContain("width:100%!important");
@@ -113,6 +120,8 @@ describe("marketing templates", () => {
     expect(all.lifetime.html).toContain("desktop licenses are now lifetime");
     expect(all.lifetime.html).toContain("desktop licenses are now lifetime");
     expect(t).not.toMatch(/refund/i);
+    // Buyers already own it; only accounts that never bought get the offer.
+    expect(t).not.toContain("30%");
   });
 
   test("campaign content is escaped; merge tags stay intact", () => {

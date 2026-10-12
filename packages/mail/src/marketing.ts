@@ -14,7 +14,7 @@
 import { escapeHtml, type Rendered } from "./templates";
 
 /** Bump when any marketing template's output changes. */
-export const marketingTemplateVersion = 5;
+export const marketingTemplateVersion = 6;
 
 export const unsubscribeTag = "{{unsubscribeUrl}}";
 export const preferencesTag = "{{preferencesUrl}}";
@@ -159,23 +159,8 @@ const footerReason =
 
 /** Every marketing email goes through here, so none can leave out the footer. */
 export function renderMarketing(email: MarketingEmail, footer: FooterInput): MarketingRendered {
-  const lifecycle =
-    email.subject === "welcome to convt"
-      ? "welcome-free"
-      : email.subject === "thanks for buying convt"
-        ? "welcome-paid"
-        : email.subject === "your convt license is now lifetime"
-          ? "lifetime"
-          : null;
-  if (lifecycle) {
-    const html = lifecycleHtml(lifecycle);
-    return {
-      subject: email.subject,
-      preheader: email.preheader,
-      text: lifecycleText(lifecycle),
-      html,
-    };
-  }
+  const letter = letterKinds.find((kind) => letters[kind].subject === email.subject);
+  if (letter) return renderLetter(letters[letter]);
   const site = footer.siteUrl.replace(/\/$/, "");
   const html =
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
@@ -207,7 +192,8 @@ export function renderMarketing(email: MarketingEmail, footer: FooterInput): Mar
   return { subject: email.subject, preheader: email.preheader, text, html };
 }
 
-type ApprovedLifecycle = "welcome-free" | "welcome-paid" | "lifetime";
+const letterKinds = ["welcome-free", "welcome-paid", "lifetime", "lifetime-free"] as const;
+type ApprovedLifecycle = (typeof letterKinds)[number];
 const lifecycleCss = `<style>:root{color-scheme:light dark;supported-color-schemes:light dark}@media (max-width:620px){.wrap{width:100%!important;max-width:100%!important}.pad{padding-left:24px!important;padding-right:24px!important}}@media (prefers-color-scheme: dark){.bg{background:#0a0b0b!important}.ink{color:#edefee!important}.ink2{color:#a1a6a3!important}.ink3{color:#868b88!important}.brand,.link{color:#3fcb84!important}.rule{border-color:#232726!important}.lt{display:none!important}.dk{display:block!important;max-height:none!important}}[data-ogsc] .ink{color:#edefee!important}[data-ogsc] .ink2{color:#a1a6a3!important}[data-ogsc] .brand,[data-ogsc] .link{color:#3fcb84!important}</style>`;
 const lifecycleLogo = `<img class="lt" src="https://convt.app/brand/convt-lockup-on-light.png" width="89" height="22" alt="convt" style="display:block;width:89px;height:22px;border:0"><!--[if !mso]><!--><img class="dk" src="https://convt.app/brand/convt-lockup-on-dark.png" width="89" height="22" alt="convt" style="display:none;width:89px;height:22px;border:0;max-height:0;overflow:hidden;mso-hide:all"><!--<![endif]-->`;
 const lifecycleFooter = `{{postalAddress}} &middot; <a class="ink3" href="${unsubscribeTag}" style="color:#6c716e;text-decoration:underline">unsubscribe</a> &middot; <a class="ink3" href="${preferencesTag}" style="color:#6c716e;text-decoration:underline">preferences</a>`;
@@ -222,13 +208,15 @@ type LetterBlock =
   | { kind: "button"; href: string; label: string }
   | { kind: "link"; href: string; label: string };
 
-/** The copy of a letter: everything between the greeting and the signature. */
-type Letter = { title: string; blocks: LetterBlock[] };
+/** A letter-style email. `blocks` is everything between the greeting and the signature. */
+type Letter = { subject: string; preheader: string; title: string; blocks: LetterBlock[] };
 
 // Each letter closes with its own invitation to reply, so the line doesn't read
 // as pasted into every email.
 const letters: Record<ApprovedLifecycle, Letter> = {
   "welcome-free": {
+    subject: "welcome to convt",
+    preheader: "welcome to convt",
     title: "welcome to convt",
     blocks: [
       { kind: "p", text: "i'm leo, i'm making convt. thanks for giving it a try." },
@@ -244,6 +232,8 @@ const letters: Record<ApprovedLifecycle, Letter> = {
     ],
   },
   "welcome-paid": {
+    subject: "thanks for buying convt",
+    preheader: "thanks for buying convt",
     title: "thank you",
     blocks: [
       {
@@ -261,7 +251,10 @@ const letters: Record<ApprovedLifecycle, Letter> = {
       },
     ],
   },
+  // For Desktop buyers.
   lifetime: {
+    subject: "your convt license is now lifetime",
+    preheader: "your convt license is now lifetime",
     title: "your convt license is now lifetime",
     blocks: [
       {
@@ -279,6 +272,32 @@ const letters: Record<ApprovedLifecycle, Letter> = {
       {
         kind: "p",
         text: "and if there's something you want convt to do next, or something that's bugging you, i'd love to hear it. just reply.",
+      },
+    ],
+  },
+  // For accounts that never bought Desktop. The 30% is a code Leo sends by hand
+  // to whoever replies; there is no automatic discount behind it.
+  "lifetime-free": {
+    subject: "convt desktop is lifetime now",
+    preheader: "it used to be yearly. that was my mistake.",
+    title: "convt desktop is lifetime now",
+    blocks: [
+      {
+        kind: "p",
+        text: "when i launched convt desktop, i made it a yearly license. that was a mistake on my part. you should be able to buy an app once and keep it, not rent it.",
+      },
+      {
+        kind: "p",
+        text: "so i've changed it. desktop is a lifetime license now: pay once, keep it, and get every future update.",
+      },
+      {
+        kind: "p",
+        text: "and since the yearly thing was my fault, i'd like to make it up to you. if you want convt desktop, reply to this email and i'll send you a code for 30% off.",
+      },
+      { kind: "button", href: "https://convt.app/#pricing", label: "see convt desktop" },
+      {
+        kind: "p",
+        text: "and if something else is holding you back, tell me that too.",
       },
     ],
   },
@@ -327,18 +346,18 @@ function letterHtml(letter: Letter): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${escapeHtml(letter.title)}</title>${lifecycleCss}</head><body class="bg" style="margin:0;padding:0;background:#ffffff"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg" bgcolor="#ffffff"><tr><td align="center"><table class="wrap" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px"><tr><td class="pad" style="padding:48px 48px 0 48px">${lifecycleLogo}</td></tr><tr><td class="ink pad" style="padding:36px 48px 0 48px;font-family:${letterFont};font-size:16px;line-height:26px;color:#0a0a0a"><p style="margin:0 0 16px 0">${greeting}</p>${copy}<p class="ink" style="margin:12px 0 0 0">leo</p></td></tr><tr><td class="pad" style="padding:40px 48px 0 48px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="rule" style="border-top:1px solid #e6e8e7;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr><tr><td class="ink3 pad" style="padding:14px 48px 40px 48px;font-family:${letterFont};font-size:12px;line-height:18px;color:#6c716e">${lifecycleFooter}</td></tr></table></td></tr></table></body></html>`;
 }
 
-const lifecycleText = (kind: ApprovedLifecycle): string => letterText(letters[kind]);
-function lifecycleHtml(kind: ApprovedLifecycle): string {
-  return letterHtml(letters[kind]);
+function renderLetter(letter: Letter): MarketingRendered {
+  return {
+    subject: letter.subject,
+    preheader: letter.preheader,
+    text: letterText(letter),
+    html: letterHtml(letter),
+  };
 }
+
 function lifecycleEmail(kind: ApprovedLifecycle): MarketingEmail {
-  const subject =
-    kind === "welcome-free"
-      ? "welcome to convt"
-      : kind === "welcome-paid"
-        ? "thanks for buying convt"
-        : "your convt license is now lifetime";
-  return { subject, preheader: subject, heading: subject, blocks: [] };
+  const { subject, preheader } = letters[kind];
+  return { subject, preheader, heading: subject, blocks: [] };
 }
 export function welcomeFreeEmail(_siteUrl: string): MarketingEmail {
   return lifecycleEmail("welcome-free");
@@ -351,6 +370,10 @@ export function welcomeEmailForSegment(_siteUrl: string, segment: "paid" | "free
 }
 export function lifetimeEmail(_siteUrl: string): MarketingEmail {
   return lifecycleEmail("lifetime");
+}
+/** The lifetime announcement for accounts that never bought Desktop, with the 30% offer. */
+export function lifetimeFreeEmail(_siteUrl: string): MarketingEmail {
+  return lifecycleEmail("lifetime-free");
 }
 export function welcomeEmail(siteUrl: string): MarketingEmail {
   return welcomeFreeEmail(siteUrl);
@@ -415,7 +438,9 @@ export type ProductUpdateInput = {
  * emails. The content is the campaign's; the frame is shared.
  */
 export function renderProductUpdate(input: ProductUpdateInput): MarketingRendered {
-  const letter: Letter = {
+  return renderLetter({
+    subject: input.subject,
+    preheader: input.preheader,
     title: input.subject,
     blocks: [
       { kind: "p", text: input.intro },
@@ -428,13 +453,7 @@ export function renderProductUpdate(input: ProductUpdateInput): MarketingRendere
       },
       { kind: "p", text: input.outro },
     ],
-  };
-  return {
-    subject: input.subject,
-    preheader: input.preheader,
-    text: letterText(letter),
-    html: letterHtml(letter),
-  };
+  });
 }
 
 /** The example product update the export and the previews use. */
@@ -464,6 +483,7 @@ export type MarketingTemplateName =
   | "welcome-free"
   | "welcome-paid"
   | "lifetime"
+  | "lifetime-free"
   | "pro-trial"
   | "product-update";
 
@@ -475,6 +495,7 @@ export function marketingTemplates(
     "welcome-free": renderMarketing(welcomeFreeEmail(footer.siteUrl), footer),
     "welcome-paid": renderMarketing(welcomePaidEmail(footer.siteUrl), footer),
     lifetime: renderMarketing(lifetimeEmail(footer.siteUrl), footer),
+    "lifetime-free": renderMarketing(lifetimeFreeEmail(footer.siteUrl), footer),
     "pro-trial": renderMarketing(proTrialEmail(footer.siteUrl), footer),
     "product-update": renderProductUpdate(sampleProductUpdate(footer.siteUrl)),
   };
