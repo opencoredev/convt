@@ -73,6 +73,8 @@ Each address may receive 3 codes per 15 minutes and each IP 10 per hour; every l
 
 GitHub and Google buttons go to the OAuth mock's authorize page, which lists its identities: `google-gmail` and `google-workspace` (verified addresses), `google-thirdparty` and `google-unverified` (must confirm by code), `github-verified`, `github-public-differs`, `github-no-email`, `github-pro` (signs in to `pro@convt.test`), and `error` (access denied). Append `&identity=<name>` to the authorize URL to skip the page and `&email=<address>` to sign up with another address.
 
+For a Pro login in one step, use the `github-pro` identity: Sign in, GitHub, then `github-pro` lands on `pro@convt.test`'s dashboard (Pro yearly, a key, API usage) with no code to read. To sign a desktop build in to a fixture without the browser, `bun run dev:sign-in <fixture> --config <dir>` writes the app's `account.json`; see "Sign-in and renewal" in `test-convt-desktop`. `test/integration/dev-sign-in.test.ts` checks that its token renews `pro@` with the Pro key, gets a cloud credential only for paid Pro, and that it refuses anything but a seeded fixture (an account that took a fixture's address included), unverified accounts and replacing a sign-in unasked.
+
 ## Drive and evidence
 
 Use headless `agent-browser` for UI verification, with a named session and its own persistent profile. Put both `--session` and `--profile` on every invocation. Never use a personal browser profile. UI work includes opening the real page and inspecting desktop and mobile screenshots in both themes.

@@ -35,6 +35,7 @@
     "db:rollback": "bun packages/db/src/cli/rollback.ts",
     "db:reset": "bun packages/db/src/cli/reset.ts",
     "db:seed": "bun packages/db/src/cli/seed.ts",
+    "dev:sign-in": "bun apps/web/scripts/dev-sign-in.ts",
     "db:ci": "bash packages/db/scripts/ci.sh",
     "billing:outbox": "bun packages/billing/src/cli/outbox.ts",
     "billing:backfill": "bun packages/billing/src/cli/backfill.ts",
