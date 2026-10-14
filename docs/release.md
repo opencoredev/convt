@@ -41,6 +41,10 @@ The Mac release is Apple silicon (arm64) only and uses FFmpeg built from [pinned
 
 Document packs are separate artifacts. They require matching sources, pinned platform digests and explicit installation. Update discovery must never fetch them. [The document-pack contract](document-pack.md) owns that flow.
 
+## Pinned inputs that left upstream
+
+Distributions delete superseded packages. When a pinned input disappears, keep the pin and fetch the same bytes from somewhere that keeps them: Launchpad's `+sourcefiles` URLs for Ubuntu sources, or the `build-inputs` prerelease on this repository for anything else (it holds the Alpine zlib 1.3.2-r0 packages the AppImage runtime build uses). Upload the exact file, check its SHA-256 against the lock, and point the lock's `url` at it. Never delete or replace a `build-inputs` asset: older releases rebuild from it.
+
 ## Keys and manifests
 
 `bun run update:keygen PATH` writes a base64url 32-byte Ed25519 seed with mode 0600 outside the repository. It refuses existing paths and repository paths, including symlinked parent directories. Store the production seed in a password manager. The license signing seed stays with billing. Use a different update seed and public key. Package clients embed `CONVT_UPDATE_PUBKEY`; this is a trust root and must never come from the downloaded manifest.
