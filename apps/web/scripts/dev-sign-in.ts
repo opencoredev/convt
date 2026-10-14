@@ -9,7 +9,16 @@
 // file a build reads with CONVT_LICENSE_STORE=file and CONVT_CONFIG_DIR=<dir>.
 // The token is never printed. Revoke it from the dashboard like any device.
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -89,25 +98,74 @@ function refuseExisting(configDir: string, replace: boolean) {
     throw new Error(`${file} exists; pass --replace to sign in again`);
 }
 
-/** Writes the app's sign-in file, owner-only, refusing to replace one unless asked. */
+/**
+ * Writes the app's sign-in file, owner-only, refusing to replace one unless asked.
+ * The token goes into a new owner-only file that then takes the name, like the
+ * app's own `write_private`, so a failed write leaves the old sign-in whole and
+ * the token is never in a file anyone else could read.
+ */
 export function writeAccountFile(configDir: string, session: DevSession, replace: boolean): string {
   refuseExisting(configDir, replace);
   const file = accountFile(configDir);
   mkdirSync(configDir, { recursive: true, mode: 0o700 });
-  writeFileSync(file, JSON.stringify({ email: session.email, token: session.token }), {
-    mode: 0o600,
-    flag: replace ? "w" : "wx",
-  });
-  chmodSync(file, 0o600);
+  const temp = join(configDir, `.account.json.${process.pid}.tmp`);
+  try {
+    writeFileSync(temp, JSON.stringify({ email: session.email, token: session.token }), {
+      mode: 0o600,
+      flag: "wx",
+    });
+    chmodSync(temp, 0o600);
+    // A link fails if the name appeared meanwhile; a rename replaces it.
+    if (replace) renameSync(temp, file);
+    else linkSync(temp, file);
+  } finally {
+    rmSync(temp, { force: true });
+  }
   return file;
 }
 
-/** Undoes a sign-in whose file couldn't be written, so no unused device stays active. */
+/** The token in an existing sign-in file, if it holds one. */
+export function storedToken(configDir: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(accountFile(configDir), "utf8"));
+    if (typeof parsed !== "object" || parsed === null || !("token" in parsed)) return null;
+    return typeof parsed.token === "string" ? parsed.token : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Turns a dev sign-in's device off, so no device without a file stays active. */
 export async function revokeDevSession(db: Db, token: string, now: Date): Promise<void> {
   await db
     .update(t.devices)
     .set({ revokedAt: now, updatedAt: now })
     .where(and(eq(t.devices.tokenHash, await tokenHash(token)), isNull(t.devices.revokedAt)));
+}
+
+/**
+ * Signs in and writes the file as one step. A failed write revokes the new
+ * device; a replaced sign-in's device is revoked once the new file is in place.
+ */
+export async function signInToConfig(
+  db: Db,
+  email: string,
+  configDir: string,
+  replace: boolean,
+  now: Date,
+): Promise<{ session: DevSession; file: string }> {
+  refuseExisting(configDir, replace);
+  const previous = replace ? storedToken(configDir) : null;
+  const session = await devDeviceSignIn(db, email, now);
+  let file: string;
+  try {
+    file = writeAccountFile(configDir, session, replace);
+  } catch (error) {
+    await revokeDevSession(db, session.token, now);
+    throw error;
+  }
+  if (previous && previous !== session.token) await revokeDevSession(db, previous, now);
+  return { session, file };
 }
 
 /** The site origin dev:web wrote, so the app renews against the same server. */
@@ -135,16 +193,9 @@ async function main() {
   const url = requireSetting("DATABASE_URL");
   assertOwnedDatabase(url);
   const configDir = resolve(values.config);
-  refuseExisting(configDir, values.replace);
-  const { session, file } = await withDb(url, async (db) => {
-    const signedIn = await devDeviceSignIn(db, email, new Date());
-    try {
-      return { session: signedIn, file: writeAccountFile(configDir, signedIn, values.replace) };
-    } catch (error) {
-      await revokeDevSession(db, signedIn.token, new Date());
-      throw error;
-    }
-  });
+  const { session, file } = await withDb(url, (db) =>
+    signInToConfig(db, email, configDir, values.replace, new Date()),
+  );
   const pub = join(devDir, "license.pub");
   console.log(`dev:sign-in: ${session.email} signed in; wrote ${file}`);
   console.log("Run a build from source with:");

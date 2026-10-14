@@ -3,7 +3,15 @@
 // answer exactly as they would after a browser sign-in. See scripts/dev-sign-in.ts.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +23,12 @@ import { runSeed } from "@convt/db/seed";
 import { importSigningKey, newId } from "@convt/license";
 import { eq } from "drizzle-orm";
 
-import { devDeviceSignIn, revokeDevSession, writeAccountFile } from "../../scripts/dev-sign-in";
+import {
+  devDeviceSignIn,
+  revokeDevSession,
+  signInToConfig,
+  writeAccountFile,
+} from "../../scripts/dev-sign-in";
 import type { CloudConfig } from "../../src/server/cloud-credential";
 import { deviceCloudCredential, renewDevice, tokenHash } from "../../src/server/device-auth";
 import { startHarness, type Harness } from "./harness";
@@ -125,6 +138,42 @@ describe("dev:sign-in", () => {
     );
   });
 
+  test("--replace revokes the sign-in it replaces", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "convt-dev-sign-in-"));
+    try {
+      const first = await signInToConfig(web, fixture("pro"), dir, false, new Date());
+      const second = await signInToConfig(web, fixture("pro"), dir, true, new Date());
+      const renew = async (token: string) =>
+        (await renewDevice(web, proKey, token, {}, nextIp(), new Date())).status;
+      expect(await renew(first.session.token)).toBe(401);
+      expect(await renew(second.session.token)).toBe(200);
+      expect(JSON.parse(readFileSync(second.file, "utf8")).token).toBe(second.session.token);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a sign-in whose file can't be written leaves no new device and the old sign-in whole", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "convt-dev-sign-in-"));
+    try {
+      const first = await signInToConfig(web, fixture("pro"), dir, false, new Date());
+      const before = readFileSync(first.file, "utf8");
+      const active = async () => (await activeDevices(web, await userId(fixture("pro")))).length;
+      const count = await active();
+      chmodSync(dir, 0o500);
+      await expect(signInToConfig(web, fixture("pro"), dir, true, new Date())).rejects.toThrow();
+      chmodSync(dir, 0o700);
+      expect(await active()).toBe(count);
+      expect(readFileSync(first.file, "utf8")).toBe(before);
+      expect(
+        (await renewDevice(web, proKey, first.session.token, {}, nextIp(), new Date())).status,
+      ).toBe(200);
+    } finally {
+      chmodSync(dir, 0o700);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("refuses an account whose email isn't verified", async () => {
     await h.owner
       .update(t.users)
@@ -158,6 +207,31 @@ describe("account.json", () => {
       expect(readFileSync(join(dir, "account.json"), "utf8")).toBe("old");
       writeAccountFile(dir, { email: "a", token: "cvd_y" }, true);
       expect(JSON.parse(readFileSync(join(dir, "account.json"), "utf8")).token).toBe("cvd_y");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a replacement is owner-only even when the old file wasn't", () => {
+    const dir = mkdtempSync(join(tmpdir(), "convt-dev-sign-in-"));
+    try {
+      writeFileSync(join(dir, "account.json"), "old", { mode: 0o644 });
+      chmodSync(join(dir, "account.json"), 0o644);
+      const file = writeAccountFile(dir, { email: "a", token: "cvd_y" }, true);
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a replacement that fails leaves the old file whole", () => {
+    const dir = mkdtempSync(join(tmpdir(), "convt-dev-sign-in-"));
+    try {
+      writeFileSync(join(dir, "account.json"), "old");
+      // Something already holds the temporary name, so the new file can't be made.
+      mkdirSync(join(dir, `.account.json.${process.pid}.tmp`));
+      expect(() => writeAccountFile(dir, { email: "a", token: "cvd_y" }, true)).toThrow();
+      expect(readFileSync(join(dir, "account.json"), "utf8")).toBe("old");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
