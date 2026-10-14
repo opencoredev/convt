@@ -1,5 +1,6 @@
 """Smoke must convert a document and fail a dead GUI; installer cleanup is owned."""
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 WINDOWS = Path(__file__).resolve().parent
@@ -28,6 +29,32 @@ class SmokeScriptTest(unittest.TestCase):
         self.assertIn("convt-app.exe did not start", SMOKE)
         self.assertNotIn("launch skipped", SMOKE)
         self.assertNotIn("CLI conversions still passed", SMOKE)
+
+
+class UrlProtocolTest(unittest.TestCase):
+    """Desktop sign-in returns through convt://auth, so the MSI must register it."""
+
+    def test_msi_registers_convt_links_for_the_installed_app(self) -> None:
+        ns = {"w": "http://wixtoolset.org/schemas/v4/wxs"}
+        root = ET.parse(WINDOWS / "convt.wxs").getroot()
+        refs = [r.get("Id") for r in root.iterfind(".//w:Feature/w:ComponentRef", ns)]
+        self.assertIn("UrlProtocol", refs)
+        component = root.find(".//w:Component[@Id='UrlProtocol']", ns)
+        self.assertIsNotNone(component)
+        key = component.find("w:RegistryKey", ns)
+        self.assertEqual(key.get("Root"), "HKCU")
+        self.assertEqual(key.get("Key"), "Software\\Classes\\convt")
+        values = {(v.get("Key"), v.get("Name")): v.get("Value") for v in key.iterfind("w:RegistryValue", ns)}
+        self.assertEqual(values[(None, None)], "URL:convt")
+        self.assertEqual(values[(None, "URL Protocol")], "")
+        self.assertEqual(
+            values[("shell\\open\\command", None)], '"[INSTALLFOLDER]convt-app.exe" "%1"'
+        )
+
+    def test_smoke_opens_a_link_and_uninstalls(self) -> None:
+        self.assertIn("Test-UrlProtocol", SMOKE)
+        self.assertIn("convt://auth?state=smoke", SMOKE)
+        self.assertIn("uninstalling left the convt protocol key behind", SMOKE)
 
 
 class InstallerCleanupTest(unittest.TestCase):
