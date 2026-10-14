@@ -101,8 +101,8 @@ function Test-UrlProtocol {
         if ($Command -ne "`"$App`" `"%1`"") { throw "convt protocol command is $Command" }
         Write-Host "convt:// opens: $Command"
         $Installed = {
-            @(Get-Process convt-app -ErrorAction SilentlyContinue |
-                Where-Object { $_.Path -and [System.IO.Path]::GetFullPath($_.Path) -eq $App })
+            Get-Process convt-app -ErrorAction SilentlyContinue |
+                Where-Object { $_.Path -and [System.IO.Path]::GetFullPath($_.Path) -eq $App }
         }
         Start-Process 'convt://auth?state=smoke&error=access_denied'
         $Launched = $null
@@ -116,7 +116,7 @@ function Test-UrlProtocol {
         # The second copy hands its link to the running app and exits.
         Start-Process 'convt://auth?state=smoke2&error=access_denied'
         Start-Sleep -Seconds 10
-        $Running = & $Installed
+        $Running = @(& $Installed)
         if ($Launched.HasExited) { throw 'the running convt-app.exe exited when a second link arrived' }
         if ($Running.Count -ne 1) { throw "a second link left $($Running.Count) convt-app.exe processes running" }
         $Inbox = Join-Path ([System.IO.Path]::GetTempPath()) 'convt'
