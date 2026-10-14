@@ -71,13 +71,19 @@ function Remove-OwnedDir {
 
 # Installs the MSI for this user, opens a convt:// link the way a browser
 # does, and checks that it starts the installed convt-app.exe. Uninstalling
-# must remove the protocol again.
+# must remove the protocol again. Because it installs and then uninstalls the
+# real product, it runs only in CI or on a machine without convt installed.
 function Test-UrlProtocol {
     param([string]$Msi, [string]$Log)
     $Key = 'HKCU:\Software\Classes\convt'
+    if (-not $env:CI -and (Test-Path -LiteralPath 'HKCU:\Software\Convt')) {
+        Write-Host 'convt is installed for this user; skipping the install and convt:// link check so it is left alone'
+        return
+    }
     $Install = Start-Process msiexec -ArgumentList '/i', "`"$Msi`"", '/qn', '/norestart', '/l*v', "`"$Log`"" -Wait -PassThru
     if ($Install.ExitCode -ne 0) { throw "msiexec /i exited $($Install.ExitCode); see $Log" }
-    $Launched = $null
+    $Dir = $null
+    $Passed = $false
     try {
         $Dir = (Get-ItemProperty -Path 'HKCU:\Software\Convt' -Name InstallFolder).InstallFolder
         $App = [System.IO.Path]::GetFullPath((Join-Path $Dir 'convt-app.exe'))
@@ -91,6 +97,7 @@ function Test-UrlProtocol {
         Write-Host "convt:// opens: $Command"
         if (Get-Process convt-app -ErrorAction SilentlyContinue) { throw 'a convt-app.exe is already running' }
         Start-Process 'convt://auth?state=smoke&error=access_denied'
+        $Launched = $null
         $Deadline = (Get-Date).AddSeconds(30)
         while (-not $Launched -and (Get-Date) -lt $Deadline) {
             Start-Sleep -Milliseconds 250
@@ -100,13 +107,20 @@ function Test-UrlProtocol {
         }
         if (-not $Launched) { throw 'opening a convt:// link did not start the installed convt-app.exe' }
         Write-Host "convt:// link started $App (pid $($Launched.Id))"
+        $Passed = $true
     } finally {
-        if ($Launched -and -not $Launched.HasExited) {
-            Stop-Process -Id $Launched.Id -ErrorAction SilentlyContinue
-            $Launched.WaitForExit(10000) | Out-Null
+        # Stop every app started from the install, matched or not, so the
+        # uninstall never meets files in use.
+        if ($Dir) {
+            $Root = [System.IO.Path]::GetFullPath($Dir)
+            Get-Process convt-app -ErrorAction SilentlyContinue |
+                Where-Object { $_.Path -and [System.IO.Path]::GetFullPath($_.Path).StartsWith($Root, [StringComparison]::OrdinalIgnoreCase) } |
+                ForEach-Object { Stop-Process -Id $_.Id -ErrorAction SilentlyContinue; $_.WaitForExit(10000) | Out-Null }
         }
         $Remove = Start-Process msiexec -ArgumentList '/x', "`"$Msi`"", '/qn', '/norestart' -Wait -PassThru
-        if ($Remove.ExitCode -ne 0) { throw "msiexec /x exited $($Remove.ExitCode)" }
+        # Report an uninstall failure only when it isn't hiding an earlier one.
+        if ($Passed -and $Remove.ExitCode -ne 0) { throw "msiexec /x exited $($Remove.ExitCode)" }
+        if ($Remove.ExitCode -ne 0) { Write-Warning "msiexec /x exited $($Remove.ExitCode)" }
     }
     if (Test-Path -LiteralPath $Key) { throw 'uninstalling left the convt protocol key behind' }
     Write-Host 'convt:// protocol registers on install and is removed on uninstall'
