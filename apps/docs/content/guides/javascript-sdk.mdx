@@ -7,7 +7,7 @@ description: The status of @convt/sdk, and what to use until it is published.
 `@convt/sdk` lives in the [convt repository](https://github.com/opencoredev/convt/tree/main/packages/sdk) but has not been published to npm, so `npm install @convt/sdk` does not work yet. Until it is, call the HTTP API directly as the [Quick start](/quick-start) does. The API is the stable contract, and the SDK is a thin layer over it.
 :::
 
-Once it is published, the SDK runs all five steps in one call. Pass `baseUrl` while `api.convt.app` is not live, because the SDK defaults to that host:
+Once it is published, the SDK runs all five steps in one call. It defaults to the verified production API host. Pass `baseUrl` only when using another compatible API endpoint:
 
 ```ts
 import { Convt } from "@convt/sdk";

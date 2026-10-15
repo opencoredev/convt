@@ -1,4 +1,4 @@
-import { apiBase, finalApi } from "../api-host.ts";
+import { apiBase } from "../api-host.ts";
 
 // Overlay that puts the shared host on the reference and Try it panel.
 const servers = `overlay: 1.1.0
@@ -13,9 +13,7 @@ actions:
     update:
       servers:
         - url: ${apiBase}
-          description: Production (interim host until api.convt.app resolves)
-        - url: ${finalApi}
-          description: Production (planned, not live yet)
+          description: Production API
 `;
 
 await Bun.write(new URL("../openapi/servers.yaml", import.meta.url), servers);
