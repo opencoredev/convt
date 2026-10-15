@@ -1,5 +1,11 @@
 # @convt/web
 
+## 0.5.0
+
+### Patch Changes
+
+- [#121](https://github.com/opencoredev/convt/pull/121) [`cf10d01`](https://github.com/opencoredev/convt/commit/cf10d01426f1bde22f53041dd7f06c4d6eefdcb8) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Dashboard tabs switch faster: a tab click no longer checks the session again before loading its page. The dashboard header is now one bar with the logo, the tabs and your avatar, and the underline slides to the tab you click.
+
 ## 0.4.0
 
 ### Minor Changes

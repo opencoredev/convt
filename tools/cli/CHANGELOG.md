@@ -1,5 +1,11 @@
 # @convt/cli
 
+## 0.5.0
+
+### Minor Changes
+
+- [#120](https://github.com/opencoredev/convt/pull/120) [`e218e71`](https://github.com/opencoredev/convt/commit/e218e7115fc0e6d9a11c4ae1bff7630341733f14) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Choose which formats the "Convert with convt" right-click menu offers for each kind of file: images, SVG, video, audio, PDFs, documents, spreadsheets and presentations. Pick them in the new Settings → Menu tab, in the order you want them, or with `convt menu set audio flac mp3`. Finder, Explorer, Nautilus and `convt targets --menu` follow the choice; for Dolphin, Nemo and Thunar, run `integrations/linux/install.py` again.
+
 ## 0.4.0
 
 ### Minor Changes
