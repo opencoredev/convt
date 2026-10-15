@@ -56,6 +56,7 @@ class UrlProtocolTest(unittest.TestCase):
         self.assertIn("convt://auth?state=smoke", SMOKE)
         self.assertIn("uninstalling left the convt protocol key behind", SMOKE)
         self.assertIn("a second convt:// link went to the running app", SMOKE)
+        self.assertIn("convt:// forwarding check", SMOKE)
 
 
 class InstallerCleanupTest(unittest.TestCase):

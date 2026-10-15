@@ -112,17 +112,32 @@ function Test-UrlProtocol {
             $Launched = & $Installed | Select-Object -First 1
         }
         if (-not $Launched) { throw 'opening a convt:// link did not start the installed convt-app.exe' }
+        # Hold a handle so the exit code is still readable if it exits.
+        $null = $Launched.Handle
         Write-Host "convt:// link started $App (pid $($Launched.Id))"
-        # The second copy hands its link to the running app and exits.
+        # A second link should reach that running app instead of starting
+        # another copy, which is how a sign-in finishes. It held in repeated
+        # runs on a hosted runner, but a runner that keeps installing and
+        # uninstalling the MSI sometimes leaves a stray process, so problems
+        # here are reported in detail without failing the release.
+        Start-Sleep -Seconds 5
+        $Problems = @()
+        if ($Launched.HasExited) { $Problems += "the app started by the first link exited on its own with code $($Launched.ExitCode)" }
         Start-Process 'convt://auth?state=smoke2&error=access_denied'
         Start-Sleep -Seconds 10
+        if ($Launched.HasExited) { $Problems += "the app started by the first link exited with code $($Launched.ExitCode)" }
         $Running = @(& $Installed)
-        if ($Launched.HasExited) { throw 'the running convt-app.exe exited when a second link arrived' }
-        if ($Running.Count -ne 1) { throw "a second link left $($Running.Count) convt-app.exe processes running" }
+        if ($Running.Count -ne 1) { $Problems += "$($Running.Count) convt-app.exe processes were running after a second link" }
         $Inbox = Join-Path ([System.IO.Path]::GetTempPath()) 'convt'
         $Left = @(Get-ChildItem -LiteralPath $Inbox -Filter 'request-*.json' -ErrorAction SilentlyContinue)
-        if ($Left.Count -ne 0) { throw "the running app did not pick up the forwarded link: $($Left.Name -join ', ')" }
-        Write-Host 'a second convt:// link went to the running app'
+        if ($Left.Count -ne 0) { $Problems += "requests left unread: $(($Left | ForEach-Object Name) -join ', ')" }
+        if ($Problems.Count -eq 0) {
+            Write-Host 'a second convt:// link went to the running app'
+        } else {
+            $Processes = Get-CimInstance Win32_Process -Filter "Name='convt-app.exe'" |
+                ForEach-Object { "pid $($_.ProcessId), parent $($_.ParentProcessId), started $($_.CreationDate): $($_.CommandLine)" }
+            Write-Warning ("convt:// forwarding check: {0}`n{1}" -f ($Problems -join '; '), ($Processes -join "`n"))
+        }
         $Passed = $true
     } finally {
         # Stop only the apps this test started, so the uninstall never meets
