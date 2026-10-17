@@ -124,6 +124,8 @@ const REQUIRED_ROUTES: &[(&str, &str, &str)] = &[
     ("mp4", "wav", "ffmpeg"),
     ("wav", "flac", "ffmpeg"),
     ("gif", "mp4", "ffmpeg"),
+    ("mpeg", "mp4", "ffmpeg"),
+    ("mpg4", "mp4", "ffmpeg"),
     ("pdf", "png", "pdfium"),
     ("pdf", "jpeg", "pdfium"),
     ("odt", "docx", "libreoffice"),
@@ -457,6 +459,8 @@ fn full_matrix() {
                     && !convt_engines::heic::LibheifEngine::new().supports_output("heic")
                 {
                     eprintln!("KNOWN GAP {} -> heic: no encoder offered", from.id);
+                } else if matches!(to.id, "mpeg" | "mpg4") {
+                    eprintln!("KNOWN GAP {} -> {}: input-only format", from.id, to.id);
                 } else {
                     eprintln!("GAP {} -> {}", from.id, to.id);
                 }
