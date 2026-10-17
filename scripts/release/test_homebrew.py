@@ -291,12 +291,12 @@ class TemplateTests(unittest.TestCase):
             root = Path(tmp)
             (root / "convt-macos-arm64.dmg").write_bytes(b"dmg")
             digest = __import__("hashlib").sha256(b"dmg").hexdigest()
-            url = "https://downloads.convt.app/0.4.0/convt-macos-arm64.dmg"
+            url = f"https://downloads.convt.app/{NEXT}/convt-macos-arm64.dmg"
             payload = {
                 "distribution_ready": True,
                 "builds": [
                     {
-                        "version": "0.4.0",
+                        "version": NEXT,
                         "artifacts": [
                             {
                                 "platform": "macos-arm64",
@@ -320,7 +320,7 @@ class TemplateTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             rendered = (out / "homebrew" / "convt.rb").read_text()
-            self.assertIn('version "0.4.0"', rendered)
+            self.assertIn(f'version "{NEXT}"', rendered)
             self.assertIn(digest, rendered)
             self.assertIn(url, rendered)
             self.assertIn("livecheck do", rendered)
