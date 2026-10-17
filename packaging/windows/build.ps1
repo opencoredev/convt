@@ -19,7 +19,20 @@ $Work = Join-Path $Repo 'packaging/out/windows/work'
 New-Item -ItemType Directory -Force $Cache,$Work,"$Out/licenses" | Out-Null
 foreach ($File in $Lock.files) {
     $Dest = Join-Path $Cache $File.name
-    if (!(Test-Path $Dest)) { Invoke-WebRequest -Uri $File.url -OutFile $Dest }
+    # The Ubuntu pool drops superseded versions; mirrors hold the same bytes.
+    $Urls = @($File.url)
+    if ($File.PSObject.Properties['mirrors']) { $Urls += $File.mirrors }
+    foreach ($Url in $Urls) {
+        if (Test-Path $Dest) { break }
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile "$Dest.partial"
+            if ((Get-FileHash "$Dest.partial" -Algorithm SHA256).Hash.ToLowerInvariant() -eq $File.sha256) {
+                Move-Item "$Dest.partial" $Dest
+            } else { Write-Warning "${Url}: SHA-256 mismatch" }
+        } catch { Write-Warning "${Url}: $($_.Exception.Message)" }
+        Remove-Item "$Dest.partial" -ErrorAction SilentlyContinue
+    }
+    if (!(Test-Path $Dest)) { throw "Download failed or SHA-256 mismatch: $($File.name)" }
     if ((Get-FileHash $Dest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $File.sha256) {
         throw "Hash mismatch: $($File.name); remove the cached file before retrying"
     }

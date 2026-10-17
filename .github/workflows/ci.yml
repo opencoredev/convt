@@ -114,8 +114,26 @@ jobs:
           python-version: "3.12"
       - name: Source archive and audit unit tests
         run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - name: Linux packaging unit tests
+        run: python3 -m unittest discover -s packaging/linux -p 'test_*.py' -v
+
+  windows-packaging:
+    # PowerShell download tests need the real Windows hosts rather than skipping on Ubuntu.
+    name: Windows packaging
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - name: Windows packaging unit tests
-        run: python3 -m unittest discover -s packaging/windows -p 'test_*.py' -v
+        run: python -m unittest discover -s packaging/windows -p 'test_*.py' -v
 
   web:
     name: Web
