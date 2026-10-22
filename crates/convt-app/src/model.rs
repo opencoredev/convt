@@ -26,6 +26,7 @@ use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
 use crate::request::Request;
 use crate::settings::{Kind, Settings, write_atomic};
+use crate::telemetry::Consent;
 use crate::update::{Update, UpdateConfig};
 
 /// How many rows the History tab shows.
@@ -33,6 +34,8 @@ const RECENT: usize = 200;
 
 /// Where the app keeps its files. Tests point these at a temp directory.
 pub struct Paths {
+    #[cfg(test)]
+    pub telemetry: Option<crate::telemetry::Telemetry>,
     /// `None` keeps settings in memory only.
     pub settings: Option<PathBuf>,
     /// `None` keeps history in memory only.
@@ -55,6 +58,8 @@ impl Paths {
     pub fn from_env() -> Self {
         use convt_engines::paths;
         Self {
+            #[cfg(test)]
+            telemetry: None,
             settings: Settings::path(),
             history: History::path(),
             presets: paths::presets_dir(),
@@ -320,7 +325,7 @@ impl Global for Shared {}
 impl AppState {
     pub(crate) fn sync_telemetry_identity(&mut self, cx: &mut Context<Self>) {
         if !self.telemetry_persisted {
-            self.telemetry.set_enabled(false);
+            self.telemetry.set_consent(Consent::Off);
             return;
         }
         let user = self
@@ -330,7 +335,7 @@ impl AppState {
             .and_then(|s| s.user_id.clone());
         if self.settings.telemetry_account != user {
             if self.settings.telemetry_account.is_some() {
-                self.telemetry.set_enabled(false);
+                self.telemetry.set_consent(Consent::Off);
                 self.settings.telemetry_anonymous_id = crate::telemetry::install_id();
                 self.telemetry.reset_anonymous_id(
                     self.settings
@@ -367,14 +372,20 @@ impl AppState {
     fn configure_telemetry(&mut self) {
         let enabled = self.settings.telemetry
             && self.telemetry_persisted
-            && !self.needs_telemetry_notice()
             && self
                 .settings
                 .telemetry_anonymous_id
                 .as_deref()
                 .is_some_and(crate::telemetry::valid_id);
-        self.telemetry.set_enabled(enabled);
-        if enabled && !crate::telemetry::do_not_track() && !self.telemetry_opened {
+        let consent = if !enabled || crate::telemetry::do_not_track() {
+            Consent::Off
+        } else if self.needs_telemetry_notice() {
+            Consent::AwaitingDisclosure
+        } else {
+            Consent::On
+        };
+        self.telemetry.set_consent(consent);
+        if consent != Consent::Off && !self.telemetry_opened {
             self.telemetry
                 .capture(crate::telemetry::Event::Opened, &self.license);
             self.telemetry_opened = true;
@@ -488,10 +499,20 @@ impl AppState {
                 .settings
                 .as_ref()
                 .is_some_and(|path| settings.save(path).is_ok());
+        #[cfg(not(test))]
         let telemetry = crate::telemetry::Telemetry::new(
             settings.telemetry_anonymous_id.clone().unwrap_or_default(),
-            false,
+            Consent::Off,
         );
+        #[cfg(test)]
+        let telemetry = paths.telemetry.unwrap_or_else(|| {
+            crate::telemetry::Telemetry::new(
+                settings.telemetry_anonymous_id.clone().unwrap_or_default(),
+                Consent::Off,
+            )
+        });
+        #[cfg(test)]
+        telemetry.reset_anonymous_id(settings.telemetry_anonymous_id.clone().unwrap_or_default());
         let mut menu_error = None;
         let menu = match &paths.menu {
             Some(path) => MenuChoices::load(path).unwrap_or_else(|e| {
@@ -700,7 +721,7 @@ impl AppState {
                     id,
                     job,
                     batch.clone(),
-                    Some(self.telemetry.conversion(&self.license)),
+                    self.telemetry.conversion(&self.license),
                 );
                 id
             })
@@ -772,7 +793,7 @@ impl AppState {
                     self.silent.insert(id);
                 }
                 self.runner
-                    .submit_tracked(id, job, Some(self.telemetry.conversion(&self.license)));
+                    .submit_tracked(id, job, self.telemetry.conversion(&self.license));
                 id
             })
             .collect();
@@ -1333,7 +1354,7 @@ impl AppState {
         let was_persisted = self.telemetry_persisted;
         change(&mut self.settings);
         if !self.settings.telemetry {
-            self.telemetry.set_enabled(false);
+            self.telemetry.set_consent(Consent::Off);
         }
         self.runner.set_concurrency(self.settings.concurrency());
         let saved = self

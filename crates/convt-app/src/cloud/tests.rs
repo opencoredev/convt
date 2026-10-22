@@ -647,7 +647,7 @@ fn telemetry_counts_the_cloud_runner_branch_without_local_engine_names() {
         id,
         webp(&file),
         Arc::new(cloud(fake, None)),
-        Some(sender.conversion(&convt_license::client::State::Unrestricted)),
+        sender.conversion(&convt_license::client::State::Unrestricted),
     );
     futures::executor::block_on(async { while queue.apply(rx.next().await.unwrap()).is_none() {} });
     assert!(matches!(queue.get(id).unwrap().status, Status::Done(_)));
@@ -769,6 +769,7 @@ mod app {
             .unwrap();
         }
         let paths = Paths {
+            telemetry: None,
             settings: None,
             history: Some(dir.path().join("history.db")),
             presets: None,
@@ -1057,6 +1058,7 @@ mod live {
         )
         .unwrap();
         let paths = Paths {
+            telemetry: None,
             settings: None,
             history: Some(dir.path().join("history.db")),
             presets: None,

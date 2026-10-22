@@ -201,6 +201,7 @@ impl Runner {
             cloud,
             telemetry,
         } = pending;
+        let telemetry = telemetry.filter(crate::telemetry::Conversion::active);
         let registry = self.registry.lock().unwrap().clone();
         let metadata = telemetry
             .as_ref()
@@ -554,12 +555,12 @@ mod tests {
         runner.submit_tracked(
             a,
             first,
-            Some(sender.conversion(&convt_license::client::State::Unrestricted)),
+            sender.conversion(&convt_license::client::State::Unrestricted),
         );
         runner.submit_tracked(
             b,
             second,
-            Some(sender.conversion(&convt_license::client::State::Unrestricted)),
+            sender.conversion(&convt_license::client::State::Unrestricted),
         );
         futures::executor::block_on(async { while rx.next().await != Some(Update::Started(a)) {} });
         runner.cancel(b);

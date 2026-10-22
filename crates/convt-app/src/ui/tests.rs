@@ -443,10 +443,20 @@ impl Fixture {
         packs: Arc<dyn pack::Backend>,
         license: impl FnOnce(&Path) -> client::Config,
     ) -> Self {
+        Self::build_with_telemetry(cx, packs, license, None)
+    }
+
+    fn build_with_telemetry(
+        cx: &mut TestAppContext,
+        packs: Arc<dyn pack::Backend>,
+        license: impl FnOnce(&Path) -> client::Config,
+        telemetry: Option<crate::telemetry::Telemetry>,
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let api = Arc::new(TestApi::default());
         let releases = Arc::new(TestReleases::default());
         let paths = Paths {
+            telemetry,
             settings: Some(dir.path().join("settings.toml")),
             history: Some(dir.path().join("history.db")),
             presets: Some(dir.path().join("presets")),

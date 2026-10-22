@@ -75,6 +75,46 @@ pub fn license_state(state: &LicenseState) -> &'static str {
 
 type Shared = Arc<(Mutex<State>, Condvar)>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Consent {
+    Off,
+    AwaitingDisclosure,
+    On,
+}
+
+#[derive(Clone, Copy)]
+struct SendGeneration(u64);
+
+struct RequestGate(Shared);
+
+impl ureq::middleware::Middleware for RequestGate {
+    fn handle(
+        &self,
+        request: ureq::http::Request<ureq::SendBody>,
+        next: ureq::middleware::MiddlewareNext,
+    ) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+        {
+            let state = self.0.0.lock().unwrap();
+            let admitted = state.consent == Consent::On
+                && request
+                    .extensions()
+                    .get::<SendGeneration>()
+                    .is_some_and(|generation| generation.0 == state.generation)
+                && !do_not_track()
+                && state.shutdown_deadline.is_none_or(|deadline| {
+                    deadline.saturating_duration_since(Instant::now()) >= REQUEST_TIMEOUT
+                });
+            if !admitted {
+                return Err(ureq::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "telemetry request was not admitted",
+                )));
+            }
+        }
+        next.handle(request)
+    }
+}
+
 #[derive(Clone)]
 pub struct Telemetry {
     shared: Shared,
@@ -96,7 +136,7 @@ impl Drop for Lifetime {
 }
 
 struct State {
-    enabled: bool,
+    consent: Consent,
     generation: u64,
     queue: VecDeque<Value>,
     stop: bool,
@@ -107,6 +147,8 @@ struct State {
     identification: Option<Value>,
     #[cfg(test)]
     before_send: Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>,
+    #[cfg(test)]
+    after_authorization: Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>,
 }
 
 pub enum Event {
@@ -126,18 +168,27 @@ pub struct Conversion {
 }
 
 impl Telemetry {
-    pub fn new(install: String, enabled: bool) -> Self {
+    pub fn new(install: String, consent: Consent) -> Self {
         #[cfg(not(test))]
         let endpoint = Some("https://us.i.posthog.com/batch/".to_string());
         #[cfg(test)]
         let endpoint = None;
-        Self::start(install, enabled, endpoint, INTERVAL)
+        Self::start(install, consent, endpoint, INTERVAL)
     }
 
-    fn start(install: String, enabled: bool, endpoint: Option<String>, interval: Duration) -> Self {
+    fn start(
+        install: String,
+        consent: Consent,
+        endpoint: Option<String>,
+        interval: Duration,
+    ) -> Self {
         let shared = Arc::new((
             Mutex::new(State {
-                enabled: enabled && !do_not_track(),
+                consent: if do_not_track() {
+                    Consent::Off
+                } else {
+                    consent
+                },
                 generation: 0,
                 queue: VecDeque::new(),
                 stop: false,
@@ -148,6 +199,8 @@ impl Telemetry {
                 identification: None,
                 #[cfg(test)]
                 before_send: None,
+                #[cfg(test)]
+                after_authorization: None,
             }),
             Condvar::new(),
         ));
@@ -168,6 +221,7 @@ impl Telemetry {
                     )
                     .max_redirects(0)
                     .timeout_global(Some(REQUEST_TIMEOUT))
+                    .middleware(RequestGate(shared.clone()))
                     .build()
                     .new_agent();
                 let (lock, wake) = &*shared;
@@ -183,10 +237,12 @@ impl Telemetry {
                     let generation = state.generation;
                     #[cfg(test)]
                     let before_send = state.before_send.take();
-                    let batch: Vec<_> = if state.enabled && !do_not_track() {
+                    let batch: Vec<_> = if state.consent == Consent::On && !do_not_track() {
                         state.queue.drain(..).collect()
                     } else {
-                        state.queue.clear();
+                        if state.stop || state.consent == Consent::Off || do_not_track() {
+                            state.queue.clear();
+                        }
                         Vec::new()
                     };
                     drop(state);
@@ -199,24 +255,18 @@ impl Telemetry {
                             let _ = paused.send(());
                             let _ = resume.recv_timeout(TIMEOUT);
                         }
-                        let state = lock.lock().unwrap();
-                        let timeout = state.shutdown_deadline.map_or(REQUEST_TIMEOUT, |deadline| {
-                            REQUEST_TIMEOUT.min(deadline.saturating_duration_since(Instant::now()))
-                        });
-                        let authorized = state.enabled
-                            && state.generation == generation
-                            && !do_not_track()
-                            && !timeout.is_zero();
-                        drop(state);
-                        if authorized {
-                            let _ = agent
-                                .post(endpoint)
-                                .header("content-type", "application/json")
-                                .config()
-                                .timeout_global(Some(timeout))
-                                .build()
-                                .send(body);
+                        #[cfg(test)]
+                        let after_authorization = lock.lock().unwrap().after_authorization.take();
+                        #[cfg(test)]
+                        if let Some((paused, resume)) = after_authorization {
+                            let _ = paused.send(());
+                            let _ = resume.recv_timeout(TIMEOUT);
                         }
+                        let _ = agent
+                            .post(endpoint)
+                            .header("content-type", "application/json")
+                            .extension(SendGeneration(generation))
+                            .send(body);
                     }
                     if stop {
                         break;
@@ -228,23 +278,30 @@ impl Telemetry {
         this
     }
 
-    pub fn set_enabled(&self, enabled: bool) {
+    pub fn set_consent(&self, consent: Consent) {
         let mut state = self.shared.0.lock().unwrap();
-        let enabled = enabled && !do_not_track();
-        if state.enabled != enabled {
+        let consent = if do_not_track() {
+            Consent::Off
+        } else {
+            consent
+        };
+        let was_off = state.consent == Consent::Off;
+        if state.consent != consent && (was_off || consent == Consent::Off) {
             state.generation += 1;
             state.queue.clear();
         }
-        let turning_on = !state.enabled && enabled;
-        state.enabled = enabled;
-        if turning_on && let Some(identification) = state.identification.clone() {
+        state.consent = consent;
+        if was_off
+            && consent != Consent::Off
+            && let Some(identification) = state.identification.clone()
+        {
             enqueue(&mut state, identification);
         }
     }
 
     pub fn reset_anonymous_id(&self, id: String) {
         let mut state = self.shared.0.lock().unwrap();
-        state.enabled = false;
+        state.consent = Consent::Off;
         state.generation += 1;
         state.queue.clear();
         state.install = id;
@@ -295,14 +352,14 @@ impl Telemetry {
         enqueue(&mut state, event);
     }
 
-    pub fn conversion(&self, license: &LicenseState) -> Conversion {
+    pub fn conversion(&self, license: &LicenseState) -> Option<Conversion> {
         let state = self.shared.0.lock().unwrap();
-        Conversion {
+        (state.consent == Consent::On && !state.stop && !do_not_track()).then(|| Conversion {
             telemetry: self.clone(),
             generation: state.generation,
             identity: state.user.as_ref().unwrap_or(&state.install).clone(),
             license: license_state(license),
-        }
+        })
     }
 
     pub fn shutdown(&self) {
@@ -326,12 +383,21 @@ impl Telemetry {
     #[cfg(test)]
     pub fn local(install: String, enabled: bool, endpoint: String, interval: Duration) -> Self {
         assert!(endpoint.starts_with("http://127.0.0.1:"));
-        Self::start(install, enabled, Some(endpoint), interval)
+        Self::start(
+            install,
+            if enabled { Consent::On } else { Consent::Off },
+            Some(endpoint),
+            interval,
+        )
     }
 }
 
 fn enqueue(state: &mut State, payload: Value) {
-    if state.enabled && !state.stop && !do_not_track() && state.queue.len() < CAPACITY {
+    if state.consent != Consent::Off
+        && !state.stop
+        && !do_not_track()
+        && state.queue.len() < CAPACITY
+    {
         state.queue.push_back(payload);
     }
 }
@@ -342,6 +408,13 @@ fn payload(name: &str, identity: &str, license: &str, mut properties: Value) -> 
 }
 
 impl Conversion {
+    pub fn active(&self) -> bool {
+        let state = self.telemetry.shared.0.lock().unwrap();
+        state.consent == Consent::On
+            && !state.stop
+            && !do_not_track()
+            && state.generation == self.generation
+    }
     pub fn started(&self, metadata: &Metadata) {
         self.capture("conversion_started", metadata.properties());
     }
@@ -354,7 +427,7 @@ impl Conversion {
     }
     fn capture(&self, name: &str, properties: Value) {
         let mut state = self.telemetry.shared.0.lock().unwrap();
-        if state.generation == self.generation {
+        if state.consent == Consent::On && state.generation == self.generation {
             enqueue(
                 &mut state,
                 payload(name, &self.identity, self.license, properties),
@@ -484,7 +557,7 @@ pub mod tests {
         let error = crate::jobs::JobError::from(&convt_core::Error::UndetectedFormat(
             "/private/error-name.token".into(),
         ));
-        let handle = t.conversion(&license);
+        let handle = t.conversion(&license).unwrap();
         handle.started(&metadata);
         handle.completed(&metadata, Some(error.kind), Duration::from_millis(42));
         t.shutdown();
@@ -575,7 +648,7 @@ pub mod tests {
             convt_core::format_by_id("webp").unwrap(),
         );
         let metadata = Metadata::of(&job, &convt_core::Registry::new(), false);
-        let conversion = t.conversion(&license);
+        let conversion = t.conversion(&license).unwrap();
         conversion.started(&metadata);
         t.identify(Some("user_fake_55"), &license);
         conversion.completed(&metadata, None, Duration::from_millis(12));
@@ -600,18 +673,18 @@ pub mod tests {
             t.capture(Event::Opened, &LicenseState::Unrestricted);
         }
         assert_eq!(t.shared.0.lock().unwrap().queue.len(), CAPACITY);
-        let handle = t.conversion(&LicenseState::Unrestricted);
-        t.set_enabled(false);
+        let handle = t.conversion(&LicenseState::Unrestricted).unwrap();
+        t.set_consent(Consent::Off);
         assert!(t.shared.0.lock().unwrap().queue.is_empty());
-        t.set_enabled(true);
+        t.set_consent(Consent::On);
         handle.capture("conversion_completed", json!({}));
         assert!(t.shared.0.lock().unwrap().queue.is_empty());
         t.identify(Some("account_a"), &LicenseState::Unrestricted);
-        let old = t.conversion(&LicenseState::Unrestricted);
+        let old = t.conversion(&LicenseState::Unrestricted).unwrap();
         t.identify(None, &LicenseState::Unrestricted);
         t.identify(Some("account_b"), &LicenseState::Unrestricted);
         old.capture("conversion_completed", json!({}));
-        t.set_enabled(false);
+        t.set_consent(Consent::Off);
         t.shutdown();
         assert_eq!(
             got.recv_timeout(Duration::from_millis(100)),
@@ -628,13 +701,105 @@ pub mod tests {
         t.shared.0.lock().unwrap().before_send = Some((paused, resumed));
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         reached.recv_timeout(Duration::from_secs(2)).unwrap();
-        t.set_enabled(false);
-        t.set_enabled(true);
+        t.set_consent(Consent::Off);
+        t.set_consent(Consent::On);
         resume.send(()).unwrap();
         t.shutdown();
         assert_eq!(
             got.recv_timeout(Duration::from_millis(100)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
+    }
+
+    #[test]
+    fn opt_out_after_authorization_rejects_the_request_at_send_entry() {
+        for re_enable in [false, true] {
+            let (url, got) = sink(Duration::ZERO);
+            let t = Telemetry::local("installation".into(), true, url, INTERVAL);
+            let (paused, reached) = mpsc::channel();
+            let (resume, resumed) = mpsc::channel();
+            t.shared.0.lock().unwrap().after_authorization = Some((paused, resumed));
+            t.capture(Event::Opened, &LicenseState::Unrestricted);
+            t.flush_now();
+            reached.recv_timeout(Duration::from_secs(2)).unwrap();
+            t.set_consent(Consent::Off);
+            if re_enable {
+                t.set_consent(Consent::On);
+            }
+            resume.send(()).unwrap();
+            t.shutdown();
+            assert_eq!(
+                got.recv_timeout(Duration::from_millis(100)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            );
+        }
+    }
+
+    #[test]
+    fn deferred_funnel_is_bounded_and_off_deferred_or_stopped_never_make_conversion_handles() {
+        let (url, got) = sink(Duration::ZERO);
+        let t = Telemetry::local("installation".into(), false, url, INTERVAL);
+        let license = LicenseState::Unrestricted;
+        assert!(t.conversion(&license).is_none());
+        t.set_consent(Consent::AwaitingDisclosure);
+        assert!(t.conversion(&license).is_none());
+        for _ in 0..CAPACITY + 20 {
+            t.capture(Event::Upgrade("deferred"), &license);
+        }
+        t.flush_now();
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(75)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        );
+        let generation = {
+            let state = t.shared.0.lock().unwrap();
+            assert_eq!(state.queue.len(), CAPACITY);
+            state.generation
+        };
+        t.set_consent(Consent::On);
+        assert_eq!(t.shared.0.lock().unwrap().generation, generation);
+        assert_eq!(t.shared.0.lock().unwrap().queue.len(), CAPACITY);
+        let handle = t.conversion(&license).unwrap();
+        assert!(handle.active());
+        t.set_consent(Consent::Off);
+        assert!(!handle.active());
+        assert!(t.conversion(&license).is_none());
+        t.set_consent(Consent::AwaitingDisclosure);
+        t.capture(Event::Upgrade("abandoned_disclosure"), &license);
+        t.shutdown();
+        assert!(t.shared.0.lock().unwrap().queue.is_empty());
+        assert!(t.conversion(&license).is_none());
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        );
+    }
+
+    #[test]
+    fn middleware_rejects_missing_generations_and_expiring_shutdown_budgets() {
+        let (url, got) = sink(Duration::ZERO);
+        let t = Telemetry::local("installation".into(), true, url.clone(), INTERVAL);
+        let agent = ureq::Agent::config_builder()
+            .middleware(RequestGate(t.shared.clone()))
+            .build()
+            .new_agent();
+        assert!(agent.post(&url).send("{}").is_err());
+        let generation = {
+            let mut state = t.shared.0.lock().unwrap();
+            state.shutdown_deadline = Some(Instant::now() + REQUEST_TIMEOUT / 2);
+            state.generation
+        };
+        assert!(
+            agent
+                .post(&url)
+                .extension(SendGeneration(generation))
+                .send("{}")
+                .is_err()
+        );
+        t.shutdown();
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
         );
     }
 
@@ -645,9 +810,9 @@ pub mod tests {
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         got.recv_timeout(Duration::from_secs(2)).unwrap();
         let start = Instant::now();
-        t.set_enabled(false);
+        t.set_consent(Consent::Off);
         assert!(start.elapsed() < Duration::from_millis(100));
-        t.set_enabled(true);
+        t.set_consent(Consent::On);
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         t.shutdown();
         assert!(start.elapsed() < Duration::from_millis(2300));
@@ -663,7 +828,8 @@ pub mod tests {
             assert!(do_not_track());
             let (url, got) = sink(Duration::ZERO);
             let t = Telemetry::local("installation".into(), true, url, INTERVAL);
-            t.set_enabled(true);
+            t.set_consent(Consent::On);
+            assert!(t.conversion(&LicenseState::Unrestricted).is_none());
             t.capture(Event::Opened, &LicenseState::Unrestricted);
             t.shutdown();
             assert_eq!(
@@ -693,7 +859,7 @@ pub mod tests {
         let a = install_id().unwrap();
         assert!(valid_id(&a));
         assert_ne!(a, install_id().unwrap());
-        let t = Telemetry::new(a, true);
+        let t = Telemetry::new(a, Consent::On);
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         t.shutdown();
         assert!(!crate::settings::Settings::default().telemetry);
