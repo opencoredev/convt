@@ -622,6 +622,45 @@ fn cloud_and_local_jobs_share_the_queue() {
     ));
 }
 
+#[test]
+fn telemetry_counts_the_cloud_runner_branch_without_local_engine_names() {
+    let fake = Arc::new(Fake {
+        outputs: vec![("1.webp", b"x")],
+        ..Fake::default()
+    });
+    fake.statuses
+        .lock()
+        .unwrap()
+        .push_back(Ok(remote(RemoteStatus::Succeeded, None)));
+    let (_dir, file) = input();
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let sender = crate::telemetry::Telemetry::local(
+        crate::telemetry::install_id().unwrap(),
+        true,
+        url,
+        Duration::from_secs(60),
+    );
+    let (runner, mut rx) = Runner::new(Arc::new(convt_core::Registry::new()), 1);
+    let mut queue = Queue::default();
+    let id = queue.add_cloud(&webp(&file));
+    runner.submit_cloud_tracked(
+        id,
+        webp(&file),
+        Arc::new(cloud(fake, None)),
+        Some(sender.conversion(&convt_license::client::State::Unrestricted)),
+    );
+    futures::executor::block_on(async { while queue.apply(rx.next().await.unwrap()).is_none() {} });
+    assert!(matches!(queue.get(id).unwrap().status, Status::Done(_)));
+    sender.shutdown();
+    let (_, body) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+    let events = body["batch"].as_array().unwrap();
+    assert_eq!(events.len(), 2);
+    for event in events {
+        assert_eq!(event["properties"]["engine"], serde_json::json!(["cloud"]));
+    }
+    assert_eq!(events[1]["properties"]["success"], true);
+}
+
 /// Test stand-ins for the parts of the app cloud jobs don't use.
 mod app_support {
     use std::path::PathBuf;

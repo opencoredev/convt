@@ -535,4 +535,48 @@ mod tests {
         }
         assert_eq!(queue.progress_line(), None);
     }
+
+    #[test]
+    fn telemetry_counts_running_cancellation_but_not_a_cancelled_queued_job() {
+        let (runner, mut rx, dir) = setup(1);
+        let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+        let sender = crate::telemetry::Telemetry::local(
+            crate::telemetry::install_id().unwrap(),
+            true,
+            url,
+            Duration::from_secs(60),
+        );
+        let mut queue = Queue::default();
+        let first = Job::new(dir.path().join("a.png"), format_by_id("jpeg").unwrap());
+        let second = Job::new(dir.path().join("b.png"), format_by_id("jpeg").unwrap());
+        let a = queue.add(&first);
+        let b = queue.add(&second);
+        runner.submit_tracked(
+            a,
+            first,
+            Some(sender.conversion(&convt_license::client::State::Unrestricted)),
+        );
+        runner.submit_tracked(
+            b,
+            second,
+            Some(sender.conversion(&convt_license::client::State::Unrestricted)),
+        );
+        futures::executor::block_on(async { while rx.next().await != Some(Update::Started(a)) {} });
+        runner.cancel(b);
+        runner.cancel(a);
+        drain(&mut rx, &mut queue, 2);
+        assert_eq!(queue.get(a).unwrap().status, Status::Cancelled);
+        assert_eq!(queue.get(b).unwrap().status, Status::Cancelled);
+        sender.shutdown();
+        let (_, body) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+        let events = body["batch"].as_array().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["event"], "conversion_started");
+        assert_eq!(events[1]["event"], "conversion_completed");
+        assert_eq!(events[1]["properties"]["error_kind"], "cancelled");
+        assert_eq!(
+            events[0]["properties"]["engine"],
+            serde_json::json!(["slow"])
+        );
+    }
 }

@@ -357,6 +357,7 @@ impl AppState {
             },
             cx,
         );
+        self.observe_trial(cx);
     }
 
     fn configure_telemetry(&mut self) {
@@ -378,6 +379,9 @@ impl AppState {
 
     pub(crate) fn observe_trial(&mut self, cx: &mut Context<Self>) {
         self.license = self.licensing.state();
+        if self.needs_telemetry_notice() || (self.settings.telemetry && !self.telemetry_persisted) {
+            return;
+        }
         let account = self
             .account
             .session
@@ -472,7 +476,7 @@ impl AppState {
             .as_deref()
             .is_some_and(crate::telemetry::valid_id)
         {
-            settings.telemetry_anonymous_id = crate::telemetry::install_id();
+            settings.telemetry_anonymous_id = settings.install_id.clone();
         }
         let telemetry_ready = errors.is_empty()
             && settings.install_id.is_some()
@@ -658,6 +662,13 @@ impl AppState {
                 "Cloud conversion doesn't take options yet. Convert on this computer to use them."
                     .into(),
             );
+        }
+        let allowed = self.licensing.begin_conversion();
+        self.license = self.licensing.state();
+        self.observe_trial(cx);
+        if let Err(blocked) = allowed {
+            cx.notify();
+            return Err(blocked.to_string());
         }
         let Some(session) = self.account.session.clone() else {
             return Err(CloudAccess::SignedOut.reason().unwrap_or_default());

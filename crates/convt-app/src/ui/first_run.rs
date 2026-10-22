@@ -329,7 +329,8 @@ impl FirstRunView {
                     s.telemetry_notice_version = 1;
                 },
                 cx,
-            )
+            );
+            s.observe_trial(cx);
         });
         super::show_main_after_finder_guide(cx);
         window.remove_window();

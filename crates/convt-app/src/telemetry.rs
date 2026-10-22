@@ -694,4 +694,59 @@ pub mod tests {
         assert!(start.elapsed() < TIMEOUT);
         assert!(t.shared.0.lock().unwrap().queue.is_empty());
     }
+
+    #[test]
+    fn metadata_keeps_the_ordered_multihop_engine_sequence() {
+        struct Hop(&'static str, &'static str, &'static str);
+        impl convt_core::Engine for Hop {
+            fn id(&self) -> &'static str {
+                self.0
+            }
+            fn steps(&self) -> Vec<convt_core::Step> {
+                vec![convt_core::Step {
+                    from: convt_core::format_by_id(self.1).unwrap(),
+                    to: convt_core::format_by_id(self.2).unwrap(),
+                }]
+            }
+            fn convert(
+                &self,
+                _: &convt_core::Ctx,
+                _: &std::path::Path,
+                _: &std::path::Path,
+            ) -> convt_core::Result<Vec<std::path::PathBuf>> {
+                unreachable!()
+            }
+        }
+        let mut registry = convt_core::Registry::new();
+        registry.register(Arc::new(Hop("decode", "png", "jpeg")));
+        registry.register(Arc::new(Hop("encode", "jpeg", "webp")));
+        let metadata = Metadata::of(
+            &convt_core::Job::new(
+                "/private/input.png",
+                convt_core::format_by_id("webp").unwrap(),
+            ),
+            &registry,
+            false,
+        );
+        assert_eq!(metadata.properties()["engine"], json!(["decode", "encode"]));
+        assert_eq!(metadata.properties()["from"], "png");
+        assert_eq!(metadata.properties()["to"], "webp");
+    }
+
+    #[test]
+    fn desktop_and_pro_licenses_have_distinct_common_states() {
+        for (plan, expected) in [
+            (convt_license::Plan::Desktop, "desktop"),
+            (convt_license::Plan::Pro, "pro"),
+        ] {
+            let license = convt_license::License {
+                id: "lic_fake".into(),
+                email: "never-sent@convt.test".into(),
+                plan,
+                issued: "2026-01-01".into(),
+                updates_until: "2027-01-01".into(),
+            };
+            assert_eq!(license_state(&LicenseState::Licensed(license)), expected);
+        }
+    }
 }
