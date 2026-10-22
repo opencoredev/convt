@@ -390,6 +390,11 @@ impl Licensing {
         self.state_on(today())
     }
 
+    pub fn account_trial_expired(&self) -> bool {
+        self.account_trial_ends_at
+            .is_some_and(|end| end <= SystemTime::now())
+    }
+
     pub fn state_on(&self, today: i64) -> State {
         if !self.config.enforce {
             return State::Unrestricted;
@@ -963,6 +968,7 @@ mod tests {
         let l = f.licensing(false);
         assert_eq!(l.session(), None);
         let session = Session {
+            user_id: None,
             email: "a@b.c".into(),
             token: "cvd_token".into(),
         };
@@ -997,6 +1003,7 @@ mod tests {
         });
         assert!(
             none.save_session(&Session {
+                user_id: None,
                 email: "a@b.c".into(),
                 token: "t".into()
             })

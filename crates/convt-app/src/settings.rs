@@ -35,6 +35,10 @@ pub struct Settings {
     /// Check convt.app for a newer build at launch and every few hours. On
     /// by default. Check now works either way.
     pub update_checks: bool,
+    pub telemetry: bool,
+    pub install_id: Option<String>,
+    pub telemetry_trial_started: Option<String>,
+    pub telemetry_trial_expired: Option<String>,
     /// When (Unix seconds) an update check last got an answer that checked
     /// out. Older files kept the day in `update_checked`, which is ignored.
     pub update_checked_at: Option<u64>,
@@ -62,6 +66,10 @@ impl Default for Settings {
             license_checked: None,
             trial_cache: None,
             update_checks: true,
+            telemetry: convt_license::client::Config::from_env(None, None).enforce,
+            install_id: None,
+            telemetry_trial_started: None,
+            telemetry_trial_expired: None,
             update_checked_at: None,
             update_sequence: 0,
             defaults: Defaults::default(),

@@ -226,7 +226,7 @@ export async function exchangeCode(
     createdAt: now,
     updatedAt: now,
   });
-  return json(200, { token, email: user.email });
+  return json(200, { token, email: user.email, user_id: grant.userId });
 }
 
 /** The bearer token of a request, if it looks like a device token. */
@@ -285,6 +285,7 @@ export async function renewDevice(
   const access = await proAccess(device.userId);
   return json(200, {
     key: current?.key ?? null,
+    user_id: device.userId,
     updates_until: current?.updatesUntil ?? null,
     access:
       access.kind === "trial"

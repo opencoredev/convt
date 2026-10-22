@@ -23,6 +23,7 @@ mod pack;
 mod placeholder;
 mod request;
 mod settings;
+mod telemetry;
 // Tests never track the real System Settings window.
 #[cfg(all(target_os = "macos", not(test)))]
 mod system_settings;
@@ -134,13 +135,14 @@ fn run(primary: instance::Primary, first: Request) {
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);
         cx.set_global(Shared(state.clone()));
+        let telemetry = state.read(cx).telemetry.clone();
+        cx.on_app_quit(move |_| {
+            telemetry.shutdown();
+            async {}
+        })
+        .detach();
         tray::init(&state, tray::platform::spawn, cx);
         cx.on_window_closed(last_window_closed).detach();
-        // The two network calls the app makes by itself: while signed in, at
-        // most once a UTC day, the Pro key renewal; while automatic update
-        // checks are on, at launch and then every few hours, the signed list
-        // of releases. convt keeps running in the background, so both are
-        // looked at again on a schedule.
         state.update(cx, |s, cx| s.start_update_checks(cx));
 
         primary.listen(move |req| drop(tx.unbounded_send(req)));

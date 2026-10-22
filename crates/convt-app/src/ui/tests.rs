@@ -40,6 +40,7 @@ use crate::update::{Fetch, FetchError, SelfInstall, Update, UpdateConfig};
 use convt_license::client::BUY_URL;
 
 mod background;
+mod telemetry;
 
 struct Fixture {
     dir: TempDir,
@@ -159,6 +160,7 @@ impl Api for TestApi {
             std::thread::sleep(Duration::from_millis(5));
         }
         Ok(convt_license::account::LicenseReply {
+            user_id: Some("user_fake_55".into()),
             key: self.key.lock().unwrap().clone()?,
             access: self.access.lock().unwrap().clone(),
         })
@@ -379,6 +381,7 @@ impl Fixture {
     /// A licensed build already signed in to convt.app as `email`.
     fn signed_in(cx: &mut TestAppContext, key: Option<&str>, email: &str) -> Self {
         let session = Session {
+            user_id: Some("user_fake_55".into()),
             email: email.into(),
             token: "cvd_test_token".into(),
         };
@@ -2502,6 +2505,7 @@ fn signing_in_from_onboarding_brings_it_back_with_the_key(cx: &mut TestAppContex
 
     // The browser's answer brings onboarding back, signed in, with the key.
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_new".into(),
     });
@@ -4265,6 +4269,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     assert_eq!(f.api.calls(), (0, 0, 0));
 
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_issued".into(),
     });
@@ -4309,6 +4314,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
 fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_issued".into(),
     });
@@ -4770,6 +4776,7 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
 fn a_second_sign_in_cannot_start_while_the_first_is_finishing(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_first".into(),
     });

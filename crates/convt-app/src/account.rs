@@ -9,8 +9,7 @@
 //!
 //! While signed in, the app asks convt.app for the account's current Pro key
 //! at most once a UTC day (checked at launch and every few hours while it
-//! runs), and when the user clicks Refresh license. Apart from the update check (`crate::update`), that is the only
-//! network call the app makes on its own. A key
+//! runs), and when the user clicks Refresh license. A key
 //! that comes back is stored without asking, but only when it covers newer
 //! builds than the stored one ([`Licensing::offer_key`]). Offline, or when
 //! the subscription lapsed, the stored key stays.
@@ -451,6 +450,7 @@ impl AppState {
         }) {
             Ok(session) => {
                 self.account.session = Some(session);
+                self.sync_telemetry_identity();
                 self.account.sign_in = SignIn::Idle;
                 // Signing in was the user's action; fetch the Pro key now.
                 self.refresh_license(cx);
@@ -469,6 +469,7 @@ impl AppState {
             tracing::warn!(error = %e, "could not forget a revoked sign-in");
         }
         self.account.session = None;
+        self.sync_telemetry_identity();
         self.account.access = None;
         self.account.refresh = Refresh::Idle;
         self.account._refresh_task = None;
@@ -494,6 +495,7 @@ impl AppState {
         self.account.sign_in = SignIn::Idle;
         self.account.refresh = Refresh::Idle;
         self.account.notice = Some("Signed out. The license on this computer stays.".into());
+        self.sync_telemetry_identity();
         self.account._refresh_task = None;
         self.account.awaiting_trial = false;
         self.account.trial_poll_started = None;
@@ -526,7 +528,13 @@ impl AppState {
             && self.account.refresh == Refresh::Idle
             && !self.license.allows_conversion();
         if self.account.session.is_some()
-            && (unknown_offer || self.settings.license_checked.as_deref() != Some(today.as_str()))
+            && (unknown_offer
+                || self
+                    .account
+                    .session
+                    .as_ref()
+                    .is_some_and(|s| s.user_id.is_none())
+                || self.settings.license_checked.as_deref() != Some(today.as_str()))
         {
             self.refresh_license(cx);
         }
@@ -558,10 +566,18 @@ impl AppState {
     }
 
     fn renewed(&mut self, result: Result<LicenseReply, ApiError>, cx: &mut Context<Self>) {
+        self.observe_trial(cx);
         let kept = "The license on this computer stays as it is.";
         let rate_limited = matches!(&result, Err(ApiError::RateLimited));
         self.account.refresh = match result {
             Ok(reply) => {
+                if let Some(user_id) = &reply.user_id
+                    && let Some(session) = &mut self.account.session
+                {
+                    session.user_id = Some(user_id.clone());
+                    let _ = self.licensing.save_session(session);
+                }
+                self.sync_telemetry_identity();
                 let remote_access = reply.access.clone();
                 self.account.access = remote_access.clone().map(|access| match access {
                     RemoteAccess::Pro => Access::Pro,
@@ -606,10 +622,16 @@ impl AppState {
                 }
                 match reply.key {
                     Some(key) => match self.licensing.offer_key(&key) {
-                        Ok(Renewed::Stored(l)) => Refresh::Done(format!(
-                            "Got your Pro key, with updates until {}.",
-                            l.updates_until
-                        )),
+                        Ok(Renewed::Stored(l)) => {
+                            self.telemetry.capture(
+                                crate::telemetry::Event::Activated(l.plan),
+                                &self.licensing.state(),
+                            );
+                            Refresh::Done(format!(
+                                "Got your Pro key, with updates until {}.",
+                                l.updates_until
+                            ))
+                        }
                         Ok(Renewed::Kept(l)) => Refresh::Done(format!(
                             "Your license is up to date, with updates until {}.",
                             l.updates_until
@@ -667,6 +689,7 @@ impl AppState {
         }
         self.license = self.licensing.state();
         // A renewed key may cover an update that needed renewing.
+        self.observe_trial(cx);
         self.reselect_update(cx);
         cx.notify();
     }

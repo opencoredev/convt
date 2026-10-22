@@ -59,6 +59,7 @@ struct Pending {
     video: bool,
     /// Set for a job that runs on convt's cloud.
     cloud: Option<Arc<Cloud>>,
+    telemetry: Option<crate::telemetry::Conversion>,
 }
 
 #[derive(Default)]
@@ -96,24 +97,47 @@ impl Runner {
         (runner, rx)
     }
 
+    #[cfg(test)]
     pub fn submit(&self, id: JobId, job: Job) {
+        self.submit_tracked(id, job, None);
+    }
+
+    pub fn submit_tracked(
+        &self,
+        id: JobId,
+        job: Job,
+        telemetry: Option<crate::telemetry::Conversion>,
+    ) {
         let video = is_video(&job);
         self.state.lock().unwrap().queue.push_back(Pending {
             id,
             job,
             video,
             cloud: None,
+            telemetry,
         });
         self.pump();
     }
 
     /// Queues a job that runs on convt's cloud.
+    #[cfg(test)]
     pub fn submit_cloud(&self, id: JobId, job: Job, cloud: Arc<Cloud>) {
+        self.submit_cloud_tracked(id, job, cloud, None);
+    }
+
+    pub fn submit_cloud_tracked(
+        &self,
+        id: JobId,
+        job: Job,
+        cloud: Arc<Cloud>,
+        telemetry: Option<crate::telemetry::Conversion>,
+    ) {
         self.state.lock().unwrap().queue.push_back(Pending {
             id,
             job,
             video: false,
             cloud: Some(cloud),
+            telemetry,
         });
         self.pump();
     }
@@ -175,19 +199,32 @@ impl Runner {
             job,
             video,
             cloud,
+            telemetry,
         } = pending;
+        let registry = self.registry.lock().unwrap().clone();
+        let metadata = telemetry
+            .as_ref()
+            .map(|_| crate::telemetry::Metadata::of(&job, &registry, cloud.is_some()));
+        let started = Instant::now();
+        if let (Some(telemetry), Some(metadata)) = (&telemetry, &metadata) {
+            telemetry.started(metadata);
+        }
         let tx = &self.tx;
         let _ = tx.unbounded_send(Update::Started(id));
         let progress = |p| drop(tx.unbounded_send(Update::Progress(id, p)));
         let result = match &cloud {
             Some(cloud) => crate::cloud::run(cloud, &job, &progress, &cancel),
-            None => {
-                let registry = self.registry.lock().unwrap().clone();
-                registry
-                    .run(&job, &progress, &cancel)
-                    .map_err(|e| JobError::from(&e))
-            }
+            None => registry
+                .run(&job, &progress, &cancel)
+                .map_err(|e| JobError::from(&e)),
         };
+        if let (Some(telemetry), Some(metadata)) = (&telemetry, &metadata) {
+            telemetry.completed(
+                metadata,
+                result.as_ref().err().map(|e| e.kind),
+                started.elapsed(),
+            );
+        }
         {
             let mut state = self.state.lock().unwrap();
             state.running.remove(&id);

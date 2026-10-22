@@ -719,6 +719,7 @@ mod app {
         }
         if signed_in {
             let session = Session {
+                user_id: None,
                 email: String::new(),
                 token: "cvd_device".into(),
             };
@@ -1007,6 +1008,7 @@ mod live {
             std::fs::write(dir.path().join("license.key"), key).unwrap();
         }
         let session = Session {
+            user_id: None,
             email: String::new(),
             token: token.into(),
         };

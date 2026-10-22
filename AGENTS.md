@@ -6,6 +6,8 @@ Users are people who want to convert files without uploading them. Conversions r
 
 ## Layout
 
+CNV-55 authorizes only the desktop usage events owned by `crates/convt-app/src/telemetry.rs`, with Settings opt-out, DO_NOT_TRACK, account-ID linkage and the privacy disclosure. The CLI stays silent; further telemetry needs explicit authorization.
+
 - `crates/convt-core`: format table, `Engine` trait, `Registry` that routes multi-hop conversions (BFS, max 3 hops). No native dependencies.
 - `crates/convt-engines`: FFmpeg (subprocess), `image`, resvg, PDFium (dynamically loaded from `vendor/pdfium`), LibreOffice (headless subprocess), HEIC via libheif (dynamically loaded) or `sips` on macOS. `default_registry()` registers whatever runs on this machine.
 - `crates/convt-cli`: the `convt` binary. `convt <files or folders> --to <fmt>` with options, `--preset`, `--json` progress, `-r` and `-j`; `convt formats [--json]`, `convt targets <file> [--menu]` (`--menu`: the short list right-click menus offer), `convt menu [show|set|reset]` (which formats those menus offer per kind of file, saved in `menu.toml` in the config directory and shared with the app's Settings → Menu), `convt engines`, `convt presets`, `convt pack [status|install|remove] documents`, `convt license [status|activate|remove]`.
