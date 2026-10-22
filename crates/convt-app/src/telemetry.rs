@@ -8,7 +8,18 @@ use serde_json::{Value, json};
 const CAPACITY: usize = 128;
 const INTERVAL: Duration = Duration::from_secs(60);
 const TIMEOUT: Duration = Duration::from_secs(2);
-const KEY: &str = "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw";
+fn public_key() -> Option<String> {
+    include_str!("../../../apps/web/wrangler.jsonc")
+        .lines()
+        .find_map(|line| {
+            let value = line
+                .trim()
+                .strip_prefix("\"POSTHOG_KEY\":")?
+                .trim()
+                .trim_end_matches(',');
+            serde_json::from_str(value).ok()
+        })
+}
 
 pub fn do_not_track() -> bool {
     std::env::var("DO_NOT_TRACK").is_ok_and(|v| {
@@ -89,6 +100,7 @@ struct State {
     queue: VecDeque<Value>,
     stop: bool,
     shutdown_deadline: Option<Instant>,
+    flush_at: Instant,
     install: String,
     user: Option<String>,
     identification: Option<Value>,
@@ -129,6 +141,7 @@ impl Telemetry {
                 queue: VecDeque::new(),
                 stop: false,
                 shutdown_deadline: None,
+                flush_at: Instant::now() + interval,
                 install,
                 user: None,
                 identification: None,
@@ -157,13 +170,14 @@ impl Telemetry {
                     .build()
                     .new_agent();
                 let (lock, wake) = &*shared;
-                let mut deadline = Instant::now() + interval;
+                let key = public_key();
                 loop {
                     let mut state = lock.lock().unwrap();
-                    while !state.stop && Instant::now() < deadline {
-                        let delay = deadline.saturating_duration_since(Instant::now());
+                    while !state.stop && Instant::now() < state.flush_at {
+                        let delay = state.flush_at.saturating_duration_since(Instant::now());
                         state = wake.wait_timeout(state, delay).unwrap().0;
                     }
+                    state.flush_at = Instant::now() + interval;
                     let stop = state.stop;
                     let generation = state.generation;
                     #[cfg(test)]
@@ -176,9 +190,9 @@ impl Telemetry {
                     };
                     drop(state);
                     if !batch.is_empty()
-                        && let Some(endpoint) = &endpoint
+                        && let (Some(endpoint), Some(key)) = (&endpoint, &key)
                     {
-                        let body = json!({"api_key": KEY, "batch": batch}).to_string();
+                        let body = json!({"api_key": key, "batch": batch}).to_string();
                         #[cfg(test)]
                         if let Some((paused, resume)) = before_send {
                             let _ = paused.send(());
@@ -206,7 +220,6 @@ impl Telemetry {
                     if stop {
                         break;
                     }
-                    deadline = Instant::now() + interval;
                 }
                 let _ = tx.send(());
             })
@@ -291,6 +304,12 @@ impl Telemetry {
             self.shared.1.notify_one();
         }
         let _ = self.done.lock().unwrap().recv_timeout(TIMEOUT);
+    }
+
+    #[cfg(test)]
+    pub fn flush_now(&self) {
+        self.shared.0.lock().unwrap().flush_at = Instant::now();
+        self.shared.1.notify_one();
     }
 
     #[cfg(test)]
@@ -626,5 +645,43 @@ pub mod tests {
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         t.shutdown();
         assert!(!crate::settings::Settings::default().telemetry);
+    }
+
+    #[test]
+    fn source_defaults_send_nothing_and_events_wait_for_the_batch_interval() {
+        let (url, got) = sink(Duration::ZERO);
+        let t = Telemetry::local(
+            "installation".into(),
+            crate::settings::Settings::default().telemetry,
+            url,
+            INTERVAL,
+        );
+        t.capture(Event::Opened, &LicenseState::Unrestricted);
+        t.shutdown();
+        assert!(got.recv_timeout(Duration::from_millis(50)).is_err());
+        let (url, got) = sink(Duration::ZERO);
+        let t = Telemetry::local("installation".into(), true, url, Duration::from_millis(250));
+        t.capture(Event::Opened, &LicenseState::Unrestricted);
+        assert!(got.recv_timeout(Duration::from_millis(100)).is_err());
+        got.recv_timeout(Duration::from_secs(2)).unwrap();
+        t.shutdown();
+    }
+
+    #[test]
+    fn offline_batches_are_dropped_without_retry_or_shutdown_delay() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/batch/", listener.local_addr().unwrap());
+        drop(listener);
+        let t = Telemetry::local(
+            "installation".into(),
+            true,
+            endpoint,
+            Duration::from_millis(10),
+        );
+        t.capture(Event::Opened, &LicenseState::Unrestricted);
+        let start = Instant::now();
+        t.shutdown();
+        assert!(start.elapsed() < TIMEOUT);
+        assert!(t.shared.0.lock().unwrap().queue.is_empty());
     }
 }

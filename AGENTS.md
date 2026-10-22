@@ -4,9 +4,9 @@ Local file conversion: right-click a file, pick a format. The engine is Rust; th
 
 Users are people who want to convert files without uploading them. Conversions run on the user's machine. The paid cloud API (convt-server and convt-worker, on Railway) is the only part that receives files. Release 0.2.0 ships the desktop app and CLI for macOS on Apple silicon and Windows x86_64; the Linux packages build from `packaging/linux` but are not in a release yet. Payments run through convt-billing (Polar as merchant of record); locally only against a mock. Pricing and licensing are product decisions: do not add a free tier, telemetry, or network calls to the desktop app or CLI without being asked.
 
-## Layout
-
 CNV-55 authorizes only the desktop usage events owned by `crates/convt-app/src/telemetry.rs`, with Settings opt-out, DO_NOT_TRACK, account-ID linkage and the privacy disclosure. The CLI stays silent; further telemetry needs explicit authorization.
+
+## Layout
 
 - `crates/convt-core`: format table, `Engine` trait, `Registry` that routes multi-hop conversions (BFS, max 3 hops). No native dependencies.
 - `crates/convt-engines`: FFmpeg (subprocess), `image`, resvg, PDFium (dynamically loaded from `vendor/pdfium`), LibreOffice (headless subprocess), HEIC via libheif (dynamically loaded) or `sips` on macOS. `default_registry()` registers whatever runs on this machine.

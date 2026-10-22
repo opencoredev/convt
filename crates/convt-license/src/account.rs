@@ -492,16 +492,21 @@ mod tests {
 
     #[test]
     fn exchange_and_renewal_over_http() {
-        let (base, got) = serve_once(200, r#"{"token":"cvd_x","email":"a@b.c"}"#);
+        let (base, got) = serve_once(
+            200,
+            r#"{"token":"cvd_x","email":"a@b.c","user_id":"user_fake_55"}"#,
+        );
         let session = Http::new(&base).exchange("code1", "ver1").unwrap();
         assert_eq!(session.token, "cvd_x");
+        assert_eq!(session.user_id.as_deref(), Some("user_fake_55"));
         let request = got.recv().unwrap();
         assert!(request.starts_with("POST /api/device/token "));
         assert!(request.contains(r#""code":"code1""#) && request.contains(r#""verifier":"ver1""#));
 
-        let (base, got) = serve_once(200, r#"{"key":"k.s"}"#);
+        let (base, got) = serve_once(200, r#"{"key":"k.s","user_id":"user_fake_55"}"#);
         let key = Http::new(&base).current_key("cvd_x", "0.1.0").unwrap();
         assert_eq!(key.key.as_deref(), Some("k.s"));
+        assert_eq!(key.user_id.as_deref(), Some("user_fake_55"));
         let request = got.recv().unwrap().to_ascii_lowercase();
         assert!(request.starts_with("post /api/device/license "));
         assert!(request.contains("authorization: bearer cvd_x"));
