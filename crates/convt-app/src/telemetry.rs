@@ -163,6 +163,9 @@ fn do_not_track() -> bool {
 }
 
 fn send_batch(events: &[Value]) {
+    if cfg!(test) {
+        return;
+    }
     let body = json!({"api_key": PROJECT_KEY, "batch": events});
     let agent = ureq::Agent::config_builder()
         .https_only(true)
@@ -181,10 +184,6 @@ pub fn size_bucket(size: Option<u64>) -> &'static str {
         104_857_600..=1_073_741_823 => "100MB-1GB",
         _ => ">1GB",
     }
-}
-
-pub fn allowed(setting: bool, enforced: bool) -> bool {
-    enabled(setting, enforced)
 }
 
 /// Shared opt-out gate for all desktop telemetry, including crash reporting.
@@ -209,8 +208,8 @@ mod tests {
     }
     #[test]
     fn opt_out_gates_setting_and_enforcement() {
-        assert!(!allowed(false, true));
-        assert!(!allowed(true, false));
+        assert!(!enabled(false, true));
+        assert!(!enabled(true, false));
     }
     #[test]
     fn scrubbed_payload_has_no_path_or_error_text() {

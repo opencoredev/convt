@@ -286,7 +286,7 @@ impl AppState {
             notice: None,
         };
         let mut errors = Vec::new();
-        let settings = match &paths.settings {
+        let mut settings = match &paths.settings {
             Some(path) => Settings::load(path).unwrap_or_else(|e| {
                 errors.push(format!(
                     "Settings were not loaded: {e}. Saving a change replaces the file."
@@ -295,6 +295,15 @@ impl AppState {
             }),
             None => Settings::default(),
         };
+        if settings.install_id.is_empty() {
+            settings.install_id = crate::telemetry::new_install_id();
+            if errors.is_empty()
+                && let Some(path) = &paths.settings
+                && let Err(e) = settings.save(path)
+            {
+                errors.push(format!("Settings were not saved: {e}"));
+            }
+        }
         let history = paths
             .history
             .as_deref()
@@ -791,30 +800,6 @@ impl AppState {
             } else {
                 &mut self.batch
             };
-            let outcome = match entry.status {
-                Status::Done(outputs) => {
-                    batch.done += 1;
-                    if !silent
-                        && self.settings.reveal_when_done
-                        && let Some(first) = outputs.first()
-                    {
-                        // GPUI's test platform can't reveal files.
-                        #[cfg(not(test))]
-                        cx.reveal_path(first);
-                        #[cfg(test)]
-                        self.revealed.push(first.clone());
-                    }
-                    Outcome::Done(outputs)
-                }
-                Status::Failed(e) => {
-                    batch.failed += 1;
-                    Outcome::Failed(e.message)
-                }
-                _ => {
-                    batch.cancelled += 1;
-                    Outcome::Cancelled
-                }
-            };
             if matches!(entry.status, Status::Done(_) | Status::Failed(_)) {
                 let mut props = self.telemetry.common(&self.license);
                 props.insert(
@@ -842,6 +827,30 @@ impl AppState {
                 }
                 self.telemetry.capture("conversion_completed", props);
             }
+            let outcome = match entry.status {
+                Status::Done(outputs) => {
+                    batch.done += 1;
+                    if !silent
+                        && self.settings.reveal_when_done
+                        && let Some(first) = outputs.first()
+                    {
+                        // GPUI's test platform can't reveal files.
+                        #[cfg(not(test))]
+                        cx.reveal_path(first);
+                        #[cfg(test)]
+                        self.revealed.push(first.clone());
+                    }
+                    Outcome::Done(outputs)
+                }
+                Status::Failed(e) => {
+                    batch.failed += 1;
+                    Outcome::Failed(e.message)
+                }
+                _ => {
+                    batch.cancelled += 1;
+                    Outcome::Cancelled
+                }
+            };
             if let Err(e) = self
                 .history
                 .add(&entry.input, entry.to.id, &entry.setup, &outcome)

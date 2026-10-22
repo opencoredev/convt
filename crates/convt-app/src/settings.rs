@@ -49,7 +49,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            install_id: crate::telemetry::new_install_id(),
+            install_id: String::new(),
             output_dir: None,
             concurrency: None,
             notifications: true,

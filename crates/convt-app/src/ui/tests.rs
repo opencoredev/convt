@@ -949,6 +949,31 @@ fn presets_are_saved_used_and_deleted(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn installation_identity_is_saved_without_changing_preferences(cx: &mut TestAppContext) {
+    let fresh = Fixture::new(cx);
+    let saved = crate::settings::Settings::load(&fresh.dir.path().join("settings.toml")).unwrap();
+    assert_eq!(saved.install_id.len(), 36);
+    cx.read(|cx| assert_eq!(fresh.app.read(cx).settings.install_id, saved.install_id));
+
+    let legacy = Fixture::build(cx, |dir| {
+        std::fs::write(dir.join("settings.toml"), "telemetry = false\n").unwrap();
+        client::Config {
+            enforce: false,
+            public_key: None,
+            build_date: BUILD_DATE.into(),
+            trial_file: None,
+            store: KeyStore::None,
+        }
+    });
+    let path = legacy.dir.path().join("settings.toml");
+    let saved = crate::settings::Settings::load(&path).unwrap();
+    assert_eq!(saved.install_id.len(), 36);
+    assert!(!saved.telemetry);
+    assert_eq!(crate::settings::Settings::load(&path).unwrap(), saved);
+    cx.read(|cx| assert_eq!(legacy.app.read(cx).settings.install_id, saved.install_id));
+}
+
+#[gpui_kit::test]
 fn settings_change_and_persist(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let (window, _) = f.settings(SettingsTab::General, cx);
