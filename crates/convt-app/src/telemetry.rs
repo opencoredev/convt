@@ -256,8 +256,8 @@ impl Telemetry {
         if state.user.as_deref() == user {
             return;
         }
-        state.generation += 1;
         if state.user.is_some() {
+            state.generation += 1;
             state.queue.clear();
         }
         state.user = user.map(str::to_string);
@@ -560,6 +560,34 @@ pub mod tests {
         println!(
             "LOCAL_CAPTURE events={names:?} distinct_id=user_fake_55 content_type=application/json path_and_error_text=absent"
         );
+    }
+
+    #[test]
+    fn identifying_during_a_conversion_keeps_its_anonymous_completion() {
+        let (url, got) = sink(Duration::ZERO);
+        let anonymous = "00000000-0000-4000-8000-000000000055";
+        let t = Telemetry::local(anonymous.into(), true, url, INTERVAL);
+        let license = LicenseState::Unrestricted;
+        let job = convt_core::Job::new(
+            "/private/anonymous-conversion.png",
+            convt_core::format_by_id("webp").unwrap(),
+        );
+        let metadata = Metadata::of(&job, &convt_core::Registry::new(), false);
+        let conversion = t.conversion(&license);
+        conversion.started(&metadata);
+        t.identify(Some("user_fake_55"), &license);
+        conversion.completed(&metadata, None, Duration::from_millis(12));
+        t.shutdown();
+        let (_, body) = got.recv_timeout(Duration::from_secs(3)).unwrap();
+        let events = body["batch"].as_array().unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0]["event"], "conversion_started");
+        assert_eq!(events[1]["event"], "$identify");
+        assert_eq!(events[1]["properties"]["$anon_distinct_id"], anonymous);
+        assert_eq!(events[2]["event"], "conversion_completed");
+        assert_eq!(events[0]["distinct_id"], anonymous);
+        assert_eq!(events[2]["distinct_id"], anonymous);
+        assert_eq!(events[2]["properties"]["success"], true);
     }
 
     #[test]
