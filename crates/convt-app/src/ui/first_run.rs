@@ -490,9 +490,12 @@ impl Render for FirstRunView {
             .child(div().flex().px(px(28.)).pt(px(24.)).child(art))
             .child(
                 div()
+                    .id("first-run-copy")
                     .flex()
                     .flex_col()
                     .flex_1()
+                    .min_h(px(0.))
+                    .overflow_y_scroll()
                     .gap(px(8.))
                     .px(px(28.))
                     .pt(px(24.))
