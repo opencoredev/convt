@@ -86,11 +86,12 @@ const sections: LegalSection[] = [
               ID and subsequent events to your account ID, not your email. File names, paths,
               content and error messages are never included. PostHog processes this data in the
               United States. Requests expose an IP address to the network service, but events set
-              the IP to null and disable geolocation enrichment. Statistics are on by default in
-              packaged builds and off in source builds that do not enforce licensing. Turn them off
-              in Settings → General → Usage statistics, or set DO_NOT_TRACK to a truthy value.
-              Turning them off clears pending events and prevents new sends; an already-started
-              request cannot be recalled. The CLI sends no usage statistics.
+              the IP to null and disable geolocation enrichment. The setting starts on in packaged
+              builds, with a disclosure before the first send. Source builds default off and need an
+              explicit opt-in. Turn statistics off in Settings → General → Usage statistics, or set
+              DO_NOT_TRACK to a truthy value. Turning them off clears pending events and prevents
+              new sends; an already-started request cannot be recalled. The CLI sends no usage
+              statistics.
             </>,
             <>
               <span className={strong}>Things you ask for.</span> Signing in, installing the

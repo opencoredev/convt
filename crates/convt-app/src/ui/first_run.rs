@@ -954,7 +954,7 @@ impl Render for FirstRunView {
                         "Anonymous usage statistics are on. Signing in links usage to your account. No file names, paths or content are sent. Turn off in Settings → General → Usage statistics."
                     } else {
                         "Usage statistics are off. You can change this in Settings → General → Usage statistics."
-                    }, &p))),
+                    }, &p).id("telemetry-first-run").test_support())),
             )
     }
 }

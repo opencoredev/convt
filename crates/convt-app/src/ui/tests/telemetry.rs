@@ -654,3 +654,59 @@ fn onboarding_defers_the_trial_start_until_disclosure_finishes(cx: &mut TestAppC
     );
     sender.shutdown();
 }
+
+#[gpui_kit::test]
+fn signed_in_startup_preserves_corrupt_opt_out_settings(cx: &mut TestAppContext) {
+    let original = "telemetry = false\nnotifications = broken";
+    let f = Fixture::build(cx, |dir| {
+        std::fs::write(dir.join("settings.toml"), original).unwrap();
+        std::fs::write(
+            dir.join("account.json"),
+            serde_json::to_vec(&Session {
+                email: "fake@convt.test".into(),
+                token: "cvd_local_only".into(),
+                user_id: Some("user_fake_55".into()),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        client::Config {
+            enforce: false,
+            public_key: None,
+            build_date: BUILD_DATE.into(),
+            trial_file: None,
+            store: KeyStore::File(dir.join("license.key")),
+        }
+    });
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("settings.toml")).unwrap(),
+        original
+    );
+    cx.read(|cx| {
+        assert!(f.app.read(cx).account.session.is_some());
+        assert!(!f.app.read(cx).settings.telemetry);
+    });
+}
+
+#[gpui_kit::test]
+fn the_enabled_disclosure_keeps_onboarding_actions_reachable(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| s.update_settings(|s| s.telemetry = true, cx))
+    });
+    let app = f.app.clone();
+    let (first, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    gpui_kit::VisualTestContext::from_window(first, cx).simulate_resize(size(px(900.), px(640.)));
+    for id in [
+        "onboarding-google",
+        "onboarding-email",
+        "onboarding-key-link",
+        "privacy",
+    ] {
+        assert!(fits(cx, first, id), "{id}");
+    }
+    assert!(shown(cx, first, "telemetry-first-run"));
+}

@@ -319,6 +319,10 @@ impl Global for Shared {}
 
 impl AppState {
     pub(crate) fn sync_telemetry_identity(&mut self, cx: &mut Context<Self>) {
+        if !self.telemetry_persisted {
+            self.telemetry.set_enabled(false);
+            return;
+        }
         let user = self
             .account
             .session
@@ -1326,6 +1330,7 @@ impl AppState {
 
     /// Applies a settings change and saves it.
     pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        let was_persisted = self.telemetry_persisted;
         change(&mut self.settings);
         if !self.settings.telemetry {
             self.telemetry.set_enabled(false);
@@ -1338,6 +1343,9 @@ impl AppState {
         self.telemetry_persisted = matches!(saved, Some(Ok(())));
         if let Some(Err(e)) = saved {
             self.errors.push(format!("Settings were not saved: {e}"));
+        }
+        if !was_persisted && self.telemetry_persisted {
+            self.sync_telemetry_identity(cx);
         }
         self.configure_telemetry();
         cx.notify();

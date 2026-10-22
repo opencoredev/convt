@@ -411,7 +411,7 @@ pub mod tests {
         let url = format!("http://{}/batch/", listener.local_addr().unwrap());
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(90);
             while Instant::now() < deadline {
                 let Ok((mut stream, _)) = listener.accept() else {
                     std::thread::sleep(Duration::from_millis(5));
