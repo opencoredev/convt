@@ -417,6 +417,7 @@ pub mod tests {
                     std::thread::sleep(Duration::from_millis(5));
                     continue;
                 };
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(3)))
                     .unwrap();
@@ -611,7 +612,10 @@ pub mod tests {
         old.capture("conversion_completed", json!({}));
         t.set_enabled(false);
         t.shutdown();
-        assert!(got.recv_timeout(Duration::from_millis(100)).is_err());
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
     }
 
     #[test]
@@ -627,7 +631,10 @@ pub mod tests {
         t.set_enabled(true);
         resume.send(()).unwrap();
         t.shutdown();
-        assert!(got.recv_timeout(Duration::from_millis(100)).is_err());
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
     }
 
     #[test]
@@ -643,7 +650,10 @@ pub mod tests {
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         t.shutdown();
         assert!(start.elapsed() < Duration::from_millis(2300));
-        assert!(got.recv_timeout(Duration::from_millis(200)).is_err());
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(200)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
     }
 
     #[test]
@@ -655,7 +665,10 @@ pub mod tests {
             t.set_enabled(true);
             t.capture(Event::Opened, &LicenseState::Unrestricted);
             t.shutdown();
-            assert!(got.recv_timeout(Duration::from_millis(50)).is_err());
+            assert_eq!(
+                got.recv_timeout(Duration::from_millis(50)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            );
             return;
         }
         for value in ["1", "true", "yes", "on", "anything"] {
@@ -696,11 +709,17 @@ pub mod tests {
         );
         t.capture(Event::Opened, &LicenseState::Unrestricted);
         t.shutdown();
-        assert!(got.recv_timeout(Duration::from_millis(50)).is_err());
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(50)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
         let (url, got) = sink(Duration::ZERO);
         let t = Telemetry::local("installation".into(), true, url, Duration::from_millis(250));
         t.capture(Event::Opened, &LicenseState::Unrestricted);
-        assert!(got.recv_timeout(Duration::from_millis(100)).is_err());
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
         got.recv_timeout(Duration::from_secs(2)).unwrap();
         t.shutdown();
     }

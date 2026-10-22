@@ -188,6 +188,7 @@ pub struct Account {
     trial_poll_started: Option<Instant>,
     /// When the trial poll last asked, so a focus check doesn't pile on.
     trial_checked_at: Option<Instant>,
+    identity_attempted: bool,
     _sign_in_task: Option<Task<()>>,
     _refresh_task: Option<Task<()>>,
 }
@@ -207,6 +208,7 @@ impl Account {
             awaiting_trial: false,
             trial_poll_started: None,
             trial_checked_at: None,
+            identity_attempted: false,
             _sign_in_task: None,
             _refresh_task: None,
         }
@@ -453,13 +455,19 @@ impl AppState {
                     .account
                     .session
                     .as_ref()
-                    .is_some_and(|old| old.user_id != session.user_id)
+                    .is_some_and(|old| old.user_id.is_none() || old.user_id != session.user_id)
                 {
+                    self.account._refresh_task = None;
+                    self.account.refresh = Refresh::Idle;
+                    self.account.access = None;
+                    self.account.awaiting_trial = false;
+                    self.account.trial_poll_started = None;
                     self.licensing.set_account_trial(None);
                     self.update_settings(|s| s.trial_cache = None, cx);
                     self.license = self.licensing.state();
                 }
                 self.account.session = Some(session);
+                self.account.identity_attempted = false;
                 self.sync_telemetry_identity(cx);
                 self.account.sign_in = SignIn::Idle;
                 // Signing in was the user's action; fetch the Pro key now.
@@ -479,6 +487,7 @@ impl AppState {
             tracing::warn!(error = %e, "could not forget a revoked sign-in");
         }
         self.account.session = None;
+        self.account.identity_attempted = false;
         self.sync_telemetry_identity(cx);
         self.account.access = None;
         self.account.refresh = Refresh::Idle;
@@ -503,6 +512,7 @@ impl AppState {
             return;
         }
         self.account.sign_in = SignIn::Idle;
+        self.account.identity_attempted = false;
         self.account.refresh = Refresh::Idle;
         self.account.notice = Some("Signed out. The license on this computer stays.".into());
         self.sync_telemetry_identity(cx);
@@ -539,11 +549,12 @@ impl AppState {
             && !self.license.allows_conversion();
         if self.account.session.is_some()
             && (unknown_offer
-                || self
-                    .account
-                    .session
-                    .as_ref()
-                    .is_some_and(|s| s.user_id.is_none())
+                || (!self.account.identity_attempted
+                    && self
+                        .account
+                        .session
+                        .as_ref()
+                        .is_some_and(|s| s.user_id.is_none()))
                 || self.settings.license_checked.as_deref() != Some(today.as_str()))
         {
             self.refresh_license(cx);
@@ -560,6 +571,7 @@ impl AppState {
             return;
         }
         let today = date::from_days(today());
+        self.account.identity_attempted = true;
         self.update_settings(|s| s.license_checked = Some(today), cx);
         self.account.notice = None;
         self.account.refresh = Refresh::Running;
