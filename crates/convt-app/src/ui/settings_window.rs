@@ -545,7 +545,7 @@ impl SettingsView {
                 Some(theme::detail(if crate::telemetry::do_not_track() { "Off because DO_NOT_TRACK is set." } else { "No file names, paths or content. Signed-in usage is linked to your account." }, p)),
                 theme::switch("telemetry", "Share usage statistics", settings.telemetry && !crate::telemetry::do_not_track(), crate::telemetry::do_not_track(), p).on_click({
                     let app = self.app.clone();
-                    move |_, _, cx| { if !crate::telemetry::do_not_track() { app.update(cx, |s, cx| s.update_settings(|s| s.telemetry = !s.telemetry, cx)); } }
+                    move |_, _, cx| { if !crate::telemetry::do_not_track() { app.update(cx, |s, cx| s.telemetry_notice(!s.settings.telemetry, cx)); } }
                 }), p,
             ).into_any_element()], p), p))
     }

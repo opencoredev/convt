@@ -449,8 +449,18 @@ impl AppState {
                 .map_err(|e| format!("Signed in, but the sign-in couldn't be saved: {e}"))
         }) {
             Ok(session) => {
+                if self
+                    .account
+                    .session
+                    .as_ref()
+                    .is_some_and(|old| old.user_id != session.user_id)
+                {
+                    self.licensing.set_account_trial(None);
+                    self.update_settings(|s| s.trial_cache = None, cx);
+                    self.license = self.licensing.state();
+                }
                 self.account.session = Some(session);
-                self.sync_telemetry_identity();
+                self.sync_telemetry_identity(cx);
                 self.account.sign_in = SignIn::Idle;
                 // Signing in was the user's action; fetch the Pro key now.
                 self.refresh_license(cx);
@@ -469,7 +479,7 @@ impl AppState {
             tracing::warn!(error = %e, "could not forget a revoked sign-in");
         }
         self.account.session = None;
-        self.sync_telemetry_identity();
+        self.sync_telemetry_identity(cx);
         self.account.access = None;
         self.account.refresh = Refresh::Idle;
         self.account._refresh_task = None;
@@ -495,7 +505,7 @@ impl AppState {
         self.account.sign_in = SignIn::Idle;
         self.account.refresh = Refresh::Idle;
         self.account.notice = Some("Signed out. The license on this computer stays.".into());
-        self.sync_telemetry_identity();
+        self.sync_telemetry_identity(cx);
         self.account._refresh_task = None;
         self.account.awaiting_trial = false;
         self.account.trial_poll_started = None;
@@ -577,7 +587,7 @@ impl AppState {
                     session.user_id = Some(user_id.clone());
                     let _ = self.licensing.save_session(session);
                 }
-                self.sync_telemetry_identity();
+                self.sync_telemetry_identity(cx);
                 let remote_access = reply.access.clone();
                 self.account.access = remote_access.clone().map(|access| match access {
                     RemoteAccess::Pro => Access::Pro,

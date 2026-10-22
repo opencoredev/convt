@@ -323,7 +323,13 @@ impl FirstRunView {
     /// main window opens first, so the app never sees its last window close.
     pub(super) fn finish(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.app.update(cx, |s, cx| {
-            s.update_settings(|s| s.first_run_done = true, cx)
+            s.update_settings(
+                |s| {
+                    s.first_run_done = true;
+                    s.telemetry_notice_version = 1;
+                },
+                cx,
+            )
         });
         super::show_main_after_finder_guide(cx);
         window.remove_window();

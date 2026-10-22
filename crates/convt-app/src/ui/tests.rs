@@ -97,6 +97,7 @@ struct TestApi {
     key: Mutex<Result<Option<String>, ApiError>>,
     /// What `current_key` says the account allows; `None` by default.
     access: Mutex<Option<convt_license::account::Access>>,
+    user_id: Mutex<Option<String>>,
     /// The last code and verifier the app traded.
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
@@ -114,6 +115,7 @@ impl Default for TestApi {
             exchange: Mutex::new(Err(ApiError::Rejected)),
             key: Mutex::new(Err(ApiError::Offline)),
             access: Mutex::new(None),
+            user_id: Mutex::new(Some("user_fake_55".into())),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
             hold_key: AtomicBool::new(false),
@@ -160,7 +162,7 @@ impl Api for TestApi {
             std::thread::sleep(Duration::from_millis(5));
         }
         Ok(convt_license::account::LicenseReply {
-            user_id: Some("user_fake_55".into()),
+            user_id: self.user_id.lock().unwrap().clone(),
             key: self.key.lock().unwrap().clone()?,
             access: self.access.lock().unwrap().clone(),
         })

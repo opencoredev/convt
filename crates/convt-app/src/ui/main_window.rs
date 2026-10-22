@@ -251,6 +251,16 @@ impl MainView {
         if finder_off {
             notices.push(finder_setup_card(p).into_any_element());
         }
+        if self.app.read(cx).needs_telemetry_notice() {
+            let accept = self.app.clone();
+            let decline = self.app.clone();
+            notices.push(theme::callout(IconName::CircleAlert, theme::Tone::Neutral,
+                div().id("telemetry-notice").test_support().flex().flex_col().gap(px(space::SM))
+                    .child(styled(size::BODY, p.text).child("Usage statistics help improve convt. They include conversion formats and outcomes, never file names, paths or content. Signing in links usage to your account. You can turn this off in Settings."))
+                    .child(div().flex().flex_wrap().gap(px(space::SM))
+                        .child(Button::primary("telemetry-notice-accept", "Share usage statistics").small().build(p).on_click(move |_, _, cx| accept.update(cx, |s, cx| s.telemetry_notice(true, cx))))
+                        .child(Button::secondary("telemetry-notice-off", "Turn off").small().build(p).on_click(move |_, _, cx| decline.update(cx, |s, cx| s.telemetry_notice(false, cx))))), p).into_any_element());
+        }
         notices
     }
 

@@ -240,6 +240,8 @@ pub struct AppState {
     pub recent: Vec<Record>,
     pub settings: Settings,
     pub(crate) telemetry: crate::telemetry::Telemetry,
+    telemetry_opened: bool,
+    telemetry_persisted: bool,
     settings_path: Option<PathBuf>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
@@ -316,14 +318,62 @@ pub struct Shared(pub Entity<AppState>);
 impl Global for Shared {}
 
 impl AppState {
-    pub(crate) fn sync_telemetry_identity(&self) {
-        self.telemetry.identify(
-            self.account
-                .session
-                .as_ref()
-                .and_then(|s| s.user_id.as_deref()),
-            &self.license,
+    pub(crate) fn sync_telemetry_identity(&mut self, cx: &mut Context<Self>) {
+        let user = self
+            .account
+            .session
+            .as_ref()
+            .and_then(|s| s.user_id.clone());
+        if self.settings.telemetry_account != user {
+            if self.settings.telemetry_account.is_some() {
+                self.telemetry.set_enabled(false);
+                self.settings.telemetry_anonymous_id = crate::telemetry::install_id();
+                self.telemetry.reset_anonymous_id(
+                    self.settings
+                        .telemetry_anonymous_id
+                        .clone()
+                        .unwrap_or_default(),
+                );
+            }
+            self.settings.telemetry_account = user.clone();
+            self.telemetry.identify(user.as_deref(), &self.license);
+            self.update_settings(|_| {}, cx);
+        } else {
+            self.telemetry.identify(user.as_deref(), &self.license);
+        }
+    }
+
+    pub fn needs_telemetry_notice(&self) -> bool {
+        self.settings.telemetry
+            && self.settings.telemetry_notice_version < 1
+            && !crate::telemetry::do_not_track()
+    }
+
+    pub fn telemetry_notice(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                s.telemetry = enabled;
+                s.telemetry_notice_version = 1;
+            },
+            cx,
         );
+    }
+
+    fn configure_telemetry(&mut self) {
+        let enabled = self.settings.telemetry
+            && self.telemetry_persisted
+            && !self.needs_telemetry_notice()
+            && self
+                .settings
+                .telemetry_anonymous_id
+                .as_deref()
+                .is_some_and(crate::telemetry::valid_id);
+        self.telemetry.set_enabled(enabled);
+        if enabled && !crate::telemetry::do_not_track() && !self.telemetry_opened {
+            self.telemetry
+                .capture(crate::telemetry::Event::Opened, &self.license);
+            self.telemetry_opened = true;
+        }
     }
 
     pub(crate) fn observe_trial(&mut self, cx: &mut Context<Self>) {
@@ -343,37 +393,43 @@ impl AppState {
             )),
             _ => None,
         };
-        if let Some(key) = started
-            && self.settings.telemetry_trial_started.as_ref() != Some(&key)
+        if let Some(key) = started.map(|key| format!("started:{key}"))
+            && !self.settings.telemetry_trials.contains(&key)
         {
             self.telemetry
                 .capture(crate::telemetry::Event::TrialStarted, &self.license);
-            self.update_settings(|s| s.telemetry_trial_started = Some(key), cx);
+            self.update_settings(
+                |s| {
+                    s.telemetry_trials.insert(key);
+                },
+                cx,
+            );
         }
-        let expired = matches!(self.license, client::State::TrialEnded)
-            || self.settings.trial_cache.as_ref().is_some_and(|cache| {
-                account.is_some()
-                    && !cache.ends_at.is_empty()
-                    && self.licensing.account_trial_expired()
-                    && !matches!(self.license, client::State::Licensed(_))
-            });
+        let expired = self.settings.trial_cache.as_ref().is_some_and(|cache| {
+            account.is_some()
+                && !cache.ends_at.is_empty()
+                && self.licensing.account_trial_expired()
+                && !matches!(self.license, client::State::Licensed(_))
+        });
         let key = if expired {
             account
                 .as_ref()
                 .zip(self.settings.trial_cache.as_ref())
                 .map(|(user, cache)| format!("{user}:{}", cache.ends_at))
-                .or_else(|| {
-                    matches!(self.license, client::State::TrialEnded).then(|| "legacy".into())
-                })
         } else {
             None
         };
-        if let Some(key) = key
-            && self.settings.telemetry_trial_expired.as_ref() != Some(&key)
+        if let Some(key) = key.map(|key| format!("expired:{key}"))
+            && !self.settings.telemetry_trials.contains(&key)
         {
             self.telemetry
                 .capture(crate::telemetry::Event::TrialExpired, &self.license);
-            self.update_settings(|s| s.telemetry_trial_expired = Some(key), cx);
+            self.update_settings(
+                |s| {
+                    s.telemetry_trials.insert(key);
+                },
+                cx,
+            );
         }
     }
 
@@ -411,6 +467,13 @@ impl AppState {
         {
             settings.install_id = crate::telemetry::install_id();
         }
+        if !settings
+            .telemetry_anonymous_id
+            .as_deref()
+            .is_some_and(crate::telemetry::valid_id)
+        {
+            settings.telemetry_anonymous_id = crate::telemetry::install_id();
+        }
         let telemetry_ready = errors.is_empty()
             && settings.install_id.is_some()
             && paths
@@ -418,8 +481,8 @@ impl AppState {
                 .as_ref()
                 .is_some_and(|path| settings.save(path).is_ok());
         let telemetry = crate::telemetry::Telemetry::new(
-            settings.install_id.clone().unwrap_or_default(),
-            settings.telemetry && telemetry_ready,
+            settings.telemetry_anonymous_id.clone().unwrap_or_default(),
+            false,
         );
         let mut menu_error = None;
         let menu = match &paths.menu {
@@ -482,6 +545,8 @@ impl AppState {
             recent: Vec::new(),
             settings,
             telemetry,
+            telemetry_opened: false,
+            telemetry_persisted: telemetry_ready,
             settings_path: paths.settings,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
@@ -535,10 +600,8 @@ impl AppState {
         };
         state.reload_presets();
         state.refresh_history();
-        state.sync_telemetry_identity();
-        state
-            .telemetry
-            .capture(crate::telemetry::Event::Opened, &state.license);
+        state.sync_telemetry_identity(cx);
+        state.configure_telemetry();
         state.observe_trial(cx);
         state
     }
@@ -1261,19 +1324,11 @@ impl AppState {
             .settings_path
             .as_ref()
             .map(|path| self.settings.save(path));
-        let persisted = matches!(saved, Some(Ok(())));
+        self.telemetry_persisted = matches!(saved, Some(Ok(())));
         if let Some(Err(e)) = saved {
             self.errors.push(format!("Settings were not saved: {e}"));
         }
-        self.telemetry.set_enabled(
-            self.settings.telemetry
-                && persisted
-                && self
-                    .settings
-                    .install_id
-                    .as_deref()
-                    .is_some_and(crate::telemetry::valid_id),
-        );
+        self.configure_telemetry();
         cx.notify();
     }
 

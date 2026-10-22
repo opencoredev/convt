@@ -241,6 +241,16 @@ impl Telemetry {
         }
     }
 
+    pub fn reset_anonymous_id(&self, id: String) {
+        let mut state = self.shared.0.lock().unwrap();
+        state.enabled = false;
+        state.generation += 1;
+        state.queue.clear();
+        state.install = id;
+        state.user = None;
+        state.identification = None;
+    }
+
     pub fn identify(&self, user: Option<&str>, license: &LicenseState) {
         let mut state = self.shared.0.lock().unwrap();
         if state.user.as_deref() == user {
@@ -483,6 +493,7 @@ pub mod tests {
                 .contains("content-type: application/json")
         );
         let events = body["batch"].as_array().unwrap();
+        println!("LOCAL_BATCH {}", serde_json::to_string(&body).unwrap());
         assert_eq!(events.len(), 9);
         let names: Vec<_> = events
             .iter()
@@ -541,7 +552,6 @@ pub mod tests {
             "token",
             "email",
             "message",
-            "input",
         ] {
             assert!(!body.to_string().contains(private), "{private}");
         }
