@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 const CAPACITY: usize = 128;
 const INTERVAL: Duration = Duration::from_secs(60);
 const TIMEOUT: Duration = Duration::from_secs(2);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
 fn public_key() -> Option<String> {
     include_str!("../../../apps/web/wrangler.jsonc")
         .lines()
@@ -166,7 +167,7 @@ impl Telemetry {
                             .is_none_or(|url| url.starts_with("https://")),
                     )
                     .max_redirects(0)
-                    .timeout_global(Some(TIMEOUT))
+                    .timeout_global(Some(REQUEST_TIMEOUT))
                     .build()
                     .new_agent();
                 let (lock, wake) = &*shared;
@@ -199,8 +200,8 @@ impl Telemetry {
                             let _ = resume.recv_timeout(TIMEOUT);
                         }
                         let state = lock.lock().unwrap();
-                        let timeout = state.shutdown_deadline.map_or(TIMEOUT, |deadline| {
-                            deadline.saturating_duration_since(Instant::now())
+                        let timeout = state.shutdown_deadline.map_or(REQUEST_TIMEOUT, |deadline| {
+                            REQUEST_TIMEOUT.min(deadline.saturating_duration_since(Instant::now()))
                         });
                         let authorized = state.enabled
                             && state.generation == generation
