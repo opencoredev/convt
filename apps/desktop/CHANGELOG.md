@@ -1,5 +1,13 @@
 # @convt/desktop
 
+## 0.5.1
+
+### Patch Changes
+
+- [#134](https://github.com/opencoredev/convt/pull/134) [`7e7bba3`](https://github.com/opencoredev/convt/commit/7e7bba38f9c9e39c21464d09d080266dda9cccab) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The email code boxes on convt.app submit as soon as the last digit is typed or pasted, show when the code is being checked, and shake and clear on a wrong code.
+
+- [#135](https://github.com/opencoredev/convt/pull/135) [`13be1df`](https://github.com/opencoredev/convt/commit/13be1df1c3446e9da4bdd155f2a22c1fdb7af3b0) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Onboarding no longer has a separate Continue with Email step. Continue with Google goes straight to Google, and Other ways to sign in opens convt.app's sign-in page, where you can type your email right away.
+
 ## 0.5.0
 
 ### Minor Changes
