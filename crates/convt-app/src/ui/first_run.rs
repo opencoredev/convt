@@ -103,8 +103,9 @@ pub enum Stage {
 pub struct FirstRunView {
     app: Entity<AppState>,
     pub(super) screen: Screen,
-    /// The button pressed last, for Try again.
-    pub(super) provider: Provider,
+    /// The way of signing in chosen last, for Try again: Google, or `None`
+    /// for convt.app's chooser.
+    pub(super) provider: Option<Provider>,
     /// The highlighted tile of a question: true for Yes.
     pub(super) yes: bool,
     pub(super) key: Entity<InputState>,
@@ -145,7 +146,7 @@ impl FirstRunView {
             }),
             app,
             screen,
-            provider: Provider::Google,
+            provider: Some(Provider::Google),
             yes: true,
             key: cx.new(|cx| InputState::new(window, cx).placeholder("Paste your license key")),
             error: None,
@@ -329,11 +330,13 @@ impl FirstRunView {
         window.remove_window();
     }
 
-    fn sign_in(&mut self, provider: Provider, cx: &mut Context<Self>) {
+    fn sign_in(&mut self, provider: Option<Provider>, cx: &mut Context<Self>) {
         self.provider = provider;
         self.error = None;
-        self.app
-            .update(cx, |s, cx| s.start_sign_in_with(provider, cx));
+        self.app.update(cx, |s, cx| match provider {
+            Some(provider) => s.start_sign_in_with(provider, cx),
+            None => s.start_sign_in(cx),
+        });
     }
 
     fn activate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -565,30 +568,21 @@ impl FirstRunView {
                     Look::Primary,
                     p,
                 )
-                .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Google, cx))),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(14.))
-                    .w(px(PILL_WIDTH))
-                    .child(div().flex_1().h(px(1.)).bg(p.control_border))
-                    .child(styled(theme::size::SMALL, p.tertiary).child("or"))
-                    .child(div().flex_1().h(px(1.)).bg(p.control_border)),
-            )
-            .child(
-                pill(
-                    "onboarding-email",
-                    "Continue with Email",
-                    Look::Secondary,
-                    p,
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.sign_in(Provider::Email, cx))),
+                .on_click(cx.listener(|this, _, _, cx| this.sign_in(Some(Provider::Google), cx))),
             )
             .children(notice.map(|n| problem(n, p)))
             .child(div().h(px(6.)))
-            .child(self.key_link(p, cx))
+            // Email, GitHub and the rest are on convt.app's sign-in page, so
+            // there is no separate email step here.
+            .child(
+                actions()
+                    .child(
+                        link("onboarding-other", "Other ways to sign in", p)
+                            .on_click(cx.listener(|this, _, _, cx| this.sign_in(None, cx))),
+                    )
+                    .child(div().size(px(3.)).rounded_full().bg(p.tertiary))
+                    .child(self.key_link(p, cx)),
+            )
             .child(
                 div()
                     .flex()
@@ -747,7 +741,6 @@ fn pill(id: &'static str, label: &'static str, look: Look, p: &Palette) -> theme
     let button = theme::Button::new(id, label, look).large();
     let button = match id {
         "onboarding-google" => button.google(),
-        "onboarding-email" => button.icon(IconName::Mail),
         _ => button,
     };
     button.build(p).w(px(PILL_WIDTH))

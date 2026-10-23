@@ -135,12 +135,12 @@ pub enum SignIn {
     Failed(String),
 }
 
-/// Which sign-in button was pressed. convt.app/device goes straight to that
-/// way of signing in instead of showing its chooser.
+/// A way of signing in the app can start directly. convt.app/device goes
+/// straight to it instead of showing its chooser. Every other way, email
+/// included, is on the chooser itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     Google,
-    Email,
 }
 
 /// What the signed-in account allows on this computer, as of the last
@@ -319,7 +319,6 @@ impl AppState {
             page.push_str("&provider=");
             page.push_str(match provider {
                 Provider::Google => "google",
-                Provider::Email => "email",
             });
         }
         account.pending = Some(pending);

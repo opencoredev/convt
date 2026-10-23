@@ -25,8 +25,10 @@ import { getSession } from "#/server/session";
 // convt://auth; the app trades it for a device token. See server/device-auth.ts.
 //
 // `provider` says which button the visitor pressed in the app. Signed out,
-// provider=google goes straight to Google and back here; provider=email shows the
-// email step with the field focused, and the code brings the visitor back here.
+// provider=google goes straight to Google and back here; without a provider the
+// visitor gets the full sign-in, email included. provider=email (the email step alone,
+// field focused) comes only from app builds that still had a Continue with Email
+// button; current builds send no provider for email.
 
 const deviceKeys = ["state", "challenge", "name", "os", "version"] as const;
 type DeviceKey = (typeof deviceKeys)[number];

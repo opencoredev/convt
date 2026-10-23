@@ -1799,7 +1799,9 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     assert!(!f.settings_file().contains("first_run_done = true"));
     // Sign in, or a key. No local trial.
     assert!(shown(cx, window, "onboarding-google"));
-    assert!(shown(cx, window, "onboarding-email"));
+    assert!(shown(cx, window, "onboarding-other"));
+    // No separate email step: email is on convt.app's sign-in page.
+    assert!(!shown(cx, window, "onboarding-email"));
     assert!(!shown(cx, window, "plan-trial"));
 
     // "I have a license key" activates the key and shows it.
@@ -1922,9 +1924,14 @@ fn the_sign_in_buttons_ask_for_their_provider(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
-    for (button, provider) in [
-        ("onboarding-google", Provider::Google),
-        ("onboarding-email", Provider::Email),
+    for (button, provider, query) in [
+        (
+            "onboarding-google",
+            Some(Provider::Google),
+            Some("&provider=google"),
+        ),
+        // Other ways opens the full chooser, email included.
+        ("onboarding-other", None, None),
     ] {
         click(cx, window, button);
         let page = cx.opened_url().expect("the device page opened");
@@ -1932,6 +1939,10 @@ fn the_sign_in_buttons_ask_for_their_provider(cx: &mut TestAppContext) {
             page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
             "{page}"
         );
+        match query {
+            Some(query) => assert!(page.ends_with(query), "{page}"),
+            None => assert!(!page.contains("provider="), "{page}"),
+        }
         cx.read(|cx| {
             assert_eq!(view.read(cx).stage(cx), Stage::Waiting);
             assert_eq!(view.read(cx).provider, provider);
@@ -3189,7 +3200,7 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         let (first, view) = window_of::<FirstRunView>(cx);
         for id in [
             "onboarding-google",
-            "onboarding-email",
+            "onboarding-other",
             "onboarding-key-link",
             "privacy",
         ] {
