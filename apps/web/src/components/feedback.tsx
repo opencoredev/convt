@@ -151,6 +151,7 @@ export function FeedbackButton() {
                 maxLength={MAX_MESSAGE}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
+                readOnly={status.kind === "sending"}
                 aria-describedby={noteId}
                 aria-invalid={status.kind === "editing" && status.error === errors.invalid_message}
                 className={cx(field, "min-h-28 resize-y py-2.5")}
@@ -169,6 +170,7 @@ export function FeedbackButton() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                readOnly={status.kind === "sending"}
                 className={cx(field, "h-10")}
               />
             </div>

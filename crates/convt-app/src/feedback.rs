@@ -21,6 +21,8 @@ pub enum SendError {
     RateLimited,
     InvalidEmail,
     InvalidMessage,
+    /// Longer than [`MAX_MESSAGE`] characters.
+    TooLong,
     Server(u16),
 }
 
@@ -34,6 +36,9 @@ impl SendError {
             Self::RateLimited => "That's a lot of feedback at once. Try again in an hour.".into(),
             Self::InvalidEmail => "That email address doesn't look right.".into(),
             Self::InvalidMessage => "Write a message first.".into(),
+            Self::TooLong => {
+                format!("Messages can be up to {MAX_MESSAGE} characters. Shorten it and try again.")
+            }
             Self::Server(status) => {
                 format!("convt.app couldn't take your feedback (error {status}). Try again later.")
             }
@@ -66,8 +71,11 @@ pub fn body(message: &str, email: &str) -> serde_json::Value {
 /// Checks what the server would refuse, so the window can say so offline.
 pub fn check(message: &str, email: &str) -> Result<(), SendError> {
     let message = message.trim();
-    if message.is_empty() || message.chars().count() > MAX_MESSAGE {
+    if message.is_empty() {
         return Err(SendError::InvalidMessage);
+    }
+    if message.chars().count() > MAX_MESSAGE {
+        return Err(SendError::TooLong);
     }
     let email = email.trim();
     if !email.is_empty() {
@@ -167,9 +175,13 @@ mod tests {
         assert_eq!(check("  ", ""), Err(SendError::InvalidMessage));
         assert_eq!(
             check(&"a".repeat(MAX_MESSAGE + 1), ""),
-            Err(SendError::InvalidMessage)
+            Err(SendError::TooLong)
         );
         assert_eq!(check(&"é".repeat(MAX_MESSAGE), ""), Ok(()));
+        assert_eq!(
+            SendError::TooLong.message(),
+            "Messages can be up to 4000 characters. Shorten it and try again."
+        );
         for bad in ["nope", "a@b", "a b@c.de", "@c.de", "a@.de", "a@c.de."] {
             assert_eq!(check("hi", bad), Err(SendError::InvalidEmail), "{bad}");
         }
