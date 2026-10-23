@@ -1,5 +1,11 @@
 # @convt/cli
 
+## 0.5.1
+
+### Patch Changes
+
+- [#134](https://github.com/opencoredev/convt/pull/134) [`7e7bba3`](https://github.com/opencoredev/convt/commit/7e7bba38f9c9e39c21464d09d080266dda9cccab) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The email code boxes on convt.app submit as soon as the last digit is typed or pasted, show when the code is being checked, and shake and clear on a wrong code.
+
 ## 0.5.0
 
 ### Minor Changes
