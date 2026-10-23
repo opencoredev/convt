@@ -18,19 +18,21 @@ image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tests"]
 # Bump together with the pack's LibreOffice when refreshing it.
 snapshot=${CONVT_DOCUMENT_PACK_SNAPSHOT:-20261020T000000Z}
 [[ $snapshot =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo "Bad snapshot: $snapshot" >&2; exit 1; }
+# snapshot.ubuntu.com is HTTPS only and the image has no CA bundle. Lend it
+# this machine's bundle read-only, so nothing comes from the live archive;
+# apt still checks every package against the snapshot's signed indexes.
+ca=/etc/ssl/certs/ca-certificates.crt
+[[ -s $ca ]] || { echo "No CA bundle at $ca" >&2; exit 1; }
 name="convt-document-pack-$$"
 trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 docker run --rm --name "$name" --label app=convt --label purpose=document-pack \
   -v "$repo/packaging/linux:/recipe:ro" -v "$repo/LICENSE:/LICENSE:ro" -v "$out:/out" \
-  -e "SNAPSHOT=$snapshot" -e "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-0}" \
+  -v "$ca:/etc/ssl/certs/ca-certificates.crt:ro" \
+  -e "SNAPSHOT=$snapshot" -e "CONVT_DOCUMENT_PACK_SNAPSHOT=$snapshot" -e "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-0}" \
   -e "OWNER=$(id -u):$(id -g)" "$image" bash -c '
     set -euo pipefail
     trap "chown -R \"$OWNER\" /out" EXIT
     export DEBIAN_FRONTEND=noninteractive
-    # snapshot.ubuntu.com is HTTPS only and the base image has no CA bundle:
-    # take it from the image'"'"'s own signed archive first.
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends ca-certificates >/dev/null
     printf "deb https://snapshot.ubuntu.com/ubuntu/%s jammy main universe\ndeb https://snapshot.ubuntu.com/ubuntu/%s jammy-updates main universe\ndeb https://snapshot.ubuntu.com/ubuntu/%s jammy-security main universe\n" "$SNAPSHOT" "$SNAPSHOT" "$SNAPSHOT" > /etc/apt/sources.list
     rm -f /etc/apt/sources.list.d/*
     apt-get update -qq

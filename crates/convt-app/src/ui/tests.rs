@@ -5796,9 +5796,10 @@ fn the_setup_step_leaves_the_document_download_to_the_background(cx: &mut TestAp
 
 /// Waits for the background download's `n`th try to finish, then lets the
 /// wait before the next one pass.
-fn pass_pack_retry(cx: &mut TestAppContext, packs: &TestPacks, n: usize) {
-    wait_until(cx, "the try ended", |_| packs.installs() == n);
-    cx.run_until_parked();
+fn pass_pack_retry(cx: &mut TestAppContext, app: &Entity<AppState>, n: usize) {
+    wait_until(cx, "the retry is scheduled", |cx| {
+        app.read(cx).pack_retry_pending()
+    });
     cx.executor()
         .advance_clock(crate::model::PACK_RETRY_DELAYS[n - 1] + Duration::from_millis(50));
 }
@@ -5825,8 +5826,9 @@ fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppC
     );
     finish_onboarding(cx, &view);
     let (main, _) = window_of::<MainView>(cx);
-    pass_pack_retry(cx, &packs, 1);
-    pass_pack_retry(cx, &packs, 2);
+    pass_pack_retry(cx, &f.app, 1);
+    wait_until(cx, "the second try", |_| packs.installs() == 2);
+    pass_pack_retry(cx, &f.app, 2);
     wait_until(cx, "the download failed", |cx| {
         matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
     });
@@ -5856,8 +5858,9 @@ fn an_onboarding_download_retries_a_network_failure_by_itself(cx: &mut TestAppCo
     let (window, view) = window_of::<FirstRunView>(cx);
     click(cx, window, "onboarding-primary");
     click(cx, window, "question-yes");
-    wait_until(cx, "the first try failed", |_| packs.installs() == 1);
-    cx.run_until_parked();
+    wait_until(cx, "the first try failed", |cx| {
+        f.app.read(cx).pack_retry_pending()
+    });
     // Waiting to try again still reads as the download going on.
     cx.read(|cx| assert!(matches!(f.app.read(cx).pack.phase, PackPhase::Working(_))));
     finish_onboarding(cx, &view);
@@ -5898,10 +5901,9 @@ fn an_onboarding_download_only_retries_what_retrying_can_fix(cx: &mut TestAppCon
     // A network failure waits to retry; Cancel ends it there.
     packs.fail_next(FailureKind::Network, "offline");
     cx.update(|cx| super::pack::start_background_install(&f.app, cx));
-    wait_until(cx, "the second download failed once", |_| {
-        packs.installs() == 2
+    wait_until(cx, "the second download failed once", |cx| {
+        f.app.read(cx).pack_retry_pending()
     });
-    cx.run_until_parked();
     f.app.update(cx, |s, cx| s.cancel_pack_download(cx));
     cx.executor().advance_clock(Duration::from_secs(120));
     cx.run_until_parked();

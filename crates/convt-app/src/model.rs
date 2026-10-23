@@ -820,6 +820,12 @@ impl AppState {
         }
     }
 
+    /// Whether a background download is waiting to try again.
+    #[cfg(test)]
+    pub fn pack_retry_pending(&self) -> bool {
+        self.pack_retry.is_some()
+    }
+
     /// Tries a failed background download again after its wait.
     fn retry_pack(&mut self, failure: Failure, cx: &mut Context<Self>) {
         self.pack_retry = None;

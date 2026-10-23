@@ -131,6 +131,16 @@ def main() -> None:
                 gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0) as zipped, \
                 tarfile.open(fileobj=zipped, mode='w', format=tarfile.PAX_FORMAT) as tar:
             installed += add(tar, 'soffice', 0o755, data=LAUNCHER)
+            sources = (
+                'Corresponding source for this document pack.\n\n'
+                f'LibreOffice.app is The Document Foundation\'s unmodified {lock["version"]} build:\n'
+                f'  {lock["url"]}\n  sha256 {lock["sha256"]}\n'
+                f'Its source code, for this exact release: {lock["source"]}\n\n'
+                'convt adds only the soffice launcher in this folder and leaves out links to\n'
+                'directories (packaging/macos/build-document-pack.py in\n'
+                'https://github.com/opencoredev/convt). Licence notices are in licenses/.\n'
+            ).encode()
+            installed += add(tar, 'SOURCES.txt', 0o644, data=sources)
             notices = mount / 'LICENSEs'
             if notices.is_dir():
                 add(tar, 'licenses', 0o755)

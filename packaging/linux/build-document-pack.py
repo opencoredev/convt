@@ -94,6 +94,21 @@ for package in sorted(packages):
     copyright = Path('/usr/share/doc') / package / 'copyright'
     if copyright.is_file():
         shutil.copy2(copyright, pack / 'licenses' / (package + '.txt'))
+# Where the corresponding source of every copied package is: the same
+# versions, as Ubuntu source packages, in the snapshot release CI pins.
+snapshot = os.environ.get('CONVT_DOCUMENT_PACK_SNAPSHOT', '')
+where = (f'https://snapshot.ubuntu.com/ubuntu/{snapshot}/' if snapshot
+         else 'the Ubuntu archive (apt-get source <package>=<version>)')
+pinned = subprocess.check_output(
+    ['dpkg-query', '-W', '-f=${binary:Package} ${Version} ${source:Package} ${source:Version}\n',
+     *sorted(packages)], text=True)
+(pack / 'SOURCES.txt').write_text(
+    'Corresponding source for this document pack.\n\n'
+    f'Each package below comes from Ubuntu 22.04; its source package is in {where}.\n'
+    'convt changes only the bootstrap paths and adds a liblangtag shim and the launcher; those are in\n'
+    'packaging/linux/build-document-pack.py and langtag-path.c in https://github.com/opencoredev/convt,\n'
+    'and langtag-path.c is also in this pack. Licence notices are in licenses/.\n\n'
+    'binary-package version source-package source-version\n' + pinned)
 archive = out / 'documents-linux-x86_64.tar.gz'
 # No symbolic or hard links: extraction rejects them before publishing executable code.
 # Fixed owners, times and gzip header, so the same packages give the same bytes.
