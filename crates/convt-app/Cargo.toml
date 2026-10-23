@@ -19,6 +19,7 @@ convt-update.workspace = true
 dirs.workspace = true
 ed25519-dalek.workspace = true
 futures.workspace = true
+getrandom.workspace = true
 gpui-kit.workspace = true
 # Decodes the tray icons; already built for the engines.
 image.workspace = true

@@ -665,6 +665,11 @@ fn error_text(message: impl Into<SharedString>, p: &Palette) -> impl IntoElement
         )
 }
 
+pub(super) fn open_upgrade(source: &'static str, cx: &mut App) {
+    crate::model::shared(cx).read(cx).upgrade_clicked(source);
+    cx.open_url(BUY_URL);
+}
+
 /// Why conversions stopped, with what the user can do about it. Nothing
 /// while conversions are allowed.
 fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>> {
@@ -716,7 +721,7 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
                         theme::Button::brand("buy", buy)
                             .small()
                             .build(p)
-                            .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                            .on_click(|_, _, cx| open_upgrade("conversion", cx)),
                     )
                     .children(download)
                     .child(

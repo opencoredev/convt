@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_site/privacy")({
     seo({
       title: "Privacy policy · convt",
       description:
-        "What convt collects and why. The desktop app converts files on your computer and sends nothing unless you ask it to.",
+        "What convt collects and why, including optional desktop usage statistics and local file conversion.",
       path: routes.privacy,
     }),
   component: () => (
@@ -24,9 +24,10 @@ export const Route = createFileRoute("/_site/privacy")({
         <p>
           convt converts files on your own computer. Your files stay on your machine unless you
           choose to convert one in the cloud. The convt.app website uses PostHog analytics to count
-          visits, which you can turn off. This policy covers the convt app, the command line tool,
-          the convt browser extension, convt.app and the convt API. Account holders get occasional
-          product news by email, which you can turn off at any time.
+          visits, and the desktop app sends optional usage statistics, which you can turn off. This
+          policy covers the convt app, the command line tool, the convt browser extension, convt.app
+          and the convt API. Account holders get occasional product news by email, which you can
+          turn off at any time.
         </p>
       }
       sections={sections}
@@ -75,6 +76,22 @@ const sections: LegalSection[] = [
               the app, it asks convt.app for your current Pro key at most once a day while it runs,
               and when you click Refresh license. The request identifies your account and this
               computer through the sign-in token. Desktop license owners never sign in.
+            </>,
+            <>
+              <span className={strong}>Usage statistics.</span> Packaged desktop builds send PostHog
+              app opens, conversion formats, engine names, coarse file size ranges, success or error
+              categories and duration, trial starts and expiry, license activation and upgrade
+              clicks. Each event includes the app version, operating system, CPU architecture and
+              license state. A random installation ID identifies repeat use. Signing in links that
+              ID and subsequent events to your account ID, not your email. File names, paths,
+              content and error messages are never included. PostHog processes this data in the
+              United States. Requests expose an IP address to the network service, but events set
+              the IP to null and disable geolocation enrichment. The setting starts on in packaged
+              builds, with a disclosure before the first send. Source builds default off and need an
+              explicit opt-in. Turn statistics off in Settings → General → Usage statistics, or set
+              DO_NOT_TRACK to a truthy value. Turning them off clears pending events and prevents
+              new sends; an already-started request cannot be recalled. The CLI sends no usage
+              statistics.
             </>,
             <>
               <span className={strong}>Things you ask for.</span> Signing in, installing the

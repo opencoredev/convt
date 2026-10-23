@@ -15,7 +15,7 @@
 
 use std::time::Duration;
 
-use convt_license::client::{BUY_URL, State};
+use convt_license::client::State;
 use gpui_kit::component::Sizable;
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::spinner::Spinner;
@@ -323,7 +323,14 @@ impl FirstRunView {
     /// main window opens first, so the app never sees its last window close.
     pub(super) fn finish(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.app.update(cx, |s, cx| {
-            s.update_settings(|s| s.first_run_done = true, cx)
+            s.update_settings(
+                |s| {
+                    s.first_run_done = true;
+                    s.telemetry_notice_version = 1;
+                },
+                cx,
+            );
+            s.observe_trial(cx);
         });
         super::show_main_after_finder_guide(cx);
         window.remove_window();
@@ -474,7 +481,7 @@ impl FirstRunView {
                 ))
                 .child(
                     pill("onboarding-primary", "Renew", Look::Brand, p)
-                        .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                        .on_click(|_, _, cx| super::open_upgrade("first_run", cx)),
                 )
                 .child(self.secondary_links(p, cx)),
             Stage::Trial { ends_on } => self
@@ -519,7 +526,7 @@ impl FirstRunView {
                 .child(line("Get convt Pro to keep converting, or use a license key.", p))
                 .child(
                     pill("onboarding-primary", "Get convt Pro", Look::Brand, p)
-                        .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                        .on_click(|_, _, cx| super::open_upgrade("first_run", cx)),
                 )
                 .child(self.secondary_links(p, cx))
                 .children(signed_in),
@@ -932,6 +939,9 @@ impl Render for FirstRunView {
                     .flex()
                     .flex_col()
                     .flex_1()
+                    .min_h_0()
+                    .id("onboarding-scroll")
+                    .overflow_y_scroll()
                     .items_center()
                     .justify_center()
                     .gap(px(36.))
@@ -939,7 +949,12 @@ impl Render for FirstRunView {
                     .pb(px(if calibrating { 0. } else { 96. }))
                     .px(px(32.))
                     .when(!calibrating, |d| d.child(theme::lockup(30., &p)))
-                    .child(content),
+                    .child(content)
+                    .when(!calibrating, |d| d.child(line(if self.app.read(cx).settings.telemetry && !crate::telemetry::do_not_track() {
+                        "Anonymous usage statistics are on. Signing in links usage to your account. No file names, paths or content are sent. Turn off in Settings → General → Usage statistics."
+                    } else {
+                        "Usage statistics are off. You can change this in Settings → General → Usage statistics."
+                    }, &p).id("telemetry-first-run").test_support())),
             )
     }
 }

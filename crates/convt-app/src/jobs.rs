@@ -59,6 +59,7 @@ struct Pending {
     video: bool,
     /// Set for a job that runs on convt's cloud.
     cloud: Option<Arc<Cloud>>,
+    telemetry: Option<crate::telemetry::Conversion>,
 }
 
 #[derive(Default)]
@@ -96,24 +97,47 @@ impl Runner {
         (runner, rx)
     }
 
+    #[cfg(test)]
     pub fn submit(&self, id: JobId, job: Job) {
+        self.submit_tracked(id, job, None);
+    }
+
+    pub fn submit_tracked(
+        &self,
+        id: JobId,
+        job: Job,
+        telemetry: Option<crate::telemetry::Conversion>,
+    ) {
         let video = is_video(&job);
         self.state.lock().unwrap().queue.push_back(Pending {
             id,
             job,
             video,
             cloud: None,
+            telemetry,
         });
         self.pump();
     }
 
     /// Queues a job that runs on convt's cloud.
+    #[cfg(test)]
     pub fn submit_cloud(&self, id: JobId, job: Job, cloud: Arc<Cloud>) {
+        self.submit_cloud_tracked(id, job, cloud, None);
+    }
+
+    pub fn submit_cloud_tracked(
+        &self,
+        id: JobId,
+        job: Job,
+        cloud: Arc<Cloud>,
+        telemetry: Option<crate::telemetry::Conversion>,
+    ) {
         self.state.lock().unwrap().queue.push_back(Pending {
             id,
             job,
             video: false,
             cloud: Some(cloud),
+            telemetry,
         });
         self.pump();
     }
@@ -175,19 +199,33 @@ impl Runner {
             job,
             video,
             cloud,
+            telemetry,
         } = pending;
+        let telemetry = telemetry.filter(crate::telemetry::Conversion::active);
+        let registry = self.registry.lock().unwrap().clone();
+        let metadata = telemetry
+            .as_ref()
+            .map(|_| crate::telemetry::Metadata::of(&job, &registry, cloud.is_some()));
+        let started = Instant::now();
+        if let (Some(telemetry), Some(metadata)) = (&telemetry, &metadata) {
+            telemetry.started(metadata);
+        }
         let tx = &self.tx;
         let _ = tx.unbounded_send(Update::Started(id));
         let progress = |p| drop(tx.unbounded_send(Update::Progress(id, p)));
         let result = match &cloud {
             Some(cloud) => crate::cloud::run(cloud, &job, &progress, &cancel),
-            None => {
-                let registry = self.registry.lock().unwrap().clone();
-                registry
-                    .run(&job, &progress, &cancel)
-                    .map_err(|e| JobError::from(&e))
-            }
+            None => registry
+                .run(&job, &progress, &cancel)
+                .map_err(|e| JobError::from(&e)),
         };
+        if let (Some(telemetry), Some(metadata)) = (&telemetry, &metadata) {
+            telemetry.completed(
+                metadata,
+                result.as_ref().err().map(|e| e.kind),
+                started.elapsed(),
+            );
+        }
         {
             let mut state = self.state.lock().unwrap();
             state.running.remove(&id);
@@ -497,5 +535,49 @@ mod tests {
             queue.apply(Update::Finished(id, Ok(Vec::new())));
         }
         assert_eq!(queue.progress_line(), None);
+    }
+
+    #[test]
+    fn telemetry_counts_running_cancellation_but_not_a_cancelled_queued_job() {
+        let (runner, mut rx, dir) = setup(1);
+        let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+        let sender = crate::telemetry::Telemetry::local(
+            crate::telemetry::install_id().unwrap(),
+            true,
+            url,
+            Duration::from_secs(60),
+        );
+        let mut queue = Queue::default();
+        let first = Job::new(dir.path().join("a.png"), format_by_id("jpeg").unwrap());
+        let second = Job::new(dir.path().join("b.png"), format_by_id("jpeg").unwrap());
+        let a = queue.add(&first);
+        let b = queue.add(&second);
+        runner.submit_tracked(
+            a,
+            first,
+            sender.conversion(&convt_license::client::State::Unrestricted),
+        );
+        runner.submit_tracked(
+            b,
+            second,
+            sender.conversion(&convt_license::client::State::Unrestricted),
+        );
+        futures::executor::block_on(async { while rx.next().await != Some(Update::Started(a)) {} });
+        runner.cancel(b);
+        runner.cancel(a);
+        drain(&mut rx, &mut queue, 2);
+        assert_eq!(queue.get(a).unwrap().status, Status::Cancelled);
+        assert_eq!(queue.get(b).unwrap().status, Status::Cancelled);
+        sender.shutdown();
+        let (_, body) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+        let events = body["batch"].as_array().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["event"], "conversion_started");
+        assert_eq!(events[1]["event"], "conversion_completed");
+        assert_eq!(events[1]["properties"]["error_kind"], "cancelled");
+        assert_eq!(
+            events[0]["properties"]["engine"],
+            serde_json::json!(["slow"])
+        );
     }
 }

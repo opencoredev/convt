@@ -35,6 +35,12 @@ pub struct Settings {
     /// Check convt.app for a newer build at launch and every few hours. On
     /// by default. Check now works either way.
     pub update_checks: bool,
+    pub telemetry: bool,
+    pub install_id: Option<String>,
+    pub telemetry_anonymous_id: Option<String>,
+    pub telemetry_account: Option<String>,
+    pub telemetry_trials: std::collections::BTreeSet<String>,
+    pub telemetry_notice_version: u32,
     /// When (Unix seconds) an update check last got an answer that checked
     /// out. Older files kept the day in `update_checked`, which is ignored.
     pub update_checked_at: Option<u64>,
@@ -62,6 +68,12 @@ impl Default for Settings {
             license_checked: None,
             trial_cache: None,
             update_checks: true,
+            telemetry: convt_license::ENFORCED,
+            install_id: None,
+            telemetry_anonymous_id: None,
+            telemetry_account: None,
+            telemetry_trials: Default::default(),
+            telemetry_notice_version: if convt_license::ENFORCED { 0 } else { 1 },
             update_checked_at: None,
             update_sequence: 0,
             defaults: Defaults::default(),
@@ -350,6 +362,32 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_license_enforcement_does_not_opt_in_to_telemetry() {
+        if convt_license::ENFORCED {
+            return;
+        }
+        assert!(!Settings::default().telemetry);
+        if std::env::var_os("CONVT_TELEMETRY_DEFAULT_CHILD").is_some() {
+            assert_eq!(std::env::var("CONVT_LICENSE_ENFORCE").unwrap(), "1");
+            let explicit: Settings = toml::from_str("telemetry = true").unwrap();
+            assert!(explicit.telemetry);
+            return;
+        }
+        assert!(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "settings::tests::source_license_enforcement_does_not_opt_in_to_telemetry"
+                ])
+                .env("CONVT_TELEMETRY_DEFAULT_CHILD", "1")
+                .env("CONVT_LICENSE_ENFORCE", "1")
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
 
     #[test]
     fn round_trip_and_defaults() {

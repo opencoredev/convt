@@ -40,6 +40,7 @@ use crate::update::{Fetch, FetchError, SelfInstall, Update, UpdateConfig};
 use convt_license::client::BUY_URL;
 
 mod background;
+mod telemetry;
 
 struct Fixture {
     dir: TempDir,
@@ -96,6 +97,7 @@ struct TestApi {
     key: Mutex<Result<Option<String>, ApiError>>,
     /// What `current_key` says the account allows; `None` by default.
     access: Mutex<Option<convt_license::account::Access>>,
+    user_id: Mutex<Option<String>>,
     /// The last code and verifier the app traded.
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
@@ -113,6 +115,7 @@ impl Default for TestApi {
             exchange: Mutex::new(Err(ApiError::Rejected)),
             key: Mutex::new(Err(ApiError::Offline)),
             access: Mutex::new(None),
+            user_id: Mutex::new(Some("user_fake_55".into())),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
             hold_key: AtomicBool::new(false),
@@ -159,6 +162,7 @@ impl Api for TestApi {
             std::thread::sleep(Duration::from_millis(5));
         }
         Ok(convt_license::account::LicenseReply {
+            user_id: self.user_id.lock().unwrap().clone(),
             key: self.key.lock().unwrap().clone()?,
             access: self.access.lock().unwrap().clone(),
         })
@@ -379,6 +383,7 @@ impl Fixture {
     /// A licensed build already signed in to convt.app as `email`.
     fn signed_in(cx: &mut TestAppContext, key: Option<&str>, email: &str) -> Self {
         let session = Session {
+            user_id: Some("user_fake_55".into()),
             email: email.into(),
             token: "cvd_test_token".into(),
         };
@@ -438,10 +443,20 @@ impl Fixture {
         packs: Arc<dyn pack::Backend>,
         license: impl FnOnce(&Path) -> client::Config,
     ) -> Self {
+        Self::build_with_telemetry(cx, packs, license, None)
+    }
+
+    fn build_with_telemetry(
+        cx: &mut TestAppContext,
+        packs: Arc<dyn pack::Backend>,
+        license: impl FnOnce(&Path) -> client::Config,
+        telemetry: Option<crate::telemetry::Telemetry>,
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let api = Arc::new(TestApi::default());
         let releases = Arc::new(TestReleases::default());
         let paths = Paths {
+            telemetry,
             settings: Some(dir.path().join("settings.toml")),
             history: Some(dir.path().join("history.db")),
             presets: Some(dir.path().join("presets")),
@@ -2502,6 +2517,7 @@ fn signing_in_from_onboarding_brings_it_back_with_the_key(cx: &mut TestAppContex
 
     // The browser's answer brings onboarding back, signed in, with the key.
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_new".into(),
     });
@@ -4265,6 +4281,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     assert_eq!(f.api.calls(), (0, 0, 0));
 
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_issued".into(),
     });
@@ -4309,6 +4326,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
 fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_issued".into(),
     });
@@ -4770,6 +4788,7 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
 fn a_second_sign_in_cannot_start_while_the_first_is_finishing(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
+        user_id: None,
         email: "pro-tester".into(),
         token: "cvd_first".into(),
     });

@@ -26,6 +26,7 @@ use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
 use crate::request::Request;
 use crate::settings::{Kind, Settings, write_atomic};
+use crate::telemetry::Consent;
 use crate::update::{Update, UpdateConfig};
 
 /// How many rows the History tab shows.
@@ -33,6 +34,8 @@ const RECENT: usize = 200;
 
 /// Where the app keeps its files. Tests point these at a temp directory.
 pub struct Paths {
+    #[cfg(test)]
+    pub telemetry: Option<crate::telemetry::Telemetry>,
     /// `None` keeps settings in memory only.
     pub settings: Option<PathBuf>,
     /// `None` keeps history in memory only.
@@ -55,6 +58,8 @@ impl Paths {
     pub fn from_env() -> Self {
         use convt_engines::paths;
         Self {
+            #[cfg(test)]
+            telemetry: None,
             settings: Settings::path(),
             history: History::path(),
             presets: paths::presets_dir(),
@@ -239,6 +244,9 @@ pub struct AppState {
     /// The newest history rows, refreshed whenever history changes.
     pub recent: Vec<Record>,
     pub settings: Settings,
+    pub(crate) telemetry: crate::telemetry::Telemetry,
+    telemetry_opened: bool,
+    telemetry_persisted: bool,
     settings_path: Option<PathBuf>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
@@ -315,6 +323,140 @@ pub struct Shared(pub Entity<AppState>);
 impl Global for Shared {}
 
 impl AppState {
+    pub(crate) fn sync_telemetry_identity(&mut self, cx: &mut Context<Self>) {
+        if !self.telemetry_persisted {
+            self.telemetry.set_consent(Consent::Off);
+            return;
+        }
+        let user = self
+            .account
+            .session
+            .as_ref()
+            .and_then(|s| s.user_id.clone());
+        if self.settings.telemetry_account != user {
+            if self.settings.telemetry_account.is_some() {
+                self.telemetry.set_consent(Consent::Off);
+                self.settings.telemetry_anonymous_id = crate::telemetry::install_id();
+                self.telemetry.reset_anonymous_id(
+                    self.settings
+                        .telemetry_anonymous_id
+                        .clone()
+                        .unwrap_or_default(),
+                );
+            }
+            self.settings.telemetry_account = user.clone();
+            self.telemetry.identify(user.as_deref(), &self.license);
+            self.update_settings(|_| {}, cx);
+        } else {
+            self.telemetry.identify(user.as_deref(), &self.license);
+        }
+    }
+
+    pub fn needs_telemetry_notice(&self) -> bool {
+        self.settings.telemetry
+            && self.settings.telemetry_notice_version < 1
+            && !crate::telemetry::do_not_track()
+    }
+
+    pub fn telemetry_notice(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                s.telemetry = enabled;
+                s.telemetry_notice_version = 1;
+            },
+            cx,
+        );
+        self.observe_trial(cx);
+    }
+
+    fn configure_telemetry(&mut self) {
+        let enabled = self.settings.telemetry
+            && self.telemetry_persisted
+            && self
+                .settings
+                .telemetry_anonymous_id
+                .as_deref()
+                .is_some_and(crate::telemetry::valid_id);
+        let consent = if !enabled || crate::telemetry::do_not_track() {
+            Consent::Off
+        } else if self.needs_telemetry_notice() {
+            Consent::AwaitingDisclosure
+        } else {
+            Consent::On
+        };
+        self.telemetry.set_consent(consent);
+        if consent != Consent::Off && !self.telemetry_opened {
+            self.telemetry
+                .capture(crate::telemetry::Event::Opened, &self.license);
+            self.telemetry_opened = true;
+        }
+    }
+
+    pub(crate) fn observe_trial(&mut self, cx: &mut Context<Self>) {
+        self.license = self.licensing.state();
+        if self.needs_telemetry_notice() || (self.settings.telemetry && !self.telemetry_persisted) {
+            return;
+        }
+        let account = self
+            .account
+            .session
+            .as_ref()
+            .and_then(|s| s.user_id.clone());
+        let started = match (&self.license, account.as_deref()) {
+            (client::State::AccountTrial { ends_on, .. }, Some(user)) => Some(format!(
+                "{user}:{}",
+                self.settings
+                    .trial_cache
+                    .as_ref()
+                    .map_or(ends_on.as_str(), |cache| cache.ends_at.as_str())
+            )),
+            _ => None,
+        };
+        if let Some(key) = started.map(|key| format!("started:{key}"))
+            && !self.settings.telemetry_trials.contains(&key)
+        {
+            self.telemetry
+                .capture(crate::telemetry::Event::TrialStarted, &self.license);
+            self.update_settings(
+                |s| {
+                    s.telemetry_trials.insert(key);
+                },
+                cx,
+            );
+        }
+        let expired = self.settings.trial_cache.as_ref().is_some_and(|cache| {
+            account.is_some()
+                && !cache.ends_at.is_empty()
+                && self.licensing.account_trial_expired()
+                && !matches!(self.license, client::State::Licensed(_))
+        });
+        let key = if expired {
+            account
+                .as_ref()
+                .zip(self.settings.trial_cache.as_ref())
+                .map(|(user, cache)| format!("{user}:{}", cache.ends_at))
+        } else {
+            None
+        };
+        if let Some(key) = key.map(|key| format!("expired:{key}"))
+            && !self.settings.telemetry_trials.contains(&key)
+        {
+            self.telemetry
+                .capture(crate::telemetry::Event::TrialExpired, &self.license);
+            self.update_settings(
+                |s| {
+                    s.telemetry_trials.insert(key);
+                },
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn upgrade_clicked(&self, source: &'static str) {
+        self.telemetry
+            .capture(crate::telemetry::Event::Upgrade(source), &self.license);
+    }
+
     pub fn new(packs: Arc<dyn pack::Backend>, paths: Paths, cx: &mut Context<Self>) -> Self {
         let registry = Arc::new(packs.registry());
         let pack = PackState {
@@ -325,15 +467,52 @@ impl AppState {
             notice: None,
         };
         let mut errors = Vec::new();
-        let settings = match &paths.settings {
+        let mut settings = match &paths.settings {
             Some(path) => Settings::load(path).unwrap_or_else(|e| {
                 errors.push(format!(
                     "Settings were not loaded: {e}. Saving a change replaces the file."
                 ));
-                Settings::default()
+                Settings {
+                    telemetry: false,
+                    ..Settings::default()
+                }
             }),
             None => Settings::default(),
         };
+        if !settings
+            .install_id
+            .as_deref()
+            .is_some_and(crate::telemetry::valid_id)
+        {
+            settings.install_id = crate::telemetry::install_id();
+        }
+        if !settings
+            .telemetry_anonymous_id
+            .as_deref()
+            .is_some_and(crate::telemetry::valid_id)
+        {
+            settings.telemetry_anonymous_id = settings.install_id.clone();
+        }
+        let telemetry_ready = errors.is_empty()
+            && settings.install_id.is_some()
+            && paths
+                .settings
+                .as_ref()
+                .is_some_and(|path| settings.save(path).is_ok());
+        #[cfg(not(test))]
+        let telemetry = crate::telemetry::Telemetry::new(
+            settings.telemetry_anonymous_id.clone().unwrap_or_default(),
+            Consent::Off,
+        );
+        #[cfg(test)]
+        let telemetry = paths.telemetry.unwrap_or_else(|| {
+            crate::telemetry::Telemetry::new(
+                settings.telemetry_anonymous_id.clone().unwrap_or_default(),
+                Consent::Off,
+            )
+        });
+        #[cfg(test)]
+        telemetry.reset_anonymous_id(settings.telemetry_anonymous_id.clone().unwrap_or_default());
         let mut menu_error = None;
         let menu = match &paths.menu {
             Some(path) => MenuChoices::load(path).unwrap_or_else(|e| {
@@ -394,6 +573,9 @@ impl AppState {
             history,
             recent: Vec::new(),
             settings,
+            telemetry,
+            telemetry_opened: false,
+            telemetry_persisted: telemetry_ready,
             settings_path: paths.settings,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
@@ -447,6 +629,9 @@ impl AppState {
         };
         state.reload_presets();
         state.refresh_history();
+        state.sync_telemetry_identity(cx);
+        state.configure_telemetry();
+        state.observe_trial(cx);
         state
     }
 
@@ -503,6 +688,13 @@ impl AppState {
                     .into(),
             );
         }
+        let allowed = self.licensing.begin_conversion();
+        self.license = self.licensing.state();
+        self.observe_trial(cx);
+        if let Err(blocked) = allowed {
+            cx.notify();
+            return Err(blocked.to_string());
+        }
         let Some(session) = self.account.session.clone() else {
             return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
         };
@@ -525,7 +717,12 @@ impl AppState {
                 };
                 let id = self.queue.add_cloud(&job);
                 self.cloud_tokens.insert(id, session.token.clone());
-                self.runner.submit_cloud(id, job, batch.clone());
+                self.runner.submit_cloud_tracked(
+                    id,
+                    job,
+                    batch.clone(),
+                    self.telemetry.conversion(&self.license),
+                );
                 id
             })
             .collect();
@@ -574,6 +771,7 @@ impl AppState {
         }
         let allowed = self.licensing.begin_conversion();
         self.license = self.licensing.state();
+        self.observe_trial(cx);
         if let Err(blocked) = allowed {
             cx.notify();
             return Err(blocked.to_string());
@@ -594,7 +792,8 @@ impl AppState {
                 if silent {
                     self.silent.insert(id);
                 }
-                self.runner.submit(id, job);
+                self.runner
+                    .submit_tracked(id, job, self.telemetry.conversion(&self.license));
                 id
             })
             .collect();
@@ -948,6 +1147,12 @@ impl AppState {
     pub fn activate(&mut self, key: &str, cx: &mut Context<Self>) -> Result<License, String> {
         let result = self.licensing.activate(key).map_err(|e| e.to_string());
         self.license = self.licensing.state();
+        if let Ok(license) = &result {
+            self.telemetry.capture(
+                crate::telemetry::Event::Activated(license.plan),
+                &self.license,
+            );
+        }
         self.reselect_update(cx);
         cx.notify();
         result
@@ -1146,13 +1351,24 @@ impl AppState {
 
     /// Applies a settings change and saves it.
     pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        let was_persisted = self.telemetry_persisted;
         change(&mut self.settings);
+        if !self.settings.telemetry {
+            self.telemetry.set_consent(Consent::Off);
+        }
         self.runner.set_concurrency(self.settings.concurrency());
-        if let Some(path) = &self.settings_path
-            && let Err(e) = self.settings.save(path)
-        {
+        let saved = self
+            .settings_path
+            .as_ref()
+            .map(|path| self.settings.save(path));
+        self.telemetry_persisted = matches!(saved, Some(Ok(())));
+        if let Some(Err(e)) = saved {
             self.errors.push(format!("Settings were not saved: {e}"));
         }
+        if !was_persisted && self.telemetry_persisted {
+            self.sync_telemetry_identity(cx);
+        }
+        self.configure_telemetry();
         cx.notify();
     }
 

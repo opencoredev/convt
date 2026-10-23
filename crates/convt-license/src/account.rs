@@ -153,6 +153,8 @@ fn encode(value: &str) -> String {
 /// The signed-in account, kept in the credential store.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Session {
+    #[serde(default)]
+    pub user_id: Option<String>,
     pub email: String,
     pub token: String,
 }
@@ -245,6 +247,7 @@ pub enum Access {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LicenseReply {
+    pub user_id: Option<String>,
     pub key: Option<String>,
     pub access: Option<Access>,
 }
@@ -347,7 +350,16 @@ impl Api for Http {
             .map(serde_json::from_value)
             .transpose()
             .map_err(|_| ApiError::BadResponse)?;
-        Ok(LicenseReply { key, access })
+        let user_id = json
+            .get("user_id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string);
+        Ok(LicenseReply {
+            user_id,
+            key,
+            access,
+        })
     }
 
     fn sign_out(&self, token: &str) -> Result<(), ApiError> {
@@ -435,6 +447,7 @@ mod tests {
     #[test]
     fn a_session_never_prints_its_token() {
         let s = Session {
+            user_id: None,
             email: "a@b.c".into(),
             token: "cvd_secret".into(),
         };
@@ -479,16 +492,21 @@ mod tests {
 
     #[test]
     fn exchange_and_renewal_over_http() {
-        let (base, got) = serve_once(200, r#"{"token":"cvd_x","email":"a@b.c"}"#);
+        let (base, got) = serve_once(
+            200,
+            r#"{"token":"cvd_x","email":"a@b.c","user_id":"user_fake_55"}"#,
+        );
         let session = Http::new(&base).exchange("code1", "ver1").unwrap();
         assert_eq!(session.token, "cvd_x");
+        assert_eq!(session.user_id.as_deref(), Some("user_fake_55"));
         let request = got.recv().unwrap();
         assert!(request.starts_with("POST /api/device/token "));
         assert!(request.contains(r#""code":"code1""#) && request.contains(r#""verifier":"ver1""#));
 
-        let (base, got) = serve_once(200, r#"{"key":"k.s"}"#);
+        let (base, got) = serve_once(200, r#"{"key":"k.s","user_id":"user_fake_55"}"#);
         let key = Http::new(&base).current_key("cvd_x", "0.1.0").unwrap();
         assert_eq!(key.key.as_deref(), Some("k.s"));
+        assert_eq!(key.user_id.as_deref(), Some("user_fake_55"));
         let request = got.recv().unwrap().to_ascii_lowercase();
         assert!(request.starts_with("post /api/device/license "));
         assert!(request.contains("authorization: bearer cvd_x"));
@@ -497,6 +515,7 @@ mod tests {
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
             Ok(LicenseReply {
+                user_id: None,
                 key: None,
                 access: None
             })
@@ -508,6 +527,7 @@ mod tests {
         assert_eq!(
             Http::new(&base).current_key("t", "v"),
             Ok(LicenseReply {
+                user_id: None,
                 key: None,
                 access: Some(Access::Trial {
                     ends_on: "2026-10-15".into(),

@@ -3,7 +3,7 @@
 use convt_core::{
     Category, FORMATS, Format, MENU_KINDS, MenuChoices, Options, Preset, category_key, format_by_id,
 };
-use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
+use convt_license::client::{State, TRIAL_DAYS};
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -540,6 +540,14 @@ impl SettingsView {
                 p,
             ))
             .child(section("What reaches the network", network(p), p))
+            .child(section("Usage statistics", theme::group([theme::row(
+                "Share usage statistics",
+                Some(theme::detail(if crate::telemetry::do_not_track() { "Off because DO_NOT_TRACK is set." } else { "No file names, paths or content. Signed-in usage is linked to your account." }, p)),
+                theme::switch("telemetry", "Share usage statistics", settings.telemetry && !crate::telemetry::do_not_track(), crate::telemetry::do_not_track(), p).on_click({
+                    let app = self.app.clone();
+                    move |_, _, cx| { if !crate::telemetry::do_not_track() { app.update(cx, |s, cx| s.telemetry_notice(!s.settings.telemetry, cx)); } }
+                }), p,
+            ).into_any_element()], p), p))
     }
 
     /// One card per kind of file: every format it can become, with the
@@ -1130,7 +1138,7 @@ impl SettingsView {
                                 p.green_text,
                                 12.,
                             )
-                            .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                            .on_click(|_, _, cx| super::open_upgrade("settings", cx)),
                         )
                     })
                     .when(licensed, |row| {
@@ -1260,7 +1268,7 @@ pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     ),
     (
         "network-other",
-        "Anything else waits for your click, such as downloading document support. Files \
+        "Usage statistics: when enabled, the app sends PostHog app opens, conversion formats, engine, coarse file size, success or error category and duration, trial and license activity, and upgrade clicks. A random installation ID links repeat use; signing in links it to your account ID. No file names, paths, content or error messages are sent. Turn this off in Usage statistics. Other requests wait for your click, such as downloading document support. Files \
          leave this computer only when you pick Cloud in Quick convert and agree to the upload.",
     ),
 ];

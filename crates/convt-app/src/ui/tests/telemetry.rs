@@ -1,0 +1,928 @@
+use super::*;
+
+fn first_run_funnel(cx: &mut TestAppContext, accept: bool) {
+    let old_key = pro_key("fake-tester", "2026-09-15");
+    let f = Fixture::licensed(cx, None, Some(&old_key));
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let anonymous = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .settings
+            .telemetry_anonymous_id
+            .clone()
+            .unwrap()
+    });
+    let sender = crate::telemetry::Telemetry::local(anonymous, false, url, Duration::from_secs(60));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry.shutdown();
+            s.telemetry = sender.clone();
+            s.update_settings(
+                |s| {
+                    s.telemetry = true;
+                    s.telemetry_notice_version = 0;
+                    s.first_run_done = false;
+                },
+                cx,
+            );
+        })
+    });
+    let app = f.app.clone();
+    let (first, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    cx.read(|cx| {
+        assert!(
+            matches!(f.app.read(cx).license, client::State::NotCovered(_)),
+            "{:?}",
+            f.app.read(cx).license
+        )
+    });
+    assert_eq!(
+        label(cx, first, "onboarding-primary").as_deref(),
+        Some("Renew")
+    );
+    click(cx, first, "onboarding-primary");
+    assert_eq!(cx.opened_url().as_deref(), Some(BUY_URL));
+    click(cx, first, "onboarding-key-link");
+    let input = cx.read(|cx| view.read(cx).key.clone());
+    set_input(cx, first, &input, &license_key("fake-tester", "2099-01-01"));
+    click(cx, first, "onboarding-activate");
+    cx.read(|cx| {
+        assert!(
+            matches!(&f.app.read(cx).license, client::State::Licensed(l) if l.plan == Plan::Desktop)
+        )
+    });
+    sender.flush_now();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(75)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+    if !accept {
+        let (settings, settings_view) = f.settings(SettingsTab::General, cx);
+        settings_view.update(cx, |v, cx| v.reveal_updates(cx));
+        click(cx, settings, "telemetry");
+        assert_eq!(toggled(cx, settings, "telemetry"), Some(false));
+    }
+    cx.update_window(first, |_, window, cx| {
+        view.update(cx, |v, cx| v.finish(window, cx))
+    })
+    .unwrap();
+    sender.flush_now();
+    sender.shutdown();
+    if accept {
+        let (_, body) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+        let events = body["batch"].as_array().unwrap();
+        for name in ["app_opened", "upgrade_clicked", "license_activated"] {
+            assert_eq!(
+                events.iter().filter(|event| event["event"] == name).count(),
+                1,
+                "{name}: {body}"
+            );
+        }
+        assert_eq!(events.len(), 3);
+        assert_eq!(
+            events
+                .iter()
+                .find(|event| event["event"] == "app_opened")
+                .unwrap()["properties"]["license_state"],
+            "ended"
+        );
+        let activated = events
+            .iter()
+            .find(|event| event["event"] == "license_activated")
+            .unwrap();
+        assert_eq!(activated["properties"]["plan"], "desktop");
+        assert_eq!(activated["properties"]["license_state"], "desktop");
+        let upgrade = events
+            .iter()
+            .find(|event| event["event"] == "upgrade_clicked")
+            .unwrap();
+        assert_eq!(upgrade["properties"]["source"], "first_run");
+        println!("FIRST_RUN_LOCAL_BATCH {body}");
+    } else {
+        assert_eq!(
+            got.recv_timeout(Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        );
+    }
+}
+
+#[gpui_kit::test]
+fn first_run_upgrade_and_activation_survive_until_disclosure_is_accepted(cx: &mut TestAppContext) {
+    first_run_funnel(cx, true);
+}
+
+#[gpui_kit::test]
+fn declining_disclosure_discards_first_run_upgrade_and_activation(cx: &mut TestAppContext) {
+    first_run_funnel(cx, false);
+}
+
+#[gpui_kit::test]
+fn real_app_state_conversion_sign_in_and_persisted_opt_out(cx: &mut TestAppContext) {
+    let f = Fixture::build(cx, |dir| client::Config {
+        enforce: false,
+        public_key: None,
+        build_date: BUILD_DATE.into(),
+        trial_file: None,
+        store: KeyStore::File(dir.join("license.key")),
+    });
+    f.api.answer_key(Ok(None));
+    let input = f.png("private-customer-photo.png");
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let id = cx.read(|cx| f.app.read(cx).settings.install_id.clone().unwrap());
+    let anonymous_id = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .settings
+            .telemetry_anonymous_id
+            .clone()
+            .unwrap()
+    });
+    let sender =
+        crate::telemetry::Telemetry::local(anonymous_id, false, url, Duration::from_secs(60));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry.shutdown();
+            s.telemetry = sender.clone();
+            s.update_settings(|settings| settings.telemetry = true, cx);
+            s.start_sign_in(cx);
+        })
+    });
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "fake@convt.test".into(),
+        token: "cvd_local_only".into(),
+        user_id: Some("user_fake_55".into()),
+    });
+    let page = cx.opened_url().unwrap();
+    let state = query(&page, "state");
+    cx.update(|cx| super::super::route(auth_link(&state, "code=local"), cx));
+    wait_until(cx, "signed in", |cx| {
+        f.app.read(cx).account.sign_in == SignIn::Idle && f.app.read(cx).account.session.is_some()
+    });
+    wait_until(cx, "renewed", |cx| {
+        matches!(f.app.read(cx).account.refresh, Refresh::Done(_))
+    });
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.convert(
+                std::slice::from_ref(&input),
+                format_by_id("webp").unwrap(),
+                &Options::default(),
+                cx,
+            )
+            .unwrap();
+        })
+    });
+    wait_until(cx, "conversion output", |cx| {
+        f.app.read(cx).queue.active() == 0
+    });
+    let output = input.with_extension("webp");
+    assert!(output.is_file());
+    assert_eq!(image::open(&output).unwrap().width(), 4);
+    let missing = f.dir.path().join("private-missing-file.png");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.convert(
+                &[missing],
+                format_by_id("webp").unwrap(),
+                &Options::default(),
+                cx,
+            )
+            .unwrap();
+        })
+    });
+    wait_until(cx, "failed conversion", |cx| {
+        f.app.read(cx).queue.active() == 0
+    });
+    sender.flush_now();
+    let (head, body) = got.recv_timeout(Duration::from_secs(3)).unwrap();
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("content-type: application/json")
+    );
+    let events = body["batch"].as_array().unwrap();
+    println!("APP_LOCAL_BATCH {}", serde_json::to_string(&body).unwrap());
+    assert!(
+        events
+            .iter()
+            .any(|e| e["event"] == "$identify" && e["distinct_id"] == "user_fake_55")
+    );
+    let conversions: Vec<_> = events
+        .iter()
+        .filter(|e| e["event"].as_str().unwrap().starts_with("conversion_"))
+        .collect();
+    assert_eq!(conversions.len(), 4);
+    for event in &conversions {
+        assert_eq!(event["distinct_id"], "user_fake_55");
+        assert_eq!(event["properties"]["from"], "png");
+        assert_eq!(event["properties"]["to"], "webp");
+        assert_eq!(event["properties"]["engine"], serde_json::json!(["image"]));
+    }
+    assert_eq!(conversions[1]["properties"]["success"], true);
+    assert_eq!(conversions[3]["properties"]["success"], false);
+    for private in ["private-customer", "private-missing", "fake@convt.test"] {
+        assert!(!body.to_string().contains(private));
+    }
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, _| s.upgrade_clicked("pending_before_opt_out"))
+    });
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
+    assert_eq!(toggled(cx, settings, "telemetry"), Some(true));
+    click(cx, settings, "telemetry");
+    assert_eq!(toggled(cx, settings, "telemetry"), Some(false));
+    let after = f.png("after-opt-out.png");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.convert(
+                std::slice::from_ref(&after),
+                format_by_id("webp").unwrap(),
+                &Options::default(),
+                cx,
+            )
+            .unwrap();
+        })
+    });
+    wait_until(cx, "opted-out conversion output", |cx| {
+        f.app.read(cx).queue.active() == 0
+    });
+    assert_eq!(
+        image::open(after.with_extension("webp")).unwrap().width(),
+        4
+    );
+    sender.flush_now();
+    sender.shutdown();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(150)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+    let saved = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
+    assert!(!saved.telemetry);
+    assert_eq!(saved.install_id.as_deref(), Some(id.as_str()));
+    println!(
+        "APP_LOCAL_CAPTURE user_id=user_fake_55 events={} PNG->WebP=4x4 engine=image persisted_opt_out=false paths_and_error_text=absent",
+        events.len()
+    );
+}
+
+#[gpui_kit::test]
+fn a_legacy_session_renews_identity_even_when_checked_today(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(
+        cx,
+        Some(&pro_key("fake@convt.test", "2027-01-01")),
+        "fake@convt.test",
+    );
+    f.api.answer_key(Ok(None));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.session.as_mut().unwrap().user_id = None;
+            s.account.access = Some(Access::Pro);
+            s.update_settings(
+                |s| s.license_checked = Some(convt_license::date::from_days(client::today())),
+                cx,
+            );
+            s.renew_if_due(cx);
+        })
+    });
+    wait_until(cx, "verified identity", |cx| {
+        f.app
+            .read(cx)
+            .account
+            .session
+            .as_ref()
+            .unwrap()
+            .user_id
+            .as_deref()
+            == Some("user_fake_55")
+    });
+    assert_eq!(f.api.calls().1, 1);
+    cx.read(|cx| {
+        assert_eq!(
+            f.app
+                .read(cx)
+                .licensing
+                .session()
+                .unwrap()
+                .user_id
+                .as_deref(),
+            Some("user_fake_55")
+        )
+    });
+}
+
+#[gpui_kit::test]
+fn an_older_account_endpoint_does_not_repeat_identity_lookups_each_tick(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(
+        cx,
+        Some(&pro_key("fake@convt.test", "2027-01-01")),
+        "fake@convt.test",
+    );
+    f.api.answer_key(Ok(None));
+    *f.api.user_id.lock().unwrap() = None;
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.session.as_mut().unwrap().user_id = None;
+            s.account.access = Some(Access::Pro);
+            s.update_settings(
+                |s| s.license_checked = Some(convt_license::date::from_days(client::today())),
+                cx,
+            );
+            s.renew_if_due(cx);
+        })
+    });
+    wait_until(cx, "legacy endpoint renewal", |cx| {
+        matches!(f.app.read(cx).account.refresh, Refresh::Done(_))
+    });
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
+    cx.read(|cx| assert!(matches!(f.app.read(cx).account.refresh, Refresh::Done(_))));
+    assert_eq!(f.api.calls().1, 1);
+    *f.api.user_id.lock().unwrap() = Some("user_fake_55".into());
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    wait_until(cx, "manual identity retry", |cx| {
+        f.app
+            .read(cx)
+            .account
+            .session
+            .as_ref()
+            .unwrap()
+            .user_id
+            .as_deref()
+            == Some("user_fake_55")
+    });
+}
+
+#[gpui_kit::test]
+fn switching_unidentified_sessions_never_keeps_the_previous_account_trial(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "legacy@convt.test");
+    let tomorrow = convt_license::date::from_days(client::today() + 1);
+    let end = format!("{tomorrow}T12:00:00Z");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.session.as_mut().unwrap().user_id = None;
+            s.account.access = Some(Access::Trial {
+                ends_on: tomorrow.clone(),
+            });
+            s.licensing
+                .set_account_trial_exact(Some(tomorrow), Some(end.clone()));
+            s.license = s.licensing.state();
+            s.update_settings(
+                |settings| {
+                    settings.trial_cache = Some(crate::settings::TrialCache {
+                        ends_at: end,
+                        fetched_on: convt_license::date::from_days(client::today()),
+                    })
+                },
+                cx,
+            );
+            assert!(matches!(s.license, client::State::AccountTrial { .. }));
+        })
+    });
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "other@convt.test".into(),
+        token: "cvd_other_local".into(),
+        user_id: None,
+    });
+    f.api.answer_key(Err(ApiError::Offline));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_sign_in(cx)));
+    let state = query(&cx.opened_url().unwrap(), "state");
+    cx.update(|cx| super::super::route(auth_link(&state, "code=other"), cx));
+    wait_until(cx, "other account offline", |cx| {
+        matches!(f.app.read(cx).account.refresh, Refresh::Failed(_))
+    });
+    cx.read(|cx| {
+        let app = f.app.read(cx);
+        assert!(app.settings.trial_cache.is_none());
+        assert!(!matches!(app.license, client::State::AccountTrial { .. }));
+        assert!(app.account.access.is_none());
+    });
+}
+
+#[gpui_kit::test]
+fn corrupt_settings_fail_closed_without_overwriting_an_opt_out(cx: &mut TestAppContext) {
+    let original = "telemetry = false\nnotifications = broken";
+    let f = Fixture::build(cx, |dir| {
+        std::fs::write(dir.join("settings.toml"), original).unwrap();
+        client::Config {
+            enforce: false,
+            public_key: None,
+            build_date: BUILD_DATE.into(),
+            trial_file: None,
+            store: KeyStore::None,
+        }
+    });
+    cx.read(|cx| assert!(!f.app.read(cx).settings.telemetry));
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("settings.toml")).unwrap(),
+        original
+    );
+}
+
+#[gpui_kit::test]
+fn trial_events_are_persisted_deduplicated_and_not_replayed_after_opt_out(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "fake@convt.test");
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let sender = crate::telemetry::Telemetry::local(
+        "installation".into(),
+        false,
+        url,
+        Duration::from_secs(60),
+    );
+    let tomorrow = convt_license::date::from_days(client::today() + 1);
+    let yesterday = convt_license::date::from_days(client::today() - 1);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry.shutdown();
+            s.telemetry = sender.clone();
+            s.update_settings(|s| s.telemetry = true, cx);
+            s.sync_telemetry_identity(cx);
+            let ends_at = format!("{tomorrow}T12:00:00Z");
+            s.update_settings(
+                |s| {
+                    s.trial_cache = Some(crate::settings::TrialCache {
+                        ends_at: ends_at.clone(),
+                        fetched_on: convt_license::date::from_days(client::today()),
+                    })
+                },
+                cx,
+            );
+            s.licensing
+                .set_account_trial_exact(Some(tomorrow.clone()), Some(ends_at));
+            s.observe_trial(cx);
+            s.observe_trial(cx);
+            let ended_at = format!("{yesterday}T12:00:00Z");
+            s.update_settings(
+                |s| s.trial_cache.as_mut().unwrap().ends_at = ended_at.clone(),
+                cx,
+            );
+            s.licensing
+                .set_account_trial_exact(Some(yesterday.clone()), Some(ended_at));
+            s.observe_trial(cx);
+            s.observe_trial(cx);
+        })
+    });
+    sender.shutdown();
+    let (_, body) = got.recv_timeout(Duration::from_secs(3)).unwrap();
+    let events = body["batch"].as_array().unwrap();
+    for name in ["trial_started", "trial_expired"] {
+        assert_eq!(events.iter().filter(|e| e["event"] == name).count(), 1);
+    }
+    let saved = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
+    assert!(
+        saved
+            .telemetry_trials
+            .iter()
+            .any(|key| key.starts_with("started:user_fake_55:"))
+    );
+    assert!(
+        saved
+            .telemetry_trials
+            .iter()
+            .any(|key| key.starts_with("expired:user_fake_55:"))
+    );
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let off = crate::telemetry::Telemetry::local(
+        "installation".into(),
+        false,
+        url,
+        Duration::from_secs(60),
+    );
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry = off.clone();
+            s.update_settings(|s| s.telemetry = false, cx);
+            s.settings
+                .telemetry_trials
+                .retain(|key| !key.starts_with("expired:"));
+            s.observe_trial(cx);
+            s.update_settings(|s| s.telemetry = true, cx);
+            s.observe_trial(cx);
+        })
+    });
+    off.shutdown();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(100)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+}
+
+#[gpui_kit::test]
+fn migrated_installs_disclose_before_sending_without_blocking_conversion(cx: &mut TestAppContext) {
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let sender = crate::telemetry::Telemetry::local(
+        "test-placeholder".into(),
+        false,
+        url,
+        Duration::from_secs(60),
+    );
+    let f = Fixture::build_with_telemetry(
+        cx,
+        Arc::new(SystemPacks),
+        |dir| {
+            crate::settings::Settings {
+                telemetry: true,
+                telemetry_notice_version: 0,
+                first_run_done: true,
+                ..Default::default()
+            }
+            .save(&dir.join("settings.toml"))
+            .unwrap();
+            client::Config {
+                enforce: false,
+                public_key: None,
+                build_date: BUILD_DATE.into(),
+                trial_file: None,
+                store: KeyStore::None,
+            }
+        },
+        Some(sender.clone()),
+    );
+    let (main, _) = f.main(cx);
+    assert!(shown(cx, main, "telemetry-notice"));
+    let input = f.png("before-disclosure.png");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.convert(
+                std::slice::from_ref(&input),
+                format_by_id("webp").unwrap(),
+                &Options::default(),
+                cx,
+            )
+            .unwrap();
+        })
+    });
+    wait_until(cx, "conversion before disclosure", |cx| {
+        f.app.read(cx).queue.active() == 0
+    });
+    assert!(input.with_extension("webp").exists());
+    sender.flush_now();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(75)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+    click(cx, main, "telemetry-notice-accept");
+    assert!(!shown(cx, main, "telemetry-notice"));
+    sender.flush_now();
+    let (_, body) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+    let events = body["batch"].as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["event"], "app_opened");
+    let saved = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
+    assert_eq!(saved.telemetry_notice_version, 1);
+    assert!(saved.first_run_done);
+    sender.shutdown();
+}
+
+#[gpui_kit::test]
+fn sign_out_rotates_the_anonymous_id_and_persists_it_across_restart(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "fake@convt.test");
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let before = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .settings
+            .telemetry_anonymous_id
+            .clone()
+            .unwrap()
+    });
+    let install = cx.read(|cx| f.app.read(cx).settings.install_id.clone().unwrap());
+    let sender =
+        crate::telemetry::Telemetry::local(before.clone(), false, url, Duration::from_secs(60));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry.shutdown();
+            s.telemetry = sender.clone();
+            s.sync_telemetry_identity(cx);
+            s.update_settings(|s| s.telemetry = true, cx);
+        })
+    });
+    sender.flush_now();
+    let (_, first) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(
+        first["batch"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["event"] == "$identify" && e["properties"]["$anon_distinct_id"] == before)
+    );
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.sign_out(cx);
+            s.upgrade_clicked("signed_out");
+        })
+    });
+    sender.flush_now();
+    let (_, signed_out) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+    let saved = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
+    let after = saved.telemetry_anonymous_id.clone().unwrap();
+    assert_ne!(after, before);
+    assert_eq!(saved.install_id.as_deref(), Some(install.as_str()));
+    for event in signed_out["batch"].as_array().unwrap() {
+        assert_eq!(event["distinct_id"], after);
+    }
+    assert_eq!(saved.telemetry_account, None);
+    f.api.answer_key(Ok(None));
+    *f.api.user_id.lock().unwrap() = Some("user_fake_b".into());
+    *f.api.exchange.lock().unwrap() = Ok(Session {
+        email: "second@convt.test".into(),
+        token: "cvd_second_local".into(),
+        user_id: Some("user_fake_b".into()),
+    });
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_sign_in(cx)));
+    let state = query(&cx.opened_url().unwrap(), "state");
+    cx.update(|cx| super::super::route(auth_link(&state, "code=second"), cx));
+    wait_until(cx, "second account", |cx| {
+        f.app
+            .read(cx)
+            .account
+            .session
+            .as_ref()
+            .is_some_and(|session| session.user_id.as_deref() == Some("user_fake_b"))
+    });
+    sender.flush_now();
+    let (_, second) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(
+        second["batch"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["event"] == "$identify"
+                && e["distinct_id"] == "user_fake_b"
+                && e["properties"]["$anon_distinct_id"] == after)
+    );
+    assert!(!second.to_string().contains(&before));
+    let paths = Paths {
+        telemetry: None,
+        settings: Some(f.dir.path().join("settings.toml")),
+        history: None,
+        presets: None,
+        menu: None,
+        license: client::Config {
+            enforce: false,
+            public_key: None,
+            build_date: BUILD_DATE.into(),
+            trial_file: None,
+            store: KeyStore::File(f.dir.path().join("license.key")),
+        },
+        account_url: ACCOUNT_URL.into(),
+        account_api: f.api.clone(),
+        update: UpdateConfig {
+            key: None,
+            fetch: f.releases.clone(),
+            target: ("linux-x86_64", "AppImage"),
+            install: None,
+        },
+    };
+    let restarted = cx.update(|cx| cx.new(|cx| AppState::new(Arc::new(SystemPacks), paths, cx)));
+    cx.read(|cx| {
+        assert_eq!(
+            restarted
+                .read(cx)
+                .settings
+                .telemetry_anonymous_id
+                .as_deref(),
+            Some(after.as_str())
+        )
+    });
+    sender.shutdown();
+}
+
+#[gpui_kit::test]
+fn local_trials_never_report_account_trial_expiry_and_account_history_deduplicates(
+    cx: &mut TestAppContext,
+) {
+    let f = Fixture::licensed(cx, Some("2020-01-01"), None);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.observe_trial(cx)));
+    cx.read(|cx| assert!(f.app.read(cx).settings.telemetry_trials.is_empty()));
+    let tomorrow = convt_license::date::from_days(client::today() + 1);
+    let end = format!("{tomorrow}T12:00:00Z");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.licensing
+                .set_account_trial_exact(Some(tomorrow.clone()), Some(end.clone()));
+            s.update_settings(
+                |s| {
+                    s.trial_cache = Some(crate::settings::TrialCache {
+                        ends_at: end.clone(),
+                        fetched_on: convt_license::date::from_days(client::today()),
+                    })
+                },
+                cx,
+            );
+            for user in ["account_a", "account_b", "account_a"] {
+                s.account.session = Some(Session {
+                    email: "fake@convt.test".into(),
+                    token: "cvd_local_only".into(),
+                    user_id: Some(user.into()),
+                });
+                s.sync_telemetry_identity(cx);
+                s.observe_trial(cx);
+            }
+        })
+    });
+    let saved = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
+    assert_eq!(saved.telemetry_trials.len(), 2);
+    assert!(
+        saved
+            .telemetry_trials
+            .contains(&format!("started:account_a:{end}"))
+    );
+    assert!(
+        saved
+            .telemetry_trials
+            .contains(&format!("started:account_b:{end}"))
+    );
+}
+
+#[gpui_kit::test]
+fn an_unpersistable_rotation_stays_off_after_revocation(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "fake@convt.test");
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let before = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .settings
+            .telemetry_anonymous_id
+            .clone()
+            .unwrap()
+    });
+    let sender =
+        crate::telemetry::Telemetry::local(before.clone(), false, url, Duration::from_secs(60));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry.shutdown();
+            s.telemetry = sender.clone();
+            s.sync_telemetry_identity(cx);
+            s.update_settings(|s| s.telemetry = true, cx);
+        })
+    });
+    sender.flush_now();
+    got.recv_timeout(Duration::from_secs(2)).unwrap();
+    let path = f.dir.path().join("settings.toml");
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.forget_revoked_session(cx);
+            s.upgrade_clicked("after_revocation");
+        })
+    });
+    sender.flush_now();
+    sender.shutdown();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(100)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+    cx.read(|cx| {
+        assert_ne!(
+            f.app.read(cx).settings.telemetry_anonymous_id.as_deref(),
+            Some(before.as_str())
+        );
+        assert!(
+            f.app
+                .read(cx)
+                .errors
+                .iter()
+                .any(|e| e.contains("not saved"))
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn onboarding_defers_the_trial_start_until_disclosure_finishes(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "fake@convt.test");
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let anonymous = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .settings
+            .telemetry_anonymous_id
+            .clone()
+            .unwrap()
+    });
+    let sender = crate::telemetry::Telemetry::local(anonymous, false, url, Duration::from_secs(60));
+    let tomorrow = convt_license::date::from_days(client::today() + 1);
+    let end = format!("{tomorrow}T12:00:00Z");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.telemetry.shutdown();
+            s.telemetry = sender.clone();
+            s.sync_telemetry_identity(cx);
+            s.update_settings(
+                |s| {
+                    s.telemetry = true;
+                    s.telemetry_notice_version = 0;
+                    s.first_run_done = false;
+                    s.license_checked = Some(convt_license::date::from_days(client::today()));
+                    s.trial_cache = Some(crate::settings::TrialCache {
+                        ends_at: end.clone(),
+                        fetched_on: convt_license::date::from_days(client::today()),
+                    });
+                },
+                cx,
+            );
+            s.licensing
+                .set_account_trial_exact(Some(tomorrow.clone()), Some(end));
+            s.account.access = Some(Access::Trial { ends_on: tomorrow });
+            s.observe_trial(cx);
+            assert!(s.settings.telemetry_trials.is_empty());
+        })
+    });
+    sender.flush_now();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(75)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+    let app = f.app.clone();
+    let (first, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    cx.update_window(first, |_, window, cx| {
+        view.update(cx, |v, cx| v.finish(window, cx))
+    })
+    .unwrap();
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.observe_trial(cx);
+            s.observe_trial(cx);
+        })
+    });
+    sender.flush_now();
+    let (_, body) = got.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert_eq!(
+        body["batch"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["event"] == "trial_started")
+            .count(),
+        1
+    );
+    assert_eq!(
+        body["batch"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["event"] == "app_opened")
+            .count(),
+        1
+    );
+    sender.shutdown();
+}
+
+#[gpui_kit::test]
+fn signed_in_startup_preserves_corrupt_opt_out_settings(cx: &mut TestAppContext) {
+    let original = "telemetry = false\nnotifications = broken";
+    let f = Fixture::build(cx, |dir| {
+        std::fs::write(dir.join("settings.toml"), original).unwrap();
+        std::fs::write(
+            dir.join("account.json"),
+            serde_json::to_vec(&Session {
+                email: "fake@convt.test".into(),
+                token: "cvd_local_only".into(),
+                user_id: Some("user_fake_55".into()),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        client::Config {
+            enforce: false,
+            public_key: None,
+            build_date: BUILD_DATE.into(),
+            trial_file: None,
+            store: KeyStore::File(dir.join("license.key")),
+        }
+    });
+    assert_eq!(
+        std::fs::read_to_string(f.dir.path().join("settings.toml")).unwrap(),
+        original
+    );
+    cx.read(|cx| {
+        assert!(f.app.read(cx).account.session.is_some());
+        assert!(!f.app.read(cx).settings.telemetry);
+    });
+}
+
+#[gpui_kit::test]
+fn the_enabled_disclosure_keeps_onboarding_actions_reachable(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| s.update_settings(|s| s.telemetry = true, cx))
+    });
+    let app = f.app.clone();
+    let (first, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    gpui_kit::VisualTestContext::from_window(first, cx).simulate_resize(size(px(900.), px(640.)));
+    for id in [
+        "onboarding-google",
+        "onboarding-email",
+        "onboarding-key-link",
+        "privacy",
+    ] {
+        assert!(fits(cx, first, id), "{id}");
+    }
+    assert!(shown(cx, first, "telemetry-first-run"));
+}
