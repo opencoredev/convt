@@ -233,6 +233,11 @@ pub struct AppState {
     pub pack: PackState,
     pack_cancel: Option<Arc<AtomicBool>>,
     _pack_task: Option<Task<()>>,
+    /// How many more times a network or server failure of this download
+    /// retries by itself (see [`PACK_RETRY_DELAYS`]).
+    pack_retries: usize,
+    /// The wait before the next retry, while there is one.
+    pack_retry: Option<Task<()>>,
     runner: Runner,
     pub queue: Queue,
     history: History,
@@ -306,6 +311,13 @@ pub const INSTALLING: &str =
 
 /// Why document support can't download or be removed while an update
 /// installs: quitting for the restart would stop it.
+/// How long a download onboarding started waits before retrying a network
+/// or server failure, once per entry. Each retry resumes the partial file.
+pub const PACK_RETRY_DELAYS: [std::time::Duration; 2] = [
+    std::time::Duration::from_secs(5),
+    std::time::Duration::from_secs(30),
+];
+
 pub const INSTALLING_PACK: &str =
     "convt is installing an update and restarts in a moment. Try again after it does.";
 
@@ -389,6 +401,8 @@ impl AppState {
             pack,
             pack_cancel: None,
             _pack_task: None,
+            pack_retries: 0,
+            pack_retry: None,
             runner,
             queue: Queue::default(),
             history,
@@ -740,10 +754,13 @@ impl AppState {
     }
 
     /// Starts downloading and installing the document pack on a worker
-    /// thread. Only the Download button calls this: nothing else may start a
-    /// network request. A reinstall waits until no document is converting,
-    /// since it replaces the files those conversions run.
-    pub fn download_pack(&mut self, cx: &mut Context<Self>) {
+    /// thread. Only a click asks for it, the Download button or onboarding's
+    /// Yes (`ui::pack`); nothing else may start a network request. `retries`:
+    /// how many times a network or server failure tries again by itself,
+    /// which only onboarding's background download does. A reinstall waits
+    /// until no document is converting, since it replaces the files those
+    /// conversions run.
+    pub fn download_pack(&mut self, retries: usize, cx: &mut Context<Self>) {
         if matches!(self.pack.phase, PackPhase::Working(_))
             || self.pack.removing
             || !self.pack.offer.configured
@@ -763,6 +780,7 @@ impl AppState {
         }
         let cancel = Arc::new(AtomicBool::new(false));
         self.pack_cancel = Some(cancel.clone());
+        self.pack_retries = retries.min(PACK_RETRY_DELAYS.len());
         self.pack.phase = PackPhase::Working(pack::Progress::Download {
             bytes: 0,
             total: None,
@@ -784,11 +802,33 @@ impl AppState {
         cx.notify();
     }
 
-    /// Stops the download. The partial file stays for the next try.
-    pub fn cancel_pack_download(&mut self) {
+    /// Stops the download, or the wait before its next try. The partial
+    /// file stays for the next try.
+    pub fn cancel_pack_download(&mut self, cx: &mut Context<Self>) {
         if let Some(cancel) = &self.pack_cancel {
             cancel.store(true, Ordering::Relaxed);
         }
+        // A failure already on its way must not start another try.
+        self.pack_retries = 0;
+        if self.pack_retry.take().is_some() {
+            self.pack_cancel = None;
+            self.pack.phase = PackPhase::Failed(Failure {
+                kind: pack::FailureKind::Cancelled,
+                message: "cancelled before trying again".into(),
+            });
+            cx.notify();
+        }
+    }
+
+    /// Tries a failed background download again after its wait.
+    fn retry_pack(&mut self, failure: Failure, cx: &mut Context<Self>) {
+        self.pack_retry = None;
+        let retries = self.pack_retries.saturating_sub(1);
+        // `download_pack` starts only from a settled phase; if it can't
+        // start now (an update installing, a removal), the failure stands.
+        self.pack.phase = PackPhase::Failed(failure);
+        self.download_pack(retries, cx);
+        cx.notify();
     }
 
     /// Removes the document pack, once no document is converting.
@@ -847,8 +887,24 @@ impl AppState {
                     self.pack.phase = PackPhase::Working(progress);
                 }
             }
+            PackEvent::Installed(Err(failure))
+                if self.pack_retries > 0
+                    && pack::transient(failure.kind)
+                    && !self
+                        .pack_cancel
+                        .as_ref()
+                        .is_some_and(|c| c.load(Ordering::Relaxed)) =>
+            {
+                // Keep showing the download while it waits to resume.
+                let delay = PACK_RETRY_DELAYS[PACK_RETRY_DELAYS.len() - self.pack_retries];
+                self.pack_retry = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(delay).await;
+                    let _ = this.update(cx, |state, cx| state.retry_pack(failure, cx));
+                }));
+            }
             PackEvent::Installed(result) => {
                 self.pack_cancel = None;
+                self.pack_retries = 0;
                 self.pack.phase = match result {
                     Ok(_) => PackPhase::Done,
                     Err(failure) => PackPhase::Failed(failure),

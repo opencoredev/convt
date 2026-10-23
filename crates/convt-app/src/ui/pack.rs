@@ -2,9 +2,10 @@
 //! documents nothing can convert yet, and the Documents row in Settings.
 //!
 //! A click is the only way to start a download: the Download button
-//! ([`download_button`]) or Yes on onboarding's documents question, both
-//! through [`start_install`], the one caller of `AppState::download_pack`.
-//! Opening a window or showing a card never does.
+//! ([`download_button`]) through [`start_install`], or Yes on onboarding's
+//! documents question through [`start_background_install`], which also
+//! retries a network failure by itself. Opening a window or showing a card
+//! never does.
 
 use super::theme::IconName;
 use gpui_kit::component::tooltip::Tooltip;
@@ -25,9 +26,19 @@ fn download_label(verb: &str, offer: &pack::Offer) -> String {
 }
 
 /// Starts downloading and installing the pack. Call it only from a click
-/// that asks for it.
+/// that asks for it. A failure waits for the next click: whoever clicked is
+/// looking at it.
 pub(super) fn start_install(app: &Entity<AppState>, cx: &mut App) {
-    app.update(cx, |s, cx| s.download_pack(cx))
+    app.update(cx, |s, cx| s.download_pack(0, cx))
+}
+
+/// [`start_install`] for onboarding's Yes. Nobody watches that download, so
+/// a network or server failure tries again by itself before Activity shows
+/// it.
+pub(super) fn start_background_install(app: &Entity<AppState>, cx: &mut App) {
+    app.update(cx, |s, cx| {
+        s.download_pack(crate::model::PACK_RETRY_DELAYS.len(), cx)
+    })
 }
 
 /// The button that starts the download.
@@ -44,7 +55,7 @@ fn cancel_button(app: &Entity<AppState>, p: &Palette) -> theme::Clickable {
     Button::secondary("pack-cancel", "Cancel download")
         .small()
         .build(p)
-        .on_click(move |_, _, cx| app.update(cx, |s, _| s.cancel_pack_download()))
+        .on_click(move |_, _, cx| app.update(cx, |s, cx| s.cancel_pack_download(cx)))
 }
 
 /// The progress bar and its caption while the pack installs.

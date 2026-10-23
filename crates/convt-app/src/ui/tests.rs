@@ -239,6 +239,11 @@ struct TestPacks {
     rejected: Mutex<Option<String>>,
     /// How the next install ends; `None` installs.
     next: Mutex<Option<Failure>>,
+    /// Every install ends as `next` says, not only the next one.
+    fail_always: AtomicBool,
+    /// Finishes as `next` says even after Cancel, like a failure that was
+    /// already on its way when the user clicked.
+    ignore_cancel: AtomicBool,
     /// Holds the download after its first step until cancelled or released.
     hold: AtomicBool,
     /// Holds a removal until released.
@@ -286,6 +291,8 @@ impl pack::Backend for TestPacks {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<PathBuf, Failure> {
         self.installs.fetch_add(1, Ordering::SeqCst);
+        let ignore = self.ignore_cancel.load(Ordering::SeqCst);
+        let cancelled = || cancelled() && !ignore;
         for step in 1..=15 {
             if cancelled() {
                 return Err(Failure {
@@ -301,7 +308,12 @@ impl pack::Backend for TestPacks {
                 std::thread::sleep(Duration::from_millis(5));
             }
         }
-        if let Some(failure) = self.next.lock().unwrap().take() {
+        let failure = if self.fail_always.load(Ordering::SeqCst) {
+            self.next.lock().unwrap().clone()
+        } else {
+            self.next.lock().unwrap().take()
+        };
+        if let Some(failure) = failure {
             return Err(failure);
         }
         progress(pack::Progress::Verifying);
@@ -3998,7 +4010,7 @@ fn a_build_without_a_pinned_pack_offers_no_download(cx: &mut TestAppContext) {
     assert!(!shown(cx, window, "pack-download"));
     // Even a direct call does nothing without a pinned pack.
     let app = f.app.clone();
-    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(cx)));
+    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(0, cx)));
     assert_eq!(packs.installs(), 0);
 }
 
@@ -4030,12 +4042,21 @@ fn only_the_download_button_reaches_the_installer() {
     };
     assert_eq!(uses("install_documents"), ["pack.rs"]);
     assert_eq!(uses("ureq"), Vec::<&str>::new());
-    // The definition, and the one call in `start_install`.
-    assert_eq!(uses("download_pack("), ["model.rs", "ui/pack.rs"]);
-    // Which only the Download button's click and onboarding's Yes call.
+    // The definition and its retry, which only follows a download already
+    // asked for, and the calls in `start_install` and
+    // `start_background_install`.
     assert_eq!(
-        uses("start_install("),
-        ["ui/first_run.rs", "ui/pack.rs", "ui/pack.rs"]
+        uses("download_pack("),
+        ["model.rs", "model.rs", "ui/pack.rs", "ui/pack.rs"]
+    );
+    let model = include_str!("../model.rs").replace("\r\n", "\n");
+    let retry = model.split("fn retry_pack").nth(1).unwrap();
+    assert!(retry[..retry.find("\n    }\n").unwrap()].contains("self.download_pack("));
+    // Which only the Download button's click and onboarding's Yes call.
+    assert_eq!(uses("start_install("), ["ui/pack.rs", "ui/pack.rs"]);
+    assert_eq!(
+        uses("start_background_install("),
+        ["ui/first_run.rs", "ui/pack.rs"]
     );
     // A Windows checkout may have CRLF line endings.
     let pack = include_str!("pack.rs").replace("\r\n", "\n");
@@ -4045,10 +4066,11 @@ fn only_the_download_button_reaches_the_installer() {
     let first_run = include_str!("first_run.rs").replace("\r\n", "\n");
     let answer = first_run.split("fn answer").nth(1).unwrap();
     let answer = &answer[..answer.find("\n    }\n").unwrap()];
-    assert!(answer.contains("if yes") && answer.contains("start_install(&self.app, cx)"));
+    assert!(
+        answer.contains("if yes") && answer.contains("start_background_install(&self.app, cx)")
+    );
     // `backend.install(` runs inside download_pack's worker thread only.
     assert_eq!(uses("backend.install("), ["model.rs"]);
-    let model = include_str!("../model.rs").replace("\r\n", "\n");
     let body = &model[model.find("pub fn download_pack").unwrap()..];
     let body = &body[..body.find("\n    }\n").unwrap()];
     assert!(body.contains("backend.install("));
@@ -4178,7 +4200,7 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
         app.update(cx, |s, cx| {
             s.convert(std::slice::from_ref(&docx), pdf, &Options::default(), cx)
                 .unwrap();
-            s.download_pack(cx);
+            s.download_pack(0, cx);
         })
     });
     assert_eq!(packs.installs(), 0, "not while a document converts");
@@ -4194,7 +4216,7 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
 
     // Once nothing converts, it reinstalls, and documents wait for it.
     packs.hold.store(true, Ordering::SeqCst);
-    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(cx)));
+    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(0, cx)));
     wait_until(cx, "the download", |_| packs.installs() == 1);
     cx.update(|cx| {
         app.update(cx, |s, cx| {
@@ -5772,22 +5794,30 @@ fn the_setup_step_leaves_the_document_download_to_the_background(cx: &mut TestAp
     assert_eq!(packs.installs(), 1);
 }
 
-/// A download that fails during onboarding doesn't stop it, and Activity
-/// says so plainly, with Settings as the way to try again.
+/// Waits for the background download's `n`th try to finish, then lets the
+/// wait before the next one pass.
+fn pass_pack_retry(cx: &mut TestAppContext, packs: &TestPacks, n: usize) {
+    wait_until(cx, "the try ended", |_| packs.installs() == n);
+    cx.run_until_parked();
+    cx.executor()
+        .advance_clock(crate::model::PACK_RETRY_DELAYS[n - 1] + Duration::from_millis(50));
+}
+
+/// A download that fails during onboarding, and again on both of its own
+/// retries, doesn't stop it, and Activity says so plainly, with Settings as
+/// the way to try again.
 #[gpui_kit::test]
 fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks::default());
     packs.fail_next(FailureKind::Network, "offline");
+    packs.fail_always.store(true, Ordering::SeqCst);
     let key = pro_key("pro-tester", "2027-10-01");
     let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
     click(cx, window, "onboarding-primary");
     click(cx, window, "question-yes");
-    wait_until(cx, "the download failed", |cx| {
-        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
-    });
-    cx.run_until_parked();
+    wait_until(cx, "the first try failed", |_| packs.installs() == 1);
     // Onboarding carries on; the failure waits in Activity.
     assert_eq!(
         label(cx, window, "onboarding-title").as_deref(),
@@ -5795,12 +5825,108 @@ fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppC
     );
     finish_onboarding(cx, &view);
     let (main, _) = window_of::<MainView>(cx);
+    pass_pack_retry(cx, &packs, 1);
+    pass_pack_retry(cx, &packs, 2);
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        packs.installs(),
+        3,
+        "two retries, then it waits for a click"
+    );
     assert_eq!(
         label(cx, main, "activity-pack").as_deref(),
         Some("Couldn't download document support")
     );
     click(cx, main, "activity-pack-settings");
     window_of::<SettingsView>(cx);
+}
+
+/// Onboarding's download gets past a dropped connection or a server error
+/// by itself: it waits, resumes, and installs, without a click.
+#[gpui_kit::test]
+fn an_onboarding_download_retries_a_network_failure_by_itself(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "connection reset");
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    wait_until(cx, "the first try failed", |_| packs.installs() == 1);
+    cx.run_until_parked();
+    // Waiting to try again still reads as the download going on.
+    cx.read(|cx| assert!(matches!(f.app.read(cx).pack.phase, PackPhase::Working(_))));
+    finish_onboarding(cx, &view);
+    let (main, _) = window_of::<MainView>(cx);
+    assert_eq!(
+        label(cx, main, "activity-pack").as_deref(),
+        Some("Adding document support")
+    );
+    cx.executor()
+        .advance_clock(crate::model::PACK_RETRY_DELAYS[0] + Duration::from_millis(50));
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).documents_supported()
+    });
+    assert_eq!(packs.installs(), 2);
+    cx.run_until_parked();
+    assert!(!shown(cx, main, "activity-pack"));
+}
+
+/// What another try can't fix (a checksum mismatch, a full disk) fails
+/// straight away, and Cancel during the wait stops the retry.
+#[gpui_kit::test]
+fn an_onboarding_download_only_retries_what_retrying_can_fix(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Checksum, "mismatch");
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, _) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.executor().advance_clock(Duration::from_secs(120));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 1);
+
+    // A network failure waits to retry; Cancel ends it there.
+    packs.fail_next(FailureKind::Network, "offline");
+    cx.update(|cx| super::pack::start_background_install(&f.app, cx));
+    wait_until(cx, "the second download failed once", |_| {
+        packs.installs() == 2
+    });
+    cx.run_until_parked();
+    f.app.update(cx, |s, cx| s.cancel_pack_download(cx));
+    cx.executor().advance_clock(Duration::from_secs(120));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 2);
+    cx.read(|cx| {
+        assert!(matches!(
+            &f.app.read(cx).pack.phase,
+            PackPhase::Failed(failure) if failure.kind == FailureKind::Cancelled
+        ))
+    });
+
+    // Cancel while a network failure is already on its way: no retry.
+    packs.fail_next(FailureKind::Network, "offline");
+    packs.ignore_cancel.store(true, Ordering::SeqCst);
+    packs.hold.store(true, Ordering::SeqCst);
+    cx.update(|cx| super::pack::start_background_install(&f.app, cx));
+    wait_until(cx, "the third download started", |_| packs.installs() == 3);
+    f.app.update(cx, |s, cx| s.cancel_pack_download(cx));
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the third download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.executor().advance_clock(Duration::from_secs(120));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 3, "Cancel stops the retry");
 }
 
 /// A scripted installer host: serves `body` for any URL, counts requests,
@@ -6550,7 +6676,7 @@ fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut Tes
     let (_, installer) = f.self_installing(cx);
     ready(&f, cx);
     packs.hold.store(true, Ordering::SeqCst);
-    cx.update(|cx| f.app.update(cx, |s, cx| s.download_pack(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.download_pack(0, cx)));
     wait_until(cx, "the pack download", |_| packs.installs() == 1);
     let (main, _) = f.main(cx);
     click(cx, main, "update-restart");
@@ -6571,7 +6697,7 @@ fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut Tes
     });
     let removed = cx.update(|cx| {
         f.app.update(cx, |s, cx| {
-            s.download_pack(cx);
+            s.download_pack(0, cx);
             s.remove_pack(cx)
         })
     });

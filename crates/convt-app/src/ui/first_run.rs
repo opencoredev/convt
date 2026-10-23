@@ -288,8 +288,8 @@ impl FirstRunView {
         if yes {
             match question {
                 // A click on Yes is the user asking for the download, as the
-                // Download button is.
-                Question::Documents => super::pack::start_install(&self.app, cx),
+                // Download button is. It carries on in the background.
+                Question::Documents => super::pack::start_background_install(&self.app, cx),
                 Question::Finder => crate::finder::open_settings(cx),
             }
         }
