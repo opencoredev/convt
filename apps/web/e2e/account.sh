@@ -104,7 +104,8 @@ ab2 click 'button[type=submit]' >/dev/null
 ab2 wait --url "**/sign-in/check-email**" >/dev/null
 ab2 click 'input[aria-label="Digit 1 of 6"]' >/dev/null
 ab2 keyboard type "$(mail_code "$moved")" >/dev/null
-ab2 wait --url "**/dashboard" >/dev/null
+# The account is minutes old, so sign-in may land on /download rather than /dashboard.
+ab2 wait --fn '["/dashboard", "/download"].includes(location.pathname)' >/dev/null
 open_page /account
 shot settings-two-sessions-desktop-light
 other=$(owner_sql "select count(*) from sessions where user_id = (select id from users where email = '$moved')")
@@ -125,7 +126,8 @@ ab2 click 'button[type=submit]' >/dev/null
 ab2 wait --url "**/sign-in/check-email**" >/dev/null
 ab2 click 'input[aria-label="Digit 1 of 6"]' >/dev/null
 ab2 keyboard type "$(mail_code "$moved")" >/dev/null
-ab2 wait --url "**/dashboard" >/dev/null
+# The account is minutes old, so sign-in may land on /download rather than /dashboard.
+ab2 wait --fn '["/dashboard", "/download"].includes(location.pathname)' >/dev/null
 owner_sql "insert into devices (id, user_id, name, os) select 'dev_e2e_' || substr(md5(random()::text), 1, 20), id, 'E2E Mac', 'macOS 26.1' from users where email = '$moved'" >/dev/null
 open_page /account
 dom_click "Sign out everywhere else" >/dev/null
