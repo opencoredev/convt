@@ -7,8 +7,8 @@
   },
   "servers": [
     {
-      "url": "https://convt-api-production.up.railway.app",
-      "description": "Interim host. https://api.convt.app is the intended canonical host and will replace this once its DNS is live."
+      "url": "https://api.convt.app",
+      "description": "Canonical production API hostname."
     }
   ],
   "paths": {

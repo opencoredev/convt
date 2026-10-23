@@ -1,16 +1,15 @@
 ---
 title: Base URL
-description: Which host to send API requests to while api.convt.app is not live.
+description: The host to send API requests to.
 ---
 
-| Host            | Status                                      |
-| --------------- | ------------------------------------------- |
-| `{{api}}`       | **Live.** Use this now.                     |
-| `{{final-api}}` | Planned. Its DNS record does not exist yet. |
+| Host      | Status                                      |
+| --------- | ------------------------------------------- |
+| `{{api}}` | **Live.** Use this for production requests. |
 
-Every example on this site uses the live host. When `api.convt.app` starts resolving, this page and the examples will switch to it, and the Railway host will keep working during the move. Paths, keys, request bodies and responses are the same on both.
+Every example on this site uses the canonical production host. The Railway hostname remains available as an operational fallback. Paths, keys, request bodies and responses are the same on both.
 
-Keep the host in one setting so the change is a one-line edit:
+Keep the host in one setting:
 
 ```bash
 export CONVT_API={{api}}
