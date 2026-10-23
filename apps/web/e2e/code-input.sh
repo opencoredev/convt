@@ -8,10 +8,14 @@ source "$(dirname "$0")/lib.sh"
 js() { ab eval "$1" | tail -1 | tr -d '"'; }
 digits='[...document.querySelectorAll("input[aria-label^=Digit]")].map((i) => i.value || "_").join("")'
 focused='document.activeElement?.getAttribute("aria-label") ?? "none"'
-# Counts code submissions to $1 and holds each one for window.__delay ms.
-hold_requests() {
-  js "window.__n = 0; window.__delay = 0; const f = window.fetch; window.fetch = async (...a) => { if (String(a[0]).includes('$1')) { window.__n++; await new Promise((r) => setTimeout(r, window.__delay)); } return f(...a); }; 'ok'" >/dev/null
+# Counts code submissions to $1 (window.__n) and their finished responses
+# (window.__done). While `hold` is on, each one waits until `release`.
+watch_requests() {
+  js "window.__n = 0; window.__done = 0; window.__held = false; window.__waiting = []; const f = window.fetch; window.fetch = async (...a) => { if (!String(a[0]).includes('$1')) return f(...a); window.__n++; if (window.__held) await new Promise((r) => window.__waiting.push(r)); try { return await f(...a); } finally { window.__done++; } }; 'ok'" >/dev/null
 }
+hold() { js "window.__held = true; 'ok'" >/dev/null; }
+release() { js "window.__held = false; window.__waiting.splice(0).forEach((r) => r()); 'ok'" >/dev/null; }
+wait_done() { ab wait --fn "window.__done >= $1" >/dev/null; }
 paste_into() { # paste_into box text
   js "(() => { const el = document.querySelector('input[aria-label=\"Digit $1 of 6\"]'); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', '$2'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return 'pasted'; })()" >/dev/null
 }
@@ -31,7 +35,7 @@ theme light
 
 start_sign_in new@convt.test
 check "the first box has focus when the page opens" test "$(js "$focused")" = "Digit 1 of 6"
-hold_requests /sign-in/email-otp
+watch_requests /sign-in/email-otp
 ab keyboard type 12 >/dev/null
 check "typing fills a box and moves to the next" test "$(js "$digits")/$(js "$focused")" = "12____/Digit 3 of 6"
 ab press Backspace >/dev/null
@@ -47,7 +51,7 @@ ab click 'input[aria-label="Digit 6 of 6"]' >/dev/null
 check "a click past the first empty box lands on it" test "$(js "$focused")" = "Digit 4 of 6"
 check "nothing is sent before the last digit" test "$(js "window.__n")" = 0
 
-js "window.__delay = 1500" >/dev/null
+hold
 paste_into 3 "000 000"
 check "a pasted code fills every box" test "$(js "$digits")" = 000000
 check "and is sent on its own, once" test "$(js "window.__n")" = 1
@@ -57,14 +61,14 @@ paste_into 1 999999
 ab press Backspace >/dev/null
 ab keyboard type 7 >/dev/null
 check "input while checking changes nothing and sends nothing" test "$(js "$digits")/$(js "window.__n")" = "000000/1"
+release
 ab wait --text "That code isn't right" >/dev/null
-sleep 0.6
+ab wait --fn "[...document.querySelectorAll('input[aria-label^=Digit]')].every((i) => i.value === '')" >/dev/null
 check "a wrong code clears the boxes and refocuses the first" test "$(js "$digits")/$(js "$focused")" = "______/Digit 1 of 6"
 check "and marks them invalid" test "$(js 'document.querySelector("input[aria-label^=Digit]").getAttribute("aria-invalid")')" = true
 shot code-input-wrong-desktop-light
 
 # Typing straight after a wrong code cuts the shake short instead of losing digits.
-js "window.__delay = 0" >/dev/null
 paste_into 1 111111
 ab wait --text "That code isn't right" >/dev/null
 ab keyboard type "$(mail_code new@convt.test)" >/dev/null
@@ -92,12 +96,15 @@ ab fill 'input[type=email]' "$moved" >/dev/null
 reset_limits
 js "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Send code').click(); 'ok'" >/dev/null
 ab wait 'input[aria-label="Digit 1 of 6"]' >/dev/null
-hold_requests /email-otp/change-email
-js "window.__delay = 1200" >/dev/null
+watch_requests /email-otp/change-email
+hold
 ab keyboard type "$(mail_code "$moved")" >/dev/null
+ab wait --fn "window.__n === 1" >/dev/null
 js "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Cancel').click(); 'ok'" >/dev/null
-sleep 1.6
+release
+wait_done 1
 open_change_email
+# The success ring lasts 700 ms; a stray onAccepted would have closed the form by now.
 sleep 1.2
 check "a reply after Cancel leaves a newly opened form open" test "$(js 'document.querySelector("input[type=email]") ? "open" : "closed"')" = open
 
