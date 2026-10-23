@@ -101,9 +101,10 @@ hold
 ab keyboard type "$(mail_code "$moved")" >/dev/null
 ab wait --fn "window.__n === 1" >/dev/null
 js "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Cancel').click(); 'ok'" >/dev/null
+# Reopen while the reply is still held, so it can only land on the new form.
+open_change_email
 release
 wait_done 1
-open_change_email
 # The success ring lasts 700 ms; a stray onAccepted would have closed the form by now.
 sleep 1.2
 check "a reply after Cancel leaves a newly opened form open" test "$(js 'document.querySelector("input[type=email]") ? "open" : "closed"')" = open
