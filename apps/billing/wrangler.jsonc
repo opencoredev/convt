@@ -6,12 +6,19 @@
   "main": "src/index.ts",
   // Production values. Secrets (POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET,
   // SEQUENZY_API_KEY, LICENSE_SIGNING_KEY) are set with `wrangler secret put` on this
-  // Worker only; the site Worker never holds them. Local development overrides
+  // Worker only; the site Worker never holds them. Campaign email adds the secrets
+  // SEQUENZY_MARKETING_API_KEY, MARKETING_LINK_SECRET and SEQUENZY_WEBHOOK_SECRET and
+  // the optional SEQUENZY_MARKETING_LIST_IDS and SEQUENZY_MARKETING_TAGS; until they
+  // are set nothing is pushed (docs/marketing-email.md). Local development overrides
   // these from apps/billing/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",
     "SITE_URL": "https://convt.app",
     "BILLING_CATALOG": "production",
+    // The one-time $29 "convt Desktop" product in the production catalog
+    // (packages/billing/src/catalog.ts). A placeholder here would reach checkout.
+    "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "9d3028c1-1e4f-4d12-9641-59960eb58679",
+    "POLAR_DESKTOP_LIFETIME_PRICE_ID": "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
     // Leo's address for the daily billing digest.
@@ -19,6 +26,9 @@
     // The public half of the production signing key; release builds embed the same
     // key as CONVT_LICENSE_PUBKEY.
     "LICENSE_PUBLIC_KEY": "FifI4kZfp25-La18pwNa4CJ751s4hDP68D60bp9rQoY",
+    // Same public project key the site uses. Safe in Worker vars.
+    "POSTHOG_KEY": "phc_yg96HDaDax6n2MmN7QyzvJjSh5qq2AwMUvaRnhmbJwMw",
+    "POSTHOG_HOST": "https://us.i.posthog.com",
   },
   // Only the webhook path is public; the site reaches everything else through its
   // service binding to the BillingRpc entrypoint.
@@ -40,7 +50,13 @@
       "routes": [],
       "vars": {
         "ENV": "staging",
+        // Empty: staging sends no PostHog events.
+        "POSTHOG_KEY": "",
+        "POSTHOG_HOST": "https://us.i.posthog.com",
         "BILLING_CATALOG": "sandbox",
+        // The sandbox catalog's one-time "convt Desktop" product.
+        "POLAR_DESKTOP_LIFETIME_PRODUCT_ID": "31a1a071-bec9-4b7e-a5dd-e9a52eb7d3ab",
+        "POLAR_DESKTOP_LIFETIME_PRICE_ID": "20024212-c2be-4d23-819e-151b704a3a3e",
         "SITE_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",

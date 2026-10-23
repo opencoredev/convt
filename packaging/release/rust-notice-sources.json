@@ -506,6 +506,25 @@
       ]
     },
     {
+      "name": "ksni",
+      "version": "0.3.6",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "manifest_sha256": "e99cc413b5e0222b08142d39864797ec67e276f1d0ca1e46072e0f095bebfde2",
+      "vcs_sha1": "4e31ee48d91b0babb472d05936b9b68bca736b06",
+      "repository": "https://github.com/iovxw/ksni",
+      "path_in_vcs": "",
+      "archive_url": "https://codeload.github.com/iovxw/ksni/tar.gz/4e31ee48d91b0babb472d05936b9b68bca736b06",
+      "archive_sha256": "40ca0ebc02155b38ef0dac4f4abf441ddb4a7ab786e318844531d1afa1cd2eef",
+      "notices": [
+        {
+          "path": "rust-notices/ksni/0.3.6/UNLICENSE",
+          "upstream_path": "UNLICENSE",
+          "url": "https://raw.githubusercontent.com/iovxw/ksni/4e31ee48d91b0babb472d05936b9b68bca736b06/UNLICENSE",
+          "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+        }
+      ]
+    },
+    {
       "name": "lyon",
       "version": "1.0.19",
       "source": "registry+https://github.com/rust-lang/crates.io-index",

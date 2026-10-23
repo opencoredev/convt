@@ -707,6 +707,14 @@ pub fn validate(
                     let on_white = fixture.alpha && matches!(to.id, "jpeg" | "ppm");
                     check_pattern(&img, alpha, on_white)?;
                 }
+                // Apple's ImageIO rejects BITMAPV4HEADER files that the image
+                // crate itself decodes.
+                if to.id == "bmp" {
+                    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+                    if data.get(14..18) == Some(&108u32.to_le_bytes()[..]) {
+                        return Err("BMP uses a BITMAPV4HEADER".into());
+                    }
+                }
                 if to.id == "gif" && fixture.format.category == Category::Video {
                     validate_media(fixture, to, path, options)?;
                 }
@@ -831,6 +839,9 @@ fn validate_media(fixture: &Fixture, to: &Format, path: &Path, options: &Options
         if audio["codec_name"] != expected {
             return Err(format!("wrong audio codec: {audio}"));
         }
+        if to.id == "flac" {
+            check_flac_block_size(path)?;
+        }
         check_tone(path)?;
     }
     let duration = info["format"]["duration"]
@@ -843,6 +854,21 @@ fn validate_media(fixture: &Fixture, to: &Format, path: &Path, options: &Options
         return Err(format!(
             "duration {duration}, expected {expected} +/-0.20 s"
         ));
+    }
+    Ok(())
+}
+
+/// FFprobe decodes any legal FLAC block size, but Apple's decoder rejects tiny
+/// ones, so read STREAMINFO's block sizes directly.
+fn check_flac_block_size(path: &Path) -> Check<()> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    if bytes.len() < 42 || &bytes[..4] != b"fLaC" || bytes[4] & 0x7f != 0 {
+        return Err("FLAC STREAMINFO missing".into());
+    }
+    let min = u16::from_be_bytes([bytes[8], bytes[9]]);
+    let max = u16::from_be_bytes([bytes[10], bytes[11]]);
+    if min != 4096 || max != 4096 {
+        return Err(format!("FLAC block size {min}..{max}, expected 4096"));
     }
     Ok(())
 }

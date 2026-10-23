@@ -12,7 +12,7 @@ current=[b for b in m['builds'] if b['version']==p.name]
 if len(current)!=1:sys.exit('Version directory does not identify exactly one build')
 for b in current:
     if b['version']!=p.name: continue
-    for a in [b['source']]+b['artifacts']:
+    for a in [b['source'], *([b['source_closure']] if b.get('source_closure') else []), *b['artifacts']]:
         from urllib.parse import urlparse,unquote
         f=p/unquote(pathlib.PurePosixPath(urlparse(a['url']).path).name)
         if f.stat().st_size!=a['size'] or hashlib.sha256(f.read_bytes()).hexdigest()!=a['sha256']:

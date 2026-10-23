@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="convt" Manufacturer="Convt" Version="$(var.Version)" UpgradeCode="BAE8028B-1352-4B85-B1C7-A10B7EA54D08" Scope="perUser">
     <MajorUpgrade DowngradeErrorMessage="A newer version of convt is already installed." />
-    <MediaTemplate EmbedCab="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Icon Id="convt.ico" SourceFile="$(sys.SOURCEFILEDIR)convt.ico" />
     <Property Id="ARPPRODUCTICON" Value="convt.ico" />
     <StandardDirectory Id="LocalAppDataFolder">
@@ -13,6 +13,7 @@
     <Feature Id="Main" Title="convt" Level="1">
       <ComponentGroupRef Id="Payload" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="UrlProtocol" />
     </Feature>
   </Package>
   <Fragment>
@@ -25,6 +26,21 @@
         </Component>
       </Directory>
     </StandardDirectory>
+  </Fragment>
+  <Fragment>
+    <!-- convt:// links: the website hands desktop sign-in back with
+         convt://auth and license keys with convt://activate. Without this
+         key Windows has nothing to open them with and sign-in never ends. -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="UrlProtocol" Guid="*">
+        <RegistryKey Root="HKCU" Key="Software\Classes\convt" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="URL:convt" KeyPath="yes" />
+          <RegistryValue Name="URL Protocol" Type="string" Value="" />
+          <RegistryValue Key="DefaultIcon" Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot;,0" />
+          <RegistryValue Key="shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]convt-app.exe&quot; &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
   </Fragment>
   <Fragment>
     <ComponentGroup Id="Payload" Directory="INSTALLFOLDER">

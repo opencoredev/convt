@@ -1,0 +1,251 @@
+/* The toolbar popup: a download shelf for recent conversions, plus settings. */
+body {
+  width: 360px;
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.header-sub {
+  justify-content: flex-start;
+  gap: 6px;
+  padding-left: 8px;
+}
+.header-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.icon-button {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.icon-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.section-settings {
+  padding-top: 4px;
+}
+.header-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+.header-link:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.section {
+  padding: 14px 16px 16px;
+}
+.section + .section {
+  border-top: 1px solid var(--line);
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  margin-bottom: 6px;
+}
+.section-title {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.status {
+  padding: 12px 12px 0;
+}
+
+/* Recent conversions. Rows bleed into the section padding so hover fills the width. */
+.recent {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+.recent-row {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+.recent-row:hover {
+  background: var(--hover);
+}
+.recent-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.recent-row[aria-disabled="true"] {
+  cursor: default;
+}
+.recent-row[aria-disabled="true"]:hover {
+  background: transparent;
+}
+.recent-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--sunken);
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+}
+.recent-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.recent-meta {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.recent-meta[data-missing="true"] {
+  color: var(--ink-3);
+}
+.recent-hint {
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+.recent-row:hover .recent-hint,
+.recent-row:focus-visible .recent-hint {
+  opacity: 1;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0 2px;
+  text-align: center;
+}
+.empty .md {
+  margin-right: 46px;
+}
+.empty p {
+  max-width: 260px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+/* Settings */
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+.setting + .setting {
+  border-top: 1px solid var(--line);
+}
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.setting-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.setting-help {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The desktop app, at the bottom where it doesn't get in the way. */
+.desktop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 12px 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 14px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.desktop-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.desktop-text {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 16px;
+}

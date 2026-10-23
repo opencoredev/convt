@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { localPriceIds } from "@convt/db/seed";
 import { localProducts } from "@convt/billing-mock";
 
-import { loadCatalog, meteredPriceProblem, validateCatalog } from "../../src/catalog";
+import {
+  complimentaryDesktop,
+  discountProblem,
+  loadCatalog,
+  meteredPriceProblem,
+  validateCatalog,
+} from "../../src/catalog";
 import { addYears } from "../../src/context";
 
 describe("catalog", () => {
@@ -60,6 +66,101 @@ describe("catalog", () => {
     expect(a).toEqual(b);
     expect(a?.code).toBe("PRODUCTHUNT");
     expect(a?.products).toEqual(["desktop", "pro_month"]);
+  });
+
+  test("production accepts the two 100% launch discounts only on their products", () => {
+    const c = loadCatalog("production");
+    const family = c.discounts["17bb47c4-8b7b-4fb5-b013-31ad52a0e909"];
+    const zortos = c.discounts["8a134038-3319-4905-a893-8635b0fd7cd7"];
+    expect(family).toEqual({ code: "FAMILY", basisPoints: 10000, products: ["pro_month"] });
+    expect(zortos).toEqual({
+      code: "ZORTOS_DISCORD",
+      basisPoints: 10000,
+      products: ["desktop"],
+    });
+
+    expect(discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month")).toBeNull();
+    expect(
+      discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month", {
+        netCents: 0,
+        subtotalCents: 1200,
+        discountCents: 1198,
+        items: [{ priceId: c.products.pro_month.priceId, amountCents: 1200 }],
+      }),
+    ).toMatch(/the order took 1198/);
+    const complimentaryAmounts = {
+      netCents: 1,
+      subtotalCents: 2900,
+      discountCents: 2900,
+      items: [{ priceId: c.products.desktop.priceId, amountCents: 2900 }],
+    };
+    expect(
+      discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "desktop", complimentaryAmounts),
+    ).toMatch(/does not apply/);
+    expect(
+      discountProblem(c, "8a134038-3319-4905-a893-8635b0fd7cd7", "desktop", complimentaryAmounts),
+    ).toBeNull();
+    expect(discountProblem(c, "8a134038-3319-4905-a893-8635b0fd7cd7", "pro_month")).toMatch(
+      /does not apply/,
+    );
+    expect(discountProblem(c, "unknown-discount", "pro_month")).toMatch(/unknown discount/);
+
+    // Polar's subscription_create trial has a zero subtotal; its later cycle
+    // charges the monthly list price and records the full discount.
+    expect(
+      discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month", {
+        netCents: 0,
+        subtotalCents: 0,
+        discountCents: 0,
+        items: [],
+      }),
+    ).toBeNull();
+    expect(
+      discountProblem(c, "17bb47c4-8b7b-4fb5-b013-31ad52a0e909", "pro_month", {
+        netCents: 0,
+        subtotalCents: 1200,
+        discountCents: 1200,
+        items: [{ priceId: c.products.pro_month.priceId, amountCents: 1200 }],
+      }),
+    ).toBeNull();
+  });
+
+  test("a 100% Polar Desktop write-off is complimentary; a partial unknown discount is not", () => {
+    const c = loadCatalog("local");
+    const price = c.products.desktop.priceId;
+    const full = {
+      netCents: 0,
+      subtotalCents: 2900,
+      discountCents: 2900,
+      items: [{ priceId: price, amountCents: 2900 }],
+    };
+    const zeroed = {
+      netCents: 0,
+      subtotalCents: 0,
+      discountCents: 0,
+      items: [{ priceId: price, amountCents: 0 }],
+    };
+    expect(complimentaryDesktop(c, full)).toBe(true);
+    expect(complimentaryDesktop(c, zeroed)).toBe(true);
+    expect(discountProblem(c, "disc_giveaway", "desktop", full)).toBeNull();
+    expect(discountProblem(c, null, "desktop", full)).toBeNull();
+    expect(discountProblem(c, "disc_giveaway", "desktop", zeroed)).toBeNull();
+    expect(
+      discountProblem(c, "disc_other", "desktop", {
+        netCents: 2030,
+        subtotalCents: 2900,
+        discountCents: 870,
+        items: [{ priceId: price, amountCents: 2900 }],
+      }),
+    ).toMatch(/unknown discount/);
+    expect(
+      complimentaryDesktop(c, {
+        netCents: 2030,
+        subtotalCents: 2900,
+        discountCents: 870,
+        items: [{ priceId: price, amountCents: 2900 }],
+      }),
+    ).toBe(false);
   });
 
   test("updates_until is the same day a year later; 29 February becomes 28 February", () => {

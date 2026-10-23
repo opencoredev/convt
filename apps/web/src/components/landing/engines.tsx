@@ -1,6 +1,6 @@
 import { Mark } from "#/components/logo";
 
-import { Container } from "./ui";
+import { Container, revealDelay } from "./ui";
 
 const engines = [
   {
@@ -56,18 +56,18 @@ export function Engines() {
             your computer, so your files stay there.
           </p>
         </div>
-        <div className="relative overflow-clip rounded-2xl shadow-[0_0_0_1px_#232726]">
+        <div className="relative overflow-clip rounded-2xl shadow-[0_0_0_1px_var(--line)]">
           <div aria-hidden="true" className="bg-land-glow absolute inset-0 bg-top" />
           <div className="relative flex flex-col items-center px-5 py-10 sm:px-8 min-[1120px]:h-[520px] min-[1120px]:justify-center min-[1120px]:p-0">
             <div className="flex items-center gap-2.5 rounded-xl bg-land-well py-2.5 pr-4 pl-3 shadow-[0_0_0_1px_#4cc28373,0_0_24px_#4cc2832e]">
               <Mark size={22} />
-              <span className="font-mono text-[13px]/[16px] text-white">convt</span>
+              <span className="font-mono text-[13px]/[16px] text-ink">convt</span>
               <span className="font-mono text-[12px]/[16px] text-land-muted">picks the engine</span>
             </div>
             <Connectors />
             <ul className="mt-6 grid w-full gap-4 sm:grid-cols-2 min-[1120px]:mt-0 min-[1120px]:flex min-[1120px]:w-[1056px]">
-              {engines.map((engine) => (
-                <EngineCard key={engine.name} {...engine} />
+              {engines.map((engine, i) => (
+                <EngineCard key={engine.name} index={i} {...engine} />
               ))}
             </ul>
           </div>
@@ -118,9 +118,21 @@ function Connectors() {
   );
 }
 
-function EngineCard({ name, from, to, description, kind, formats }: (typeof engines)[number]) {
+function EngineCard({
+  name,
+  from,
+  to,
+  description,
+  kind,
+  formats,
+  index,
+}: (typeof engines)[number] & { index: number }) {
   return (
-    <li className="flex flex-col justify-between gap-7 rounded-[14px] bg-[#0b0d0cdb] p-6 shadow-[0_0_0_1px_#ffffff14,0_24px_48px_#00000066] min-[1120px]:w-[252px] min-[1120px]:shrink-0">
+    <li
+      data-reveal=""
+      style={revealDelay(index)}
+      className="reveal lift flex flex-col justify-between gap-7 rounded-[14px] bg-raised/90 p-6 shadow-[0_0_0_1px_#0000000f,0_24px_48px_#0a1e141a] backdrop-blur-sm hover:shadow-[0_0_0_1px_#1fa46366,0_24px_48px_#0a1e1424] min-[1120px]:w-[252px] dark:bg-[#0b0d0cdb] dark:shadow-[0_0_0_1px_#ffffff14,0_24px_48px_#00000066] dark:hover:shadow-[0_0_0_1px_#4cc28366,0_24px_48px_#00000080] min-[1120px]:shrink-0"
+    >
       <div className="flex flex-col gap-5">
         <p className="flex items-center gap-2 font-mono text-[12px]/[16px] text-land-mono">
           {from}
@@ -135,7 +147,7 @@ function EngineCard({ name, from, to, description, kind, formats }: (typeof engi
           <p className="text-[14px]/[21px] text-ink-2">{description}</p>
         </div>
       </div>
-      <div className="flex flex-col gap-3 border-t border-[#ffffff14] pt-4">
+      <div className="flex flex-col gap-3 border-t border-line pt-4 dark:border-[#ffffff14]">
         <p className="font-mono text-[11px]/[14px] tracking-[0.06em] text-land-label uppercase">
           {kind}
         </p>

@@ -1,11 +1,32 @@
 cask "convt" do
   version "@version@"
   sha256 "@macos-arm64.dmg.sha256@"
-  url "@macos-arm64.dmg.url@"
+
+  url "https://github.com/opencoredev/convt/releases/download/v#{version}/convt-macos-arm64.dmg",
+      verified: "github.com/opencoredev/convt/"
   name "convt"
-  desc "Local file conversion"
-  homepage "https://convt.app"
+  desc "Convert files locally without uploading"
+  homepage "https://convt.app/"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
   depends_on arch: :arm64
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
+
   app "convt.app"
+  binary "#{appdir}/convt.app/Contents/MacOS/convt"
+
+  uninstall quit: "app.convt.desktop"
+
+  zap trash: [
+    "~/Library/Application Support/convt",
+    "~/Library/Caches/app.convt.desktop",
+    "~/Library/HTTPStorages/app.convt.desktop",
+    "~/Library/Logs/convt",
+    "~/Library/Preferences/app.convt.desktop.plist",
+    "~/Library/Saved Application State/app.convt.desktop.savedState",
+  ]
 end

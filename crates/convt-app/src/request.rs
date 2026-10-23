@@ -416,7 +416,7 @@ mod tests {
             "convt://auth?state=s&state=t&code=c",
             "convt://auth?state=s%20x&code=c",
             "convt://auth?state=s&code=%3Cb%3E",
-            "convt://signin?email=a%40example.com",
+            "convt://signin?email=someone",
         ] {
             assert!(parse_url(bad).is_err(), "{bad}");
         }

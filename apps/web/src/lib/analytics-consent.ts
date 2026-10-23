@@ -1,8 +1,11 @@
 // Whether this browser has opted out of PostHog. The privacy policy names these
 // three ways out: Do Not Track, Global Privacy Control, and the switch on the
-// privacy page, which stores its choice in localStorage.
+// privacy page, which stores its choice in localStorage and a first-party cookie
+// so the signup hook can see it.
 
 const OPT_OUT_KEY = "convt:analytics-opt-out";
+/** First-party cookie the privacy switch sets so server-side capture can opt out. */
+export const ANALYTICS_CONSENT_COOKIE = "convt_analytics";
 
 export type AnalyticsChoice = "on" | "off" | "browser";
 
@@ -39,4 +42,23 @@ export function setAnalyticsOptOut(optOut: boolean) {
   } catch {
     // Storage blocked: nothing persists, and PostHog cannot persist either.
   }
+  try {
+    document.cookie = optOut
+      ? `${ANALYTICS_CONSENT_COOKIE}=off; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`
+      : `${ANALYTICS_CONSENT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  } catch {
+    // Document blocked (SSR, tests): headers still carry DNT and GPC.
+  }
+}
+
+type HeaderMap = { get(name: string): string | null };
+
+/** Server-side view of the same three opt-outs the browser already respects. */
+export function analyticsAllowedFromHeaders(headers: HeaderMap | null | undefined): boolean {
+  if (!headers) return true;
+  const dnt = headers.get("dnt");
+  if (dnt === "1" || dnt?.toLowerCase() === "yes") return false;
+  if (headers.get("sec-gpc") === "1") return false;
+  const cookie = headers.get("cookie") ?? "";
+  return !new RegExp(`(?:^|;\\s*)${ANALYTICS_CONSENT_COOKIE}=off(?:;|$)`).test(cookie);
 }

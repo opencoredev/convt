@@ -106,9 +106,23 @@ $CRT = Get-ChildItem (Join-Path $VisualStudio.installationPath 'VC/Redist/MSVC')
 $Runtime = Get-ChildItem (Join-Path $CRT.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' | Select-Object -First 1
 if (-not $Runtime) { throw 'MSVC redistributable CRT missing' }
 Copy-Item "$($Runtime.FullName)/*.dll" $Out
-# Preserve corresponding codec sources, excluding generated build products.
+# Notices only. Corresponding source stays with the Windows lock and the
+# public source archive, not the runtime MSI (v0.2.0 shipped 2,316 source files).
 foreach ($Name in @('x265','libde265','aom','libheif')) {
-    $Dest = "$Out/licenses/native-source/$Name"
+    $Dest = Join-Path $Out "licenses/codecs/$Name"
     New-Item -ItemType Directory -Force $Dest | Out-Null
-    Get-ChildItem (Join-Path $Work $Name) | Where-Object { $_.Name -ne 'build-convt' } | Copy-Item -Destination $Dest -Recurse
+    $Copied = 0
+    Get-ChildItem (Join-Path $Work $Name) -Recurse -File | Where-Object {
+        $_.Name -match '^(LICENSE|COPYING|NOTICE|PATENTS|COPYRIGHT)(\.|$)' -or $_.Name -eq 'copyright'
+    } | ForEach-Object {
+        $Target = Join-Path $Dest $_.Name
+        $Index = 1
+        while (Test-Path -LiteralPath $Target) {
+            $Target = Join-Path $Dest ("{0}-{1}{2}" -f $_.BaseName, $Index, $_.Extension)
+            $Index++
+        }
+        Copy-Item -LiteralPath $_.FullName $Target
+        $Copied++
+    }
+    if ($Copied -lt 1) { throw "No license notices for $Name" }
 }

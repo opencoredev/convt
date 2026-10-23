@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "bun test",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "export:marketing": "bun scripts/export-marketing.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",

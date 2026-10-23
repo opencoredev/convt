@@ -6,7 +6,7 @@ None of this builds or runs on Linux. It needs Xcode and a Mac.
 
 ## The menu
 
-- `FinderSync/FinderSync.swift` builds the menu from the target list the app publishes. The extension is sandboxed and runs from its own executable, so it never probes tools: `crates/convt-app/src/macos.rs` writes `targets.json` (extension to format, format to targets, with categories) into the App Group container `<TEAMID>.app.convt.desktop` at launch and after every engine change. Both bundles name the group in the `ConvtAppGroup` Info.plist key. The menu shows the targets every selected file shares, grouped under a header per category ("Video", "Audio only" for a video's audio, and so on), with **More options…** at the bottom. With no readable list (the app has never run) it shows only **Open in convt…**.
+- `FinderSync/FinderSync.swift` builds the menu from the target list the app publishes. The extension is sandboxed and runs from its own executable, so it never probes tools: `crates/convt-app/src/macos.rs` writes `targets.json` (extension to format, format to targets, with categories) into the App Group container `<TEAMID>.app.convt.desktop` at launch, after every engine change, and whenever the formats picked in Settings → Menu change. Both bundles name the group in the `ConvtAppGroup` Info.plist key. The menu shows the targets every selected file shares, grouped under a header per category ("Video", "Audio only" for a video's audio, and so on), with **More options…** at the bottom. With no readable list (the app has never run) it shows only **Open in convt…**.
 - Picking a format converts in place with no window; **More options…** opens Quick convert. AppKit drops `NSWorkspace.OpenConfiguration.arguments` for sandboxed callers, so the extension can't pass `open --to <format> -- <files>`. Instead it writes the request (`{version, to, files, created}`) to `requests/<uuid>.json` in the App Group container and opens `convt://finder` with this bundle's app by path (another app may claim the `convt` scheme). The app takes every fresh request (under two minutes old, absolute paths, deleted before use) on that link, or at launch in place of the main window. The link only wakes the app: a web page can open it, but only processes in the App Group can write requests, so links still never convert without a click.
 - When it can't write the request (no shared container, as in an ad-hoc build), the extension opens the files with convt instead, which shows Quick convert. Finder's "Open With" → convt arrives the same way.
 - The Services menu has **Convert with convt** as a fallback when the extension is off (`NSServices` in `packaging/macos/Info.plist`, handled in `macos.rs`). It opens Quick convert.
@@ -29,7 +29,9 @@ The design shows the new file appearing next to the original as soon as the conv
 
 The extension needs no change for this: Finder picks up published progress from any process.
 
-The menu bar icon's passive spinner (no percentage, no highlight) needs an `NSStatusItem`, which GPUI doesn't offer yet; `crates/convt-app/src/tray.rs` decides what the icon shows and is the place to wire it.
+## Menu bar item
+
+While "Keep running in the background" is on (Settings, General; on by default), convt shows a menu bar item (`crates/convt-app/src/tray.rs`, through the `tray-icon` crate's `NSStatusItem`) showing the colored convt mark from `FinderSync/MenuIcon.svg`, pre-rendered to `crates/convt-app/assets/tray/menubar.png` (36 px, drawn at 18 pt). Its menu has Open convt, Settings… and Quit convt; while jobs run, its tooltip counts them. Closing the last window leaves convt running, so a Finder request starts without launching the app, and convt leaves the Dock (accessory activation policy) until a window opens again. ⌘Q and the convt menu's Quit convt quit at once. With the setting off, convt quits with its last window, or when the conversions still running finish.
 
 ## Still to do
 

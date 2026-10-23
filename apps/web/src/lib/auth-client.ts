@@ -1,6 +1,9 @@
 // Browser calls to Better Auth's endpoints under /api/auth. Plain fetch: the
 // session cookie is HttpOnly and same-origin, and Better Auth checks Origin.
 
+import posthog from "posthog-js";
+
+import { analyticsChoice } from "./analytics-consent";
 import type { Account } from "./types";
 
 export type AuthResult<T = unknown> =
@@ -65,8 +68,9 @@ async function post<T>(path: string, body: unknown): Promise<AuthResult<T>> {
 export const sendSignInCode = (email: string) =>
   post("/email-otp/send-verification-otp", { email: email.trim(), type: "sign-in" });
 
+/** `user.createdAt` tells a new account from a returning one (lib/sign-in.ts isNewAccount). */
 export const signInWithCode = (email: string, otp: string) =>
-  post("/sign-in/email-otp", { email: email.trim(), otp });
+  post<{ user?: { createdAt?: unknown } }>("/sign-in/email-otp", { email: email.trim(), otp });
 
 export const sendVerificationCode = (email: string) =>
   post("/email-otp/send-verification-otp", { email, type: "email-verification" });
@@ -82,7 +86,17 @@ export const changeEmail = (newEmail: string, otp: string) =>
 
 export const unlinkAccount = (accountId: string) => post("/unlink-account", { accountId });
 
-export const signOut = () => post("/sign-out", {});
+export const signOut = async () => {
+  const result = await post("/sign-out", {});
+  if (result.ok && analyticsChoice() === "on") {
+    try {
+      posthog.reset();
+    } catch {
+      // PostHog was never loaded.
+    }
+  }
+  return result;
+};
 
 /** The header's view of a signed-in user. A blank name falls back to the email's local part. */
 export function accountFromUser(user: {
@@ -116,14 +130,23 @@ export async function fetchSignedInAccount(): Promise<Account | null> {
 
 export type SocialProvider = "github" | "google";
 
-/** Starts GitHub or Google sign-in and leaves the page for the provider. */
-export async function startSocialSignIn(
-  provider: SocialProvider,
-  redirectTo: string,
-): Promise<AuthResult> {
+/**
+ * Starts GitHub or Google sign-in and leaves the page for the provider. A new account
+ * lands on `newUserCallbackURL` when one is given, a returning one on `callbackURL`.
+ */
+export async function startSocialSignIn({
+  provider,
+  callbackURL,
+  newUserCallbackURL,
+}: {
+  provider: SocialProvider;
+  callbackURL: string;
+  newUserCallbackURL?: string;
+}): Promise<AuthResult> {
   const result = await post<{ url: string }>("/sign-in/social", {
     provider,
-    callbackURL: redirectTo,
+    callbackURL,
+    ...(newUserCallbackURL ? { newUserCallbackURL } : {}),
     errorCallbackURL: "/sign-in",
     disableRedirect: true,
   });

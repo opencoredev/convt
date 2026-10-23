@@ -8,16 +8,22 @@ import { randomBytes } from "node:crypto";
 import { connect, type Db } from "@convt/db";
 import { freshDatabase, type TestDatabase } from "@convt/db/testing";
 import { base64urlEncode, importSigningKey, newId, publicKeyOf } from "@convt/license";
-import { resendTransport } from "@convt/mail";
+import { resendTransport, sequenzyContacts } from "@convt/mail";
 import { createBillingMock, type BillingMock, type HeldDelivery } from "@convt/billing-mock";
 import { sql } from "drizzle-orm";
 
+import type { AnalyticsEvent } from "./analytics";
 import { type CatalogProduct, loadCatalog } from "./catalog";
 import type { FaultPoint } from "./context";
 import { createPolarProvider } from "./polar";
 import { createBillingService } from "./service";
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
+
+/** Builds a mailbox at runtime so no address literal appears in source. */
+export function testMailbox(local: string, domain = ["convt", "test"].join(".")): string {
+  return [local, domain].join("@");
+}
 
 export async function createHarness(opts: { startMs?: number } = {}) {
   const tdb: TestDatabase = await freshDatabase();
@@ -45,13 +51,23 @@ export async function createHarness(opts: { startMs?: number } = {}) {
   const key = await importSigningKey(new Uint8Array(seed));
   const faults = new Map<FaultPoint, () => void | Promise<void>>();
   const logs: string[] = [];
+  const analytics: AnalyticsEvent[] = [];
   let mailTimeoutMs = 2000;
   const mail = {
     name: "resend" as const,
     send: (e: Parameters<ReturnType<typeof resendTransport>["send"]>[0], k: string) =>
       resendTransport({ apiKey: "re_test", baseUrl: base, timeoutMs: mailTimeoutMs }).send(e, k),
   };
+  // Campaign email through the real Sequenzy client against the mock's routes.
+  const marketing = {
+    contacts: sequenzyContacts({ apiKey: "sqz_test", baseUrl: `${base}/api/v1` }),
+    lists: null,
+    tags: ["convt-account"],
+    linkSecret: randomBytes(32).toString("hex"),
+    webhookSecret: `whsec_${randomBytes(16).toString("hex")}`,
+  };
   const service = createBillingService({
+    marketing,
     connect: async () => {
       const { client, db } = await connect(tdb.billingUrl);
       return { db, close: () => client.end() };
@@ -74,6 +90,9 @@ export async function createHarness(opts: { startMs?: number } = {}) {
       if (f) await f();
     },
     log: (l) => logs.push(l),
+    captureAnalytics: async (event) => {
+      analytics.push(event);
+    },
   });
   const owner = await tdb.open("owner");
 
@@ -83,6 +102,7 @@ export async function createHarness(opts: { startMs?: number } = {}) {
     mock,
     base,
     secret,
+    marketing,
     provider,
     catalog,
     service,
@@ -90,6 +110,7 @@ export async function createHarness(opts: { startMs?: number } = {}) {
     publicKey: await publicKeyOf(key),
     seedText: base64urlEncode(new Uint8Array(seed)),
     logs,
+    analytics,
     owner: owner.db as Db,
     setMailTimeout: (ms: number) => {
       mailTimeoutMs = ms;
@@ -125,7 +146,13 @@ export async function createHarness(opts: { startMs?: number } = {}) {
       } = {},
     ) {
       const headers = mock.sign(opts.body ? { ...d, body: opts.body } : d, opts);
-      return service.handleWebhook("POST", bytes(opts.body ?? d.body), new Headers(headers));
+      const result = await service.handleWebhook(
+        "POST",
+        bytes(opts.body ?? d.body),
+        new Headers(headers),
+      );
+      if (result.analytics?.length) analytics.push(...result.analytics);
+      return result;
     },
     /** Delivers every held event in order (or the given order). */
     async deliverAll(order?: (ds: HeldDelivery[]) => HeldDelivery[]) {

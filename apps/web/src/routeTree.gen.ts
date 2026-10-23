@@ -29,11 +29,13 @@ import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
 import { Route as UpdatesManifestDotjsonRouteImport } from './routes/updates/manifest[.]json'
 import { Route as AppShellAccountRouteImport } from './routes/_app/_shell/account'
 import { Route as AppCheckoutSuccessRouteImport } from './routes/_app/checkout/success'
+import { Route as AppEmailPreferencesRouteImport } from './routes/_app/email/preferences'
 import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
 import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/check-email'
 import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
 import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/verify-email'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
 import { Route as ApiDeviceSignOutRouteImport } from './routes/api/device/sign-out'
 import { Route as ApiDeviceTokenRouteImport } from './routes/api/device/token'
@@ -140,6 +142,11 @@ const AppCheckoutSuccessRoute = AppCheckoutSuccessRouteImport.update({
   path: '/checkout/success',
   getParentRoute: () => AppRoute,
 } as any)
+const AppEmailPreferencesRoute = AppEmailPreferencesRouteImport.update({
+  id: '/email/preferences',
+  path: '/email/preferences',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSignInIndexRoute = AppSignInIndexRouteImport.update({
   id: '/sign-in/',
   path: '/sign-in/',
@@ -163,6 +170,11 @@ const AppSignInVerifyEmailRoute = AppSignInVerifyEmailRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDeviceCloudRoute = ApiDeviceCloudRouteImport.update({
+  id: '/api/device/cloud',
+  path: '/api/device/cloud',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDeviceLicenseRoute = ApiDeviceLicenseRouteImport.update({
@@ -227,10 +239,12 @@ export interface FileRoutesByFullPath {
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
+  '/email/preferences': typeof AppEmailPreferencesRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
@@ -259,10 +273,12 @@ export interface FileRoutesByTo {
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/account': typeof AppShellAccountRoute
   '/checkout/success': typeof AppCheckoutSuccessRoute
+  '/email/preferences': typeof AppEmailPreferencesRoute
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
@@ -295,10 +311,12 @@ export interface FileRoutesById {
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
   '/_app/_shell/account': typeof AppShellAccountRoute
   '/_app/checkout/success': typeof AppCheckoutSuccessRoute
+  '/_app/email/preferences': typeof AppEmailPreferencesRoute
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/_app/sign-in/verify': typeof AppSignInVerifyRoute
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
@@ -329,10 +347,12 @@ export interface FileRouteTypes {
     | '/updates/manifest.json'
     | '/account'
     | '/checkout/success'
+    | '/email/preferences'
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
     | '/api/auth/$'
+    | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
@@ -361,10 +381,12 @@ export interface FileRouteTypes {
     | '/updates/manifest.json'
     | '/account'
     | '/checkout/success'
+    | '/email/preferences'
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
     | '/api/auth/$'
+    | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
@@ -396,10 +418,12 @@ export interface FileRouteTypes {
     | '/updates/manifest.json'
     | '/_app/_shell/account'
     | '/_app/checkout/success'
+    | '/_app/email/preferences'
     | '/_app/sign-in/check-email'
     | '/_app/sign-in/verify'
     | '/_app/sign-in/verify-email'
     | '/api/auth/$'
+    | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
@@ -423,6 +447,7 @@ export interface RootRouteChildren {
   CheckoutProRoute: typeof CheckoutProRoute
   UpdatesManifestDotjsonRoute: typeof UpdatesManifestDotjsonRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDeviceCloudRoute: typeof ApiDeviceCloudRoute
   ApiDeviceLicenseRoute: typeof ApiDeviceLicenseRoute
   ApiDeviceSignOutRoute: typeof ApiDeviceSignOutRoute
   ApiDeviceTokenRoute: typeof ApiDeviceTokenRoute
@@ -570,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCheckoutSuccessRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/email/preferences': {
+      id: '/_app/email/preferences'
+      path: '/email/preferences'
+      fullPath: '/email/preferences'
+      preLoaderRoute: typeof AppEmailPreferencesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/sign-in/': {
       id: '/_app/sign-in/'
       path: '/sign-in'
@@ -603,6 +635,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/device/cloud': {
+      id: '/api/device/cloud'
+      path: '/api/device/cloud'
+      fullPath: '/api/device/cloud'
+      preLoaderRoute: typeof ApiDeviceCloudRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/device/license': {
@@ -690,6 +729,7 @@ interface AppRouteChildren {
   AppShellRoute: typeof AppShellRouteWithChildren
   AppDeviceRoute: typeof AppDeviceRoute
   AppCheckoutSuccessRoute: typeof AppCheckoutSuccessRoute
+  AppEmailPreferencesRoute: typeof AppEmailPreferencesRoute
   AppSignInCheckEmailRoute: typeof AppSignInCheckEmailRoute
   AppSignInVerifyRoute: typeof AppSignInVerifyRoute
   AppSignInVerifyEmailRoute: typeof AppSignInVerifyEmailRoute
@@ -700,6 +740,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppShellRoute: AppShellRouteWithChildren,
   AppDeviceRoute: AppDeviceRoute,
   AppCheckoutSuccessRoute: AppCheckoutSuccessRoute,
+  AppEmailPreferencesRoute: AppEmailPreferencesRoute,
   AppSignInCheckEmailRoute: AppSignInCheckEmailRoute,
   AppSignInVerifyRoute: AppSignInVerifyRoute,
   AppSignInVerifyEmailRoute: AppSignInVerifyEmailRoute,
@@ -740,6 +781,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutProRoute: CheckoutProRoute,
   UpdatesManifestDotjsonRoute: UpdatesManifestDotjsonRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDeviceCloudRoute: ApiDeviceCloudRoute,
   ApiDeviceLicenseRoute: ApiDeviceLicenseRoute,
   ApiDeviceSignOutRoute: ApiDeviceSignOutRoute,
   ApiDeviceTokenRoute: ApiDeviceTokenRoute,

@@ -35,7 +35,10 @@ export type Catalog = {
   /** Switching between monthly and yearly takes effect at once, both ways. */
   switchPolicy: Record<ProProduct, Proration>;
   meterName: "api_conversion";
+  legacyDesktop?: DesktopProductIds[];
 };
+
+export type DesktopProductIds = { productId: string; priceId: string };
 
 // The Product Hunt launch offer: 30% off Desktop, or off the first 3 months of Pro
 // monthly, until the end of 31 October 2026 Pacific time (the code's ends_at in Polar).
@@ -153,6 +156,16 @@ const production = withIds(
     // launch checkouts hang on /checkout/success and never grant Pro.
     "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt,
     "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHunt,
+    "17bb47c4-8b7b-4fb5-b013-31ad52a0e909": {
+      code: "FAMILY",
+      basisPoints: 10000,
+      products: ["pro_month"],
+    },
+    "8a134038-3319-4905-a893-8635b0fd7cd7": {
+      code: "ZORTOS_DISCORD",
+      basisPoints: 10000,
+      products: ["desktop"],
+    },
   },
 );
 
@@ -185,8 +198,8 @@ export function validateCatalog(c: Catalog): string[] {
     }
   }
   for (const [id, d] of Object.entries(c.discounts)) {
-    if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints >= 10000)
-      problems.push(`discount ${id}: basis points must be between 1 and 9999`);
+    if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints > 10000)
+      problems.push(`discount ${id}: basis points must be between 1 and 10000`);
     if (d.products.includes("api")) problems.push(`discount ${id}: the API is never discounted`);
   }
   if (
@@ -198,8 +211,18 @@ export function validateCatalog(c: Catalog): string[] {
 }
 
 /** Loads the catalog for an environment, refusing one with an invalid price. */
-export function loadCatalog(env: CatalogEnv): Catalog {
-  const c = catalogs[env];
+export function loadCatalog(env: CatalogEnv, desktop?: DesktopProductIds): Catalog {
+  const previous = catalogs[env].products.desktop;
+  const c = desktop
+    ? {
+        ...catalogs[env],
+        legacyDesktop: [{ productId: previous.productId, priceId: previous.priceId }],
+        products: {
+          ...catalogs[env].products,
+          desktop: { ...catalogs[env].products.desktop, ...desktop },
+        },
+      }
+    : catalogs[env];
   const problems = validateCatalog(c).filter((p) => !p.includes("placeholders"));
   if (problems.length) throw new Error(`the ${env} catalog is invalid: ${problems.join("; ")}`);
   return c;
@@ -209,6 +232,7 @@ export function productByProviderId(c: Catalog, productId: string | null): Catal
   if (!productId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.productId === productId) return k as CatalogProduct;
+  if (c.legacyDesktop?.some((p) => p.productId === productId)) return "desktop";
   return null;
 }
 
@@ -216,22 +240,51 @@ export function productByPriceId(c: Catalog, priceId: string | null): CatalogPro
   if (!priceId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.priceId === priceId) return k as CatalogProduct;
+  if (c.legacyDesktop?.some((p) => p.priceId === priceId)) return "desktop";
   return null;
 }
 
 export const isPro = (p: CatalogProduct | null): p is ProProduct =>
   p === "pro_month" || p === "pro_year";
 
+/** Polar line items used when deciding whether a Desktop order charged nothing. */
+export type ComplimentaryDesktopAmounts = {
+  netCents: number;
+  subtotalCents: number;
+  discountCents: number;
+  appliedBalanceCents?: number;
+  items: Array<{ priceId: string | null; amountCents: number }>;
+};
+
+/**
+ * A Polar-signed Desktop order that took no money: a 100% code, Polar zeroing the
+ * line, or store credit covering the list price. Partial unknown discounts are not.
+ */
+export function complimentaryDesktop(c: Catalog, o: ComplimentaryDesktopAmounts): boolean {
+  const price = c.products.desktop;
+  if (o.netCents !== 0) return false;
+  const acceptedPrices = new Set([price.priceId, ...(c.legacyDesktop ?? []).map((p) => p.priceId)]);
+  if (o.items.length !== 1 || !acceptedPrices.has(o.items[0].priceId ?? "")) return false;
+  const item = o.items[0].amountCents;
+  if (item !== price.amountCents && item !== 0) return false;
+  if (o.subtotalCents !== price.amountCents && o.subtotalCents !== 0) return false;
+  if (o.subtotalCents === 0) return o.discountCents === 0;
+  return o.discountCents + (o.appliedBalanceCents ?? 0) >= o.subtotalCents;
+}
+
 /**
  * Why a discount on `product` is not acceptable, or null. `discountCents` is checked
  * against the code's percentage of `subtotalCents` when given (orders only).
+ * A complimentary Desktop write-off is accepted even when Polar's discount id is
+ * not in the catalog (giveaway codes, 100% coupons).
  */
 export function discountProblem(
   c: Catalog,
   discountId: string | null,
   product: CatalogProduct,
-  amounts?: { discountCents: number; subtotalCents: number },
+  amounts?: ComplimentaryDesktopAmounts,
 ): string | null {
+  if (product === "desktop" && amounts && complimentaryDesktop(c, amounts)) return null;
   if (!discountId)
     return amounts && amounts.discountCents !== 0 ? "a discount without a code" : null;
   const d = c.discounts[discountId];

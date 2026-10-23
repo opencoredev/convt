@@ -3,9 +3,32 @@ import type { ApiEnrollment, Billing } from "./types";
 
 const liveApiStates = new Set<ApiEnrollment["state"]>(["pending", "enrolled", "payment_failed"]);
 
-/** True only when there is no Pro (trial or paid) and no live API enrollment. */
+/** True only when there is no Pro, no Desktop, and no live API enrollment. */
 export function billingHasNoPlan(billing: Pick<Billing, "plan" | "api">): boolean {
   return billing.plan === null && !liveApiStates.has(billing.api.state);
+}
+
+/** Hide the Desktop checkout once the account already owns a live Desktop license. */
+export function showGetDesktop(billing: Pick<Billing, "ownsDesktop">): boolean {
+  return !billing.ownsDesktop;
+}
+
+/** Polar portal links: Manage billing / Change receipt email. */
+export function showPolarBilling(billing: Pick<Billing, "polarPortal" | "plan" | "api">): boolean {
+  return billing.polarPortal && (billing.plan !== null || billing.api.state !== "none");
+}
+
+/**
+ * Copy for the payment-method panel when Polar has no card. A $0 or one-time
+ * Desktop order never stores a card; "No card on file" reads like a broken panel.
+ */
+export function billingCardCopy(
+  billing: Pick<Billing, "card" | "plan" | "ownsDesktop">,
+): string | null {
+  if (billing.card) return null;
+  if (billing.plan?.kind === "desktop" || (billing.ownsDesktop && billing.plan === null))
+    return "No card needed.";
+  return "No card on file.";
 }
 
 /** Spend-cap line for the billing card, plus an end date when the API plan is set to stop. */

@@ -23,12 +23,16 @@ pub enum Outcome {
 pub struct Setup {
     pub options: Options,
     pub output: Output,
+    /// It ran on convt's cloud, so Retry runs it there again.
+    pub cloud: bool,
 }
 
 #[derive(Serialize, Deserialize)]
 struct StoredSetup {
     options: Options,
     output: StoredOutput,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    cloud: bool,
 }
 
 /// [`Output`] with byte paths, so non-UTF-8 names survive.
@@ -50,6 +54,7 @@ impl Setup {
         let stored = StoredSetup {
             options: self.options.clone(),
             output,
+            cloud: self.cloud,
         };
         serde_json::to_string(&stored).expect("options serialize")
     }
@@ -64,6 +69,7 @@ impl Setup {
         Some(Self {
             options: stored.options,
             output,
+            cloud: stored.cloud,
         })
     }
 }
@@ -196,8 +202,18 @@ impl History {
         rows.collect()
     }
 
+    #[cfg(test)]
     pub fn clear(&self) -> rusqlite::Result<()> {
         self.db.execute("DELETE FROM history", []).map(drop)
+    }
+
+    /// Deletes the records with these ids.
+    pub fn remove(&self, ids: &[i64]) -> rusqlite::Result<()> {
+        let mut delete = self.db.prepare("DELETE FROM history WHERE id = ?1")?;
+        for id in ids {
+            delete.execute([id])?;
+        }
+        Ok(())
     }
 }
 
@@ -318,10 +334,19 @@ mod tests {
                 ..Options::default()
             },
             output: Output::Dir(PathBuf::from("/out/converted")),
+            cloud: false,
         };
         h.add(Path::new("/in/a.mov"), "mkv", &setup, &Outcome::Cancelled)
             .unwrap();
-        assert_eq!(h.recent(1).unwrap()[0].setup, Some(setup));
+        assert_eq!(h.recent(1).unwrap()[0].setup, Some(setup.clone()));
+        // A cloud conversion is kept as one, so Retry runs it there again.
+        let cloud = Setup {
+            cloud: true,
+            ..setup
+        };
+        h.add(Path::new("/in/a.png"), "webp", &cloud, &Outcome::Cancelled)
+            .unwrap();
+        assert_eq!(h.recent(1).unwrap()[0].setup, Some(cloud));
     }
 
     #[test]

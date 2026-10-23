@@ -1,0 +1,86 @@
+/* The right-click menu drawing. Sized like Chrome's real menu so it reads as one. */
+.md {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 13px;
+  line-height: 18px;
+  user-select: none;
+  padding-bottom: 93px;
+}
+
+.md-menu {
+  width: 196px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow:
+    0 0 0 1px var(--line),
+    rgb(0 0 0 / 8%) 0 8px 24px,
+    rgb(0 0 0 / 6%) 0 2px 6px;
+}
+
+.md-sub {
+  position: relative;
+  z-index: 1;
+  width: 150px;
+  margin-left: -6px;
+  /* Top edge lines up with the highlighted row, like a real submenu. */
+  margin-bottom: -93px;
+}
+
+.md-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.md-label {
+  flex: 1;
+}
+.md-caret {
+  color: var(--ink-3);
+  font-size: 15px;
+}
+.md-menu:not(.md-sub) .md-item[data-highlighted="true"] {
+  background: var(--hover);
+}
+.md-sub .md-item[data-highlighted="true"] {
+  background: var(--green);
+  color: #ffffff;
+}
+
+.md-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+
+.md[data-compact="true"] .md-menu {
+  width: 176px;
+}
+.md[data-compact="true"] .md-sub {
+  width: 136px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .md-menu {
+    background: var(--sunken);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      rgb(0 0 0 / 50%) 0 8px 24px;
+  }
+  .md-sub .md-item[data-highlighted="true"] {
+    background: #1fa463;
+  }
+}

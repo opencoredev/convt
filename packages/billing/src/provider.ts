@@ -228,7 +228,7 @@ export interface BillingProvider {
   setCancelAtPeriodEnd(subscriptionId: string, value: boolean): Promise<SubscriptionFact>;
   /** Ends a subscription now, without a refund. "Already ended" resolves by fetching it. */
   revokeSubscription(subscriptionId: string): Promise<SubscriptionFact>;
-  portalUrl(userId: string, returnUrl: string): Promise<string>;
+  portalUrl(userId: string, returnUrl: string, customerId?: string | null): Promise<string>;
   receiptUrl(providerOrderId: string): Promise<string>;
   settings(): Promise<OrganizationFacts>;
   products(): Promise<ProductFacts>;

@@ -1,11 +1,12 @@
 //! macOS glue: the Finder extension's target list and request inbox, files
-//! opened with convt, the check that the extension is on, and the Services
-//! menu entry.
+//! opened with convt, the check that the extension is on, the Services
+//! menu entry, and hiding from the Dock.
 //!
 //! The Finder Sync extension is sandboxed and runs from its own executable, so
 //! probing tools there would give different targets than the app. Instead the
 //! app writes what each format can become to the App Group container shared
-//! with the extension, at launch and whenever the engines change.
+//! with the extension, at launch and whenever the engines or the right-click
+//! menu choices (Settings, Menu) change.
 //!
 //! A sandboxed process can't pass launch arguments (AppKit drops
 //! `NSWorkspace.OpenConfiguration.arguments` for sandboxed callers), so the
@@ -21,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use convt_core::{FORMATS, Registry};
+use convt_core::{FORMATS, MenuChoices, Registry};
 use futures::channel::mpsc::UnboundedSender;
 use gpui_kit::{App, Entity};
 use serde::{Deserialize, Serialize};
@@ -46,17 +47,18 @@ const REQUEST_MAX_BYTES: u64 = 1 << 20;
 /// A Finder request has been taken since launch.
 static TOOK_REQUEST: AtomicBool = AtomicBool::new(false);
 
-/// Publishes the target list now and after every registry rebuild, and
-/// registers the Services menu entry.
+/// Publishes the target list now and after every registry rebuild or menu
+/// change, and registers the Services menu entry.
 pub fn init(state: &Entity<AppState>, requests: UnboundedSender<Request>, cx: &mut App) {
     services::register(requests);
-    publish(&state.read(cx).registry);
-    let mut generation = state.read(cx).registry_generation;
+    let generation = |state: &AppState| (state.registry_generation, state.menu_generation);
+    let mut published = generation(state.read(cx));
+    publish(&state.read(cx).registry, &state.read(cx).menu);
     cx.observe(state, move |state, cx| {
         let state = state.read(cx);
-        if state.registry_generation != generation {
-            generation = state.registry_generation;
-            publish(&state.registry);
+        if generation(state) != published {
+            published = generation(state);
+            publish(&state.registry, &state.menu);
         }
     })
     .detach();
@@ -123,14 +125,14 @@ struct Target<'a> {
     category: String,
 }
 
-fn target_list(registry: &Registry) -> TargetList<'static> {
+fn target_list(registry: &Registry, menu: &MenuChoices) -> TargetList<'static> {
     let mut list = TargetList {
         version: 1,
         extensions: BTreeMap::new(),
         targets: BTreeMap::new(),
     };
     for format in FORMATS {
-        let targets = registry.menu_targets(format);
+        let targets = registry.menu_targets_with(format, menu);
         if targets.is_empty() {
             continue;
         }
@@ -152,12 +154,12 @@ fn target_list(registry: &Registry) -> TargetList<'static> {
     list
 }
 
-fn publish(registry: &Registry) {
+fn publish(registry: &Registry, menu: &MenuChoices) {
     let Some(dir) = cocoa::group_container() else {
         tracing::debug!("no App Group container; not publishing Finder targets");
         return;
     };
-    let json = serde_json::to_vec(&target_list(registry)).expect("serializable");
+    let json = serde_json::to_vec(&target_list(registry, menu)).expect("serializable");
     match crate::settings::write_atomic(&dir.join(TARGETS_FILE), &json) {
         Ok(()) => tracing::debug!(dir = %dir.display(), "published Finder targets"),
         Err(e) => tracing::warn!(error = %e, "could not publish Finder targets"),
@@ -248,6 +250,25 @@ fn parse_pluginkit(out: &str) -> Option<bool> {
         None
     } else {
         Some(marks.contains(&'+'))
+    }
+}
+
+/// Shows or hides the Dock icon (and the app's menu bar menus). convt hides
+/// from the Dock while no window is open and the menu bar item keeps it
+/// running, and comes back when a window opens.
+pub fn show_in_dock(show: bool) {
+    use objc::runtime::{BOOL, Object};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    // NSApplicationActivationPolicyRegular and ...Accessory.
+    let policy: i64 = if show { 0 } else { 1 };
+    // SAFETY: called on the main thread, where GPUI runs every App callback.
+    unsafe {
+        let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+        let current: i64 = msg_send![app, activationPolicy];
+        if current != policy {
+            let _: BOOL = msg_send![app, setActivationPolicy: policy];
+        }
     }
 }
 
@@ -419,7 +440,7 @@ mod tests {
 
     #[test]
     fn target_list_covers_every_convertible_extension() {
-        let list = target_list(&convt_engines::default_registry());
+        let list = target_list(&convt_engines::default_registry(), &MenuChoices::default());
         assert_eq!(list.extensions.get("jpg"), Some(&"jpeg"));
         let png = &list.targets["png"];
         assert!(png.iter().any(|t| t.id == "webp" && t.category == "Image"));
@@ -427,6 +448,19 @@ mod tests {
         for id in list.extensions.values() {
             assert!(list.targets.contains_key(id));
         }
+    }
+
+    #[test]
+    fn target_list_follows_the_menu_choices() {
+        use convt_core::{Category, format_by_id};
+        let mut menu = MenuChoices::default();
+        menu.set(
+            Category::Image,
+            vec![format_by_id("tiff").unwrap(), format_by_id("png").unwrap()],
+        );
+        let list = target_list(&convt_engines::default_registry(), &menu);
+        let ids: Vec<_> = list.targets["jpeg"].iter().map(|t| t.id).collect();
+        assert_eq!(ids, ["tiff", "png"]);
     }
 
     #[test]

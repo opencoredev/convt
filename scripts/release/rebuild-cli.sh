@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
 # Clean container, no host Cargo registry or target directory.
 set -euo pipefail
-archive=$(realpath "${1:?source archive required}")
+archive=$(realpath "${1:?compact source archive required}")
+closure=$(realpath "${2:?corresponding-source closure archive required}")
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d /tmp/convt-source-rebuild-XXXXXX)
 name="convt-source-rebuild-$$"
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
 # Reject unsafe archive names before extracting into the owned directory.
-python3 - "$archive" <<'PY'
+python3 - "$archive" "$closure" <<'PY'
 import sys,tarfile,pathlib
-with tarfile.open(sys.argv[1]) as t:
- for m in t.getmembers():
-  p=pathlib.PurePosixPath(m.name)
-  if p.is_absolute() or '..' in p.parts:sys.exit('unsafe archive path')
-  if m.issym() or m.islnk():
-   import posixpath
-   link=pathlib.PurePosixPath(m.linkname)
-   resolved=posixpath.normpath(str(p.parent/link) if m.issym() else str(link))
-   if link.is_absolute() or not resolved.startswith('convt-source/'):sys.exit('unsafe archive link')
+for path in sys.argv[1:]:
+ with tarfile.open(path) as t:
+  for m in t.getmembers():
+   p=pathlib.PurePosixPath(m.name)
+   if p.is_absolute() or '..' in p.parts:sys.exit('unsafe archive path')
+   if m.issym() or m.islnk():
+    import posixpath
+    link=pathlib.PurePosixPath(m.linkname)
+    resolved=posixpath.normpath(str(p.parent/link) if m.issym() else str(link))
+    if link.is_absolute() or not resolved.startswith('convt-source/'):sys.exit('unsafe archive link')
 PY
 tar --warning=no-timestamp -xf "$archive" -C "$work"
+tar --warning=no-timestamp -xf "$closure" -C "$work"
 base=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["image"])' "$repo/packaging/linux/build-image.json")
 rust=$(dirname "$(dirname "$(rustup which rustc)")")
 docker run --rm --name "$name" --label app=convt --label purpose=source-rebuild --network none \

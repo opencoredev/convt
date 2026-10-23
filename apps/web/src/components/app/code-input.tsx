@@ -59,7 +59,8 @@ export function typedText(previous: string, value: string): string {
  * code goes to `verify`, once: no Enter and no button. `verify` resolves true when the
  * code was accepted; on false the boxes shake, clear, and focus the first box again.
  * `onAccepted` runs once the success ring has drawn, for a caller that removes the
- * input rather than leaving the page.
+ * input rather than leaving the page. The group fills its column, so the boxes can
+ * shrink on a narrow screen; `align` places them in it.
  */
 export function CodeInput({
   length,
@@ -67,12 +68,14 @@ export function CodeInput({
   verify,
   onAccepted,
   autoFocus = false,
+  align = "start",
 }: {
   length: number;
   labelId: string;
   verify: (code: string) => Promise<boolean>;
   onAccepted?: () => void;
   autoFocus?: boolean;
+  align?: "start" | "center";
 }) {
   const [digits, setDigits] = useState<string[]>(() => Array.from({ length }, () => ""));
   const [phase, setPhase] = useState<Phase>("idle");
@@ -218,7 +221,10 @@ export function CodeInput({
       role="group"
       aria-labelledby={labelId}
       aria-busy={phase === "checking"}
-      className="flex [--gap:8px] max-sm:@container max-sm:[--cell:min(44px,calc((100cqw_-_5*var(--gap))/6))] sm:[--cell:52px]"
+      className={cx(
+        "flex w-full [--gap:8px] max-sm:@container max-sm:[--cell:min(44px,calc((100cqw_-_5*var(--gap))/6))] sm:[--cell:52px]",
+        align === "center" && "justify-center",
+      )}
     >
       <div
         data-phase={phase}

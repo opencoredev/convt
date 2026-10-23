@@ -1,12 +1,12 @@
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, format_by_id};
 use image::codecs::avif::AvifEncoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
-use image::{DynamicImage, ImageFormat, ImageReader};
+use image::{DynamicImage, ImageFormat};
 
 pub(crate) const INPUTS: &[&str] = &[
     "png", "jpeg", "webp", "gif", "tiff", "bmp", "ico", "tga", "ppm", "qoi", "exr",
@@ -20,7 +20,7 @@ const OUTPUTS: &[&str] = &[
 /// WIC) will take over HEIC and the heavy lifting with a higher priority.
 pub struct ImageEngine;
 
-fn failed(e: impl std::fmt::Display) -> Error {
+pub(crate) fn failed(e: impl std::fmt::Display) -> Error {
     Error::EngineFailed {
         engine: "image",
         message: e.to_string(),
@@ -37,10 +37,7 @@ impl Engine for ImageEngine {
     }
 
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
-        let img = ImageReader::open(input)?
-            .with_guessed_format()?
-            .decode()
-            .map_err(failed)?;
+        let img = crate::orientation::open_oriented(input)?;
         ctx.check()?;
         ctx.progress(0.5);
         let output = ctx.artifact(out_dir, 0);
@@ -91,7 +88,7 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
         .read_info()
         .map_err(failed)?;
     let source = reader.info();
-    let img = apply_background(image::open(path).map_err(failed)?, "png", options)?;
+    let img = apply_background(crate::orientation::open_oriented(path)?, "png", options)?;
     let mut info = png::Info::with_size(img.width(), img.height());
     info.pixel_dims = source.pixel_dims;
     info.source_gamma = source.gamma();
@@ -261,6 +258,11 @@ pub(crate) fn encode_with_pixel_aspect(
             DynamicImage::ImageRgba32F(img.to_rgba32f()).write_to(&mut w, ImageFormat::OpenExr)
         }
         "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut w, ImageFormat::Pnm),
+        "bmp" => {
+            let mut bmp = BmpV5Writer::new(&mut w);
+            img.write_with_encoder(image::codecs::bmp::BmpEncoder::new(&mut bmp))
+                .and_then(|()| bmp.finish().map_err(image::ImageError::IoError))
+        }
         id => {
             let format = ImageFormat::from_extension(id)
                 .ok_or_else(|| failed(format!("no encoder for {id}")))?;
@@ -270,6 +272,73 @@ pub(crate) fn encode_with_pixel_aspect(
     .map_err(failed)?;
     w.into_inner().map_err(|e| Error::Io(e.into_error()))?;
     Ok(())
+}
+
+const BMP_V4: u32 = 108;
+const BMP_V5: u32 = 124;
+const BMP_V4_END: usize = 14 + BMP_V4 as usize;
+
+/// Passes BMP output through, rewriting a BITMAPV4HEADER (what the encoder
+/// writes for transparency) as a BITMAPV5HEADER. Apple's ImageIO refuses
+/// every V4 file, so Preview and Finder couldn't open an RGBA BMP; V5 keeps
+/// the same alpha mask. Only the headers are held back, so pixels stream.
+struct BmpV5Writer<W: Write> {
+    inner: W,
+    /// The bytes held back until the headers are complete; `None` after.
+    head: Option<Vec<u8>>,
+}
+
+impl<W: Write> BmpV5Writer<W> {
+    fn new(inner: W) -> Self {
+        Self {
+            inner,
+            head: Some(Vec::with_capacity(BMP_V4_END)),
+        }
+    }
+
+    /// Writes a file shorter than the V4 headers unchanged.
+    fn finish(mut self) -> std::io::Result<()> {
+        if let Some(head) = self.head.take() {
+            self.inner.write_all(&head)?;
+        }
+        self.inner.flush()
+    }
+}
+
+impl<W: Write> Write for BmpV5Writer<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let Some(head) = &mut self.head else {
+            return self.inner.write(buf);
+        };
+        let n = buf.len().min(BMP_V4_END - head.len());
+        head.extend_from_slice(&buf[..n]);
+        if head.len() == BMP_V4_END {
+            let head = self.head.take().unwrap_or_default();
+            self.inner.write_all(&bmp_v5_header(head))?;
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn bmp_v5_header(mut head: Vec<u8>) -> Vec<u8> {
+    let field = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+    if field(&head, 14) != BMP_V4 {
+        return head;
+    }
+    let grow = BMP_V5 - BMP_V4;
+    let file_size = field(&head, 2) + grow;
+    let pixel_offset = field(&head, 10) + grow;
+    head[2..6].copy_from_slice(&file_size.to_le_bytes());
+    head[10..14].copy_from_slice(&pixel_offset.to_le_bytes());
+    head[14..18].copy_from_slice(&BMP_V5.to_le_bytes());
+    // bV5Intent LCS_GM_IMAGES, then no profile data, profile size or reserved.
+    head.extend_from_slice(&4u32.to_le_bytes());
+    head.extend_from_slice(&[0; 12]);
+    head
 }
 
 #[cfg(test)]
@@ -327,6 +396,32 @@ mod tests {
             image::open(&out).unwrap().to_rgba8().get_pixel(0, 0).0[3],
             0
         );
+        let bytes = std::fs::read(&out).unwrap();
+        assert_eq!(bytes[14..18], 124u32.to_le_bytes(), "BITMAPV5HEADER");
+        assert_eq!(bytes[2..6], (bytes.len() as u32).to_le_bytes());
+    }
+
+    #[test]
+    fn bmp_header_rewrite_survives_one_byte_writes() {
+        let rgba = DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            3,
+            2,
+            image::Rgba([10, 20, 30, 128]),
+        ));
+        let mut plain = Vec::new();
+        rgba.write_with_encoder(image::codecs::bmp::BmpEncoder::new(&mut plain))
+            .unwrap();
+        let mut out = Vec::new();
+        let mut writer = BmpV5Writer::new(&mut out);
+        for byte in &plain {
+            writer.write_all(std::slice::from_ref(byte)).unwrap();
+        }
+        writer.finish().unwrap();
+        assert_eq!(out.len(), plain.len() + 16);
+        assert_eq!(out[14..18], 124u32.to_le_bytes());
+        assert_eq!(out[out.len() - 24..], plain[plain.len() - 24..]);
+        let back = image::load_from_memory_with_format(&out, ImageFormat::Bmp).unwrap();
+        assert_eq!(back.to_rgba8(), rgba.to_rgba8());
     }
 
     #[test]
@@ -347,6 +442,47 @@ mod tests {
             flatten(opaque, [9, 9, 9]),
             DynamicImage::ImageRgb8(_)
         ));
+    }
+
+    #[test]
+    fn jpeg_exif_orientation_is_baked_into_pixels() {
+        use crate::orientation::{decoder_orientation, jpeg_with_orientation};
+        use image::metadata::Orientation;
+
+        let dir = tempfile::tempdir().unwrap();
+        let raw = dir.path().join("raw.jpeg");
+        image::RgbImage::from_fn(32, 24, |x, y| {
+            image::Rgb(if x < 16 {
+                if y < 12 { [240, 24, 24] } else { [24, 24, 240] }
+            } else if y < 12 {
+                [24, 224, 24]
+            } else {
+                [224, 224, 24]
+            })
+        })
+        .save(&raw)
+        .unwrap();
+        let jpeg = std::fs::read(&raw).unwrap();
+        let src = dir.path().join("oriented.jpeg");
+        std::fs::write(&src, jpeg_with_orientation(&jpeg, 6).unwrap()).unwrap();
+        let webp = run(&src, "webp", &Options::default());
+        assert_eq!((webp.width(), webp.height()), (24, 32));
+        let px = webp.to_rgb8();
+        assert!(
+            px.get_pixel(18, 8).0[0] > 200,
+            "red should be at top-right after 90° CW"
+        );
+        assert!(
+            px.get_pixel(6, 8).0[2] > 180,
+            "blue (was bottom-left) should be at top-left, got {:?}",
+            px.get_pixel(6, 8).0
+        );
+        let out = dir.path().join("check.webp");
+        webp.save(&out).unwrap();
+        assert_eq!(
+            decoder_orientation(&out).unwrap(),
+            Orientation::NoTransforms
+        );
     }
 
     #[test]

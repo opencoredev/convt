@@ -2,23 +2,25 @@
 //! presets. Every window reads one [`AppState`] entity and changes it through
 //! the methods here.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use convt_core::{
-    Format, Job, Options, Output, Preset, Registry, expand_inputs, format_by_extension,
-    format_by_id,
+    Format, Job, MenuChoices, Options, Output, Preset, Registry, expand_inputs,
+    format_by_extension, format_by_id,
 };
 use convt_license::License;
 use convt_license::account::{self, Api};
 use convt_license::client::{self, Licensing};
+use convt_license::date;
 use futures::StreamExt;
 use futures::channel::mpsc::unbounded;
 use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, Task};
 
 use crate::account::Account;
+use crate::cloud::{self, CloudAccess};
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
@@ -36,6 +38,8 @@ pub struct Paths {
     /// `None` keeps history in memory only.
     pub history: Option<PathBuf>,
     pub presets: Option<PathBuf>,
+    /// The right-click menu lists. `None` keeps them in memory only.
+    pub menu: Option<PathBuf>,
     /// The trial file, the key store and whether this build checks licenses.
     pub license: client::Config,
     /// The site desktop sign-in and renewal talk to, and how. Tests script
@@ -54,6 +58,7 @@ impl Paths {
             settings: Settings::path(),
             history: History::path(),
             presets: paths::presets_dir(),
+            menu: paths::menu_file(),
             license: client::Config::from_env(paths::config_dir(), paths::data_dir()),
             account_url: account::account_url(),
             account_api: Arc::new(account::Http::new(&account::account_url())),
@@ -237,6 +242,14 @@ pub struct AppState {
     settings_path: Option<PathBuf>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
+    /// The formats right-click menus offer, by kind of file. The CLI reads
+    /// the same file, so Explorer and the Linux menus follow it too.
+    pub menu: MenuChoices,
+    menu_path: Option<PathBuf>,
+    /// Counts menu changes, so the Finder target list is published again.
+    pub menu_generation: u64,
+    /// Why the menu choices couldn't be read or saved, shown in the Menu tab.
+    pub menu_error: Option<String>,
     /// Problems loading or saving app files, shown in the Settings tab.
     pub errors: Vec<String>,
     pub(crate) licensing: Licensing,
@@ -248,9 +261,20 @@ pub struct AppState {
     /// What the last update check found.
     pub update: Update,
     pub(crate) _update_task: Option<Task<()>>,
+    /// When (Unix seconds) the last update check started, this session.
+    pub(crate) update_attempted: Option<u64>,
+    /// Wakes every [`crate::update::SCHEDULE_TICK`] to run checks that are due.
+    pub(crate) _update_schedule: Option<Task<()>>,
     /// The last manifest accepted this session, to select again when the
     /// license changes.
     pub(crate) update_manifest: Option<Arc<Vec<u8>>>,
+    /// The update download and install, when this install updates itself.
+    pub(crate) updater: crate::update::Updater,
+    /// The cloud jobs API client. Building it sends nothing; only a cloud
+    /// conversion does.
+    cloud_api: Arc<dyn cloud::CloudApi>,
+    /// How often a cloud job asks how it is doing.
+    cloud_poll: std::time::Duration,
     batch: Batch,
     /// Jobs from silent conversions (a target picked in a background menu).
     /// Explorer requests that ask to show progress are tracked like normal
@@ -265,8 +289,25 @@ pub struct AppState {
     /// none, or macOS has not registered it. Tests set this directly.
     pub finder_on: Option<bool>,
     _finder_watch: Option<Task<()>>,
+    _menu_watch: Option<Task<()>>,
+    /// Jobs whose result should be copied when they finish.
+    automation_copies: HashSet<JobId>,
+    /// The sign-in token each cloud job asked for credentials with, so one
+    /// that finds it revoked signs out only that sign-in.
+    cloud_tokens: HashMap<JobId, String>,
+    watch: crate::automation::WatchState,
+    _automations: Option<Task<()>>,
     _drain: Task<()>,
 }
+
+/// Why a conversion can't start while an update installs.
+pub const INSTALLING: &str =
+    "convt is installing an update and restarts in a moment. Convert again after it does.";
+
+/// Why document support can't download or be removed while an update
+/// installs: quitting for the restart would stop it.
+pub const INSTALLING_PACK: &str =
+    "convt is installing an update and restarts in a moment. Try again after it does.";
 
 /// The app's one [`AppState`].
 pub struct Shared(pub Entity<AppState>);
@@ -293,6 +334,16 @@ impl AppState {
             }),
             None => Settings::default(),
         };
+        let mut menu_error = None;
+        let menu = match &paths.menu {
+            Some(path) => MenuChoices::load(path).unwrap_or_else(|e| {
+                menu_error = Some(format!(
+                    "Right-click menu choices were not loaded: {e}. Changing one replaces the file."
+                ));
+                MenuChoices::default()
+            }),
+            None => MenuChoices::default(),
+        };
         let history = paths
             .history
             .as_deref()
@@ -311,8 +362,26 @@ impl AppState {
                 };
             }
         });
-        let licensing = Licensing::new(paths.license);
-        let account = Account::new(paths.account_url, paths.account_api, licensing.session());
+        let mut licensing = Licensing::new(paths.license);
+        #[cfg(not(test))]
+        licensing.disable_local_trial();
+        let session = licensing.session();
+        let cached_trial = settings
+            .trial_cache
+            .clone()
+            .filter(|cache| cached_trial_is_valid(cache, session.is_some(), client::today()));
+        licensing.set_account_trial_exact(
+            cached_trial
+                .as_ref()
+                .map(|cache| cache.ends_at[..10].to_string()),
+            cached_trial.as_ref().map(|cache| cache.ends_at.clone()),
+        );
+        let mut account = Account::new(paths.account_url, paths.account_api, session);
+        if let Some(cache) = cached_trial {
+            account.access = Some(crate::account::Access::Trial {
+                ends_on: cache.ends_at[..10].to_string(),
+            });
+        }
         let mut state = Self {
             registry,
             registry_generation: 0,
@@ -328,6 +397,10 @@ impl AppState {
             settings_path: paths.settings,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
+            menu,
+            menu_path: paths.menu,
+            menu_generation: 0,
+            menu_error,
             errors,
             license: licensing.state(),
             licensing,
@@ -335,7 +408,12 @@ impl AppState {
             update_config: paths.update,
             update: Update::Idle,
             _update_task: None,
+            update_attempted: None,
+            _update_schedule: None,
             update_manifest: None,
+            updater: Default::default(),
+            cloud_api: Arc::new(cloud::Http::new()),
+            cloud_poll: std::time::Duration::from_secs(2),
             batch: Batch::default(),
             silent: HashSet::new(),
             #[cfg(test)]
@@ -345,6 +423,23 @@ impl AppState {
             // Tests set `finder_on` themselves; a live poll would overwrite it.
             _finder_watch: if cfg!(all(target_os = "macos", not(test))) {
                 Some(crate::finder::watch(cx))
+            } else {
+                None
+            },
+            // Finder reads the targets the app publishes, so a `convt menu`
+            // change has to reach the app without a window opening.
+            _menu_watch: if cfg!(all(target_os = "macos", not(test))) {
+                Some(watch_menu(cx))
+            } else {
+                None
+            },
+            automation_copies: HashSet::new(),
+            cloud_tokens: HashMap::new(),
+            watch: crate::automation::WatchState::default(),
+            // Tests drive the watcher themselves so a live poll cannot see
+            // the real Desktop or race a fixture.
+            _automations: if cfg!(not(test)) {
+                Some(crate::automation::watch(cx))
             } else {
                 None
             },
@@ -368,6 +463,83 @@ impl AppState {
         self.convert_to(files, to, options, output, cx)
     }
 
+    /// Whether Cloud conversions can run now, and if not, why. Decided from
+    /// what this computer already knows, without a network call, so windows
+    /// can ask on every render.
+    pub fn cloud_access(&self) -> CloudAccess {
+        cloud::access(
+            self.account.url(),
+            self.account.session.is_some(),
+            &self.license,
+            client::today(),
+        )
+    }
+
+    /// Like [`Self::convert_to`], but runs on convt's cloud. The caller has
+    /// checked [`Self::cloud_access`] and the user's consent; this checks
+    /// both again. The cloud takes no conversion options, so a request with
+    /// any is refused rather than converted without them.
+    pub fn convert_in_cloud(
+        &mut self,
+        files: &[PathBuf],
+        to: &'static Format,
+        options: &Options,
+        output: Output,
+        cx: &mut Context<Self>,
+    ) -> Result<Vec<JobId>, String> {
+        // Quitting after the install would cut the upload or download off.
+        if self.installing() {
+            return Err(INSTALLING.into());
+        }
+        if let Some(reason) = self.cloud_access().reason() {
+            return Err(reason);
+        }
+        if !self.settings.cloud_consent {
+            return Err("Agree to upload files to convt's cloud before converting there.".into());
+        }
+        if *options != Options::default() {
+            return Err(
+                "Cloud conversion doesn't take options yet. Convert on this computer to use them."
+                    .into(),
+            );
+        }
+        let Some(session) = self.account.session.clone() else {
+            return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
+        };
+        // One credential serves the whole batch while it lasts.
+        let batch = Arc::new(cloud::Cloud {
+            api: self.cloud_api.clone(),
+            credentials: cloud::Credentials::new(self.account.api(), session.token.clone()),
+            poll: self.cloud_poll,
+            link_reuse: cloud::LINK_REUSE,
+        });
+        let output = absolute_output(output);
+        let ids = files
+            .iter()
+            .map(|file| {
+                let job = Job {
+                    input: file.clone(),
+                    to,
+                    options: Options::default(),
+                    output: output.clone(),
+                };
+                let id = self.queue.add_cloud(&job);
+                self.cloud_tokens.insert(id, session.token.clone());
+                self.runner.submit_cloud(id, job, batch.clone());
+                id
+            })
+            .collect();
+        cx.notify();
+        Ok(ids)
+    }
+
+    /// Replaces the cloud client and how often it polls, for tests.
+    #[cfg(test)]
+    pub fn set_cloud_api(&mut self, api: Arc<dyn cloud::CloudApi>, poll: std::time::Duration) {
+        self.cloud_api = api;
+        self.cloud_poll = poll;
+    }
+
     /// [`Self::convert`] with an output other than the one in Settings.
     pub fn convert_to(
         &mut self,
@@ -389,6 +561,10 @@ impl AppState {
         silent: bool,
         cx: &mut Context<Self>,
     ) -> Result<Vec<JobId>, String> {
+        // Quitting after the install would stop them.
+        if self.installing() {
+            return Err(INSTALLING.into());
+        }
         if let Some(reason) = self.documents_locked()
             && files
                 .iter()
@@ -426,12 +602,12 @@ impl AppState {
         Ok(ids)
     }
 
-    /// The format Add files converts `file` to: the default for its kind, if
-    /// the file can reach it.
+    /// The format the popover's drop bar converts `file` to: the default for
+    /// its kind, if the file can reach it.
     pub fn default_target(&self, file: &Path) -> Option<&'static Format> {
         let from = format_by_extension(file)?;
-        let to = self.settings.defaults.get(Kind::of(from)?)?;
-        self.registry.targets(from).contains(&to).then_some(to)
+        let to = self.settings.defaults.get(Kind::of_file(file, from)?)?;
+        (from.id != to.id && self.registry.targets(from).contains(&to)).then_some(to)
     }
 
     /// Converts files (and the files directly inside folders) to their
@@ -524,6 +700,9 @@ impl AppState {
     ) -> Result<Vec<JobId>, String> {
         let files = [input.to_path_buf()];
         match setup {
+            Some(setup) if setup.cloud => {
+                self.convert_in_cloud(&files, to, &setup.options, setup.output.clone(), cx)
+            }
             Some(setup) => self.convert_to(&files, to, &setup.options, setup.output.clone(), cx),
             None => self.convert(&files, to, &Options::default(), cx),
         }
@@ -571,6 +750,11 @@ impl AppState {
         {
             return;
         }
+        if self.installing() {
+            self.pack.notice = Some(INSTALLING_PACK.into());
+            cx.notify();
+            return;
+        }
         if matches!(self.pack.status, pack::Status::Installed(_)) && self.documents_converting() {
             self.pack.notice =
                 Some("Wait for the document conversions to finish, then download it again.".into());
@@ -611,6 +795,11 @@ impl AppState {
     pub fn remove_pack(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         if matches!(self.pack.phase, PackPhase::Working(_)) || self.pack.removing {
             return Err("Wait for the download to finish first.".into());
+        }
+        if self.installing() {
+            self.pack.notice = Some(INSTALLING_PACK.into());
+            cx.notify();
+            return Err(INSTALLING_PACK.into());
         }
         if self.documents_converting() {
             let error = "Wait for the document conversions to finish, then remove it.";
@@ -695,8 +884,7 @@ impl AppState {
         self.registry_generation += 1;
     }
 
-    /// Switches an automation rule on or off. Only the setting changes: no
-    /// automation engine runs the rules yet.
+    /// Switches an automation rule on or off.
     pub fn set_automation(&mut self, index: usize, enabled: bool, cx: &mut Context<Self>) {
         self.update_settings(
             |s| {
@@ -708,11 +896,59 @@ impl AppState {
         );
     }
 
+    /// Whether a finished automation should copy its result.
+    pub fn set_automation_copy(&mut self, index: usize, copy: bool, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                if let Some(rule) = s.automations.get_mut(index) {
+                    rule.copy_to_clipboard = Some(copy);
+                    rule.detail = if copy {
+                        "copy to clipboard".into()
+                    } else {
+                        "save beside original".into()
+                    };
+                }
+            },
+            cx,
+        );
+    }
+
+    /// Lists each watched folder and converts new matching files. Tests call
+    /// this twice after writing a file: once to see it, once after it is
+    /// the same size.
+    pub fn poll_automations(&mut self, cx: &mut Context<Self>) {
+        let rules = self.settings.automations.clone();
+        let ready = self.watch.drain_ready(&rules);
+        for (index, path) in ready {
+            let Some(rule) = rules.get(index) else {
+                continue;
+            };
+            let Some(to) = format_by_id(&rule.to) else {
+                continue;
+            };
+            let Some(from) = format_by_extension(&path) else {
+                continue;
+            };
+            if !self.registry.targets(from).contains(&to) {
+                continue;
+            }
+            let copy = rule.copies_to_clipboard();
+            match self.convert(std::slice::from_ref(&path), to, &Options::default(), cx) {
+                Ok(ids) => {
+                    if copy {
+                        self.automation_copies.extend(ids);
+                    }
+                }
+                Err(e) => self.errors.push(e),
+            }
+        }
+    }
+
     /// Verifies and stores a license key.
     pub fn activate(&mut self, key: &str, cx: &mut Context<Self>) -> Result<License, String> {
         let result = self.licensing.activate(key).map_err(|e| e.to_string());
         self.license = self.licensing.state();
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
         result
     }
@@ -721,7 +957,7 @@ impl AppState {
     pub fn deactivate(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
         let result = self.licensing.deactivate();
         self.license = self.licensing.state();
-        self.reselect_update();
+        self.reselect_update(cx);
         cx.notify();
         result
     }
@@ -734,18 +970,6 @@ impl AppState {
         self.queue.get(id)
     }
 
-    pub fn clear_finished(&mut self, cx: &mut Context<Self>) {
-        self.queue.clear_finished();
-        cx.notify();
-    }
-
-    /// Clears everything finished from the Activity list: finished jobs and
-    /// the history behind them.
-    pub fn clear_activity(&mut self, cx: &mut Context<Self>) {
-        self.clear_finished(cx);
-        self.clear_history(cx);
-    }
-
     /// Whether this build checks licenses.
     pub fn license_enforced(&self) -> bool {
         self.licensing.enforced()
@@ -753,17 +977,26 @@ impl AppState {
 
     fn apply(&mut self, update: crate::jobs::Update, cx: &mut Context<Self>) {
         if let Some(entry) = self.queue.apply(update).cloned() {
-            // Silent jobs stay out of the batch summary and are never revealed.
+            // Silent jobs count toward the batch summary and its notification
+            // like any other, but are never revealed: the file manager that
+            // asked is already showing the folder.
             let silent = self.silent.remove(&entry.id);
-            let mut ignored = Batch::default();
-            let batch = if silent {
-                &mut ignored
-            } else {
-                &mut self.batch
-            };
-            let outcome = match entry.status {
+            let cloud_token = self.cloud_tokens.remove(&entry.id);
+            // Revoked from the dashboard: sign out here too, so Settings
+            // offers Sign in instead of an account that can't convert.
+            let revoked = matches!(&entry.status, Status::Failed(e) if e.kind == "cloud_signed_out")
+                && cloud_token.is_some()
+                && self.account.session.as_ref().map(|s| &s.token) == cloud_token.as_ref();
+            if revoked {
+                self.forget_revoked_session(cx);
+            }
+            let batch = &mut self.batch;
+            let outcome = match &entry.status {
                 Status::Done(outputs) => {
                     batch.done += 1;
+                    if self.automation_copies.remove(&entry.id) {
+                        cx.write_to_clipboard(crate::clipboard::clipboard_item(outputs));
+                    }
                     if !silent
                         && self.settings.reveal_when_done
                         && let Some(first) = outputs.first()
@@ -774,11 +1007,12 @@ impl AppState {
                         #[cfg(test)]
                         self.revealed.push(first.clone());
                     }
-                    Outcome::Done(outputs)
+                    Outcome::Done(outputs.clone())
                 }
                 Status::Failed(e) => {
+                    self.automation_copies.remove(&entry.id);
                     batch.failed += 1;
-                    Outcome::Failed(e.message)
+                    Outcome::Failed(e.message.clone())
                 }
                 _ => {
                     batch.cancelled += 1;
@@ -813,8 +1047,11 @@ impl AppState {
                 actions: Vec::new(),
             });
         }
-        if self.quit_when_idle && cx.windows().is_empty() {
-            cx.quit();
+        if self.quit_when_idle
+            && cx.windows().is_empty()
+            && !crate::tray::keeps_running(self.settings.menu_bar_icon, cx)
+        {
+            crate::menu::quit(cx);
         }
     }
 
@@ -825,8 +1062,11 @@ impl AppState {
         });
     }
 
-    pub fn clear_history(&mut self, cx: &mut Context<Self>) {
-        if let Err(e) = self.history.clear() {
+    /// Clears some finished conversions from Activity, such as one day's,
+    /// and the finished jobs the list no longer shows.
+    pub fn clear_records(&mut self, ids: &[i64], cx: &mut Context<Self>) {
+        self.queue.clear_finished();
+        if let Err(e) = self.history.remove(ids) {
             self.errors.push(format!("History was not cleared: {e}"));
         }
         self.refresh_history();
@@ -916,6 +1156,58 @@ impl AppState {
         cx.notify();
     }
 
+    /// Changes the right-click menu lists and saves them.
+    /// Starts from the saved file, so a `convt menu` change made while the
+    /// app runs is kept.
+    pub fn update_menu(&mut self, change: impl FnOnce(&mut MenuChoices), cx: &mut Context<Self>) {
+        if let Some(path) = &self.menu_path
+            && let Ok(saved) = MenuChoices::load(path)
+        {
+            self.menu = saved;
+        }
+        change(&mut self.menu);
+        self.menu_generation += 1;
+        self.menu_error = match &self.menu_path {
+            Some(path) => self
+                .menu
+                .save(path)
+                .err()
+                .map(|e| format!("Right-click menu choices were not saved: {e}")),
+            None => None,
+        };
+        cx.notify();
+    }
+
+    /// Reads the menu choices again, so a `convt menu` change made while the
+    /// app runs shows in Settings and reaches the Finder menu.
+    pub fn reload_menu(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = &self.menu_path else {
+            return;
+        };
+        match MenuChoices::load(path) {
+            Ok(saved) if saved != self.menu => {
+                self.menu = saved;
+                self.menu_generation += 1;
+                self.menu_error = None;
+                cx.notify();
+            }
+            Ok(_) => {
+                if self.menu_error.take().is_some() {
+                    cx.notify();
+                }
+            }
+            Err(e) => {
+                let error = format!(
+                    "Right-click menu choices were not loaded: {e}. Changing one replaces the file."
+                );
+                if self.menu_error.as_ref() != Some(&error) {
+                    self.menu_error = Some(error);
+                    cx.notify();
+                }
+            }
+        }
+    }
+
     /// [`Self::update_settings`] for a change that must reach the disk, such
     /// as the update check's rollback guard. If saving fails, the change is
     /// undone and the error returned.
@@ -936,6 +1228,33 @@ impl AppState {
         cx.notify();
         Ok(())
     }
+}
+
+/// Reads `menu.toml` again every couple of seconds, so a `convt menu` change
+/// reaches the Finder menu while the app runs.
+fn watch_menu(cx: &mut Context<AppState>) -> Task<()> {
+    cx.spawn(async move |this, cx| {
+        loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(2))
+                .await;
+            if this.update(cx, |s, cx| s.reload_menu(cx)).is_err() {
+                break;
+            }
+        }
+    })
+}
+
+fn cached_trial_is_valid(cache: &crate::settings::TrialCache, signed_in: bool, today: i64) -> bool {
+    signed_in
+        && date::to_days(&cache.fetched_on).is_some_and(|fetched| {
+            // `get` because a hand-edited value may not split at byte 10.
+            cache
+                .ends_at
+                .get(..10)
+                .and_then(date::to_days)
+                .is_some_and(|ends| ends <= fetched + 8 && ends >= fetched && fetched <= today)
+        })
 }
 
 /// The target and options a request or a picker selection resolves to.
@@ -1006,6 +1325,33 @@ mod tests {
     }
 
     #[test]
+    fn cached_account_trials_need_a_session_and_a_short_fetch_window() {
+        let today = date::to_days("2026-10-08").unwrap();
+        let valid = crate::settings::TrialCache {
+            ends_at: "2026-10-14T12:00:00Z".into(),
+            fetched_on: "2026-10-08".into(),
+        };
+        assert!(cached_trial_is_valid(&valid, true, today));
+        assert!(!cached_trial_is_valid(&valid, false, today));
+        assert!(!cached_trial_is_valid(
+            &crate::settings::TrialCache {
+                ends_at: "2099-01-01T00:00:00Z".into(),
+                fetched_on: "2026-10-08".into(),
+            },
+            true,
+            today,
+        ));
+        // A malformed saved value is rejected, not sliced mid-character.
+        for ends_at in ["123456789é", "2026-10-1", ""] {
+            let cache = crate::settings::TrialCache {
+                ends_at: ends_at.into(),
+                fetched_on: "2026-10-08".into(),
+            };
+            assert!(!cached_trial_is_valid(&cache, true, today), "{ends_at}");
+        }
+    }
+
+    #[test]
     fn preset_names() {
         for good in ["web", "Web 2048", "a_b-c"] {
             assert!(valid_preset_name(good), "{good}");
@@ -1033,5 +1379,29 @@ mod tests {
         assert_eq!(t.formats, expected);
         assert!(t.formats.iter().any(|f| f.id == "webp"));
         assert_eq!(common_targets(&registry, &[]), Targets::default());
+    }
+
+    #[test]
+    fn default_target_splits_photos_from_other_images() {
+        let registry = convt_engines::default_registry();
+        let settings = Settings::default();
+        let state_target = |file: &str| {
+            let from = format_by_extension(Path::new(file))?;
+            let to = settings
+                .defaults
+                .get(Kind::of_file(Path::new(file), from)?)?;
+            (from.id != to.id && registry.targets(from).contains(&to)).then_some(to.id)
+        };
+        assert_eq!(state_target("share.webp"), Some("jpeg"));
+        assert_eq!(state_target("Screenshot 1.webp"), Some("png"));
+        assert_eq!(state_target("diagram.svg"), Some("png"));
+        assert_eq!(state_target("icon.bmp"), Some("png"));
+        assert_eq!(state_target("already.png"), None);
+        assert_eq!(state_target("already.jpg"), None);
+        let heic = format_by_id("heic").unwrap();
+        if registry.targets(heic).iter().any(|f| f.id == "jpeg") {
+            assert_eq!(state_target("IMG_2041.heic"), Some("jpeg"));
+            assert_eq!(state_target("Screenshot 1.heic"), Some("png"));
+        }
     }
 }

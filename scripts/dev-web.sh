@@ -5,7 +5,8 @@
 #   2. the OAuth mock (tools/oauth-mock) on OAUTH_MOCK_PORT from services.env
 #   3. the billing mock (tools/billing-mock: Polar and Resend) on BILLING_MOCK_PORT,
 #      delivering signed webhooks to the site's /webhooks/polar
-#   4. apps/web/.dev.vars and apps/billing/.dev.vars from .convt-dev/services.env;
+#   4. apps/web/.dev.vars and apps/billing/.dev.vars from .convt-dev/services.env
+#      (plus CONVT_API_URL and CONVT_WEB_TOKEN_SECRET when both are set);
 #      convt-billing signs with the local dev key in .convt-dev/license.key
 #   5. Vite on port 3000, or the next free one, with BETTER_AUTH_URL to match;
 #      convt-billing runs inside it as an auxiliary Worker
@@ -60,12 +61,13 @@ host_args=()
 [[ -f .convt-dev/license.key ]] || bun -e 'await (await import("./packages/db/src/seed.ts")).devSigningKey()'
 POLAR_MOCK_TOKEN=polar_oat_local_$(openssl rand -hex 12)
 RESEND_MOCK_KEY=re_local_$(openssl rand -hex 12)
+SEQUENZY_MOCK_KEY=sqz_local_$(openssl rand -hex 12)
 if ! port_free "$BILLING_MOCK_PORT"; then
   echo "dev-web: port $BILLING_MOCK_PORT is taken; stop the other billing mock or remove BILLING_MOCK_PORT from services.env" >&2
   exit 1
 fi
 MOCK_PORT=$BILLING_MOCK_PORT MOCK_PUBLIC_URL=${BILLING_MOCK_PUBLIC_URL:-} \
-  POLAR_ACCESS_TOKEN=$POLAR_MOCK_TOKEN RESEND_API_KEY=$RESEND_MOCK_KEY \
+  POLAR_ACCESS_TOKEN=$POLAR_MOCK_TOKEN RESEND_API_KEY=$RESEND_MOCK_KEY SEQUENZY_API_KEY=$SEQUENZY_MOCK_KEY \
   POLAR_WEBHOOK_SECRET=$POLAR_WEBHOOK_SECRET WEBHOOK_URL=http://127.0.0.1:$port/webhooks/polar \
   WEBHOOK_SCHEME=${WEBHOOK_SCHEME:-standard} MAILPIT_URL=$MAILPIT_URL \
   bun tools/billing-mock/src/main.ts &
@@ -84,6 +86,11 @@ MAILPIT_URL=$MAILPIT_URL
 OAUTH_MOCK_URL=$OAUTH_MOCK_URL
 OAUTH_MOCK_PUBLIC_URL=${MOCK_PUBLIC_URL:-$OAUTH_MOCK_URL}
 VARS
+# A local cloud API (test-convt-server): pass both to let the dashboard
+# converter and the desktop app's cloud jobs reach it.
+if [[ -n ${CONVT_API_URL:-} && -n ${CONVT_WEB_TOKEN_SECRET:-} ]]; then
+  printf 'CONVT_API_URL=%s\nCONVT_WEB_TOKEN_SECRET=%s\n' "$CONVT_API_URL" "$CONVT_WEB_TOKEN_SECRET" >>apps/web/.dev.vars
+fi
 cat >apps/billing/.dev.vars <<VARS
 # Written by scripts/dev-web.sh. Local billing mock and the dev signing key. Never commit.
 ENV=development
@@ -99,6 +106,10 @@ RESEND_API_URL=$BILLING_MOCK_URL
 MAIL_FROM=convt <hello@convt.test>
 ALERT_EMAIL=alerts@convt.test
 LICENSE_SIGNING_KEY=$(tr -d '\n' <.convt-dev/license.key)
+SEQUENZY_MARKETING_API_KEY=$SEQUENZY_MOCK_KEY
+SEQUENZY_API_URL=$BILLING_MOCK_URL/api/v1
+MARKETING_LINK_SECRET=$(openssl rand -hex 32)
+SEQUENZY_WEBHOOK_SECRET=whsec_local_$(openssl rand -hex 16)
 VARS
 
 for _ in $(seq 40); do curl -fsS "$BILLING_MOCK_URL/health" >/dev/null 2>&1 && break; sleep 0.25; done

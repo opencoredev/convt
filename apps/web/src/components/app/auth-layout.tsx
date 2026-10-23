@@ -7,7 +7,7 @@ import { cx, focusRing } from "./ui";
 
 const signInAside = {
   title: "AFTER YOU SIGN IN",
-  items: ["Download the Mac app", "Find your license key and receipts", "Create API keys"],
+  items: ["Download the desktop app", "Find your license key and receipts", "Create API keys"],
 };
 
 /**

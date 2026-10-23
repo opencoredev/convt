@@ -12,6 +12,7 @@ import { logTransport } from "@convt/mail";
 import { sql } from "drizzle-orm";
 
 import { loadCatalog } from "../catalog";
+import { marketingDisabled } from "../marketing";
 import type { BillingContext } from "../context";
 import { resolveOutbox } from "../outbox";
 import type { BillingProvider } from "../provider";
@@ -48,6 +49,7 @@ try {
         budgetMs: 5000,
         checkoutCookie: "",
       },
+      marketing: marketingDisabled,
       log: console.log,
     } satisfies BillingContext;
     console.log(JSON.stringify(await resolveOutbox(ctx, id, decision)));

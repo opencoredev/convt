@@ -10,7 +10,7 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::VerifyingKey;
 
@@ -38,6 +38,13 @@ pub enum State {
         started: Option<String>,
     },
     TrialEnded,
+    /// Pro access granted by the signed-in account's online trial.
+    AccountTrial {
+        ends_on: String,
+        days_left: i64,
+    },
+    /// Packaged install needs a signed-in account to start its online trial.
+    SignInNeeded,
     Licensed(License),
     /// A valid license whose update window ended before this build was made.
     NotCovered(License),
@@ -47,7 +54,10 @@ impl State {
     pub fn allows_conversion(&self) -> bool {
         matches!(
             self,
-            State::Unrestricted | State::Trial { .. } | State::Licensed(_)
+            State::Unrestricted
+                | State::Trial { .. }
+                | State::AccountTrial { .. }
+                | State::Licensed(_)
         )
     }
 
@@ -60,6 +70,12 @@ impl State {
             }
             State::Trial { days_left: 1, .. } => "Free trial: last day.".into(),
             State::Trial { days_left, .. } => format!("Free trial: {days_left} days left."),
+            State::AccountTrial { days_left: 1, .. } => "Pro trial: last day.".into(),
+            State::AccountTrial { days_left, .. } => format!("Pro trial: {days_left} days left."),
+            State::SignInNeeded => "Sign in to start your free trial.".into(),
+            State::Licensed(l) if l.plan == Plan::Desktop => {
+                format!("Licensed to {} (Desktop), with lifetime updates.", l.email)
+            }
             State::Licensed(l) => format!(
                 "Licensed to {} ({}), with updates until {}.",
                 l.email,
@@ -76,6 +92,7 @@ impl State {
             State::TrialEnded => Some(format!(
                 "Your convt trial has ended. Buy a license at {BUY_URL} to keep converting."
             )),
+            State::SignInNeeded => Some("Sign in to start your free trial.".into()),
             State::NotCovered(license) => Some(format!(
                 "This build is newer than your license covers. Your license covers builds \
                  released up to {}; download one from {DOWNLOAD_URL}, or renew to use this one.",
@@ -294,6 +311,9 @@ pub struct Licensing {
     /// The stored key, read again before each conversion so a key removed
     /// by another client stops counting.
     key: Option<String>,
+    local_trial_enabled: bool,
+    account_trial_ends_on: Option<String>,
+    account_trial_ends_at: Option<SystemTime>,
 }
 
 impl Licensing {
@@ -303,7 +323,13 @@ impl Licensing {
         } else {
             None
         };
-        Self { config, key }
+        Self {
+            config,
+            key,
+            local_trial_enabled: true,
+            account_trial_ends_on: None,
+            account_trial_ends_at: None,
+        }
     }
 
     /// Reads the stored key again.
@@ -317,6 +343,29 @@ impl Licensing {
         self.config.enforce
     }
 
+    /// Packaged desktop builds use the account trial; the CLI keeps its local trial.
+    pub fn disable_local_trial(&mut self) {
+        self.local_trial_enabled = false;
+    }
+
+    /// Sets the current account trial returned by convt.app. No key is stored.
+    pub fn set_account_trial(&mut self, ends_on: Option<String>) {
+        self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
+        self.account_trial_ends_at = None;
+    }
+
+    /// Sets the exact online trial end. Older servers may omit it; those are
+    /// treated conservatively as ending at the start of the display day.
+    pub fn set_account_trial_exact(&mut self, ends_on: Option<String>, ends_at: Option<String>) {
+        if ends_at.is_some() && ends_at.as_deref().and_then(parse_utc_timestamp).is_none() {
+            self.account_trial_ends_on = None;
+            self.account_trial_ends_at = None;
+            return;
+        }
+        self.account_trial_ends_on = ends_on.filter(|date| crate::date::to_days(date).is_some());
+        self.account_trial_ends_at = ends_at.as_deref().and_then(parse_utc_timestamp);
+    }
+
     pub fn build_date(&self) -> &str {
         &self.config.build_date
     }
@@ -327,6 +376,17 @@ impl Licensing {
     }
 
     pub fn state(&self) -> State {
+        if self.config.enforce
+            && let Some(end) = self.account_trial_ends_at
+            && let Ok(remaining) = end.duration_since(SystemTime::now())
+            && remaining > Duration::ZERO
+            && let Some(ends_on) = &self.account_trial_ends_on
+        {
+            return State::AccountTrial {
+                ends_on: ends_on.clone(),
+                days_left: remaining.as_secs().div_ceil(86_400) as i64,
+            };
+        }
         self.state_on(today())
     }
 
@@ -340,7 +400,20 @@ impl Licensing {
                 Err(_) => State::NotCovered(license),
             };
         }
+        if self.account_trial_ends_at.is_none()
+            && let Some(ends_on) = &self.account_trial_ends_on
+            && let Some(end) = date::to_days(ends_on)
+            && today < end
+        {
+            return State::AccountTrial {
+                ends_on: ends_on.clone(),
+                days_left: end - today,
+            };
+        }
         let started = self.trial_started();
+        if !self.local_trial_enabled && started.is_none() {
+            return State::SignInNeeded;
+        }
         let elapsed = started
             .as_deref()
             .and_then(date::to_days)
@@ -428,7 +501,7 @@ impl Licensing {
         }
         self.key = self.config.store.load(LICENSE);
         if let Some(current) = self.license()
-            && current.updates_until >= offered.updates_until
+            && (current.plan == Plan::Desktop || current.updates_until >= offered.updates_until)
         {
             return Ok(Renewed::Kept(current));
         }
@@ -459,6 +532,22 @@ impl Licensing {
     pub fn clear_session(&self) -> Result<(), String> {
         self.config.store.delete(ACCOUNT)
     }
+}
+
+fn parse_utc_timestamp(value: &str) -> Option<SystemTime> {
+    let (date, time) = value.strip_suffix('Z')?.split_once('T')?;
+    let day = crate::date::to_days(date)?;
+    let mut parts = time.split(':');
+    let hour: u64 = parts.next()?.parse().ok()?;
+    let minute: u64 = parts.next()?.parse().ok()?;
+    let second: u64 = parts.next()?.split('.').next()?.parse().ok()?;
+    if hour >= 24 || minute >= 60 || second >= 60 {
+        return None;
+    }
+    let seconds = (day as u64)
+        .checked_mul(86_400)?
+        .checked_add(hour * 3_600 + minute * 60 + second)?;
+    Some(UNIX_EPOCH + Duration::from_secs(seconds))
 }
 
 /// What [`Licensing::offer_key`] did with a key renewal fetched.
@@ -562,6 +651,52 @@ mod tests {
     }
 
     #[test]
+    fn an_account_trial_ends_at_the_exact_timestamp() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        let ends_on = date::from_days(today() + 2);
+        l.set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T23:59:59Z")));
+        assert!(
+            matches!(l.state(), State::AccountTrial { ends_on: ref got, days_left, .. } if got == &ends_on && days_left >= 2)
+        );
+        assert!(l.begin_conversion().is_ok());
+    }
+
+    #[test]
+    fn a_source_build_ignores_an_account_trial() {
+        let f = Fixture::new();
+        let mut l = f.licensing(false);
+        let ends_on = date::from_days(today() + 2);
+        l.set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T23:59:59Z")));
+        assert_eq!(l.state(), State::Unrestricted);
+    }
+
+    #[test]
+    fn an_old_date_only_trial_is_conservative_and_exclusive() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        let ends_on = date::from_days(today() + 2);
+        l.set_account_trial(Some(ends_on.clone()));
+        assert!(matches!(
+            l.state_on(today() + 1),
+            State::AccountTrial { days_left: 1, .. }
+        ));
+        assert!(!matches!(
+            l.state_on(today() + 2),
+            State::AccountTrial { .. }
+        ));
+    }
+
+    #[test]
+    fn a_packaged_install_without_an_account_needs_sign_in() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        l.disable_local_trial();
+        assert_eq!(l.state(), State::SignInNeeded);
+        assert!(!l.state().allows_conversion());
+    }
+
+    #[test]
     fn an_ended_trial_blocks_conversions() {
         let f = Fixture::new();
         let trial = f.dir.path().join("data/trial");
@@ -628,14 +763,14 @@ mod tests {
     fn a_newer_build_than_the_license_covers() {
         let f = Fixture::new();
         let mut l = f.licensing(true);
-        let license = l.activate(&f.key("2026-10-01")).unwrap();
+        let license = l.activate(&pro_key(&f, "2026-10-01")).unwrap();
         let state = l.state();
         assert_eq!(state, State::NotCovered(license));
         assert!(state.blocked_reason().unwrap().contains("2026-10-01"));
         assert!(l.begin_conversion().is_err());
         // The build made on the last covered day is fine.
         let mut l = f.licensing(true);
-        l.activate(&f.key("2026-10-02")).unwrap();
+        l.activate(&pro_key(&f, "2026-10-02")).unwrap();
         assert!(matches!(l.state(), State::Licensed(_)));
     }
 
@@ -807,6 +942,18 @@ mod tests {
         assert!(matches!(l.state(), State::NotCovered(_)));
         l.offer_key(&pro_key(&f, "2026-11-01")).unwrap();
         assert!(matches!(l.state(), State::Licensed(_)));
+    }
+
+    #[test]
+    fn renewal_never_replaces_a_legacy_desktop_key() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        l.activate(&f.key("2026-09-01")).unwrap();
+        assert!(matches!(
+            l.offer_key(&pro_key(&f, "2028-01-01")),
+            Ok(Renewed::Kept(k)) if k.plan == Plan::Desktop
+        ));
+        assert!(matches!(l.state(), State::Licensed(k) if k.plan == Plan::Desktop));
     }
 
     #[test]

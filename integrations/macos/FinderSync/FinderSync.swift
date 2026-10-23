@@ -76,7 +76,10 @@ final class FinderSync: FIFinderSync {
 
         let menu = NSMenu(title: "")
         let root = NSMenuItem(title: "Convert with convt", action: nil, keyEquivalent: "")
-        root.image = NSImage(named: "MenuIconTemplate")
+        // The colored mark, not a template image: Finder copies this menu into
+        // its own process, loses the template flag and draws a template black
+        // on a dark menu.
+        root.image = NSImage(named: "MenuIcon")
         root.submenu = submenu
         menu.addItem(root)
         return menu

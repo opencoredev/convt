@@ -1,0 +1,65 @@
+/* Shared by the framed store screenshots (1280x800) and the promo tile (440x280). */
+@font-face {
+  font-family: "Geist";
+  font-weight: 100 900;
+  src: url("/ext/fonts/geist.woff2") format("woff2");
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  width: 1280px;
+  height: 800px;
+  overflow: hidden;
+}
+body {
+  display: grid;
+  grid-template-columns: 470px 1fr;
+  align-items: center;
+  gap: 56px;
+  padding: 0 72px;
+  background:
+    radial-gradient(700px 500px at 85% 110%, rgb(31 164 99 / 28%), transparent 70%), #0a0b0b;
+  color: #edefee;
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 36px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+h1 {
+  margin: 0;
+  font-size: 46px;
+  font-weight: 500;
+  line-height: 52px;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+p {
+  margin: 18px 0 0;
+  color: #a1a6a3;
+  font-size: 19px;
+  line-height: 29px;
+  text-wrap: pretty;
+}
+.art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+.art img {
+  display: block;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 10%),
+    0 24px 60px rgb(0 0 0 / 60%);
+}

@@ -29,6 +29,7 @@ const mock = createBillingMock({
   publicUrl: process.env.MOCK_PUBLIC_URL || internalUrl,
   accessToken: need("POLAR_ACCESS_TOKEN"),
   resendApiKey: need("RESEND_API_KEY"),
+  sequenzyApiKey: process.env.SEQUENZY_API_KEY || undefined,
   webhook: {
     secret: need("POLAR_WEBHOOK_SECRET"),
     url: process.env.WEBHOOK_URL || null,

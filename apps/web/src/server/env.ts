@@ -110,8 +110,16 @@ export function readEnv(raw: RawEnv): AppEnv {
   };
 }
 
-/** Matches createAuth's real providers and its all-or-nothing local OAuth mock. */
+/**
+ * Matches createAuth's real providers and its all-or-nothing local OAuth mock.
+ * Apple stays off until createAuth registers it (CNV-20); its buttons render only
+ * when this says it is available.
+ */
 export function availableProviders(env: AppEnv) {
   const mock = env.oauthMock !== null && env.github === null && env.google === null;
-  return { github: env.github !== null || mock, google: env.google !== null || mock };
+  return {
+    github: env.github !== null || mock,
+    google: env.google !== null || mock,
+    apple: false,
+  };
 }
