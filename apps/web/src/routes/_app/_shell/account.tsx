@@ -584,10 +584,12 @@ function EmailRow({
                 fail(result);
                 return false;
               }
+              return true;
+            }}
+            onAccepted={() => {
               setStep("view");
               notice("Email changed. Other sessions were signed out.");
-              await router.invalidate();
-              return true;
+              void router.invalidate();
             }}
           />
         </div>

@@ -16,6 +16,8 @@ type Phase = "idle" | "checking" | "rejected" | "error" | "accepted";
 
 // Shake (320 ms) and the digits dropping out (from 240 ms, 180 ms long) finish here.
 const REJECT_MS = 440;
+// The success ring around the last box (45 ms stagger, 450 ms draw) finishes here.
+const ACCEPT_MS = 700;
 
 /**
  * Puts `text`'s digits into `digits` from box `at`, or from the first box when it holds
@@ -56,16 +58,20 @@ export function typedText(previous: string, value: string): string {
  * pasted or autofilled code fills every box. The moment the last box has a digit the
  * code goes to `verify`, once: no Enter and no button. `verify` resolves true when the
  * code was accepted; on false the boxes shake, clear, and focus the first box again.
+ * `onAccepted` runs once the success ring has drawn, for a caller that removes the
+ * input rather than leaving the page.
  */
 export function CodeInput({
   length,
   labelId,
   verify,
+  onAccepted,
   autoFocus = false,
 }: {
   length: number;
   labelId: string;
   verify: (code: string) => Promise<boolean>;
+  onAccepted?: () => void;
   autoFocus?: boolean;
 }) {
   const [digits, setDigits] = useState<string[]>(() => Array.from({ length }, () => ""));
@@ -77,11 +83,15 @@ export function CodeInput({
   // State lags a render behind; this blocks a second submit from the same tick.
   const submitting = useRef(false);
   const rejectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const acceptTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const locked = phase === "checking" || phase === "accepted";
 
   useEffect(() => {
     if (autoFocus) inputs.current[0]?.focus();
-    return () => clearTimeout(rejectTimer.current);
+    return () => {
+      clearTimeout(rejectTimer.current);
+      clearTimeout(acceptTimer.current);
+    };
   }, [autoFocus]);
 
   function focusAt(index: number) {
@@ -102,6 +112,10 @@ export function CodeInput({
     }
     if (accepted) {
       setPhase("accepted");
+      if (onAccepted) {
+        const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        acceptTimer.current = setTimeout(onAccepted, still ? 0 : ACCEPT_MS);
+      }
       return;
     }
     setPhase("rejected");
@@ -204,7 +218,7 @@ export function CodeInput({
       role="group"
       aria-labelledby={labelId}
       aria-busy={phase === "checking"}
-      className="flex [--cell:44px] [--gap:8px] sm:[--cell:52px]"
+      className="flex [--gap:8px] max-sm:@container max-sm:[--cell:min(44px,calc((100cqw_-_5*var(--gap))/6))] sm:[--cell:52px]"
     >
       <div
         data-phase={phase}
