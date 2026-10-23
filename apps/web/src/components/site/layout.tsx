@@ -7,6 +7,7 @@ import { Mark } from "#/components/logo";
 import type { Account } from "#/lib/types";
 
 import { footerColumns } from "./links";
+import { OpenCoreLinks } from "./opencore-links";
 
 /** Width of the public pages' column: 1080px of content plus the side padding. */
 export const siteColumn = "mx-auto w-full max-w-[1120px] px-5";
@@ -75,6 +76,7 @@ function SiteFooter() {
             ))}
           </div>
         </div>
+        <OpenCoreLinks mutedClassName="text-ink-2" />
         <p className="border-t border-line pt-6 text-[13px]/4 text-ink-2">© 2026 convt</p>
       </div>
     </footer>

@@ -3,6 +3,7 @@ import { downloadEntryHref } from "#/lib/sign-in";
 import { LAUNCHED, routes } from "#/lib/site";
 
 import { footerColumns } from "../site/links";
+import { OpenCoreLinks } from "../site/opencore-links";
 import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
 
 export function CallToAction({ signedIn }: { signedIn: boolean }) {
@@ -108,6 +109,7 @@ export function Footer() {
             </div>
           )}
         </div>
+        <OpenCoreLinks mutedClassName="text-land-muted" />
         <div className="flex flex-col gap-2 border-t border-line pt-6 sm:flex-row sm:justify-between">
           <p className="flex gap-4 text-[13px]/[16px] text-land-muted">
             © 2026 convt
