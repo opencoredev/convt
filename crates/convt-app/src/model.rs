@@ -21,6 +21,7 @@ use gpui_kit::{App, Context, Entity, Global, SharedString, SystemNotification, T
 
 use crate::account::Account;
 use crate::cloud::{self, CloudAccess};
+use crate::feedback;
 use crate::history::{History, Outcome, Record, Setup};
 use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
@@ -46,6 +47,8 @@ pub struct Paths {
     /// their own [`Api`] so they never reach the network.
     pub account_url: String,
     pub account_api: Arc<dyn Api>,
+    /// Where the Feedback window sends to. Tests script their own.
+    pub feedback: Arc<dyn feedback::Sender>,
     /// The update check's key, transport and install target. Tests script
     /// their own transport.
     pub update: UpdateConfig,
@@ -62,6 +65,7 @@ impl Paths {
             license: client::Config::from_env(paths::config_dir(), paths::data_dir()),
             account_url: account::account_url(),
             account_api: Arc::new(account::Http::new(&account::account_url())),
+            feedback: Arc::new(feedback::Http::new(&account::account_url())),
             update: UpdateConfig::from_env(),
         }
     }
@@ -262,6 +266,8 @@ pub struct AppState {
     pub license: client::State,
     /// Desktop sign-in and Pro renewal.
     pub account: Account,
+    /// Sends what the Feedback window collects.
+    pub feedback: Arc<dyn feedback::Sender>,
     pub(crate) update_config: UpdateConfig,
     /// What the last update check found.
     pub update: Update,
@@ -419,6 +425,7 @@ impl AppState {
             license: licensing.state(),
             licensing,
             account,
+            feedback: paths.feedback,
             update_config: paths.update,
             update: Update::Idle,
             _update_task: None,

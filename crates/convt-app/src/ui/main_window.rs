@@ -178,6 +178,16 @@ impl MainView {
                         .on_click(
                             cx.listener(|this, _, _, cx| this.set_page(Page::Automations, cx)),
                         ),
+                    )
+                    .child(
+                        nav(
+                            "nav-feedback",
+                            "Send feedback",
+                            IconName::Edit,
+                            false,
+                            None,
+                        )
+                        .on_click(|_, _, cx| super::show_feedback(cx)),
                     ),
             )
             .child(div().flex_1())

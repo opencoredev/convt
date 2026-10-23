@@ -16,3 +16,10 @@ OAUTH_MOCK_URL=http://127.0.0.1:4100
 # to skip tracking. Production sets these in wrangler.jsonc vars.
 # POSTHOG_KEY=phc_...
 # POSTHOG_HOST=https://us.i.posthog.com
+
+# Optional: the Feedback form's PostHog API survey. Needs POSTHOG_KEY too; without
+# both, /api/feedback answers 503. Point POSTHOG_HOST at a local stub to inspect
+# the event instead of sending it.
+# POSTHOG_FEEDBACK_SURVEY_ID=
+# POSTHOG_FEEDBACK_MESSAGE_QUESTION_ID=
+# POSTHOG_FEEDBACK_EMAIL_QUESTION_ID=

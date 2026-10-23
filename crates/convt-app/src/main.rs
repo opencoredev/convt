@@ -11,6 +11,7 @@ mod automation;
 mod clipboard;
 mod clock;
 mod cloud;
+mod feedback;
 mod finder;
 mod history;
 mod instance;

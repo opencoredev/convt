@@ -21,6 +21,7 @@ use gpui_kit::{
 };
 use tempfile::TempDir;
 
+use super::feedback::FeedbackView;
 use super::first_run::{FirstRunView, Question, Screen, Stage};
 use super::main_window::{MainView, Page};
 use super::quick::QuickView;
@@ -28,6 +29,7 @@ use super::settings_window::{SettingsTab, SettingsView};
 use super::{AboutView, FinderGuideView, Open, PopoverView, menus, theme};
 use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::cloud::CloudAccess;
+use crate::feedback::{SendError, Sender};
 use crate::history::Outcome;
 use crate::jobs::JobId;
 use crate::model::{AppState, PackPhase, Paths, Shared};
@@ -48,6 +50,32 @@ struct Fixture {
     api: Arc<TestApi>,
     /// What the update check downloads; scripted, never the network.
     releases: Arc<TestReleases>,
+    /// Where the Feedback window sends; scripted, never the network.
+    feedback: Arc<TestFeedback>,
+}
+
+/// A scripted feedback endpoint that keeps every body it was sent.
+#[derive(Default)]
+struct TestFeedback {
+    sent: Mutex<Vec<serde_json::Value>>,
+    /// The answer to the next sends; `Ok` when unset.
+    answer: Mutex<Option<SendError>>,
+}
+
+impl TestFeedback {
+    fn sent(&self) -> Vec<serde_json::Value> {
+        self.sent.lock().unwrap().clone()
+    }
+}
+
+impl Sender for TestFeedback {
+    fn send(&self, body: &serde_json::Value) -> Result<(), SendError> {
+        self.sent.lock().unwrap().push(body.clone());
+        match self.answer.lock().unwrap().clone() {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
 }
 
 /// A scripted update server. It counts every fetch, so tests can prove a
@@ -453,6 +481,7 @@ impl Fixture {
         let dir = tempfile::tempdir().unwrap();
         let api = Arc::new(TestApi::default());
         let releases = Arc::new(TestReleases::default());
+        let feedback = Arc::new(TestFeedback::default());
         let paths = Paths {
             settings: Some(dir.path().join("settings.toml")),
             history: Some(dir.path().join("history.db")),
@@ -461,6 +490,7 @@ impl Fixture {
             license: license(dir.path()),
             account_url: ACCOUNT_URL.into(),
             account_api: api.clone(),
+            feedback: feedback.clone(),
             update: UpdateConfig {
                 key: Some(update_key().verifying_key()),
                 fetch: releases.clone(),
@@ -489,6 +519,7 @@ impl Fixture {
             app,
             api,
             releases,
+            feedback,
         }
     }
 
@@ -2737,7 +2768,96 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
             cx.new(|cx| PopoverView::new(app, window, cx))
         });
         assert!(shown(cx, popover, "drop-bar"));
+        let app = f.app.clone();
+        let (feedback, _) = open(cx, move |window, cx| {
+            cx.new(|cx| FeedbackView::new(app, window, cx))
+        });
+        assert!(shown(cx, feedback, "feedback-send"));
     }
+}
+
+fn set_textarea(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    input: &Entity<gpui_kit::component::input::TextareaState>,
+    value: &str,
+) {
+    let value = value.to_string();
+    let input = input.clone();
+    cx.update_window(window, |_, window, cx| {
+        input.update(cx, |s, cx| s.set_value(value, window, cx))
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn feedback_sends_the_message_with_the_version_and_platform(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (main, _) = f.main(cx);
+    click(cx, main, "nav-feedback");
+    let (window, view) = window_of::<FeedbackView>(cx);
+    assert!(fits(cx, window, "feedback-send"), "Feedback window");
+
+    // Nothing is sent for an empty message or a bad email.
+    click(cx, window, "feedback-send");
+    assert_eq!(
+        label(cx, window, "error").as_deref(),
+        Some("Write a message first.")
+    );
+    let (message, email) =
+        cx.read(|cx| (view.read(cx).message.clone(), view.read(cx).email.clone()));
+    set_textarea(
+        cx,
+        window,
+        &message,
+        "  WebP to GIF lost the animation.\nCan you look?  ",
+    );
+    set_input(cx, window, &email, "nope");
+    click(cx, window, "feedback-send");
+    assert_eq!(
+        label(cx, window, "error").as_deref(),
+        Some("That email address doesn't look right.")
+    );
+    assert!(f.feedback.sent().is_empty());
+
+    // A server that isn't set up yet keeps the message for another try.
+    *f.feedback.answer.lock().unwrap() = Some(SendError::Unavailable);
+    set_input(cx, window, &email, "ada@example.com");
+    click(cx, window, "feedback-send");
+    wait_for_label(cx, window, "error", |t| {
+        t.starts_with("Feedback isn't set up yet")
+    });
+    cx.read(|cx| {
+        assert!(
+            view.read(cx)
+                .message
+                .read(cx)
+                .value()
+                .contains("WebP to GIF")
+        )
+    });
+
+    *f.feedback.answer.lock().unwrap() = None;
+    click(cx, window, "feedback-send");
+    wait_for_label(cx, window, "feedback-sent", |t| {
+        t == "Thanks for the feedback"
+    });
+    let sent = f.feedback.sent();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(
+        sent[1],
+        serde_json::json!({
+            "source": "desktop",
+            "message": "WebP to GIF lost the animation.\nCan you look?",
+            "email": "ada@example.com",
+            "version": crate::account::VERSION,
+            "platform": crate::feedback::platform(),
+        })
+    );
+    // Done closes the window.
+    click(cx, window, "feedback-done");
+    cx.run_until_parked();
+    assert!(!cx.update(|cx| cx.windows()).contains(&window));
 }
 
 #[gpui_kit::test]
@@ -3467,7 +3587,12 @@ fn text_fields_have_room_for_a_whole_line(cx: &mut TestAppContext) {
     let (quick, _) = f.quick(cli(vec![f.png("a.png")], None, None), cx);
     click(cx, quick, "to-webp");
     click(cx, quick, "file-name-edit");
+    let app = f.app.clone();
+    let (feedback, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FeedbackView::new(app, window, cx))
+    });
     let fields = [
+        (feedback, "feedback-email", theme::FIELD_HEIGHT),
         (settings, "preset-name", theme::FIELD_HEIGHT),
         (settings, "preset-quality", theme::FIELD_HEIGHT),
         (settings, "preset-max-size", theme::FIELD_HEIGHT),

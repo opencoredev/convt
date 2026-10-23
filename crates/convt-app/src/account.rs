@@ -282,7 +282,7 @@ fn device_name() -> String {
     "This computer".into()
 }
 
-fn os_name() -> &'static str {
+pub(crate) fn os_name() -> &'static str {
     match std::env::consts::OS {
         "macos" => "macOS",
         "windows" => "Windows",

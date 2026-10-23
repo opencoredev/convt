@@ -5,6 +5,7 @@
 mod about;
 mod account;
 mod chrome;
+mod feedback;
 mod finder_guide;
 mod first_run;
 mod main_window;
@@ -522,6 +523,17 @@ pub fn show_settings(tab: SettingsTab, cx: &mut App) {
     }) {
         let _ = handle.update(cx, |_, _, cx| view.update(cx, |v, cx| v.set_tab(tab, cx)));
     }
+}
+
+/// Opens the Feedback window, or brings it forward.
+pub fn show_feedback(cx: &mut App) {
+    let app = model::shared(cx);
+    show(
+        size(px(460.), px(500.)),
+        "Send feedback",
+        cx,
+        |window, cx| cx.new(|cx| feedback::FeedbackView::new(app, window, cx)),
+    );
 }
 
 /// Opens the License tab of Settings, with `key` filled in. Keys from links

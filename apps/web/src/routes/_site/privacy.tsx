@@ -78,8 +78,8 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>Things you ask for.</span> Signing in, installing the
-              optional document pack and sending a file to the cloud each happen only when you click
-              to do them.
+              optional document pack, sending a file to the cloud and sending feedback each happen
+              only when you click to do them.
             </>,
           ]}
         />
@@ -265,6 +265,27 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: "feedback",
+    title: "Feedback",
+    body: (
+      <>
+        <p>
+          The Feedback button in the app and on convt.app sends us what you write, the email address
+          if you add one, where you sent it from (app or website), the app version and your
+          operating system. On the website it also sends the address of the page, without anything
+          after a <code>?</code> or <code>#</code>. It goes through convt.app to{" "}
+          <span className={strong}>PostHog</span>, which stores it for us in the United States.
+        </p>
+        <p>
+          Feedback is sent only when you press Send, including when website analytics are off. It is
+          not linked to your visitor ID or your convt account, and PostHog does not record your IP
+          address or location with it. To have it deleted, write to{" "}
+          <TextLink href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</TextLink>.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "providers",
     title: "Who processes data for us",
     body: (
@@ -289,8 +310,8 @@ const sections: LegalSection[] = [
               servers.
             </>,
             <>
-              <span className={strong}>PostHog</span> runs the website analytics described above, in
-              the United States.
+              <span className={strong}>PostHog</span> runs the website analytics and stores the
+              feedback described above, in the United States.
             </>,
             <>
               <span className={strong}>GitHub and Google</span> receive a sign-in request only if

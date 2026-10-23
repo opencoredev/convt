@@ -1260,8 +1260,9 @@ pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     ),
     (
         "network-other",
-        "Anything else waits for your click, such as downloading document support. Files \
-         leave this computer only when you pick Cloud in Quick convert and agree to the upload.",
+        "Anything else waits for your click, such as downloading document support or sending \
+         feedback. Files leave this computer only when you pick Cloud in Quick convert and agree \
+         to the upload.",
     ),
 ];
 

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { HeadContent, Scripts, createRootRoute, useMatches } from "@tanstack/react-router";
 
 import { themeScript, useSystemTheme } from "#/components/app/theme";
+import { FeedbackButton } from "#/components/feedback";
 import { IdentifyUser } from "#/components/identify-user";
 import { PostHogProvider } from "#/components/posthog-provider";
 import { rememberAttribution } from "#/lib/analytics-attribution";
@@ -26,7 +27,7 @@ const Devtools = import.meta.env.DEV
       return {
         default: () => (
           <TanStackDevtools
-            config={{ position: "bottom-right" }}
+            config={{ position: "bottom-left" }}
             plugins={[{ name: "Tanstack Router", render: <TanStackRouterDevtoolsPanel /> }]}
           />
         ),
@@ -78,6 +79,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <PostHogRoot>{children}</PostHogRoot>
+        <FeedbackButton />
         {Devtools && (
           <Suspense fallback={null}>
             <Devtools />
