@@ -25,7 +25,10 @@ function CheckEmailPage() {
   const [status, setStatus] = useState<string | null>(null);
 
   async function verify(code: string) {
-    if (!email) return false;
+    if (!email) {
+      setError("This page lost your email address. Use a different email to start again.");
+      return false;
+    }
     setError(null);
     setStatus(null);
     const result = await signInWithCode(email, code);

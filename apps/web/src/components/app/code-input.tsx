@@ -9,7 +9,8 @@ import { cx } from "./ui";
 
 /**
  * Where the input is in its life. `checking` waits for `verify`; `rejected` plays the
- * shake before the boxes clear; `error` keeps the red ring until the next edit.
+ * shake before the boxes clear, and typing cuts it short; `error` keeps the red ring
+ * until the next edit.
  */
 type Phase = "idle" | "checking" | "rejected" | "error" | "accepted";
 
@@ -76,7 +77,7 @@ export function CodeInput({
   // State lags a render behind; this blocks a second submit from the same tick.
   const submitting = useRef(false);
   const rejectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const locked = phase === "checking" || phase === "rejected" || phase === "accepted";
+  const locked = phase === "checking" || phase === "accepted";
 
   useEffect(() => {
     if (autoFocus) inputs.current[0]?.focus();
@@ -105,28 +106,47 @@ export function CodeInput({
     }
     setPhase("rejected");
     rejectTimer.current = setTimeout(() => {
-      setDigits(Array.from({ length }, () => ""));
-      setRound((n) => n + 1);
-      setPhase("error");
-      submitting.current = false;
+      reset();
       focusAt(0);
     }, REJECT_MS);
   }
 
+  /** Clears the boxes after a wrong code. Returns the empty boxes. */
+  function reset() {
+    clearTimeout(rejectTimer.current);
+    const cleared = Array.from({ length }, () => "");
+    setDigits(cleared);
+    setRound((n) => n + 1);
+    setPhase("error");
+    submitting.current = false;
+    return cleared;
+  }
+
+  /** The boxes an edit starts from: empty, from the first box, while a wrong code clears. */
+  function current(index: number) {
+    return phase === "rejected" ? { from: reset(), at: 0 } : { from: digits, at: index };
+  }
+
   function edit(next: string[], focus: number) {
     setDigits(next);
-    if (phase === "error") setPhase("idle");
+    if (phase === "error" || phase === "rejected") setPhase("idle");
     focusAt(focus);
     if (next.every((digit) => digit !== "")) void submit(next.join(""));
   }
 
   function enter(index: number, text: string) {
-    if (locked) return;
-    const placed = placeDigits(digits, index, text);
+    if (locked || !/\d/.test(text)) return;
+    const { from, at } = current(index);
+    const placed = placeDigits(from, at, text);
     if (placed) edit(placed.digits, placed.focus);
   }
 
   function clear(index: number, focus: number) {
+    if (phase === "rejected") {
+      reset();
+      focusAt(0);
+      return;
+    }
     edit(
       digits.map((digit, i) => (i === index ? "" : digit)),
       focus,
