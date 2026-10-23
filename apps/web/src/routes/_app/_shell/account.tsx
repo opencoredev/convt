@@ -584,13 +584,12 @@ function EmailRow({
                 fail(result);
                 return false;
               }
-              return true;
-            }}
-            onAccepted={() => {
-              setStep("view");
+              // Refresh now, so leaving during the success ring can't keep the old address.
               notice("Email changed. Other sessions were signed out.");
               void router.invalidate();
+              return true;
             }}
+            onAccepted={() => setStep("view")}
           />
         </div>
       ) : null}
