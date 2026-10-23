@@ -23,23 +23,18 @@ function CheckEmailPage() {
   const codeLabelId = useId();
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // A new key clears the boxes after a wrong code.
-  const [attempt, setAttempt] = useState(0);
 
-  async function submit(code: string) {
-    if (!email || busy) return;
-    setBusy(true);
+  async function verify(code: string) {
+    if (!email) return false;
     setError(null);
     setStatus(null);
     const result = await signInWithCode(email, code);
     if (result.ok) {
       window.location.assign(safeRedirect(redirectTo, siteOrigin()));
-      return;
+      return true;
     }
-    setBusy(false);
     setError(result.message);
-    setAttempt((n) => n + 1);
+    return false;
   }
 
   return (
@@ -82,12 +77,7 @@ function CheckEmailPage() {
         <p id={codeLabelId} className="text-[13px]/4 font-medium">
           Or enter the code from the email
         </p>
-        <CodeInput
-          key={attempt}
-          length={signInCodeLength}
-          labelId={codeLabelId}
-          onComplete={submit}
-        />
+        <CodeInput length={signInCodeLength} labelId={codeLabelId} verify={verify} autoFocus />
         <FormError>{error}</FormError>
         <FormStatus>{status}</FormStatus>
       </div>

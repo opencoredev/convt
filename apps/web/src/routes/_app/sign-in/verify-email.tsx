@@ -31,7 +31,6 @@ function VerifyEmailPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [attempt, setAttempt] = useState(0);
 
   async function send() {
     setBusy(true);
@@ -59,16 +58,19 @@ function VerifyEmailPage() {
             Enter the code from the email
           </p>
           <CodeInput
-            key={attempt}
             length={signInCodeLength}
             labelId={codeLabelId}
-            onComplete={async (code) => {
+            autoFocus
+            verify={async (code) => {
               setError(null);
               setStatus(null);
               const result = await verifyEmail(email, code);
-              if (result.ok) return window.location.assign("/dashboard");
+              if (result.ok) {
+                window.location.assign("/dashboard");
+                return true;
+              }
               setError(result.message);
-              setAttempt((n) => n + 1);
+              return false;
             }}
           />
         </div>

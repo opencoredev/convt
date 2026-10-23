@@ -371,3 +371,83 @@ body {
     filter: var(--dont-filter);
   }
 }
+
+/*
+ * The email code boxes (components/app/code-input.tsx). Digits roll up into their box,
+ * the caret glides to the next one, the boxes breathe while the code is checked, a
+ * wrong code shakes and its digits drop out, a right one draws a ring around each box.
+ * Reduced motion keeps the states and drops the movement.
+ */
+.code-ring {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+@keyframes code-digit-in {
+  from {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+}
+
+@keyframes code-digit-out {
+  to {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+}
+
+@keyframes code-wait {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes code-shake {
+  20% {
+    transform: translateX(-6px);
+  }
+  45% {
+    transform: translateX(5px);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+  90% {
+    transform: translateX(1px);
+  }
+}
+
+@keyframes code-ring-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@keyframes code-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .code-digit {
+    animation: code-digit-in 200ms var(--ease-out) both;
+  }
+  .code-row[data-phase="checking"] .code-digit {
+    animation: code-wait 1000ms ease-in-out infinite both;
+  }
+  .code-row[data-phase="rejected"] {
+    animation: code-shake 320ms ease-out;
+  }
+  .code-row[data-phase="rejected"] .code-digit {
+    animation: code-digit-out 180ms var(--ease-out) 240ms both;
+  }
+  .code-ring {
+    animation: code-ring-draw 450ms var(--ease-out) both;
+  }
+  .code-caret {
+    transition: transform 150ms var(--ease-out);
+    animation: code-caret-blink 1100ms steps(1) 500ms infinite;
+  }
+}
