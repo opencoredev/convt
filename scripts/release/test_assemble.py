@@ -1,4 +1,5 @@
-"""Windows public assets include the MSI and the on-demand document pack."""
+"""Public assets include every included platform's on-demand document pack."""
+import hashlib
 import json
 import subprocess
 import sys
@@ -34,6 +35,15 @@ def linux_tree(root: Path, version: str) -> None:
         ).encode(),
     )
     write(root / "macos-release-review" / "convt-macos-arm64.dmg")
+    pack(root / "linux-release-review", version, "linux-x86_64")
+    pack(root / "macos-release-review", version, "macos-arm64")
+
+
+def pack(review: Path, version: str, platform: str, data: bytes = b"pack") -> None:
+    name = f"convt-{version}-{platform}-documents.tar.gz"
+    write(review / name, data)
+    digest = hashlib.sha256(data).hexdigest()
+    write(review / f"{name}.sha256", f"{digest}  {name}\n".encode())
 
 
 class AssembleWindowsDocumentsTest(unittest.TestCase):
@@ -58,11 +68,7 @@ class AssembleWindowsDocumentsTest(unittest.TestCase):
             linux_tree(downloads, "0.2.0")
             windows = downloads / "windows-release-review"
             write(windows / "convt-0.2.0-windows-x86_64.msi", b"msi")
-            write(windows / "convt-0.2.0-windows-x86_64-documents.tar.gz", b"pack")
-            write(
-                windows / "convt-0.2.0-windows-x86_64-documents.tar.gz.sha256",
-                b"deadbeef  convt-0.2.0-windows-x86_64-documents.tar.gz\n",
-            )
+            pack(windows, "0.2.0", "windows-x86_64")
             out = Path(raw) / "release"
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), str(downloads), str(out), "0.2.0", "--include-windows"],
@@ -108,6 +114,43 @@ class AssembleWindowsDocumentsTest(unittest.TestCase):
             )
             self.assertIn("Assembled", result.stdout)
             self.assertFalse((out / "convt-0.2.0-windows-x86_64-documents.tar.gz").exists())
+            for platform in ("linux-x86_64", "macos-arm64"):
+                name = f"convt-0.2.0-{platform}-documents.tar.gz"
+                self.assertEqual((out / name).read_bytes(), b"pack")
+                self.assertTrue((out / f"{name}.sha256").is_file())
+
+
+class AssembleDocumentPacksTest(unittest.TestCase):
+    def run_assemble(self, downloads: Path, out: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), str(downloads), str(out), "0.2.0"],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_a_platform_without_its_pack_refuses_publication(self) -> None:
+        for review, platform in (
+            ("linux-release-review", "linux-x86_64"),
+            ("macos-release-review", "macos-arm64"),
+        ):
+            for missing in ("", ".sha256"):
+                with tempfile.TemporaryDirectory() as raw, self.subTest(platform=platform, missing=missing):
+                    downloads = Path(raw) / "downloaded"
+                    linux_tree(downloads, "0.2.0")
+                    (downloads / review / f"convt-0.2.0-{platform}-documents.tar.gz{missing}").unlink()
+                    result = self.run_assemble(downloads, Path(raw) / "release")
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(f"Missing {platform} document pack", result.stderr)
+                    self.assertFalse((Path(raw) / "release" / "convt-macos-arm64.dmg").exists())
+
+    def test_a_checksum_that_does_not_match_its_pack_refuses_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            downloads = Path(raw) / "downloaded"
+            linux_tree(downloads, "0.2.0")
+            write(downloads / "macos-release-review" / "convt-0.2.0-macos-arm64-documents.tar.gz", b"other")
+            result = self.run_assemble(downloads, Path(raw) / "release")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not match", result.stderr)
 
 
 if __name__ == "__main__":

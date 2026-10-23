@@ -113,6 +113,19 @@ jobs:
           security import "$RUNNER_TEMP/certificate.p12" -k "$RUNNER_TEMP/release.keychain-db" -P "$PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/release.keychain-db"
           security list-keychains -d user -s "$RUNNER_TEMP/release.keychain-db"
+      # Every build downloads document support from its release, so the pack
+      # is built and pinned before convt (crates/convt-engines/build.rs
+      # refuses a packaged build without it).
+      - name: Build the macOS document pack
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          pack="$RUNNER_TEMP/document-pack"
+          /usr/bin/python3 packaging/macos/build-document-pack.py "$pack/documents.tar.gz" > "$pack.json"
+          read -r installed label < <(/usr/bin/python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["installed_bytes"], r["version"])' "$pack.json")
+          /usr/bin/python3 scripts/release/pack_assets.py publish "$pack/documents.tar.gz" \
+            "$RELEASE_VERSION" packaging/out --platform macos-arm64 \
+            --github-env "$GITHUB_ENV" --pack-version "$label" --installed-size "$installed"
       - name: Build arm64 app and signed notarized image
         env:
           DRY_RUN: ${{ inputs.dry_run }}
@@ -161,7 +174,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-release-review
-          path: packaging/out/convt-macos-arm64.dmg
+          path: |
+            packaging/out/convt-macos-arm64.dmg
+            packaging/out/convt-*-macos-arm64-documents.tar.gz
+            packaging/out/convt-*-macos-arm64-documents.tar.gz.sha256
           if-no-files-found: error
       - name: Remove certificate and keychain
         if: always()

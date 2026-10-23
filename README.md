@@ -11,7 +11,7 @@ Local file conversion for your own machine. Right-click a file, pick a format, a
 - A desktop app built with [GPUI](https://www.gpui.rs), with a Finder menu on macOS and file manager menus on Linux. The Windows Explorer menu is built (`crates/convt-shell`) but not yet in the release installer
 - The `convt` CLI, shipped in the same install
 - Multi-hop routes of at most three steps when no engine can convert directly
-- Optional document pack for Word, Excel and PowerPoint, installed only when you ask
+- Document support for Word, Excel and PowerPoint: a one-time download that setup offers, or that you can add later in Settings
 - A paid cloud API and TypeScript SDK for converting files on convt's servers
 - Accounts, checkout and downloads on [convt.app](https://convt.app)
 

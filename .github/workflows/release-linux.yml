@@ -109,6 +109,20 @@ jobs:
             printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
           fi
           echo "CONVT_UPDATE_SIGNING_KEY=$key" >> "$GITHUB_ENV"
+      # Every build downloads document support from its release, so the pack
+      # is built and pinned before convt (crates/convt-engines/build.rs
+      # refuses a packaged build without it).
+      - name: Build the Linux document pack
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          pack=$(mktemp -d)
+          bash packaging/linux/document-pack.sh "$pack/out" > "$pack/receipt.json"
+          read -r installed label < <(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["installed_bytes"], r["version"])' "$pack/receipt.json")
+          python3 scripts/release/pack_assets.py publish "$pack/out/documents-linux-x86_64.tar.gz" \
+            "$RELEASE_VERSION" "$RUNNER_TEMP/documents" --platform linux-x86_64 \
+            --github-env "$GITHUB_ENV" --pack-version "$label" --installed-size "$installed"
+          rm -rf "${pack:?}"
       - name: Rebuild twice and compare unsigned artifacts
         env:
           DRY_RUN: ${{ inputs.dry_run }}
@@ -127,6 +141,7 @@ jobs:
             "packaging/out/ci-a/$version/convt-$version-source.tar.gz" \
             "packaging/out/ci-a/$version/convt-$version-source-closure.tar.gz"
           rm -rf "$frozen"
+          cp "$RUNNER_TEMP"/documents/convt-*-linux-x86_64-documents.tar.gz* "packaging/out/ci-a/$version/"
       - uses: actions/upload-artifact@v4
         with:
           name: linux-release-review

@@ -147,7 +147,8 @@ if (cmd === "keygen") {
     };
   }
   const artifacts = names.flatMap((name) => {
-    if (name.endsWith("-source.tar.gz")) return [];
+    // Document packs are pinned into each build, not update downloads.
+    if (name.endsWith("-source.tar.gz") || name.endsWith("-documents.tar.gz")) return [];
     let platform: string, kind: string;
     if (name.endsWith(".deb")) {
       platform = "linux-x86_64";

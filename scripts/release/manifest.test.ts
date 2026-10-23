@@ -164,6 +164,9 @@ test("readiness requires empty gaps and source coverage for every artifact platf
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, "convt-linux-x86_64.tar.gz"), "payload");
       writeFileSync(join(dir, "convt-0.1.0-source.tar.gz"), "sources");
+      // Each build pins its document pack; the update manifest never lists one.
+      writeFileSync(join(dir, "convt-0.1.0-linux-x86_64-documents.tar.gz"), "Linux pack");
+      writeFileSync(join(dir, "convt-0.1.0-macos-arm64-documents.tar.gz"), "Mac pack");
       if (mac === true) writeFileSync(join(dir, "convt-macos-arm64.zip"), "Mac payload");
       if (mac === "windows")
         writeFileSync(join(dir, "convt-0.1.0-windows-x86_64.msi"), "Windows MSI");
@@ -173,10 +176,11 @@ test("readiness requires empty gaps and source coverage for every artifact platf
         CONVT_VERIFICATION_ONLY: "",
       });
       expect(result.exitCode).toBe(0);
-      expect(
-        JSON.parse(require("node:fs").readFileSync(join(dir, "release-manifest.json"), "utf8"))
-          .distribution_ready,
-      ).toBe(expected);
+      const manifest = JSON.parse(
+        require("node:fs").readFileSync(join(dir, "release-manifest.json"), "utf8"),
+      );
+      expect(manifest.distribution_ready).toBe(expected);
+      expect(JSON.stringify(manifest.builds)).not.toContain("documents");
       if (!expected) {
         const upload = Bun.spawnSync(["bash", join(import.meta.dir, "upload.sh"), "--upload", dir]);
         expect(upload.exitCode).not.toBe(0);

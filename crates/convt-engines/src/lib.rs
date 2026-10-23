@@ -19,8 +19,11 @@ mod orientation;
 mod orientation_tests;
 pub mod packs;
 pub mod paths;
+// The build script's document-pack check; compiled here only for its tests.
 #[cfg(feature = "pdfium")]
 pub mod pdfium;
+#[cfg(test)]
+mod pin;
 pub mod svg;
 #[cfg(windows)]
 mod windows_acl;

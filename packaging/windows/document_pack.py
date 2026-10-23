@@ -1,73 +1,42 @@
 #!/usr/bin/env python3
-"""Name, checksum and public URL for the Windows document pack.
+"""The Windows document pack's name, checksum and public URL.
 
-Mac and Linux already download document support on demand after the user
-clicks Install (`packs::install_documents`). They have no hosted archive yet,
-so a released build only uses a system LibreOffice. Windows used to embed the
-pack in the MSI. The MSI stays runtime-only; this helper publishes the same
-pinned archive next to it so the existing Download UI can fetch and verify it.
+A Windows-only front for `scripts/release/pack_assets.py`, which names every
+platform's pack the same way. build.ps1 calls this file; the MSI stays
+runtime-only and the app downloads the published archive after Install.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "release"))
+import pack_assets  # noqa: E402
+
+PLATFORM = "windows-x86_64"
+sha256_file = pack_assets.sha256_file
+
 
 def asset_name(version: str) -> str:
-    if not version or any(part for part in version.split(".") if not part.isdigit()):
-        raise ValueError(f"expected stable semver, got {version!r}")
-    return f"convt-{version}-windows-x86_64-documents.tar.gz"
+    return pack_assets.asset_name(version, PLATFORM)
 
 
 def checksum_name(version: str) -> str:
-    return asset_name(version) + ".sha256"
+    return pack_assets.checksum_name(version, PLATFORM)
 
 
 def release_url(version: str, repository: str | None = None) -> str:
-    repo = repository or os.environ.get("GITHUB_REPOSITORY") or "opencoredev/convt"
-    if "/" not in repo or repo.startswith("/") or repo.endswith("/"):
-        raise ValueError(f"expected owner/name repository, got {repo!r}")
-    name = asset_name(version)
-    return f"https://github.com/{repo}/releases/download/v{version}/{name}"
+    return pack_assets.release_url(version, PLATFORM, repository)
 
 
 def public_url(version: str, repository: str | None = None) -> str:
-    if override := os.environ.get("CONVT_DOCUMENT_PACK_URL"):
-        return override
-    return release_url(version, repository)
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return pack_assets.public_url(version, PLATFORM, repository)
 
 
 def publish(archive: Path, version: str, destination: Path) -> dict[str, object]:
-    if not archive.is_file() or archive.stat().st_size == 0:
-        raise SystemExit(f"Document pack archive is missing: {archive}")
-    destination.mkdir(parents=True, exist_ok=True)
-    target = destination / asset_name(version)
-    if archive.resolve() != target.resolve():
-        if target.exists():
-            raise SystemExit(f"Output exists: {target}")
-        archive.replace(target)
-    digest = sha256_file(target)
-    checksum = destination / checksum_name(version)
-    checksum.write_text(f"{digest}  {target.name}\n", encoding="utf-8")
-    return {
-        "url": release_url(version),
-        "name": target.name,
-        "sha256": digest,
-        "size": target.stat().st_size,
-        "checksum": checksum.name,
-    }
+    return pack_assets.publish(archive, version, PLATFORM, destination)
 
 
 def main() -> int:
