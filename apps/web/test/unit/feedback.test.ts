@@ -9,6 +9,7 @@ import {
   type Feedback,
   type FeedbackError,
 } from "../../src/server/feedback";
+import { screenFeedback } from "../../src/server/feedback-route";
 
 const base = {
   BETTER_AUTH_URL: "http://localhost:3000",
@@ -212,4 +213,45 @@ test("control characters in labels become spaces", () => {
     platform: "Linux\nx86_64\u0000",
   });
   expect(parsed.ok && parsed.value.platform).toBe("Linux x86_64");
+});
+
+describe("screenFeedback", () => {
+  const post = (url: string, headers: Record<string, string>, body = '{"message":"hi"}') =>
+    new Request(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+    });
+
+  test("refuses a browser posting from another site", async () => {
+    const r = await screenFeedback(
+      post("https://convt.app/api/feedback", { origin: "https://evil.example" }),
+    );
+    expect(r).toEqual({ status: 403, body: { error: "forbidden" } });
+  });
+
+  test("accepts a browser on either host the site serves", async () => {
+    for (const host of ["https://convt.app", "https://www.convt.app"]) {
+      const r = await screenFeedback(post(`${host}/api/feedback`, { origin: host }));
+      expect(r).toEqual({ value: { message: "hi" } });
+    }
+  });
+
+  test("refuses www posting to the apex, which a browser never does", async () => {
+    const r = await screenFeedback(
+      post("https://convt.app/api/feedback", { origin: "https://www.convt.app" }),
+    );
+    expect(r).toEqual({ status: 403, body: { error: "forbidden" } });
+  });
+
+  test("accepts the desktop app, which sends no Origin", async () => {
+    const r = await screenFeedback(post("https://convt.app/api/feedback", {}));
+    expect(r).toEqual({ value: { message: "hi" } });
+  });
+
+  test("refuses a body over the size cap", async () => {
+    const big = JSON.stringify({ message: "x".repeat(feedbackLimits.body) });
+    const r = await screenFeedback(post("https://convt.app/api/feedback", {}, big));
+    expect(r).toEqual({ status: 413, body: { error: "too_large" } });
+  });
 });

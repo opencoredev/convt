@@ -12,6 +12,7 @@ type Status = { kind: "editing"; error: string | null } | { kind: "sending" } | 
 
 const errors: Record<string, string> = {
   invalid_message: "Write a message first.",
+  too_long: `Keep it under ${MAX_MESSAGE.toLocaleString("en")} characters.`,
   invalid_email: "That email address doesn't look right.",
   rate_limited: "That's a lot of feedback at once. Try again in an hour.",
   unavailable: `Feedback isn't set up yet. Email ${SUPPORT_EMAIL} instead.`,
@@ -52,6 +53,11 @@ export function FeedbackButton() {
   const send = async () => {
     if (message.trim() === "") {
       setStatus({ kind: "editing", error: errors.invalid_message });
+      return;
+    }
+    // Count characters as the server does: an emoji is one, not two UTF-16 units.
+    if ([...message].length > MAX_MESSAGE) {
+      setStatus({ kind: "editing", error: errors.too_long });
       return;
     }
     setStatus({ kind: "sending" });
@@ -148,12 +154,14 @@ export function FeedbackButton() {
                 id={messageId}
                 required
                 rows={5}
-                maxLength={MAX_MESSAGE}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 readOnly={status.kind === "sending"}
                 aria-describedby={noteId}
-                aria-invalid={status.kind === "editing" && status.error === errors.invalid_message}
+                aria-invalid={
+                  status.kind === "editing" &&
+                  (status.error === errors.invalid_message || status.error === errors.too_long)
+                }
                 className={cx(field, "min-h-28 resize-y py-2.5")}
               />
             </div>
