@@ -84,6 +84,7 @@ The repeatable checks are scripts in `apps/web/e2e`, each printing PASS or FAIL 
 ```sh
 cd apps/web
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/sign-in.sh   # code, emailed link, OAuth identities, verify-email
+E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/code-input.sh  # code boxes: keys, paste, one request, wrong code, 320 px, late reply
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/fixtures.sh  # every fixture, 5 pages, 1280 and 390 px, light and dark
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/account.sh   # activate, copy key, rename, change email, connect, sign out
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/billing.sh   # checkout, keys, trial, switch, refund, API, emails, deletion

@@ -87,11 +87,16 @@ export function CodeInput({
   const submitting = useRef(false);
   const rejectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const acceptTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // A reply that lands after the input is gone (Cancel mid-request) must not run
+  // onAccepted, which could close a form opened since.
+  const mounted = useRef(false);
   const locked = phase === "checking" || phase === "accepted";
 
   useEffect(() => {
+    mounted.current = true;
     if (autoFocus) inputs.current[0]?.focus();
     return () => {
+      mounted.current = false;
       clearTimeout(rejectTimer.current);
       clearTimeout(acceptTimer.current);
     };
@@ -113,6 +118,7 @@ export function CodeInput({
     } catch {
       accepted = false;
     }
+    if (!mounted.current) return;
     if (accepted) {
       setPhase("accepted");
       if (onAccepted) {
