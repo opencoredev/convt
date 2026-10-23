@@ -13,6 +13,15 @@ use futures::StreamExt;
 use super::*;
 use crate::jobs::{Queue, Runner, Status, Update};
 
+/// Cloud tests never send feedback.
+struct NoFeedback;
+
+impl crate::feedback::Sender for NoFeedback {
+    fn send(&self, _: &serde_json::Value) -> Result<(), crate::feedback::SendError> {
+        Ok(())
+    }
+}
+
 /// convt.app's side: hands out numbered credentials, or refuses.
 struct Site {
     refuse: Option<ApiError>,
@@ -741,6 +750,7 @@ mod app {
                 store: KeyStore::File(dir.path().join("license.key")),
             },
             account_url: "https://convt.test".into(),
+            feedback: Arc::new(NoFeedback),
             account_api: Arc::new(Site {
                 refuse,
                 issued: Mutex::new(0),
@@ -1029,6 +1039,7 @@ mod live {
             },
             account_url: url.clone(),
             account_api: Arc::new(account::Http::new(&url)),
+            feedback: Arc::new(NoFeedback),
             update: UpdateConfig {
                 key: None,
                 fetch: Arc::new(NoUpdates),

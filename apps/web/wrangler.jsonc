@@ -15,9 +15,9 @@
     "POSTHOG_HOST": "https://us.i.posthog.com",
     // The PostHog API survey that /api/feedback answers, and its two question ids
     // (not secret). Empty: the Feedback form answers "isn't set up yet".
-    "POSTHOG_FEEDBACK_SURVEY_ID": "",
-    "POSTHOG_FEEDBACK_MESSAGE_QUESTION_ID": "",
-    "POSTHOG_FEEDBACK_EMAIL_QUESTION_ID": "",
+    "POSTHOG_FEEDBACK_SURVEY_ID": "01a16ad0-41ba-0000-fdab-40e4b214ca19",
+    "POSTHOG_FEEDBACK_MESSAGE_QUESTION_ID": "5fc2b438-31fc-4e2d-b4a5-587b328431de",
+    "POSTHOG_FEEDBACK_EMAIL_QUESTION_ID": "b67f8465-b886-46d5-ba8b-45050d19c14c",
     "BETTER_AUTH_URL": "https://convt.app",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",

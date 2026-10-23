@@ -6,7 +6,7 @@ use gpui_kit::component::input::{InputState, Textarea, TextareaState};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::theme::{self, primary_button, secondary_button, text};
+use super::theme::{self, Button, secondary_button, text};
 use crate::feedback::{self, SendError};
 use crate::model::AppState;
 
@@ -207,7 +207,8 @@ impl Render for FeedbackView {
             .border_color(p.hairline)
             .when(sent, |d| {
                 d.child(
-                    primary_button("feedback-done", "Done", 13., false)
+                    Button::primary("feedback-done", "Done")
+                        .build(&p)
                         .on_click(|_, window, _| window.remove_window()),
                 )
             })
@@ -217,16 +218,16 @@ impl Render for FeedbackView {
                         .on_click(|_, window, _| window.remove_window()),
                 )
                 .child(
-                    primary_button(
+                    Button::primary(
                         "feedback-send",
                         if sending {
                             "Sending…"
                         } else {
                             "Send feedback"
                         },
-                        13.,
-                        sending,
                     )
+                    .disabled(sending)
+                    .build(&p)
                     .on_click(cx.listener(|this, _, _, cx| this.send(cx))),
                 )
             });

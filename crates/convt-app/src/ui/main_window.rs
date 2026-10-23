@@ -180,14 +180,8 @@ impl MainView {
                         ),
                     )
                     .child(
-                        nav(
-                            "nav-feedback",
-                            "Send feedback",
-                            IconName::Edit,
-                            false,
-                            None,
-                        )
-                        .on_click(|_, _, cx| super::show_feedback(cx)),
+                        nav("nav-feedback", "Send feedback", IconName::Edit, false, None)
+                            .on_click(|_, _, cx| super::show_feedback(cx)),
                     ),
             )
             .child(div().flex_1())
