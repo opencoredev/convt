@@ -4705,6 +4705,37 @@ fn a_preset_for_another_target_drops_install_and_convert(cx: &mut TestAppContext
 }
 
 #[gpui_kit::test]
+fn a_preset_for_a_pack_target_converts_on_this_computer(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs);
+    save_preset(
+        &f,
+        cx,
+        "word",
+        Preset {
+            to: Some("docx".into()),
+            options: Options::default(),
+        },
+    );
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+    let (window, view) = f.quick(cli(vec![pdf], Some("png"), None), cx);
+    click(cx, window, "where-cloud");
+    click(cx, window, "cloud-consent-agree");
+    cx.read(|cx| assert!(view.read(cx).cloud));
+    click(cx, window, "preset-word");
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.to.map(|f| f.id), Some("docx"));
+        assert!(!v.cloud, "pack targets convert locally once installed");
+    });
+}
+
+#[gpui_kit::test]
 fn the_pack_stays_while_a_pdf_becomes_word(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks {
         pdf: true,

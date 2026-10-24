@@ -327,6 +327,20 @@ impl QuickView {
             .update(cx, |s, cx| s.set_value(name, window, cx));
     }
 
+    /// Makes `to` the target, from a card or a preset.
+    fn set_target(&mut self, to: &'static Format) {
+        if self.to != Some(to) {
+            // Install & Convert was for the other target.
+            self.convert_when_ready = false;
+        }
+        self.to = Some(to);
+        if self.targets.pack.contains(&to) {
+            self.waited_for_pack = true;
+            // The pack's targets convert on this computer once it's in.
+            self.cloud = false;
+        }
+    }
+
     pub(super) fn pick(
         &mut self,
         to: &'static Format,
@@ -334,16 +348,7 @@ impl QuickView {
         cx: &mut Context<Self>,
     ) {
         let changed = self.to != Some(to);
-        self.to = Some(to);
-        if self.targets.pack.contains(&to) {
-            self.waited_for_pack = true;
-            // The pack's targets convert on this computer once it's in.
-            self.cloud = false;
-        }
-        if changed {
-            // Install & Convert was for the other target.
-            self.convert_when_ready = false;
-        }
+        self.set_target(to);
         // Size means something else for each kind of target.
         if changed {
             self.size = self.preset_size();
@@ -360,12 +365,8 @@ impl QuickView {
                 self.options = options;
                 self.error = None;
                 if let Some(to) = to {
-                    if self.to != Some(to) {
-                        // Install & Convert was for the other target.
-                        self.convert_when_ready = false;
-                    }
                     if self.targets.formats.contains(&to) {
-                        self.to = Some(to);
+                        self.set_target(to);
                         self.reset_name(window, cx);
                     } else {
                         self.to = None;
