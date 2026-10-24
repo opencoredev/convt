@@ -761,7 +761,7 @@ mod tests {
             seed ^= seed << 13;
             seed ^= seed >> 17;
             seed ^= seed << 5;
-            let n = (seed % 48) as u32;
+            let n = seed % 48;
             image::Rgb([
                 ((x * 255 / w) + n).min(255) as u8,
                 ((y * 255 / h) + n).min(255) as u8,

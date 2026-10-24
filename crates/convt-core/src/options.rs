@@ -86,7 +86,7 @@ pub fn parse_size(s: &str) -> Result<u64> {
 /// Formats bytes the way [`parse_size`] reads them: `10MB`, `500KB`, `1234B`.
 pub fn format_size(bytes: u64) -> String {
     for (unit, scale) in [("GB", 1_000_000_000), ("MB", 1_000_000), ("KB", 1000)] {
-        if bytes >= scale && bytes % scale == 0 {
+        if bytes >= scale && bytes.is_multiple_of(scale) {
             return format!("{}{unit}", bytes / scale);
         }
     }
@@ -117,7 +117,7 @@ pub struct Timestamp {
 
 impl Timestamp {
     pub fn from_secs_f64(secs: f64) -> Option<Self> {
-        (secs.is_finite() && secs >= 0.0 && secs < 1e12).then(|| Timestamp {
+        (0.0..1e12).contains(&secs).then(|| Timestamp {
             millis: (secs * 1000.0).round() as u64,
         })
     }
