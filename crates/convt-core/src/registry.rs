@@ -126,21 +126,21 @@ impl Registry {
                 if d > 0 && media(edge.1.to) && !media(from) {
                     continue;
                 }
-                // Pictures and media never become documents by way of a PDF:
-                // a photo is not offered TXT or DOCX, nor a video a PDF of its
-                // first frame. Images may still reach PDF through PNG.
+                // Text pulled out of a PDF is only offered for PDFs: a photo,
+                // a spreadsheet or a slide deck is not offered TXT or DOCX by
+                // way of the PDF made from it. Images may still reach PDF
+                // through PNG, but a video never offers a PDF of its first
+                // frame.
                 let document = |f: &Format| {
                     matches!(
                         f.category,
                         Category::Document | Category::Spreadsheet | Category::Presentation
                     )
                 };
-                let visual =
-                    media(from) || matches!(from.category, Category::Image | Category::Vector);
-                if d > 0
-                    && visual
-                    && (document(edge.1.to) || edge.1.to.category == Category::Pdf && media(from))
-                {
+                if d > 0 && edge.1.from.category == Category::Pdf && document(edge.1.to) {
+                    continue;
+                }
+                if d > 0 && media(from) && edge.1.to.category == Category::Pdf {
                     continue;
                 }
                 if !depth.contains_key(target) {
@@ -633,6 +633,35 @@ mod tests {
         // A video's first frame is not a PDF either.
         assert!(r.plan(f("mp4"), f("png")).is_ok());
         assert!(r.plan(f("mp4"), f("pdf")).is_err());
+    }
+
+    #[test]
+    fn only_pdfs_offer_the_text_pulled_out_of_a_pdf() {
+        let mut r = document_registry();
+        // LibreOffice also reads spreadsheets and slides, but writes only
+        // their own kind and PDF.
+        r.register(Arc::new(Fake(
+            "office2",
+            0,
+            vec![
+                ("xlsx", "pdf"),
+                ("xlsx", "csv"),
+                ("csv", "pdf"),
+                ("csv", "xlsx"),
+                ("pptx", "pdf"),
+                ("pptx", "odp"),
+            ],
+        )));
+        let ids = |from| r.targets(f(from)).iter().map(|t| t.id).collect::<Vec<_>>();
+        assert_eq!(ids("xlsx"), ["jpeg", "png", "webp", "pdf", "csv"]);
+        assert_eq!(ids("csv"), ["jpeg", "png", "webp", "pdf", "xlsx"]);
+        assert_eq!(ids("pptx"), ["jpeg", "png", "webp", "pdf", "odp"]);
+        // A word processor file keeps its direct text steps.
+        assert_eq!(
+            r.plan(f("docx"), f("txt")).unwrap().describe(),
+            "docx -[office]-> txt"
+        );
+        assert!(r.plan(f("pdf"), f("docx")).is_ok());
     }
 
     struct Missing(Fake);
