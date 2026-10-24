@@ -2372,8 +2372,16 @@ fn yes_to_documents_installs_the_pack(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Question(Question::Documents)));
     assert_eq!(
         label(cx, window, "onboarding-title").as_deref(),
-        Some("Convert PDFs and documents too?")
+        Some("Convert Word, Excel and PowerPoint files too?")
     );
+    // What the pack adds, what works without it, and the size.
+    let detail = label(cx, window, "question-detail").unwrap();
+    assert!(
+        detail.starts_with("Adds Word, Excel, PowerPoint and OpenDocument files"),
+        "{detail}"
+    );
+    assert!(detail.ends_with("One 150 MB download."), "{detail}");
+    assert!(!detail.contains('—'), "no em dashes: {detail}");
     // The arrow keys move between the tiles; nothing downloads until a pick.
     cx.simulate_keystrokes(window, "right");
     cx.read(|cx| assert!(!view.read(cx).yes));
