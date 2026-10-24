@@ -343,9 +343,13 @@ impl QuickView {
         if audio_applies(to) {
             options.strip_audio = self.strip_audio;
         }
-        if target_size_applies(to) {
-            options.target_size = self.target_size;
-        }
+        // Where the row is hidden (WAV, FLAC), a preset's limit would only
+        // make the conversion fail, with nothing in the window to clear it.
+        options.target_size = if target_size_applies(to) {
+            self.target_size
+        } else {
+            None
+        };
         if media(to) {
             options.strip_metadata = self.strip_metadata;
         }

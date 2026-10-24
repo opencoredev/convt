@@ -39,8 +39,9 @@ pub struct Options {
         deserialize_with = "size_from_toml"
     )]
     pub target_size: Option<u64>,
-    /// Leave EXIF, XMP, ICC and container metadata out of the output.
-    /// Images are rotated to their EXIF orientation first.
+    /// Leave EXIF, XMP, GPS and container metadata out of the output. Color
+    /// profiles stay, since dropping one changes the colors. Images are
+    /// rotated to their EXIF orientation first.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub strip_metadata: bool,
     /// Where video and audio output starts in the input.
@@ -270,6 +271,9 @@ impl Options {
         }
         if self.fps.is_some_and(|f| !(1..=120).contains(&f)) {
             return bad("fps must be between 1 and 120");
+        }
+        if self.trim_end.is_some_and(|end| end.millis == 0) {
+            return bad("trim end must be after the start of the file");
         }
         if let (Some(start), Some(end)) = (self.trim_start, self.trim_end)
             && end <= start
@@ -710,6 +714,7 @@ mod tests {
         assert_eq!(p.options.fps, Some(24));
         assert_eq!(Preset::parse(&p.to_toml()).unwrap(), p);
         assert!(Preset::parse("trim_start = 10\ntrim_end = 5").is_err());
+        assert!(Preset::parse("trim_end = 0").is_err());
         assert!(Preset::parse("fps = 0").is_err());
         assert!(Preset::parse("fps = 500").is_err());
     }

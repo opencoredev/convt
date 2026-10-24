@@ -85,12 +85,19 @@ pub(crate) fn apply_background(
     }
 }
 
-/// Applies a chosen background color to the PNG at `path` in place, for
-/// engines that get PNG from an outside tool (FFmpeg, macOS `sips`). The
-/// rewrite keeps only the color tags, so it also drops EXIF and text chunks
-/// for `strip_metadata`. Otherwise the file is left alone, since PNG keeps
-/// transparency.
+/// Applies the options to the PNG at `path` in place, for engines that get
+/// PNG from an outside tool (FFmpeg, macOS `sips`, resvg): a chosen
+/// background color, `strip_metadata` (the rewrite keeps only the color
+/// tags, dropping EXIF and text chunks) and `target_size`. With none of
+/// them the file is left alone.
 pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
+    if let Some(target) = options.target_size
+        && std::fs::metadata(path)?.len() > target
+    {
+        // Only dimensions can make a PNG smaller; encode() searches them.
+        let img = image::open(path).map_err(failed)?;
+        return encode(img, "png", options, path);
+    }
     if !matches!(options.background, Some(Background::Color(_))) && !options.strip_metadata {
         return Ok(());
     }
@@ -118,6 +125,33 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
             info.color_type = png::ColorType::Grayscale;
             info.bit_depth = png::BitDepth::Eight;
             gray.into_raw()
+        }
+        // Without a color, transparency survives the rewrite.
+        DynamicImage::ImageLumaA8(gray) => {
+            info.color_type = png::ColorType::GrayscaleAlpha;
+            info.bit_depth = png::BitDepth::Eight;
+            gray.into_raw()
+        }
+        DynamicImage::ImageLumaA16(gray) => {
+            info.color_type = png::ColorType::GrayscaleAlpha;
+            info.bit_depth = png::BitDepth::Sixteen;
+            gray.into_raw()
+                .into_iter()
+                .flat_map(u16::to_be_bytes)
+                .collect()
+        }
+        DynamicImage::ImageRgba16(rgba) => {
+            info.color_type = png::ColorType::Rgba;
+            info.bit_depth = png::BitDepth::Sixteen;
+            rgba.into_raw()
+                .into_iter()
+                .flat_map(u16::to_be_bytes)
+                .collect()
+        }
+        img if img.color().has_alpha() => {
+            info.color_type = png::ColorType::Rgba;
+            info.bit_depth = png::BitDepth::Eight;
+            img.to_rgba8().into_raw()
         }
         DynamicImage::ImageRgb16(rgb) => {
             info.color_type = png::ColorType::Rgb;
@@ -233,7 +267,8 @@ pub(crate) fn encode_with_pixel_aspect(
         Some(target) => {
             let (w, h) = (img.width(), img.height());
             let mut best = None;
-            fit_target(target, to, options.quality, w.max(h), |quality, edge| {
+            let cap = options.quality.unwrap_or(default_quality(to));
+            fit_target(target, to, Some(cap), w.max(h), |quality, edge| {
                 let scaled = match edge {
                     Some(edge) => &img.resize(edge, edge, FilterType::Lanczos3),
                     None => &img,
@@ -356,6 +391,14 @@ pub(crate) fn fit_target(
     })
 }
 
+/// The quality `to` encodes at when none is chosen.
+fn default_quality(to: &str) -> u8 {
+    match to {
+        "webp" | "avif" => 80,
+        _ => 90,
+    }
+}
+
 /// Encodes prepared pixels as `to`. `quality` is the user's lossy quality,
 /// or the format's default when unset.
 fn encode_bytes(
@@ -367,7 +410,8 @@ fn encode_bytes(
     let mut w = std::io::Cursor::new(Vec::new());
     match to {
         "jpeg" => {
-            let mut encoder = JpegEncoder::new_with_quality(&mut w, quality.unwrap_or(90));
+            let quality = quality.unwrap_or(default_quality(to));
+            let mut encoder = JpegEncoder::new_with_quality(&mut w, quality);
             if let Some((num, den)) = pixel_aspect {
                 encoder.set_pixel_density(image::codecs::jpeg::PixelDensity {
                     density: (num, den),
@@ -376,11 +420,11 @@ fn encode_bytes(
             }
             DynamicImage::ImageRgb8(img.to_rgb8()).write_with_encoder(encoder)
         }
-        "webp" => return webp(img, quality.unwrap_or(80)),
+        "webp" => return webp(img, quality.unwrap_or(default_quality(to))),
         "avif" => img.write_with_encoder(AvifEncoder::new_with_speed_quality(
             &mut w,
             4,
-            quality.unwrap_or(80),
+            quality.unwrap_or(default_quality(to)),
         )),
         "ico" if img.width() > 256 || img.height() > 256 => {
             img.thumbnail(256, 256).write_to(&mut w, ImageFormat::Ico)
@@ -552,6 +596,47 @@ mod tests {
             image::open(&png).unwrap().to_rgba8().get_pixel(0, 0).0,
             [255; 4]
         );
+    }
+
+    #[test]
+    fn png_rewrites_keep_alpha_and_depth_and_meet_a_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let strip = Options {
+            strip_metadata: true,
+            ..Options::default()
+        };
+        let rgba = dir.path().join("rgba.png");
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([9, 8, 7, 0]))
+            .save(&rgba)
+            .unwrap();
+        background_png(&rgba, &strip).unwrap();
+        let back = image::open(&rgba).unwrap();
+        assert_eq!(back.color(), image::ColorType::Rgba8);
+        assert_eq!(back.to_rgba8().get_pixel(1, 1).0[3], 0);
+
+        let deep = dir.path().join("deep.png");
+        let px = image::Rgba([1000u16, 2000, 3000, 4000]);
+        DynamicImage::ImageRgba16(image::ImageBuffer::from_pixel(4, 4, px))
+            .save(&deep)
+            .unwrap();
+        background_png(&deep, &strip).unwrap();
+        let back = image::open(&deep).unwrap();
+        assert_eq!(back.to_rgba16().get_pixel(0, 0), &px);
+        let gray = dir.path().join("gray.png");
+        image::GrayAlphaImage::from_pixel(4, 4, image::LumaA([50, 0]))
+            .save(&gray)
+            .unwrap();
+        background_png(&gray, &strip).unwrap();
+        assert_eq!(image::open(&gray).unwrap().color(), image::ColorType::La8);
+
+        let big = dir.path().join("big.png");
+        photo(400, 300).save(&big).unwrap();
+        let sized = Options {
+            target_size: Some(40_000),
+            ..Options::default()
+        };
+        background_png(&big, &sized).unwrap();
+        assert!(std::fs::metadata(&big).unwrap().len() <= 40_000);
     }
 
     #[test]
@@ -852,10 +937,13 @@ mod tests {
             target_size: Some(50_000_000),
             ..Options::default()
         };
-        assert_eq!(
-            encoded_len(&img, "jpeg", &roomy),
-            encoded_len(&img, "jpeg", &Options::default())
-        );
+        for to in ["jpeg", "webp"] {
+            assert_eq!(
+                encoded_len(&img, to, &roomy),
+                encoded_len(&img, to, &Options::default()),
+                "{to}"
+            );
+        }
     }
 
     #[test]

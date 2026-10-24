@@ -229,10 +229,21 @@ impl Registry {
         let staging = destination.staging()?;
 
         let n = plan.hops.len() as f32;
+        // Trimming happens once, on the first hop, and only the last hop
+        // aims for the size: an intermediate PNG squeezed to the target
+        // would leave the final image a fraction of its size.
+        let last = plan.hops.len() - 1;
+        let hop_options = |i: usize| Options {
+            target_size: job.options.target_size.filter(|_| i == last),
+            trim_start: job.options.trim_start.filter(|_| i == 0),
+            trim_end: job.options.trim_end.filter(|_| i == 0),
+            ..job.options.clone()
+        };
         // Each file in flight carries the 0-based page it came from.
         let mut current = vec![(input.clone(), 0)];
         for (i, (engine, step)) in plan.hops.iter().enumerate() {
             let k = current.len() as f32;
+            let options = hop_options(i);
             let mut next = Vec::new();
             for (j, (file, page)) in current.iter().enumerate() {
                 if cancel.is_cancelled() {
@@ -244,7 +255,7 @@ impl Registry {
                 let scaled = |p: Option<f32>| {
                     progress(p.map(|p| (base + p.clamp(0.0, 1.0) / k) / n));
                 };
-                let ctx = Ctx::new(*step, &job.options, &scaled, cancel);
+                let ctx = Ctx::new(*step, &options, &scaled, cancel);
                 let produced = match engine.convert(&ctx, file, &out_dir) {
                     Err(_) if cancel.is_cancelled() => return Err(Error::Cancelled),
                     r => r?,
@@ -536,6 +547,62 @@ mod tests {
         // Menus keep offering other formats only.
         assert!(!r.menu_targets(f("png")).contains(&f("png")));
         assert!(r.menu_targets(f("png")).contains(&f("jpeg")));
+    }
+
+    #[test]
+    fn only_the_last_hop_aims_for_the_size_and_only_the_first_trims() {
+        use std::sync::Mutex;
+        struct Spy(
+            &'static str,
+            (&'static str, &'static str),
+            Arc<Mutex<Vec<String>>>,
+        );
+        impl Engine for Spy {
+            fn id(&self) -> &'static str {
+                self.0
+            }
+            fn steps(&self) -> Vec<Step> {
+                vec![Step {
+                    from: f(self.1.0),
+                    to: f(self.1.1),
+                }]
+            }
+            fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
+                let o = ctx.options;
+                self.2.lock().unwrap().push(format!(
+                    "{} size={:?} trim={:?} fps={:?}",
+                    self.0,
+                    o.target_size,
+                    o.trim_start.map(|t| t.millis),
+                    o.fps
+                ));
+                let out = ctx.artifact(out_dir, 0);
+                std::fs::copy(input, &out)?;
+                Ok(vec![out])
+            }
+        }
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut r = Registry::new();
+        r.register(Arc::new(Spy("a", ("mp4", "png"), seen.clone())));
+        r.register(Arc::new(Spy("b", ("png", "webp"), seen.clone())));
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("clip.mp4");
+        std::fs::write(&input, "x").unwrap();
+        let mut job = Job::new(&input, f("webp"));
+        job.options = Options {
+            target_size: Some(50_000),
+            trim_start: Some("2".parse().unwrap()),
+            fps: Some(10),
+            ..Options::default()
+        };
+        r.run(&job, &no_progress, &Cancel::new()).unwrap();
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "a size=None trim=Some(2000) fps=Some(10)",
+                "b size=Some(50000) trim=None fps=Some(10)"
+            ]
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 
-use convt_core::{Ctx, Engine, Error, Options, Result, Step};
+use convt_core::{Ctx, Engine, Error, Result, Step};
 use image::ImageDecoder;
 use libloading::{Library, Symbol};
 
@@ -295,6 +295,14 @@ unsafe fn sym<'l, T>(lib: &'l Library, name: &[u8]) -> Result<Symbol<'l, T>> {
 }
 
 fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
+    decode_with_profile(lib, input).map(|(img, _)| img)
+}
+
+/// Decodes the primary image, with its embedded ICC profile if it has one.
+fn decode_with_profile(
+    lib: &Library,
+    input: &Path,
+) -> Result<(image::DynamicImage, Option<Vec<u8>>)> {
     // Orientation tags are read first so the source file is not held in
     // memory together with the decoded pixel buffer.
     let (heif_ori, file_exif) = {
@@ -330,6 +338,20 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
             free: sym(lib, b"heif_image_handle_release\0")?,
         };
         primary(ctx.ptr, &mut handle.ptr).check()?;
+
+        let profile_size: Symbol<unsafe extern "C" fn(*const Opaque) -> usize> =
+            sym(lib, b"heif_image_handle_get_raw_color_profile_size ")?;
+        let size = profile_size(handle.ptr);
+        let profile = if size == 0 {
+            None
+        } else {
+            let read_profile: Symbol<
+                unsafe extern "C" fn(*const Opaque, *mut c_void) -> HeifError,
+            > = sym(lib, b"heif_image_handle_get_raw_color_profile ")?;
+            let mut bytes = vec![0u8; size];
+            read_profile(handle.ptr, bytes.as_mut_ptr().cast()).check()?;
+            Some(bytes)
+        };
 
         let has_alpha: Symbol<unsafe extern "C" fn(*const Opaque) -> c_int> =
             sym(lib, b"heif_image_handle_has_alpha_channel\0")?;
@@ -401,7 +423,7 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
         {
             img.apply_orientation(exif);
         }
-        Ok(img)
+        Ok((img, profile))
     }
 }
 
@@ -752,7 +774,7 @@ fn encode(lib: &Library, input: &Path, ctx: &Ctx, output: &Path) -> Result<()> {
     crate::image::fit_target(
         target,
         ctx.step.to.id,
-        ctx.options.quality,
+        Some(ctx.options.quality.unwrap_or(90)),
         longest,
         |quality, edge| {
             ctx.check()?;
@@ -993,6 +1015,30 @@ fn encode_depth(
     Ok(EncodeAttempt::Written)
 }
 
+/// Writes `img` as PNG with `profile` in its iCCP chunk.
+fn write_png_with_profile(
+    img: &image::DynamicImage,
+    profile: Option<Vec<u8>>,
+    path: &Path,
+) -> Result<()> {
+    use image::ImageEncoder;
+    let mut out = std::io::BufWriter::new(std::fs::File::create(path)?);
+    let mut encoder = image::codecs::png::PngEncoder::new(&mut out);
+    if let Some(profile) = profile {
+        encoder.set_icc_profile(profile).map_err(failed)?;
+    }
+    encoder
+        .write_image(
+            img.as_bytes(),
+            img.width(),
+            img.height(),
+            img.color().into(),
+        )
+        .map_err(failed)?;
+    out.into_inner().map_err(|e| Error::Io(e.into_error()))?;
+    Ok(())
+}
+
 fn decoder_steps(hevc: bool, av1: bool) -> Vec<Step> {
     let inputs: Vec<_> = [("heic", hevc), ("avif", av1)]
         .into_iter()
@@ -1049,8 +1095,11 @@ impl Engine for LibheifEngine {
             if ctx.step.from == ctx.step.to {
                 // The encoder reads its input with the `image` crate, which
                 // can't open HEIC, so decode to a lossless PNG first.
+                // The encoder reads the PNG's ICC profile, so the colours
+                // (Display P3 on iPhone photos) survive the round trip.
                 let decoded = out_dir.join("decoded.png");
-                crate::image::encode(decode(lib, input)?, "png", &Options::default(), &decoded)?;
+                let (img, profile) = decode_with_profile(lib, input)?;
+                write_png_with_profile(&img, profile, &decoded)?;
                 ctx.check()?;
                 let encoded = encode(lib, &decoded, ctx, &output);
                 let _ = std::fs::remove_file(&decoded);
