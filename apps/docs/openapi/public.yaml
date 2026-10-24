@@ -42,6 +42,9 @@ actions:
         input_format: png
         target_format: webp
         input_bytes: 48213
+        options:
+          quality: 80
+          max_size: 2048
   - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_format
     update:
       description: Format id of the file you upload, such as `png` or `docx`. See [Formats](https://convt.app/docs/reference/formats).
@@ -51,6 +54,9 @@ actions:
   - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.input_bytes
     update:
       description: Exact size of the upload in bytes.
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.options
+    update:
+      description: Optional conversion settings. Leave it out to use the defaults. Settings that don't apply to the target format are ignored.
   - target: $.paths['/v1/jobs'].post.responses['200']
     update:
       description: The job was reserved. Upload the file to `upload_url` next.
@@ -62,6 +68,9 @@ actions:
               status: created
               input_format: png
               target_format: webp
+              options:
+                quality: 80
+                max_size: 2048
               input_bytes: 48213
               attempt: 0
               error_code: null
@@ -76,7 +85,7 @@ actions:
       description: Seconds until `upload_url` stops accepting uploads. Always 900.
   - target: $.paths['/v1/jobs'].post.responses['400']
     update:
-      description: "`unsupported_format` or `file_too_large`."
+      description: "`unsupported_format`, `invalid_options` or `file_too_large`."
       content:
         application/json:
           example:
@@ -265,6 +274,39 @@ actions:
     update: { description: Size you reserved, in bytes. }
   - target: $.components.schemas.Job.properties.expires_at
     update: { description: When the job and its files are deleted, 24 hours after creation. }
+  - target: $.components.schemas.Job.properties.options
+    update:
+      description: "The settings the job converts with, as sent when it was created."
+  - target: $.components.schemas.Options
+    update:
+      description: "Conversion settings. Every field is optional, and an out-of-range value fails with `400 invalid_options` when you create the job."
+  - target: $.components.schemas.Options.properties.quality
+    update:
+      description: "Lossy quality from 1 to 100 for JPEG, WebP, AVIF, HEIC and video output."
+  - target: $.components.schemas.Options.properties.max_size
+    update:
+      description: "Longest edge of image output in pixels. Larger images are scaled down; smaller ones are left alone."
+  - target: $.components.schemas.Options.properties.video_height
+    update:
+      description: "Maximum video height in pixels, an even number. Scales down only and keeps the aspect ratio."
+  - target: $.components.schemas.Options.properties.audio_bitrate
+    update:
+      description: "Audio bitrate in kbit/s, from 8 to 640."
+  - target: $.components.schemas.Options.properties.pages
+    update:
+      description: "PDF pages to render: `2`, `1-3` or `4-` (page 4 to the end)."
+  - target: $.components.schemas.Options.properties.dpi
+    update:
+      description: "Resolution for rendering PDF and SVG pages, from 18 to 1200."
+  - target: $.components.schemas.Options.properties.video_codec
+    update:
+      description: "Encoder for MP4, MOV and MKV output: `h264` (the default) or `hevc`."
+  - target: $.components.schemas.Options.properties.background
+    update:
+      description: "What transparent areas become: `transparent`, `white`, `black` or a color like `#ff8800`. Unset keeps transparency where the format can store it and uses white where it can't. `transparent` fails for formats without transparency, such as JPEG."
+  - target: $.components.schemas.Options.properties.strip_audio
+    update:
+      description: "Leave the audio out of video output."
   - target: $.components.schemas.Error
     update:
       description: Every JSON error has this shape. `code` is stable; `message` is for people and may change.

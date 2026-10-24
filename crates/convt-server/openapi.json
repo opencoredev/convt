@@ -124,6 +124,9 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 2000000000
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/Options"
                   }
                 }
               }
@@ -591,6 +594,9 @@
           "target_format": {
             "type": "string"
           },
+          "options": {
+            "$ref": "#/components/schemas/Options"
+          },
           "input_bytes": {
             "type": ["integer", "null"]
           },
@@ -619,6 +625,51 @@
                 "type": "string"
               }
             }
+          }
+        }
+      },
+      "Options": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "quality": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 100
+          },
+          "max_size": {
+            "type": ["integer", "null"],
+            "minimum": 1
+          },
+          "video_height": {
+            "type": ["integer", "null"],
+            "minimum": 2,
+            "multipleOf": 2
+          },
+          "audio_bitrate": {
+            "type": ["integer", "null"],
+            "minimum": 8,
+            "maximum": 640
+          },
+          "pages": {
+            "type": ["string", "null"],
+            "pattern": "^[1-9][0-9]*(-([1-9][0-9]*)?)?$"
+          },
+          "dpi": {
+            "type": ["integer", "null"],
+            "minimum": 18,
+            "maximum": 1200
+          },
+          "video_codec": {
+            "type": ["string", "null"],
+            "enum": ["h264", "hevc", null]
+          },
+          "background": {
+            "type": ["string", "null"]
+          },
+          "strip_audio": {
+            "type": "boolean",
+            "default": false
           }
         }
       }
