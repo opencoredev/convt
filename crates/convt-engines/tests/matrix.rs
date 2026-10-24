@@ -126,6 +126,10 @@ const REQUIRED_ROUTES: &[(&str, &str, &str)] = &[
     ("gif", "mp4", "ffmpeg"),
     ("pdf", "png", "pdfium"),
     ("pdf", "jpeg", "pdfium"),
+    ("pdf", "txt", "pdfium"),
+    ("pdf", "html", "pdfium"),
+    ("png", "pdf", "pdfium"),
+    ("jpeg", "pdf", "pdfium"),
     ("odt", "docx", "libreoffice"),
     ("html", "docx", "libreoffice"),
     ("html", "doc", "libreoffice"),
@@ -522,7 +526,7 @@ fn full_matrix() {
                             })?
                         };
                         support::validate(fixture, to, &files, &options)?;
-                        if from.category == Category::Pdf {
+                        if from.category == Category::Pdf && to.category == Category::Image {
                             let names: Vec<_> = files
                                 .iter()
                                 .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())

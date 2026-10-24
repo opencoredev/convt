@@ -54,6 +54,19 @@ impl Engine for ImageEngine {
     }
 }
 
+/// Decodes `path` upright: EXIF orientation, as phones write it, is applied
+/// to the pixels.
+pub(crate) fn open_upright(path: &Path) -> Result<DynamicImage> {
+    let mut decoder = ImageReader::open(path)?
+        .with_guessed_format()?
+        .into_decoder()
+        .map_err(failed)?;
+    let orientation = image::ImageDecoder::orientation(&mut decoder).map_err(failed)?;
+    let mut img = DynamicImage::from_decoder(decoder).map_err(failed)?;
+    img.apply_orientation(orientation);
+    Ok(img)
+}
+
 /// Scales `img` down so its longest edge is at most `max`. Never scales up.
 pub(crate) fn fit(img: DynamicImage, max: Option<u32>) -> DynamicImage {
     match max {

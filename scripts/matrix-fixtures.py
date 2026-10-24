@@ -291,7 +291,7 @@ def heif_pixels(path):
         fn('heif_context_free', [c.c_void_p], None)(ctx)
 
 
-def office_check(path, kind):
+def office_check(path, kind, pages=''):
     data = path.read_bytes()
     ext = path.suffix[1:]
     if ext in ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods']:
@@ -327,6 +327,14 @@ def office_check(path, kind):
         assert MARKER in text, 'Marker lost: ' + repr(text)
         if kind == 'Document':
             assert 'Known document text 12345' in text, 'Document text lost'
+        if kind == 'PdfText':
+            # Text from the PDF fixture: the CONVT block and only the
+            # selected pages' markers.
+            assert 'CONVT' in text, 'PDF text lost: ' + repr(text)
+            selected = set(pages.split(','))
+            for number in ['1', '2']:
+                marker = f'{MARKER}_PAGE_{number}'
+                assert (marker in text) == (number in selected), f'Page {number} marker wrong: {text!r}'
 
 
 if __name__ == '__main__':
@@ -350,5 +358,5 @@ if __name__ == '__main__':
             reference = office_convert(path / ('sample.' + target), 'pdf', path / 'reference')
             info = pdf_text(reference)
             assert info['pages'] == 1 and MARKER in info['text'], f'Invalid fixture reference: {info}'
-    elif mode == 'office-check': office_check(path, rest[0])
+    elif mode == 'office-check': office_check(path, *rest)
     else: raise ValueError(mode)
