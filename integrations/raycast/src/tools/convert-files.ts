@@ -54,7 +54,7 @@ export const confirmation: Tool.Confirmation<Input> = async (input) => ({
   ],
 });
 
-/** Convert local files or folders and return each converted file's actual output paths, failure, or cancellation. Never retry successful entries. */
+/** Convert local files or folders and return each converted file's actual output paths, failure, or cancellation, and any folder skipped because nothing in it converts. Never retry successful entries. */
 export default async function tool(input: Input) {
   return convertFiles(await getBinary(), { ...input, jobs: getJobs() });
 }

@@ -52,7 +52,7 @@ Choosing a preset selects its output format when the files support it. Options y
 
 A folder converts every file directly inside it. Turn on **Include subfolders** to convert files in its subfolders too; with an output folder, Convt recreates the subfolder structure there. Hidden files are ignored.
 
-The output formats offered for folders are the ones at least one file inside can reach, combined with the formats every file you selected directly can reach. When you convert, files in a folder that can't become the chosen format are skipped, as `convt` does on the command line. The results list each converted file. To keep the form responsive, target discovery reads up to 10,000 files per folder; Convt still converts every file.
+When you select only folders, the output formats offered are the ones at least one file inside can reach. When you also select files directly, every one of those files must reach the format; folders then add whatever they hold that converts. When you convert, files in a folder that can't become the chosen format are skipped, as `convt` does on the command line. The results list each converted file, and a folder that held nothing for the chosen format shows as skipped. To keep the form responsive, target discovery reads up to 10,000 files per folder; Convt still converts every file.
 
 **Parallel Conversions** in the extension preferences sets how many files convert at once. The default, 1, converts one file at a time. **Auto** lets Convt use one per CPU core. Videos always convert one at a time.
 

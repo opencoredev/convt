@@ -46,9 +46,12 @@ export const OFFICE_FORMAT_IDS: ReadonlySet<string> = new Set([
   "docx",
   "odt",
   "rtf",
+  "txt",
+  "html",
   "xls",
   "xlsx",
   "ods",
+  "csv",
   "ppt",
   "pptx",
   "odp",
@@ -105,7 +108,7 @@ export type ConversionRequest = ConversionOptions & {
 };
 export type ConversionResult =
   | { status: "done"; input: string; outputs: string[] }
-  | { status: "failed" | "cancelled"; input: string; message: string };
+  | { status: "failed" | "cancelled" | "skipped"; input: string; message: string };
 export type ConversionProgress = { input: string; completed: number; total: number; fraction: number | null };
 
 export function expandPath(value: string): string {
@@ -567,6 +570,11 @@ export function parseEvent(line: string): Event {
   throw new Error("Unrecognized Convt event. Update Convt and try again.");
 }
 
+function isInside(folder: string, file: string): boolean {
+  const relative = path.relative(folder, file);
+  return !!relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
 export async function convertFiles(
   binary: string,
   request: ConversionRequest,
@@ -686,8 +694,18 @@ export async function convertFiles(
         ...reported,
         ...selection.sources.filter(({ file }) => !reportedInputs.has(file)).map(({ file }) => missing(file)),
         // Without a summary, Convt stopped before reporting every folder file. With one, a folder
-        // without results had nothing that converts to the target, which Convt skips quietly.
-        ...(finished ? [] : selection.folders.map(({ folder }) => missing(folder))),
+        // without results had nothing that converts to the target, which Convt skips quietly; say so.
+        ...selection.folders
+          .filter(({ folder }) => !finished || !reported.some((result) => isInside(folder, result.input)))
+          .map(({ folder }): ConversionResult =>
+            finished
+              ? {
+                  status: "skipped",
+                  input: folder,
+                  message: `Nothing in this folder converts to ${targetFormat.name}.`,
+                }
+              : missing(folder),
+          ),
       ]);
     });
   });

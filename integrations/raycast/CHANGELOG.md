@@ -2,7 +2,7 @@
 
 ## [Folders, Presets, and More Options] - {PR_MERGE_DATE}
 
-- Convert folders, optionally including subfolders. Output formats come from the files inside, and files that can't convert are skipped.
+- Convert folders, optionally including subfolders. Output formats come from the files inside, and files that can't convert are skipped. A folder with nothing to convert is listed as skipped in the results.
 - Choose a saved Convt preset.
 - Set a background for transparent areas in image outputs.
 - Set a maximum video height, the video codec (H.264 or HEVC), the audio bitrate, or remove audio from videos.

@@ -314,9 +314,11 @@ function Converter({
       );
       push(<Results results={converted} />);
       const done = converted.filter((result) => result.status === "done").length;
+      // A skipped folder isn't a file, but the toast still points to the results that explain it.
+      const total = converted.filter((result) => result.status !== "skipped").length;
       await showToast({
         style: done === converted.length ? Toast.Style.Success : Toast.Style.Failure,
-        title: `${done} of ${converted.length} files converted`,
+        title: `${done} of ${total} files converted`,
         message: done === converted.length ? "Your converted files are ready." : "See results for details.",
       });
     } catch (error) {
@@ -628,10 +630,29 @@ function Converter({
           ))}
         </Form.Dropdown>
       )}
-      {video && <Form.Checkbox id="noAudio" title="Audio" label="Remove audio" value={noAudio} onChange={setNoAudio} />}
+      {video && (
+        <Form.Checkbox
+          id="noAudio"
+          title="Audio"
+          label="Remove audio"
+          value={noAudio}
+          onChange={setNoAudio}
+          info={
+            preset === NO_PRESET
+              ? undefined
+              : "Unchecking keeps the preset's setting: a preset that removes audio still removes it."
+          }
+        />
+      )}
     </Form>
   );
 }
+
+const resultTitle = {
+  failed: "Conversion Failed",
+  cancelled: "Conversion Cancelled",
+  skipped: "Folder Skipped",
+} as const;
 
 function Results({ results }: { results: ConversionResult[] }) {
   const { pop } = useNavigation();
@@ -679,16 +700,18 @@ function Results({ results }: { results: ConversionResult[] }) {
               key={`${index}:${result.input}`}
               title={path.basename(result.input)}
               subtitle={result.message}
-              icon={result.status === "cancelled" ? Icon.XMarkCircle : Icon.Warning}
+              icon={
+                result.status === "cancelled"
+                  ? Icon.XMarkCircle
+                  : result.status === "skipped"
+                    ? Icon.MinusCircle
+                    : Icon.Warning
+              }
               actions={
                 <ActionPanel>
                   <Action.Push
-                    title="Show Error"
-                    target={
-                      <Detail
-                        markdown={`# ${result.status === "cancelled" ? "Conversion Cancelled" : "Conversion Failed"}\n\n${result.message}`}
-                      />
-                    }
+                    title="Show Details"
+                    target={<Detail markdown={`# ${resultTitle[result.status]}\n\n${result.message}`} />}
                   />
                   <Action.CopyToClipboard title="Copy Error" content={result.message} />
                   <Action title="Back to Conversion" icon={Icon.ArrowCounterClockwise} onAction={pop} />

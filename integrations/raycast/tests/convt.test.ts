@@ -43,6 +43,7 @@ const {
   inspectFiles,
   installDocumentPack,
   keepsTransparency,
+  OFFICE_FORMAT_IDS,
   parseEvent,
   parseFormats,
   parsePackProgress,
@@ -595,6 +596,26 @@ test("a folder Convt reports nothing for keeps the CLI's error", async (t) => {
     ],
   );
   assert.ok(results.every((result) => result.status !== "done" && /trial has ended/.test(result.message)));
+});
+
+test("a selected folder with nothing for the target is reported as skipped", async (t) => {
+  const { directory, binary } = await fixture(t, ["single.png", "music/song.wav"]);
+  const results = await convertFiles(binary, {
+    files: [path.join(directory, "single.png"), path.join(directory, "music")],
+    target: "jpeg",
+  });
+  assert.deepEqual(
+    results.map((result) => [result.status, path.basename(result.input)]),
+    [
+      ["done", "single.png"],
+      ["skipped", "music"],
+    ],
+  );
+  assert.equal(results[1].status !== "done" && results[1].message, "Nothing in this folder converts to JPEG.");
+});
+
+test("text, HTML and CSV files count as documents that need the pack", () => {
+  for (const id of ["docx", "txt", "html", "csv", "xlsx", "pptx"]) assert.ok(OFFICE_FORMAT_IDS.has(id), id);
 });
 
 test("refuses a transparent background for formats that can't store transparency", async (t) => {
