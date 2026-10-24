@@ -632,6 +632,21 @@ fn describe(preset: &Preset) -> String {
     if o.strip_audio {
         parts.push("no audio".into());
     }
+    if let Some(bytes) = o.target_size {
+        parts.push(format!("under {}", convt_core::format_size(bytes)));
+    }
+    if o.strip_metadata {
+        parts.push("no metadata".into());
+    }
+    match (o.trim_start, o.trim_end) {
+        (Some(start), Some(end)) => parts.push(format!("{start}s to {end}s")),
+        (Some(start), None) => parts.push(format!("from {start}s")),
+        (None, Some(end)) => parts.push(format!("first {end}s")),
+        (None, None) => {}
+    }
+    if let Some(fps) = o.fps {
+        parts.push(format!("{fps} fps"));
+    }
     if let Some(background) = o.background {
         parts.push(format!("{} background", background.name().to_lowercase()));
     }

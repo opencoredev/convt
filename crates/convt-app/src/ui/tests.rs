@@ -258,11 +258,32 @@ impl Engine for TestOffice {
     }
 }
 
+/// Recompresses PNG into PNG, standing in for the image engine's same-format
+/// step so the tests don't depend on which engines declare one.
+struct TestSquash;
+
+impl Engine for TestSquash {
+    fn id(&self) -> &'static str {
+        "test-squash"
+    }
+    fn steps(&self) -> Vec<convt_core::Step> {
+        let png = format_by_id("png").unwrap();
+        vec![convt_core::Step { from: png, to: png }]
+    }
+    fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> convt_core::Result<Vec<PathBuf>> {
+        let out = ctx.artifact(out_dir, 0);
+        std::fs::copy(input, &out)?;
+        Ok(vec![out])
+    }
+}
+
 /// A scripted document pack: it downloads 150 MB in 10 MB steps, can hold
 /// mid-download, fail as told, and counts every call.
 #[derive(Default)]
 struct TestPacks {
     unconfigured: bool,
+    /// Registers [`TestSquash`], a PNG to PNG step.
+    squash: bool,
     installed: AtomicBool,
     rejected: Mutex<Option<String>>,
     /// How the next install ends; `None` installs.
@@ -365,6 +386,9 @@ impl pack::Backend for TestPacks {
         registry.register(Arc::new(convt_engines::svg::SvgEngine));
         if self.installed.load(Ordering::SeqCst) {
             registry.register(Arc::new(TestOffice));
+        }
+        if self.squash {
+            registry.register(Arc::new(TestSquash));
         }
         registry
     }
@@ -3262,6 +3286,167 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
             (Some(VideoCodec::H264), false)
         );
     });
+}
+
+#[gpui_kit::test]
+fn quick_convert_offers_max_file_size_and_strip_metadata_for_media(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("photo.png");
+    save_preset(
+        &f,
+        cx,
+        "upload",
+        Preset {
+            to: Some("webp".into()),
+            options: Options {
+                target_size: Some(3_500_000),
+                strip_metadata: true,
+                ..Options::default()
+            },
+        },
+    );
+    let (window, view) = f.quick(cli(vec![png], Some("jpeg"), None), cx);
+    click(cx, window, "options-toggle");
+    // Defaults change nothing.
+    assert_eq!(
+        label(cx, window, "target-size").as_deref(),
+        Some("No limit")
+    );
+    assert_eq!(
+        label(cx, window, "strip-metadata").as_deref(),
+        Some("Strip metadata")
+    );
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options(), Options::default()));
+
+    // The menu offers the upload limits, in decimal megabytes.
+    click(cx, window, "target-size");
+    for (value, name) in [
+        ("none", "No limit"),
+        ("2000000", "2MB"),
+        ("8000000", "8MB"),
+        ("10000000", "10MB"),
+        ("25000000", "25MB"),
+        ("50000000", "50MB"),
+    ] {
+        assert_eq!(
+            label(cx, window, &format!("target-size-{value}")).as_deref(),
+            Some(name)
+        );
+    }
+    click(cx, window, "target-size-10000000");
+    click(cx, window, "strip-metadata");
+    assert_eq!(label(cx, window, "target-size").as_deref(), Some("10MB"));
+    cx.read(|cx| {
+        let o = view.read(cx).conversion_options();
+        assert_eq!((o.target_size, o.strip_metadata), (Some(10_000_000), true));
+    });
+    click(cx, window, "strip-metadata");
+    click(cx, window, "target-size");
+    click(cx, window, "target-size-none");
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options(), Options::default()));
+
+    // PDF output is neither media nor bounded by size.
+    if cx.read(|cx| view.read(cx).targets.formats.iter().any(|t| t.id == "pdf")) {
+        click(cx, window, "to-pdf");
+        assert!(!shown(cx, window, "target-size") && !shown(cx, window, "strip-metadata"));
+    }
+
+    // A preset's own limit shows as an extra entry, and both controls load.
+    click(cx, window, "preset-upload");
+    assert_eq!(label(cx, window, "target-size").as_deref(), Some("3500KB"));
+    click(cx, window, "target-size");
+    assert_eq!(
+        label(cx, window, "target-size-3500000").as_deref(),
+        Some("3500KB")
+    );
+    click(cx, window, "target-size-8000000");
+    cx.read(|cx| {
+        let o = view.read(cx).conversion_options();
+        assert_eq!((o.target_size, o.strip_metadata), (Some(8_000_000), true));
+    });
+}
+
+#[gpui_kit::test]
+fn quick_convert_shows_max_file_size_for_video_and_audio(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let clip = f.dir.path().join("clip.mov");
+    std::fs::write(&clip, "not really a movie").unwrap();
+    let (window, view) = f.quick(cli(vec![clip], None, None), cx);
+    let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
+    if !targets.iter().any(|t| t.id == "mp4") || !targets.iter().any(|t| t.id == "mp3") {
+        eprintln!("skipping: no engine converts MOV here (is FFmpeg installed?)");
+        return;
+    }
+    click(cx, window, "to-mp4");
+    click(cx, window, "options-toggle");
+    for to in ["to-mp4", "to-mp3"] {
+        click(cx, window, to);
+        assert!(shown(cx, window, "target-size") && shown(cx, window, "strip-metadata"));
+        click(cx, window, "target-size");
+        click(cx, window, "target-size-25000000");
+        click(cx, window, "strip-metadata");
+        cx.read(|cx| {
+            let o = view.read(cx).conversion_options();
+            assert_eq!((o.target_size, o.strip_metadata), (Some(25_000_000), true));
+        });
+        click(cx, window, "strip-metadata");
+    }
+    click(cx, window, "to-mp4");
+    assert!(shown(cx, window, "keep-audio") && shown(cx, window, "strip-metadata"));
+}
+
+#[gpui_kit::test]
+fn quick_convert_offers_the_files_own_format_without_replacing_it(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        squash: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs);
+    let png = f.png("photo.png");
+    let original = std::fs::read(&png).unwrap();
+    // Opened through a link, typing the real name reaches the same file.
+    let link = f.dir.path().join("link.png");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&png, &link).unwrap();
+    #[cfg(not(unix))]
+    std::fs::copy(&png, &link).unwrap();
+    let (window, view) = f.quick(cli(vec![link.clone()], None, None), cx);
+    cx.read(|cx| {
+        assert!(view.read(cx).targets.formats.iter().any(|t| t.id == "png"));
+    });
+    // Its own format reads as compressing it; others keep their blurb.
+    assert_eq!(label(cx, window, "blurb-png").as_deref(), Some("Compress"));
+    assert_eq!(label(cx, window, "blurb-jpeg").as_deref(), Some("Photos"));
+
+    click(cx, window, "to-png");
+    click(cx, window, "options-toggle");
+    assert!(shown(cx, window, "target-size") && shown(cx, window, "strip-metadata"));
+    let input = cx.read(|cx| view.read(cx).file_name.clone());
+    click(cx, window, "file-name-edit");
+    #[cfg(unix)]
+    {
+        set_input(cx, window, &input, "photo.png");
+        click(cx, window, "convert");
+        assert_eq!(
+            label(cx, window, "file-name-error").as_deref(),
+            Some("That's the original file's name. Pick another one.")
+        );
+        cx.read(|cx| assert!(view.read(cx).jobs.is_empty()));
+    }
+
+    // The suggested name gets a number instead.
+    set_input(cx, window, &input, "link.png");
+    click(cx, window, "convert");
+    let job = f.last_job(cx);
+    wait_for_label(cx, window, &format!("status-{job}"), |s| {
+        s.starts_with("Saved")
+    });
+    assert_eq!(
+        label(cx, window, &format!("status-{job}")).as_deref(),
+        Some("Saved link (1).png")
+    );
+    assert_eq!(std::fs::read(&png).unwrap(), original);
+    assert!(f.dir.path().join("link (1).png").exists());
 }
 
 /// Whether the element is drawn inside the window, not cut off below it.
