@@ -53,7 +53,7 @@ impl Engine for DataEngine {
             ctx.check()?;
             match to {
                 "csv" | "tsv" => write_table(&rows, delimiter(to))?,
-                "json" | "yaml" => write_tree(&rows_to_tree(rows), to)?,
+                "json" | "yaml" => write_tree(&rows_to_tree(rows)?, to)?,
                 "html" => table_html(&rows, &title(input)),
                 "md" => table_markdown(&rows),
                 "txt" => text::aligned_columns(&rows),
@@ -564,13 +564,17 @@ fn header(rows: &[Vec<String>]) -> Vec<String> {
 }
 
 /// One object per row after the header, keyed by the header. Short rows
-/// leave their missing cells out.
-pub fn rows_to_tree(rows: Vec<Vec<String>>) -> Value {
+/// leave their missing cells out. A header with no rows is an error, since
+/// an empty array would lose it.
+pub fn rows_to_tree(rows: Vec<Vec<String>>) -> Result<Value> {
     if rows.is_empty() {
-        return Value::Array(Vec::new());
+        return Ok(Value::Array(Vec::new()));
+    }
+    if rows.len() == 1 {
+        return Err(failed("the table has a header but no rows"));
     }
     let keys = header(&rows);
-    Value::Array(
+    Ok(Value::Array(
         rows.into_iter()
             .skip(1)
             .map(|row| {
@@ -582,7 +586,7 @@ pub fn rows_to_tree(rows: Vec<Vec<String>>) -> Value {
                 )
             })
             .collect(),
-    )
+    ))
 }
 
 /// A table from an array of objects (their keys in first-seen order make the
@@ -707,7 +711,7 @@ mod tests {
     #[test]
     fn csv_to_json_keys_rows_by_header_in_order() {
         let rows = table("zeta,alpha,mid\n1,2,3\n4,5,6\n");
-        let json = write_tree(&rows_to_tree(rows), "json").unwrap();
+        let json = write_tree(&rows_to_tree(rows).unwrap(), "json").unwrap();
         assert_eq!(
             json,
             "[\n  {\n    \"zeta\": \"1\",\n    \"alpha\": \"2\",\n    \"mid\": \"3\"\n  },\n  {\n    \"zeta\": \"4\",\n    \"alpha\": \"5\",\n    \"mid\": \"6\"\n  }\n]\n"
@@ -719,7 +723,11 @@ mod tests {
         let csv = "name,note\n\"Smith, J\",\"said \"\"hi\"\"\nthen left\"\n";
         let rows = table(csv);
         assert_eq!(rows[1], ["Smith, J", "said \"hi\"\nthen left"]);
-        let back = write_table(&tree_to_rows(rows_to_tree(rows.clone())).unwrap(), b',').unwrap();
+        let back = write_table(
+            &tree_to_rows(rows_to_tree(rows.clone()).unwrap()).unwrap(),
+            b',',
+        )
+        .unwrap();
         assert_eq!(back, csv);
         let tsv = write_table(&rows, b'\t').unwrap();
         assert_eq!(read_table(&tsv, b'\t').unwrap(), rows);
@@ -746,7 +754,7 @@ mod tests {
     fn unicode_survives_every_format() {
         let rows = table("名前,emoji\nÅsa,🎉\n");
         for format in ["json", "yaml"] {
-            let text = write_tree(&rows_to_tree(rows.clone()), format).unwrap();
+            let text = write_tree(&rows_to_tree(rows.clone()).unwrap(), format).unwrap();
             assert!(text.contains("Åsa") && text.contains("🎉"), "{text}");
             let back = tree_to_rows(read_tree(format, &text).unwrap()).unwrap();
             assert_eq!(back, rows, "{format}");
@@ -763,9 +771,20 @@ mod tests {
     }
 
     #[test]
+    fn a_header_without_rows_is_an_error() {
+        for csv in ["id,name\n", "id,name"] {
+            let error = rows_to_tree(table(csv)).unwrap_err().to_string();
+            assert!(
+                error.contains("the table has a header but no rows"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
     fn ragged_rows_get_named_columns() {
         let rows = table("a,b\n1\n2,3,4\n");
-        let tree = rows_to_tree(rows);
+        let tree = rows_to_tree(rows).unwrap();
         let json = serde_json::to_string(&tree).unwrap();
         assert_eq!(json, r#"[{"a":"1"},{"a":"2","b":"3","column 3":"4"}]"#);
         let back = tree_to_rows(tree).unwrap();
@@ -781,7 +800,7 @@ mod tests {
 
     #[test]
     fn duplicate_and_blank_headers_stay_distinct() {
-        let json = serde_json::to_string(&rows_to_tree(table("a,a,\n1,2,3\n"))).unwrap();
+        let json = serde_json::to_string(&rows_to_tree(table("a,a,\n1,2,3\n")).unwrap()).unwrap();
         assert_eq!(json, r#"[{"a":"1","a 2":"2","column 3":"3"}]"#);
     }
 
@@ -789,7 +808,7 @@ mod tests {
     fn empty_input_is_an_empty_table() {
         assert!(table("").is_empty());
         assert_eq!(
-            write_tree(&rows_to_tree(Vec::new()), "json").unwrap(),
+            write_tree(&rows_to_tree(Vec::new()).unwrap(), "json").unwrap(),
             "[]\n"
         );
         assert!(
@@ -870,7 +889,11 @@ mod tests {
 
     #[test]
     fn strings_that_look_like_numbers_stay_strings_in_yaml() {
-        let yaml = write_tree(&rows_to_tree(table("zip,flag\n02134,yes\n")), "yaml").unwrap();
+        let yaml = write_tree(
+            &rows_to_tree(table("zip,flag\n02134,yes\n")).unwrap(),
+            "yaml",
+        )
+        .unwrap();
         let back = tree_to_rows(read_tree("yaml", &yaml).unwrap()).unwrap();
         assert_eq!(back[1], ["02134", "yes"], "{yaml}");
     }
