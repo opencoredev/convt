@@ -1,9 +1,15 @@
 //! The document pack in the windows: the card Quick convert shows for
-//! documents nothing can convert yet, and the Documents row in Settings.
+//! documents nothing can convert yet or a target that needs the pack, the
+//! card on Activity, and the Documents row in Settings.
 //!
-//! The Download button is the only way to start a download: its click
-//! handler, [`download_button`], is the one caller of
-//! `AppState::download_pack`. Opening a window or showing a card never does.
+//! A click is the only way to start a download: [`download_button`] builds
+//! every button that does (Download, Try again, Install & Convert), and its
+//! click handler is the one caller of `AppState::download_pack`. Opening a
+//! window or showing a card never does.
+
+use std::rc::Rc;
+
+use convt_core::format_by_id;
 
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
@@ -22,12 +28,93 @@ fn download_label(verb: &str, offer: &pack::Offer) -> String {
     }
 }
 
+/// What a button does after it started the download, such as Quick convert
+/// remembering to convert once the pack is installed.
+pub(super) type After = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// The button that starts the download, the only caller of
-/// `AppState::download_pack`.
-fn download_button(app: &Entity<AppState>, label: String) -> theme::Clickable {
+/// `AppState::download_pack`. A download already running is left alone,
+/// and `after` still runs, so a second click can join it.
+fn download_button(
+    id: &'static str,
+    app: &Entity<AppState>,
+    label: String,
+    disabled: bool,
+    after: Option<After>,
+) -> theme::Clickable {
     let app = app.clone();
-    primary_button("pack-download", label, 13., false)
-        .on_click(move |_, _, cx| app.update(cx, |s, cx| s.download_pack(cx)))
+    primary_button(id, label, 13., disabled).on_click(move |_, window, cx| {
+        if disabled {
+            return;
+        }
+        app.update(cx, |s, cx| s.download_pack(cx));
+        if let Some(after) = &after {
+            after(window, cx);
+        }
+    })
+}
+
+/// Quick convert's main button for a target that needs the pack: it starts
+/// the download (or joins one already running) and then `after`.
+pub(super) fn install_and_convert_button(
+    app: &Entity<AppState>,
+    label: String,
+    disabled: bool,
+    after: After,
+) -> theme::Clickable {
+    download_button("convert", app, label, disabled, Some(after))
+}
+
+/// The marker on a target card that needs the pack.
+pub(super) fn tag(id: SharedString, on: bool, p: &Palette) -> impl IntoElement + use<> {
+    div()
+        .id(id)
+        .test_support()
+        .aria_label("Document pack")
+        .flex()
+        .child(
+            div()
+                .px(px(4.))
+                .rounded(px(3.))
+                .bg(if on { p.window } else { p.chip })
+                .border_1()
+                .border_color(p.chip_border)
+                .child(
+                    text(10., 13., p.secondary)
+                        .font_weight(FontWeight::MEDIUM)
+                        .whitespace_nowrap()
+                        .child("Document pack"),
+                ),
+        )
+}
+
+/// What the pack adds and what works without it, from the registries, so
+/// the words never promise a conversion this build doesn't have.
+pub(super) fn what_it_adds(state: &AppState) -> String {
+    let f = |id| format_by_id(id).expect("a known format");
+    let (pdf, png, txt, docx) = (f("pdf"), f("png"), f("txt"), f("docx"));
+    let mut adds = "Adds Word, Excel, PowerPoint and OpenDocument files".to_string();
+    if state.pack_targets(pdf).contains(&docx) {
+        adds.push_str(", and PDF to Word");
+    }
+    adds.push('.');
+    let now = |from, to| state.registry.targets(from).contains(&to);
+    let free: Vec<&str> = [
+        (now(png, pdf), "images to PDF"),
+        (now(pdf, png), "PDF to images"),
+        (now(pdf, txt), "PDF to text"),
+    ]
+    .into_iter()
+    .filter_map(|(works, what)| works.then_some(what))
+    .collect();
+    let free = match free.as_slice() {
+        [] => return adds,
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    };
+    let mut free = free;
+    free[..1].make_ascii_uppercase();
+    format!("{adds} {free} already work without it.")
 }
 
 fn cancel_button(app: &Entity<AppState>, p: &Palette) -> theme::Clickable {
@@ -169,7 +256,13 @@ fn words(pack: &PackState, mixed: bool) -> Words {
 }
 
 /// The action under the words: Download, Try again, or progress with Cancel.
-fn action(app: &Entity<AppState>, pack: &PackState, p: &Palette) -> Option<AnyElement> {
+/// With `then`, the button converts after installing: Install & Convert.
+fn action(
+    app: &Entity<AppState>,
+    pack: &PackState,
+    then: Option<After>,
+    p: &Palette,
+) -> Option<AnyElement> {
     match &pack.phase {
         PackPhase::Working(step) => {
             // The engines stop until extraction starts.
@@ -189,12 +282,19 @@ fn action(app: &Entity<AppState>, pack: &PackState, p: &Palette) -> Option<AnyEl
             let verb = match (phase, &pack.status) {
                 (PackPhase::Failed(f), _) if f.kind != FailureKind::Cancelled => "Try again",
                 (_, Status::Rejected(_)) => "Download again",
+                _ if then.is_some() => "Install & Convert",
                 _ => "Download",
             };
             Some(
                 div()
                     .flex()
-                    .child(download_button(app, download_label(verb, &pack.offer)))
+                    .child(download_button(
+                        "pack-download",
+                        app,
+                        download_label(verb, &pack.offer),
+                        false,
+                        then,
+                    ))
                     .into_any_element(),
             )
         }
@@ -228,11 +328,13 @@ fn page_icon(p: &Palette) -> Div {
         )
 }
 
-/// Quick convert's card for documents nothing can convert yet. `mixed`:
-/// other files in the selection can convert now.
+/// Quick convert's card for documents nothing can convert yet, or a target
+/// that needs the pack. `mixed`: other files in the selection can convert
+/// now. `then`: a target is picked, so the button installs and converts.
 pub(super) fn card(
     app: &Entity<AppState>,
     mixed: bool,
+    then: Option<After>,
     p: &Palette,
     cx: &App,
 ) -> impl IntoElement + use<> {
@@ -285,20 +387,26 @@ pub(super) fn card(
                         .child(mono(11., 14., p.tertiary).child(detail))
                 }))
                 .children(pack.notice.clone().map(|e| error_text(e, p)))
-                .children(action(app, pack, p).map(|a| div().pt(px(6.)).child(a))),
+                .children(action(app, pack, then, p).map(|a| div().pt(px(6.)).child(a))),
         )
 }
 
 /// The line Quick convert shows once the pack it offered is installed.
-pub(super) fn installed_notice(p: &Palette) -> impl IntoElement + use<> {
+/// `picked`: a target is already picked, so Convert is what's left.
+pub(super) fn installed_notice(picked: bool, p: &Palette) -> impl IntoElement + use<> {
+    let words = if picked {
+        "Document support is installed. Click Convert to finish."
+    } else {
+        "Document support is installed. Pick a format to convert."
+    };
     div()
         .id("pack-done")
         .test_support()
-        .aria_label("Document support is installed. Pick a format to convert.")
+        .aria_label(words)
         .child(
             text(12., 16., p.green)
                 .font_weight(FontWeight::MEDIUM)
-                .child("Document support is installed. Pick a format to convert."),
+                .child(words),
         )
 }
 
@@ -384,11 +492,20 @@ pub(super) fn settings_row(
     // Offer the download where it would help: nothing installed and no
     // LibreOffice on this computer, a failed try, or a rejected pack.
     let offer = match (&pack.phase, &pack.status) {
-        (PackPhase::Working(_), _) => action(app, pack, p),
+        (PackPhase::Working(_), _) => action(app, pack, None, p),
         (_, Status::Installed(_)) => None,
         (_, Status::NotInstalled) if system => None,
-        _ => action(app, pack, p),
+        _ => action(app, pack, None, p),
     };
+    // What the pack is for, while it would still add something.
+    let about = (pack.offer.configured && !system && !installed_status(&pack.status)).then(|| {
+        let adds = what_it_adds(state);
+        div()
+            .id("pack-about")
+            .test_support()
+            .aria_label(SharedString::from(adds.clone()))
+            .child(text(12., 16., p.secondary).child(adds))
+    });
     let detail = match (&pack.phase, &pack.status) {
         (PackPhase::Failed(f), _) if f.kind != FailureKind::Cancelled => Some(f.message.clone()),
         (_, Status::Rejected(reason)) => Some(reason.clone()),
@@ -400,6 +517,7 @@ pub(super) fn settings_row(
         .gap(px(8.))
         .w(px(330.))
         .child(status)
+        .children(about)
         .children(detail.map(|d| {
             div()
                 .id("pack-detail")
@@ -410,4 +528,121 @@ pub(super) fn settings_row(
         .children(offer)
         .children(remove)
         .children(pack.notice.clone().map(|e| error_text(e, p)))
+}
+
+fn installed_status(status: &Status) -> bool {
+    matches!(status, Status::Installed(_))
+}
+
+/// The card on Activity that points at the document pack, for people who
+/// finished setup before it existed or never opened a document. It shows
+/// while the pack would add something and the user hasn't dismissed it,
+/// and follows a download started anywhere.
+pub(super) fn activity_card(
+    app: &Entity<AppState>,
+    on_dismiss: impl Fn(&mut Window, &mut App) + 'static,
+    p: &Palette,
+    cx: &App,
+) -> Option<AnyElement> {
+    let state = app.read(cx);
+    let pack = &state.pack;
+    let working = matches!(pack.phase, PackPhase::Working(_));
+    if state.settings.pack_hint_dismissed && !working {
+        return None;
+    }
+    let done = pack.phase == PackPhase::Done && installed_status(&pack.status);
+    if !(state.pack_worth_offering() || working || done) || pack.removing {
+        return None;
+    }
+    let idle = matches!(pack.phase, PackPhase::Idle)
+        || matches!(&pack.phase, PackPhase::Failed(f) if f.kind == FailureKind::Cancelled);
+    let (title, body, detail) = if done {
+        (
+            "Document support is installed".to_string(),
+            format!(
+                "Word, Excel, PowerPoint and OpenDocument files now convert on {}. Drop one here or right-click it.",
+                theme::this_machine()
+            ),
+            None,
+        )
+    } else if idle && !matches!(pack.status, Status::Rejected(_)) {
+        (
+            "Convert Word, Excel and PowerPoint files".to_string(),
+            format!(
+                "{} It's a one-time download; after that, documents convert offline.",
+                what_it_adds(state)
+            ),
+            None,
+        )
+    } else {
+        let words = words(pack, false);
+        (words.title, words.body, words.detail)
+    };
+    let sizes = sizes_line(&pack.offer);
+    let dismiss = (!working).then(|| {
+        text_button(
+            "pack-hint-dismiss",
+            if done { "Dismiss" } else { "Not now" },
+            p.secondary,
+            12.,
+        )
+        .on_click(move |_, window, cx| on_dismiss(window, cx))
+    });
+    let action = (!done).then(|| action(app, pack, None, p)).flatten();
+    Some(
+        div()
+            .id("pack-hint")
+            .test_support()
+            .aria_label(SharedString::from(title.clone()))
+            .flex()
+            .gap(px(14.))
+            .mb(px(8.))
+            .p(px(14.))
+            .rounded(px(8.))
+            .bg(p.recessed)
+            .border_1()
+            .border_color(p.recessed_border)
+            .child(page_icon(p))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(6.))
+                    .child(
+                        text(13., 16., p.text)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(title),
+                    )
+                    .child(
+                        div()
+                            .id("pack-hint-body")
+                            .test_support()
+                            .aria_label(SharedString::from(body.clone()))
+                            .child(text(12., 17., p.secondary).child(body)),
+                    )
+                    .when(idle && !sizes.is_empty(), |d| {
+                        d.child(mono(11., 14., p.tertiary).truncate().child(sizes))
+                    })
+                    .children(detail.map(|detail| {
+                        div()
+                            .id("pack-detail")
+                            .test_support()
+                            .aria_label(SharedString::from(detail.clone()))
+                            .child(mono(11., 14., p.tertiary).child(detail))
+                    }))
+                    .children(pack.notice.clone().map(|e| error_text(e, p)))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(14.))
+                            .pt(px(4.))
+                            .children(action.map(|a| div().flex_1().child(a)))
+                            .children(dismiss),
+                    ),
+            )
+            .into_any_element(),
+    )
 }

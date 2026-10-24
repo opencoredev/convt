@@ -77,6 +77,9 @@ impl PopoverView {
             super::open_quick(
                 Request {
                     files: added.ask,
+                    // Documents open with their default picked, ready for
+                    // Install & Convert.
+                    to: added.ask_to.map(|f| f.id.to_string()),
                     ..Request::default()
                 },
                 cx,

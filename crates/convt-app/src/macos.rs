@@ -15,16 +15,15 @@
 //! requests, so a link alone never converts anything. See
 //! `integrations/macos/README.md`.
 
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use convt_core::{FORMATS, Registry};
+use convt_core::Registry;
 use futures::channel::mpsc::UnboundedSender;
 use gpui_kit::{App, Entity};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::model::AppState;
 use crate::request::{self, Command, Request, Source};
@@ -50,13 +49,15 @@ static TOOK_REQUEST: AtomicBool = AtomicBool::new(false);
 /// registers the Services menu entry.
 pub fn init(state: &Entity<AppState>, requests: UnboundedSender<Request>, cx: &mut App) {
     services::register(requests);
-    publish(&state.read(cx).registry);
+    // With the pack's targets while it can be downloaded, so documents keep
+    // their menu and a click opens Quick convert with Install & Convert.
+    publish(state.read(cx).menu_registry());
     let mut generation = state.read(cx).registry_generation;
     cx.observe(state, move |state, cx| {
         let state = state.read(cx);
         if state.registry_generation != generation {
             generation = state.registry_generation;
-            publish(&state.registry);
+            publish(state.menu_registry());
         }
     })
     .detach();
@@ -107,57 +108,12 @@ pub fn open_urls(links: Vec<String>) -> (Vec<Request>, Vec<String>) {
     (requests, rest)
 }
 
-#[derive(Serialize)]
-struct TargetList<'a> {
-    version: u32,
-    /// Lowercase extension to format id.
-    extensions: BTreeMap<&'a str, &'a str>,
-    /// Format id to the formats it converts to, in menu order.
-    targets: BTreeMap<&'a str, Vec<Target<'a>>>,
-}
-
-#[derive(Serialize)]
-struct Target<'a> {
-    id: &'a str,
-    name: &'a str,
-    category: String,
-}
-
-fn target_list(registry: &Registry) -> TargetList<'static> {
-    let mut list = TargetList {
-        version: 1,
-        extensions: BTreeMap::new(),
-        targets: BTreeMap::new(),
-    };
-    for format in FORMATS {
-        let targets = registry.menu_targets(format);
-        if targets.is_empty() {
-            continue;
-        }
-        for ext in format.extensions {
-            list.extensions.insert(ext, format.id);
-        }
-        list.targets.insert(
-            format.id,
-            targets
-                .into_iter()
-                .map(|t| Target {
-                    id: t.id,
-                    name: t.name,
-                    category: format!("{:?}", t.category),
-                })
-                .collect(),
-        );
-    }
-    list
-}
-
 fn publish(registry: &Registry) {
     let Some(dir) = cocoa::group_container() else {
         tracing::debug!("no App Group container; not publishing Finder targets");
         return;
     };
-    let json = serde_json::to_vec(&target_list(registry)).expect("serializable");
+    let json = serde_json::to_vec(&crate::finder::target_list(registry)).expect("serializable");
     match crate::settings::write_atomic(&dir.join(TARGETS_FILE), &json) {
         Ok(()) => tracing::debug!(dir = %dir.display(), "published Finder targets"),
         Err(e) => tracing::warn!(error = %e, "could not publish Finder targets"),
@@ -415,18 +371,6 @@ mod tests {
             parse_pluginkit("+    leodev.convt.ConvtFinder(1.0)\n"),
             None
         );
-    }
-
-    #[test]
-    fn target_list_covers_every_convertible_extension() {
-        let list = target_list(&convt_engines::default_registry());
-        assert_eq!(list.extensions.get("jpg"), Some(&"jpeg"));
-        let png = &list.targets["png"];
-        assert!(png.iter().any(|t| t.id == "webp" && t.category == "Image"));
-        assert!(png.iter().all(|t| t.id != "png"));
-        for id in list.extensions.values() {
-            assert!(list.targets.contains_key(id));
-        }
     }
 
     #[test]

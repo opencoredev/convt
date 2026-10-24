@@ -62,6 +62,9 @@ impl MainView {
             super::open_quick(
                 Request {
                     files: added.ask,
+                    // Documents open with their default picked, ready for
+                    // Install & Convert.
+                    to: added.ask_to.map(|f| f.id.to_string()),
                     ..Request::default()
                 },
                 cx,
@@ -196,7 +199,13 @@ impl MainView {
     fn defaults_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let state = self.app.read(cx);
         let defaults = state.settings.defaults.clone();
-        let registry = state.registry.clone();
+        // Documents can default to what the pack would add; Add files then
+        // offers the pack for them.
+        let registry = if state.planned_registry().is_some() {
+            state.planned.clone()
+        } else {
+            state.registry.clone()
+        };
         let chip = |label: String| {
             div()
                 .px(px(8.))
@@ -382,6 +391,19 @@ impl MainView {
                     .map(|e| div().pb(px(8.)).child(error_text(e, p))),
             )
             .children(finder_off.then(|| finder_setup_card(p)))
+            .children(super::pack::activity_card(
+                &self.app,
+                {
+                    let app = self.app.clone();
+                    move |_, cx| {
+                        app.update(cx, |s, cx| {
+                            s.update_settings(|s| s.pack_hint_dismissed = true, cx)
+                        })
+                    }
+                },
+                p,
+                cx,
+            ))
             .when(empty, |d| {
                 d.child(
                     div()

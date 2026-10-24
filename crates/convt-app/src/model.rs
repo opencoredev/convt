@@ -105,6 +105,9 @@ impl Batch {
 pub struct Targets {
     pub formats: Vec<&'static Format>,
     pub unsupported: Vec<PathBuf>,
+    /// The formats in `formats` that some file reaches only with the
+    /// document pack. Empty unless [`targets_with_pack`] made the list.
+    pub pack: Vec<&'static Format>,
 }
 
 pub fn common_targets(registry: &Registry, files: &[PathBuf]) -> Targets {
@@ -126,12 +129,55 @@ pub fn common_targets(registry: &Registry, files: &[PathBuf]) -> Targets {
     out
 }
 
+/// [`common_targets`] plus the formats every file could become with the
+/// document pack, from `planned` (`None` when this build has no pack to
+/// download). `unsupported` still lists the files that can't convert now.
+pub fn targets_with_pack(
+    registry: &Registry,
+    planned: Option<&Registry>,
+    files: &[PathBuf],
+) -> Targets {
+    let mut out = common_targets(registry, files);
+    let Some(planned) = planned else {
+        return out;
+    };
+    let with_pack = common_targets(planned, files);
+    let now: Vec<Vec<&'static Format>> = files
+        .iter()
+        .map(|file| {
+            format_by_extension(file)
+                .map(|f| registry.targets(f))
+                .unwrap_or_default()
+        })
+        .collect();
+    for to in with_pack.formats {
+        let reached = |targets: &Vec<&'static Format>| targets.contains(&to);
+        // Files the pack can't help either are skipped, as without it.
+        let needs_pack = files
+            .iter()
+            .zip(&now)
+            .any(|(file, now)| !reached(now) && !with_pack.unsupported.contains(file));
+        if needs_pack {
+            out.pack.push(to);
+        }
+        if !out.formats.contains(&to) {
+            out.formats.push(to);
+        }
+    }
+    // The registry's order: by kind, then name.
+    out.formats.sort_by_key(|f| (f.category as u8, f.name));
+    out
+}
+
 /// What [`AppState::add_files`] did.
 #[derive(Debug, Default)]
 pub struct Added {
     pub jobs: Vec<JobId>,
     /// Files with no default format they can reach.
     pub ask: Vec<PathBuf>,
+    /// The default every file in `ask` shares and could reach with the
+    /// document pack, so Quick convert opens with it picked.
+    pub ask_to: Option<&'static Format>,
     /// Folders that could not be read, or why the license stopped the batch.
     pub errors: Vec<String>,
 }
@@ -222,6 +268,9 @@ enum PackEvent {
 
 pub struct AppState {
     pub registry: Arc<Registry>,
+    /// [`Self::registry`] as it would be with the document pack, rebuilt
+    /// with it. Only for showing what the pack adds; never run a job with it.
+    pub planned: Arc<Registry>,
     /// Counts registry rebuilds, so windows know to recompute targets.
     pub registry_generation: u64,
     packs: Arc<dyn pack::Backend>,
@@ -276,6 +325,7 @@ impl Global for Shared {}
 impl AppState {
     pub fn new(packs: Arc<dyn pack::Backend>, paths: Paths, cx: &mut Context<Self>) -> Self {
         let registry = Arc::new(packs.registry());
+        let planned = Arc::new(packs.planned_registry());
         let pack = PackState {
             status: packs.status(),
             offer: packs.offer(),
@@ -315,6 +365,7 @@ impl AppState {
         let account = Account::new(paths.account_url, paths.account_api, licensing.session());
         let mut state = Self {
             registry,
+            planned,
             registry_generation: 0,
             packs,
             pack,
@@ -434,6 +485,21 @@ impl AppState {
         self.registry.targets(from).contains(&to).then_some(to)
     }
 
+    /// The default format all of `files` share, when each reaches it only
+    /// with the document pack.
+    fn pack_default(&self, files: &[PathBuf]) -> Option<&'static Format> {
+        let mut shared = None;
+        for file in files {
+            let from = format_by_extension(file)?;
+            let to = self.settings.defaults.get(Kind::of(from)?)?;
+            if shared.is_some_and(|s| s != to) || !self.pack_targets(from).contains(&to) {
+                return None;
+            }
+            shared = Some(to);
+        }
+        shared
+    }
+
     /// Converts files (and the files directly inside folders) to their
     /// default formats right away. Files with no usable default come back in
     /// [`Added::ask`] so the caller can ask what to do with them.
@@ -457,6 +523,7 @@ impl AppState {
                 None => added.ask.push(file),
             }
         }
+        added.ask_to = self.pack_default(&added.ask);
         for (to, files) in groups {
             match self.convert(&files, to, &Options::default(), cx) {
                 Ok(ids) => added.jobs.extend(ids),
@@ -622,6 +689,7 @@ impl AppState {
         self.pack.notice = None;
         // Nothing may start LibreOffice from the folder being deleted.
         self.registry = Arc::new(self.packs.registry_without_documents());
+        self.planned = Arc::new(self.packs.planned_registry());
         self.runner.set_registry(self.registry.clone());
         self.registry_generation += 1;
         let backend = self.packs.clone();
@@ -691,8 +759,49 @@ impl AppState {
     fn rebuild_registry(&mut self) {
         self.pack.status = self.packs.status();
         self.registry = Arc::new(self.packs.registry());
+        self.planned = Arc::new(self.packs.planned_registry());
         self.runner.set_registry(self.registry.clone());
         self.registry_generation += 1;
+    }
+
+    /// The registry with the document pack, when this build has a pack to
+    /// download. A build without one never advertises what it would add.
+    pub fn planned_registry(&self) -> Option<&Registry> {
+        self.pack.offer.configured.then_some(&*self.planned)
+    }
+
+    /// What `files` can become now or after installing the document pack.
+    pub fn targets_with_pack(&self, files: &[PathBuf]) -> Targets {
+        targets_with_pack(&self.registry, self.planned_registry(), files)
+    }
+
+    /// The formats a file of `from` reaches only with the document pack.
+    pub fn pack_targets(&self, from: &'static Format) -> Vec<&'static Format> {
+        let Some(planned) = self.planned_registry() else {
+            return Vec::new();
+        };
+        let now = self.registry.targets(from);
+        planned
+            .targets(from)
+            .into_iter()
+            .filter(|to| !now.contains(to))
+            .collect()
+    }
+
+    /// The registry right-click menus are built from: with the document
+    /// pack's targets when it can be downloaded, so a document still gets
+    /// its menu and the click lands on the pack's offer.
+    #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
+    pub fn menu_registry(&self) -> &Registry {
+        self.planned_registry().unwrap_or(&self.registry)
+    }
+
+    /// Whether to point people at the document pack: this build can download
+    /// it and nothing on this computer converts documents yet.
+    pub fn pack_worth_offering(&self) -> bool {
+        self.pack.offer.configured
+            && !matches!(self.pack.status, pack::Status::Installed(_))
+            && !self.documents_supported()
     }
 
     /// Switches an automation rule on or off. Only the setting changes: no
