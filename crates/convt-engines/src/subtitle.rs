@@ -107,7 +107,13 @@ fn timestamp(s: &str) -> Option<u64> {
         return None;
     }
     let ms: u64 = format!("{fraction:0<3}")[..3].parse().ok()?;
-    Some(((h * 60 + m) * 60 + sec) * 1000 + ms)
+    // An absurd hour count would overflow; it is just unreadable timing.
+    h.checked_mul(60)?
+        .checked_add(m)?
+        .checked_mul(60)?
+        .checked_add(sec)?
+        .checked_mul(1000)?
+        .checked_add(ms)
 }
 
 /// The start and end of a timing line. Anything after the end (WebVTT cue
@@ -411,6 +417,20 @@ mod tests {
             srt,
             "1\n00:01:02,500 --> 00:01:04,000\nHi there & <you>\n\n2\n00:01:05,000 --> 00:01:06,000\n<i>Loud</i> later\n\n"
         );
+    }
+
+    #[test]
+    fn huge_hours_are_unreadable_timing_not_a_crash() {
+        let srt = "1\n99999999999999999:00:00,000 --> 99999999999999999:00:01,000\nHi\n";
+        let error = parse_srt(srt).unwrap_err().to_string();
+        assert!(error.contains("line 2: can't read the timing"), "{error}");
+        let vtt = "WEBVTT\n\n5124095576030431:00:00.000 --> 5124095576030431:00:01.000\nHi\n";
+        assert!(parse_vtt(vtt).is_err());
+        // The largest hour count that fits still reads and writes back.
+        let max = u64::MAX / 3_600_000 - 1;
+        let srt = format!("1\n{max}:00:00,000 --> {max}:00:01,000\nHi\n");
+        let cues = parse_srt(&srt).unwrap();
+        assert!(write_srt(&cues).contains(&format!("{max}:00:01,000")));
     }
 
     #[test]
