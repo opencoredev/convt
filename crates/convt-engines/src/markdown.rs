@@ -334,11 +334,14 @@ pub fn from_html(html: &str) -> Result<String> {
             |handlers: &dyn Handlers, element: Element| {
                 let inner = handlers.walk_children(element.node).content;
                 let trimmed = inner.trim();
-                Some(if trimmed.is_empty() {
-                    inner.into()
-                } else {
-                    format!("~~{trimmed}~~").into()
-                })
+                if trimmed.is_empty() {
+                    return Some(inner.into());
+                }
+                // Spaces at the edges stay outside the delimiters, so
+                // `keep<del> old </del>new` keeps its words apart.
+                let start = inner.len() - inner.trim_start().len();
+                let end = start + trimmed.len();
+                Some(format!("{}~~{trimmed}~~{}", &inner[..start], &inner[end..]).into())
             },
         )
         .add_handler(vec!["input"], |_: &dyn Handlers, element: Element| {
@@ -509,6 +512,26 @@ quoted
         assert!(md.contains("[x] done") && md.contains("[ ] todo"), "{md}");
         let plain = from_html("<p><input type=text value=v>field</p>").unwrap();
         assert_eq!(plain, "field\n");
+    }
+
+    #[test]
+    fn strikethrough_keeps_its_edge_spaces_outside_the_tildes() {
+        assert_eq!(
+            from_html("<p>keep<del> old </del>new</p>").unwrap(),
+            "keep ~~old~~ new\n"
+        );
+        assert_eq!(
+            from_html("<p>a<s>gone </s>b <strike> x</strike></p>").unwrap(),
+            "a~~gone~~ b ~~x~~\n"
+        );
+        // The words stay apart once the Markdown renders again.
+        let back = to_plain(&from_html("<p>keep<del> old </del>new</p>").unwrap());
+        assert_eq!(back, "keep old new\n");
+        let md = from_html(
+            "<ul><li><input type=checkbox> done</li><li>x <input type=checkbox checked>y</li></ul>",
+        )
+        .unwrap();
+        assert!(md.contains("[ ] done") && md.contains("x [x] y"), "{md}");
     }
 
     #[test]
