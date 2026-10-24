@@ -614,6 +614,21 @@ test("a selected folder with nothing for the target is reported as skipped", asy
   assert.equal(results[1].status !== "done" && results[1].message, "Nothing in this folder converts to JPEG.");
 });
 
+test("a folder is skipped even when a file named directly sits inside it", async (t) => {
+  const { directory, binary } = await fixture(t, ["photos/notes.wav", "photos/sub/a.png"]);
+  const results = await convertFiles(binary, {
+    files: [path.join(directory, "photos"), path.join(directory, "photos", "sub", "a.png")],
+    target: "jpeg",
+  });
+  assert.deepEqual(
+    results.map((result) => [result.status, path.basename(result.input)]),
+    [
+      ["done", "a.png"],
+      ["skipped", "photos"],
+    ],
+  );
+});
+
 test("text, HTML and CSV files count as documents that need the pack", () => {
   for (const id of ["docx", "txt", "html", "csv", "xlsx", "pptx"]) assert.ok(OFFICE_FORMAT_IDS.has(id), id);
 });

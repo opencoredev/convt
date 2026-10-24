@@ -619,13 +619,21 @@ export async function convertFiles(
   }
   const args = conversionArgs({ ...request, files, target, outputDirectory });
   if (callbacks.signal?.aborted) return cancelled();
-  // Predict the job count the way Convt filters folder files; unknown when a folder was too large to scan.
-  const expectedJobs = selection.folders.every((folder) => folder.complete)
-    ? selection.sources.length +
-      selection.folders
-        .flatMap((folder) => folder.sources)
-        .filter((source) => source.format && source.format.id !== target && targetsOf(source).includes(target)).length
+  // Predict each folder's jobs the way Convt filters folder files; unknown when a folder was too large to scan.
+  const folderJobs = selection.folders.map((folder) =>
+    folder.complete
+      ? folder.sources.filter(
+          (source) => source.format && source.format.id !== target && targetsOf(source).includes(target),
+        ).length
+      : undefined,
+  );
+  const expectedJobs = folderJobs.every((jobs) => jobs !== undefined)
+    ? selection.sources.length + folderJobs.reduce<number>((sum, jobs) => sum + (jobs ?? 0), 0)
     : 0;
+  // A fully scanned folder contributes nothing exactly when no file in it passes that filter. Paths
+  // can't tell, since a file named directly may also sit inside a selected folder.
+  const contributes = (index: number, folder: string, reported: ConversionResult[]) =>
+    folderJobs[index] === undefined ? reported.some((result) => isInside(folder, result.input)) : folderJobs[index] > 0;
 
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { env: cliEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -696,7 +704,7 @@ export async function convertFiles(
         // Without a summary, Convt stopped before reporting every folder file. With one, a folder
         // without results had nothing that converts to the target, which Convt skips quietly; say so.
         ...selection.folders
-          .filter(({ folder }) => !finished || !reported.some((result) => isInside(folder, result.input)))
+          .filter(({ folder }, index) => !finished || !contributes(index, folder, reported))
           .map(({ folder }): ConversionResult =>
             finished
               ? {
