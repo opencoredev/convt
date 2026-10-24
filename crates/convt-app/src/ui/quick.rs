@@ -123,7 +123,6 @@ impl QuickView {
         let targets = state.targets_with_pack(&files);
         let generation = state.registry_generation;
         let file_needs_pack = files.iter().any(|f| pack::needs_pack(&state.registry, f));
-        let offered_pack = !targets.pack.is_empty() || file_needs_pack;
         let mut wanted = None;
         let save_dir = state.settings.output_dir.clone();
         let mut error = None;
@@ -140,8 +139,9 @@ impl QuickView {
             if targets.pack.contains(f) {
                 // Picked, with the pack's offer: Install & Convert.
                 wanted = Some(*f);
-            } else if !reachable && offered_pack {
-                // A build with nothing to download: the card says so.
+            } else if !reachable && file_needs_pack {
+                // A document the pack can't help with here (a build with
+                // nothing to download): the card says so.
                 wanted = Some(*f);
             } else if !reachable && error.is_none() {
                 error = Some(unreachable(f, files.len()));

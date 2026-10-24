@@ -4736,6 +4736,28 @@ fn a_preset_for_a_pack_target_converts_on_this_computer(cx: &mut TestAppContext)
 }
 
 #[gpui_kit::test]
+fn a_target_the_pack_cannot_unlock_still_says_why(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs);
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    // The pack adds DOCX for a PDF, but nothing makes it an MP3.
+    let (window, view) = f.quick(cli(vec![pdf], Some("mp3"), None), cx);
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(v.to.is_none() && v.wanted.is_none());
+        assert!(v.error.is_some(), "an unreachable target says so");
+    });
+    assert_eq!(
+        label(cx, window, "error"),
+        cx.read(|cx| view.read(cx).error.clone())
+    );
+}
+
+#[gpui_kit::test]
 fn the_pack_stays_while_a_pdf_becomes_word(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks {
         pdf: true,
