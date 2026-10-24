@@ -360,18 +360,21 @@ impl pack::Backend for TestPacks {
         Ok(())
     }
     fn registry(&self) -> Registry {
-        let mut registry = Registry::new();
-        registry.register(Arc::new(convt_engines::image::ImageEngine));
-        registry.register(Arc::new(convt_engines::svg::SvgEngine));
+        let mut registry = self.registry_without_documents();
         if self.installed.load(Ordering::SeqCst) {
             registry.register(Arc::new(TestOffice));
         }
         registry
     }
+    // The engines every build has, text ones included: Markdown and CSV
+    // convert without the pack, which must not count as document support.
     fn registry_without_documents(&self) -> Registry {
         let mut registry = Registry::new();
         registry.register(Arc::new(convt_engines::image::ImageEngine));
         registry.register(Arc::new(convt_engines::svg::SvgEngine));
+        registry.register(Arc::new(convt_engines::markdown::MarkdownEngine));
+        registry.register(Arc::new(convt_engines::data::DataEngine));
+        registry.register(Arc::new(convt_engines::subtitle::SubtitleEngine));
         registry
     }
 }
