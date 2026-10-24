@@ -1391,7 +1391,21 @@ mod tests {
         );
         assert!(orphan.exists());
         drop(lock);
-        remove_at(&root).unwrap();
+        // A test on another thread that forks a tool shares this file's lock
+        // until the child execs, so allow that moment to pass.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            match remove_at(&root) {
+                Ok(()) => break,
+                Err(e)
+                    if e.to_string().contains("another")
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                Err(e) => panic!("{e:#}"),
+            }
+        }
         assert!(!orphan.exists());
     }
 

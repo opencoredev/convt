@@ -74,3 +74,4 @@ Folder inputs skip files that cannot reach the target (or already are it). Files
 - In an enforced build, `convt license activate` reads the key from stdin when KEY is omitted. Do not put a license key in a shared command line.
 - `convt pack install documents` is the only pack command that may use the network. `pack status` is offline.
 - Presets are TOML (`to`, `quality`, `max_size`, …) under the config presets directory, or a path to a `.toml` file. List them with `convt presets`. Point `CONVT_CONFIG_DIR` at a private directory instead of the user's real presets.
+- MP4, MOV and MKV output uses a hardware video encoder when one works on this machine (VideoToolbox on macOS, NVENC with an NVIDIA GPU), and converts again in software if it fails. Set `CONVT_HWACCEL=0` to always use the software encoders, for example to compare output or rule out a GPU driver problem.

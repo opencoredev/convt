@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.input_key,j.input_bytes,j.output_keys as \"output_keys: _\",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at",
+  "query": "select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as \"options: _\",input_key,input_bytes,output_keys as \"output_keys: _\",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()",
   "describe": {
     "columns": [
       {
@@ -104,6 +104,17 @@
       },
       {
         "ordinal": 9,
+        "name": "options: _",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "options"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
         "name": "input_key",
         "type_info": "Text",
         "origin": {
@@ -114,7 +125,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "input_bytes",
         "type_info": "Int8",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "output_keys: _",
         "type_info": "Jsonb",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "attempt",
         "type_info": "Int4",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "max_attempts",
         "type_info": "Int4",
         "origin": {
@@ -158,7 +169,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "lease_owner",
         "type_info": "Text",
         "origin": {
@@ -169,7 +180,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "lease_expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -180,7 +191,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "reserved_bytes",
         "type_info": "Int8",
         "origin": {
@@ -191,7 +202,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "reserved_cents",
         "type_info": "Int4",
         "origin": {
@@ -202,7 +213,7 @@
         }
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "reservation",
         "type_info": "Text",
         "origin": {
@@ -213,7 +224,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "error_code",
         "type_info": "Text",
         "origin": {
@@ -224,7 +235,7 @@
         }
       },
       {
-        "ordinal": 20,
+        "ordinal": 21,
         "name": "expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -235,7 +246,7 @@
         }
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -248,6 +259,7 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
@@ -258,6 +270,7 @@
       true,
       true,
       true,
+      false,
       false,
       false,
       false,
@@ -276,5 +289,5 @@
       false
     ]
   },
-  "hash": "1e40b11bfe57968c9dba4eea22bd6db2a1110a21491d702c8d6242152e5d46dd"
+  "hash": "38aa72a8283493ab4d0fe727aedce93548953d430177ef7044b69d7b7dba6094"
 }

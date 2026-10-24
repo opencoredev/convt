@@ -38,6 +38,7 @@ pub struct Ctx<'a> {
     pub options: &'a Options,
     pub(crate) progress: Progress<'a>,
     pub(crate) cancel: &'a Cancel,
+    pub(crate) last_hop: bool,
 }
 
 impl<'a> Ctx<'a> {
@@ -52,7 +53,20 @@ impl<'a> Ctx<'a> {
             options,
             progress,
             cancel,
+            last_hop: true,
         }
+    }
+
+    /// Marks whether this step writes the job's result. A middle hop's
+    /// output lives in a temporary folder, not where the user put the input.
+    pub fn with_last_hop(mut self, last_hop: bool) -> Self {
+        self.last_hop = last_hop;
+        self
+    }
+
+    /// Whether this step writes the job's result rather than a middle hop.
+    pub fn is_last_hop(&self) -> bool {
+        self.last_hop
     }
 
     pub fn progress(&self, fraction: f32) {

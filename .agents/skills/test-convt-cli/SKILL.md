@@ -16,7 +16,7 @@ cargo locate-project --workspace --message-format plain   # must be this checkou
 cargo build -p convt-cli && ./target/debug/convt engines
 ```
 
-`convt engines` prints each ready engine (`image`, `svg`, `libheif`, `ffmpeg`, `pdfium`, `libreoffice`) and each unavailable one with its reason. A conversion that fails with "no route" usually means an engine is missing here, not a routing bug. Fix the environment first:
+`convt engines` prints each ready engine (`image`, `svg`, `markdown`, `data`, `subtitle`, `libheif`, `ffmpeg`, `pdfium`, `libreoffice`) and each unavailable one with its reason. A conversion that fails with "no route" usually means an engine is missing here, not a routing bug. Fix the environment first:
 
 - `pdfium` unavailable: `bash scripts/fetch-pdfium.sh` (writes `vendor/pdfium`, gitignored).
 - `ffmpeg` or `libreoffice` unavailable: install the package, or point `CONVT_FFMPEG` / `CONVT_SOFFICE` at a binary. See `crates/convt-engines/src/lib.rs` for discovery order.
@@ -32,7 +32,7 @@ work=$(mktemp -d /tmp/convt-test.XXXXXX)
 bash .agents/skills/test-convt-cli/scripts/fixtures.sh "$work/in"
 ```
 
-This writes `sample.png`, `sample.mp4` (3 s, video and audio), `sample.wav`, `sample.svg`, `sample.txt`, and `sample.pdf` when LibreOffice is present. Add new fixtures to that script rather than committing binaries.
+This writes `sample.png`, `sample.mp4` (3 s, video and audio), `sample.wav`, `sample.svg`, `sample.txt`, the text formats the native `markdown`, `data` and `subtitle` engines read (`sample.md`, `.csv`, `.tsv`, `.json`, `.yaml`, `.srt`, `.vtt`), and `sample.pdf` when LibreOffice is present. Add new fixtures to that script rather than committing binaries.
 
 ## Drive
 
@@ -64,6 +64,8 @@ $c "$work/in" -r --to webp -j 2 --json -o "$work/batch"   # subfolders mirrored 
 ```
 
 `--json` prints one event per line on stdout (`started`, `progress`, `done`, `failed` with a `kind`, then `summary`). Folder files that can't reach the target, or already are it, are skipped quietly; files named directly report their errors. Exit codes: 0 all done, 1 any failure, 130 cancelled.
+
+Hardware video encoding (VideoToolbox, NVENC) is probed once per process and falls back to libx264/libx265 when an encoder fails. Linux servers usually list NVENC without a GPU, so the probe rejects it; `real_ffmpeg_falls_back_from_unusable_hardware` in `ffmpeg.rs` forces each encoder to prove the fallback. `CONVT_HWACCEL=0` turns hardware off.
 
 To test cancellation, start a conversion of a long video in the background, `kill -INT` that PID (never `pkill`), and check that it exits 130, that its FFmpeg child is gone (`ps -o pid= --ppid <pid>` before the kill), and that the output directory holds no `.convt-*` staging folder or partial file.
 

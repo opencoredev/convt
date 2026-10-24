@@ -47,6 +47,15 @@ const LOSSLESS_HOPS: &[&str] = &[
     "png", "tiff", "wav", "flac", "mkv", "pdf", "odt", "ods", "odp",
 ];
 
+/// What a subtitle track pulled out of a video may become.
+const SUBTITLE_TEXT: &[&str] = &["srt", "vtt", "txt"];
+
+/// Spreadsheets with sheets and formatting, which CSV and TSV flatten.
+const WORKBOOKS: &[&str] = &["xlsx", "xls", "ods"];
+
+/// Plain tables: a workbook made into one keeps only its first sheet's values.
+const TABLE_TEXT: &[&str] = &["csv", "tsv"];
+
 impl Registry {
     pub fn new() -> Self {
         Self::default()
@@ -86,7 +95,9 @@ impl Registry {
             from: from.id.into(),
             to: to.id.into(),
         };
-        if from == to {
+        // Plain text has no structure to turn into Markdown; the route
+        // through HTML would only escape its punctuation.
+        if from == to || (from.id == "txt" && to.id == "md") {
             return Err(no_route());
         }
         let mut prev: HashMap<&str, (&str, &Edge)> = HashMap::new();
@@ -97,7 +108,14 @@ impl Registry {
                 break;
             }
             let d = depth[node];
-            if d == MAX_HOPS {
+            // Plain text keeps only the words, so it ends a route: a
+            // subtitle file reaches TXT but not a PDF or Word file made from it.
+            if d == MAX_HOPS || (d > 0 && node == "txt") {
+                continue;
+            }
+            // A workbook reaches CSV, but a Word file, Markdown or JSON made
+            // from that CSV would be its first sheet without formatting.
+            if d > 0 && TABLE_TEXT.contains(&node) && WORKBOOKS.contains(&from.id) {
                 continue;
             }
             // HashMap order changes between runs, so equal-length routes would be
@@ -115,6 +133,21 @@ impl Registry {
                 // so an SVG never offers MP4 by way of an animated GIF.
                 let media = |f: &Format| matches!(f.category, Category::Video | Category::Audio);
                 if d > 0 && media(edge.1.to) && !media(from) {
+                    continue;
+                }
+                // Text comes out of a video only as its own subtitle track, so
+                // extraction must be the first hop (a GIF made into an MP4 has
+                // none), and the text may only become other subtitle or plain
+                // text formats, never a PDF or Word file.
+                let video_to_text = edge.1.from.category == Category::Video
+                    && edge.1.to.category == Category::Document;
+                if video_to_text && d > 0 {
+                    continue;
+                }
+                if from.category == Category::Video
+                    && edge.1.from.category == Category::Document
+                    && !SUBTITLE_TEXT.contains(&edge.1.to.id)
+                {
                     continue;
                 }
                 if !depth.contains_key(target) {
@@ -175,8 +208,17 @@ impl Registry {
                 return picked;
             }
         }
+        // Text formats that share a category with Office documents want
+        // their own neighbours: a subtitle file wants the other subtitle
+        // format, not Word.
         let preferred: &[&str] = match from.id {
             "gif" => &["mp4", "webp", "png"],
+            "md" => &["html", "pdf", "docx"],
+            "json" => &["yaml", "csv"],
+            "yaml" => &["json", "csv"],
+            "srt" => &["vtt", "txt"],
+            "vtt" => &["srt", "txt"],
+            "tsv" => &["csv", "xlsx", "json"],
             _ => default_menu(from.category),
         };
         let picked = pick(&mut preferred.iter().copied());
@@ -235,7 +277,8 @@ impl Registry {
                 let scaled = |p: Option<f32>| {
                     progress(p.map(|p| (base + p.clamp(0.0, 1.0) / k) / n));
                 };
-                let ctx = Ctx::new(*step, &job.options, &scaled, cancel);
+                let ctx = Ctx::new(*step, &job.options, &scaled, cancel)
+                    .with_last_hop(i + 1 == plan.hops.len());
                 let produced = match engine.convert(&ctx, file, &out_dir) {
                     Err(_) if cancel.is_cancelled() => return Err(Error::Cancelled),
                     r => r?,
@@ -553,6 +596,93 @@ mod tests {
     }
 
     #[test]
+    fn plain_text_ends_a_route_and_never_becomes_markdown() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "text",
+            0,
+            vec![
+                ("srt", "txt"),
+                ("txt", "pdf"),
+                ("txt", "html"),
+                ("html", "md"),
+                ("html", "pdf"),
+            ],
+        )));
+        assert!(r.plan(f("srt"), f("txt")).is_ok());
+        assert!(r.plan(f("srt"), f("pdf")).is_err());
+        assert!(r.plan(f("txt"), f("pdf")).is_ok());
+        assert!(r.plan(f("txt"), f("html")).is_ok());
+        assert!(r.plan(f("txt"), f("md")).is_err());
+        assert!(r.plan(f("html"), f("md")).is_ok());
+    }
+
+    #[test]
+    fn a_workbook_flattened_to_csv_goes_no_further() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "office",
+            0,
+            vec![
+                ("xlsx", "csv"),
+                ("xlsx", "pdf"),
+                ("csv", "xlsx"),
+                ("html", "docx"),
+            ],
+        )));
+        r.register(Arc::new(Fake(
+            "data",
+            10,
+            vec![
+                ("csv", "html"),
+                ("csv", "json"),
+                ("csv", "tsv"),
+                ("json", "yaml"),
+            ],
+        )));
+        for to in ["html", "docx", "json", "yaml", "tsv"] {
+            assert!(r.plan(f("xlsx"), f(to)).is_err(), "xlsx -> {to}");
+        }
+        assert!(r.plan(f("xlsx"), f("csv")).is_ok());
+        assert!(r.plan(f("xlsx"), f("pdf")).is_ok());
+        // A CSV file is already a plain table, so it routes on.
+        assert!(r.plan(f("csv"), f("docx")).is_ok());
+        assert!(r.plan(f("csv"), f("yaml")).is_ok());
+    }
+
+    #[test]
+    fn text_formats_have_their_own_menus() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "text",
+            0,
+            vec![
+                ("md", "html"),
+                ("md", "txt"),
+                ("html", "pdf"),
+                ("html", "docx"),
+                ("json", "yaml"),
+                ("json", "csv"),
+                ("csv", "pdf"),
+                ("srt", "vtt"),
+                ("srt", "txt"),
+                ("txt", "pdf"),
+                ("txt", "docx"),
+            ],
+        )));
+        let ids = |from| {
+            r.menu_targets(f(from))
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids("md"), ["html", "pdf", "docx"]);
+        assert_eq!(ids("json"), ["yaml", "csv"]);
+        // Reachable through a text file, but not what a subtitle menu offers.
+        assert_eq!(ids("srt"), ["vtt", "txt"]);
+    }
+
+    #[test]
     fn menus_follow_the_lists_people_pick() {
         let mut r = Registry::new();
         r.register(Arc::new(Fake(
@@ -607,6 +737,79 @@ mod tests {
         assert!(r.plan(f("svg"), f("mp4")).is_err());
         assert!(r.plan(f("gif"), f("mp4")).is_ok());
         assert!(r.plan(f("gif"), f("webm")).is_err());
+    }
+
+    #[test]
+    fn video_text_is_its_own_subtitles() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "ffmpeg",
+            0,
+            vec![
+                ("gif", "mp4"),
+                ("avi", "mkv"),
+                ("mp4", "srt"),
+                ("mkv", "srt"),
+            ],
+        )));
+        r.register(Arc::new(Fake(
+            "subtitle",
+            0,
+            vec![("srt", "vtt"), ("srt", "txt"), ("txt", "srt")],
+        )));
+        r.register(Arc::new(Fake(
+            "office",
+            0,
+            vec![("txt", "docx"), ("txt", "pdf")],
+        )));
+        assert!(r.plan(f("mp4"), f("srt")).is_ok());
+        assert!(r.plan(f("mp4"), f("vtt")).is_ok());
+        assert!(r.plan(f("mkv"), f("txt")).is_ok());
+        // A GIF or AVI made into a container has no subtitle track.
+        assert!(r.plan(f("gif"), f("srt")).is_err());
+        assert!(r.plan(f("avi"), f("vtt")).is_err());
+        // Subtitles don't turn a video into a document.
+        assert!(r.plan(f("mp4"), f("docx")).is_err());
+        assert!(r.plan(f("mp4"), f("pdf")).is_err());
+        // Text that didn't come from a video routes as before, and plain
+        // text is never a middle hop.
+        assert!(r.plan(f("srt"), f("docx")).is_err());
+        assert!(r.plan(f("txt"), f("vtt")).is_ok());
+    }
+
+    #[test]
+    fn only_the_final_hop_is_marked_last() {
+        struct Record(&'static str, &'static str, Arc<std::sync::Mutex<Vec<bool>>>);
+        impl Engine for Record {
+            fn id(&self) -> &'static str {
+                "record"
+            }
+            fn steps(&self) -> Vec<Step> {
+                vec![Step {
+                    from: f(self.0),
+                    to: f(self.1),
+                }]
+            }
+            fn convert(&self, ctx: &Ctx, _: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
+                self.2.lock().unwrap().push(ctx.is_last_hop());
+                let path = ctx.artifact(out_dir, 0);
+                std::fs::write(&path, "x")?;
+                Ok(vec![path])
+            }
+        }
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut r = Registry::new();
+        r.register(Arc::new(Record("md", "html", seen.clone())))
+            .register(Arc::new(Record("html", "pdf", seen.clone())));
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("a.md");
+        std::fs::write(&input, "x").unwrap();
+        r.run(&Job::new(&input, f("pdf")), &no_progress, &Cancel::new())
+            .unwrap();
+        assert_eq!(*seen.lock().unwrap(), [false, true]);
+        r.run(&Job::new(&input, f("html")), &no_progress, &Cancel::new())
+            .unwrap();
+        assert_eq!(*seen.lock().unwrap(), [false, true, true]);
     }
 
     #[test]

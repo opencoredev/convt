@@ -18,10 +18,10 @@ Every JSON error has the same shape:
 
 Branch on `code`. It is stable. `message` is written for people and may change.
 
-Two errors come before convt reads your request and are plain text, not JSON:
+Two errors mean the body of `POST /v1/jobs` itself is wrong:
 
-- `415` when the body of `POST /v1/jobs` is not sent with `Content-Type: application/json`.
-- `422` when that body is not valid JSON, misses a field, or has an extra one.
+- `400 invalid_request` when the body is not sent with `Content-Type: application/json`, is not valid JSON, misses a field, or has an extra one.
+- `400 invalid_options` when `options` has an unknown field, a value of the wrong type, or a value out of range.
 
 Fix these in your code. Retrying will not help.
 

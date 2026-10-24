@@ -32,6 +32,9 @@ fn every_engine_converts_a_declared_step() {
             }
             "imageio" => ("heic", "png"),
             "ffmpeg" => ("mp4", "webm"),
+            "markdown" => ("md", "html"),
+            "data" => ("tsv", "json"),
+            "subtitle" => ("srt", "vtt"),
             "pdfium" => ("pdf", "jpeg"),
             "libreoffice" => ("odt", "docx"),
             id => panic!("new engine {id} needs a fast semantic case"),
@@ -137,6 +140,22 @@ const REQUIRED_ROUTES: &[(&str, &str, &str)] = &[
     ("xlsx", "csv", "libreoffice"),
     ("xlsx", "pdf", "libreoffice"),
     ("csv", "ods", "libreoffice"),
+    ("md", "html", "text"),
+    ("md", "txt", "text"),
+    ("html", "md", "text"),
+    ("csv", "json", "text"),
+    ("json", "yaml", "text"),
+    ("yaml", "csv", "text"),
+    ("tsv", "csv", "text"),
+    ("csv", "html", "text"),
+    ("csv", "md", "text"),
+    ("srt", "vtt", "text"),
+    ("vtt", "srt", "text"),
+    ("vtt", "txt", "text"),
+    ("md", "pdf", "libreoffice"),
+    ("md", "docx", "libreoffice"),
+    ("docx", "md", "libreoffice"),
+    ("json", "xlsx", "libreoffice"),
 ];
 
 fn require_routes(registry: &Registry) -> Check<()> {
@@ -144,6 +163,7 @@ fn require_routes(registry: &Registry) -> Check<()> {
     let mut available = BTreeMap::from([
         ("image", true),
         ("svg", true),
+        ("text", true),
         ("hevc", heif.supports_input("heic")),
         ("hevc-encoder", heif.supports_output("heic")),
         ("av1", heif.supports_input("avif")),
@@ -195,6 +215,43 @@ fn required_routes_remain_offered() {
     let error = require_routes(&Registry::new()).unwrap_err();
     assert!(error.contains("required jpeg -> ico"), "{error}");
     assert!(error.contains("required svg -> png"), "{error}");
+}
+
+#[test]
+fn markdown_images_are_embedded_through_office_hops() {
+    let registry = convt_engines::default_registry();
+    if let Some((_, reason)) = registry
+        .unavailable()
+        .iter()
+        .find(|(id, _)| *id == "libreoffice")
+    {
+        eprintln!("SKIP libreoffice: {reason}");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    image::RgbImage::from_pixel(40, 40, image::Rgb([255, 0, 0]))
+        .save(dir.path().join("red.png"))
+        .unwrap();
+    let input = dir.path().join("p.md");
+    std::fs::write(&input, "# Pic\n\n![red](red.png)\n").unwrap();
+    // File names in a ZIP's directory and PDF object dictionaries are stored
+    // uncompressed, so the bytes show whether a picture went in.
+    let contains = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    for (to, needle) in [
+        ("pdf", &b"/Subtype/Image"[..]),
+        ("docx", b"word/media/"),
+        ("odt", b"Pictures/"),
+    ] {
+        let out = dir.path().join(to);
+        std::fs::create_dir(&out).unwrap();
+        let mut job = Job::new(&input, format_by_id(to).unwrap());
+        job.output = Output::Dir(out);
+        let files = registry
+            .run(&job, &|_| {}, &Cancel::new())
+            .unwrap_or_else(|e| panic!("md->{to}: {e}"));
+        let bytes = std::fs::read(&files[0]).unwrap();
+        assert!(contains(&bytes, needle), "md->{to} has no embedded image");
+    }
 }
 
 #[test]

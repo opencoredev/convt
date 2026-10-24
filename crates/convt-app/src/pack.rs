@@ -145,6 +145,26 @@ pub fn is_document(format: &Format) -> bool {
     )
 }
 
+/// Whether converting `from` to `to` with `registry` runs the document
+/// pack: `native`, the registry without the pack, can't plan it or plans a
+/// different route. Markdown, CSV, JSON or subtitles to the formats their
+/// own engines write don't need it. While the pack is gone or being
+/// removed, neither registry plans a Word file to PDF; that still counts,
+/// so the user hears why it waits.
+pub fn uses_pack(
+    registry: &Registry,
+    native: &Registry,
+    from: &'static Format,
+    to: &'static Format,
+) -> bool {
+    match (native.plan(from, to), registry.plan(from, to)) {
+        (Ok(native), Ok(planned)) => native.describe() != planned.describe(),
+        (Ok(_), Err(_)) => false,
+        (Err(_), Ok(_)) => true,
+        (Err(_), Err(_)) => is_document(from),
+    }
+}
+
 /// Whether `file` is a document this registry can't convert yet, so the
 /// document pack would help.
 pub fn needs_pack(registry: &Registry, file: &Path) -> bool {
@@ -235,6 +255,72 @@ pub fn plain_failure(failure: &Failure, offer: &Offer) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use convt_core::{Ctx, Engine, Step, format_by_id};
+    use std::sync::Arc;
+
+    /// Stands in for LibreOffice: Word to PDF, and HTML to PDF the way
+    /// Markdown reaches PDF.
+    struct Office;
+
+    impl Engine for Office {
+        fn id(&self) -> &'static str {
+            "office"
+        }
+        fn steps(&self) -> Vec<Step> {
+            let f = |id| format_by_id(id).unwrap();
+            vec![
+                Step {
+                    from: f("docx"),
+                    to: f("pdf"),
+                },
+                Step {
+                    from: f("html"),
+                    to: f("pdf"),
+                },
+                Step {
+                    from: f("csv"),
+                    to: f("xlsx"),
+                },
+            ]
+        }
+        fn convert(&self, _: &Ctx, _: &Path, _: &Path) -> convt_core::Result<Vec<PathBuf>> {
+            unreachable!("planning only")
+        }
+    }
+
+    #[test]
+    fn only_routes_through_the_pack_use_it() {
+        let native = || {
+            let mut r = Registry::new();
+            r.register(Arc::new(convt_engines::markdown::MarkdownEngine));
+            r.register(Arc::new(convt_engines::data::DataEngine));
+            r.register(Arc::new(convt_engines::subtitle::SubtitleEngine));
+            r
+        };
+        let mut full = native();
+        full.register(Arc::new(Office));
+        let f = |id| format_by_id(id).unwrap();
+        let uses = |registry: &Registry, from, to| uses_pack(registry, &native(), f(from), f(to));
+        // Text formats to what their own engines write.
+        for (from, to) in [
+            ("md", "html"),
+            ("csv", "json"),
+            ("json", "yaml"),
+            ("srt", "vtt"),
+            ("tsv", "csv"),
+        ] {
+            assert!(!uses(&full, from, to), "{from} -> {to}");
+            assert!(!uses(&native(), from, to), "{from} -> {to} while removing");
+        }
+        // Routes only the pack can finish, even when they start natively.
+        for (from, to) in [("docx", "pdf"), ("md", "pdf"), ("csv", "xlsx")] {
+            assert!(uses(&full, from, to), "{from} -> {to}");
+        }
+        // With the pack gone, a document nothing else reads still counts,
+        // so the conversion waits with a reason instead of failing.
+        assert!(uses(&native(), "docx", "pdf"));
+        assert!(!uses(&native(), "png", "pdf"));
+    }
 
     #[test]
     fn only_failures_another_try_can_fix_are_transient() {

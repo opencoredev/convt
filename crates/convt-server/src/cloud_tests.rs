@@ -80,6 +80,7 @@ fn data(bytes: i64) -> CreateJob {
         input_format: "svg".into(),
         target_format: "png".into(),
         input_bytes: bytes,
+        options: Default::default(),
     }
 }
 async fn key(pool: &sqlx::PgPool) {
@@ -93,6 +94,23 @@ async fn call(state: &CloudState, path: &str, method: &str) -> (StatusCode, serd
                 .method(method)
                 .header("authorization", format!("Bearer {KEY}"))
                 .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = r.status();
+    let body = to_bytes(r.into_body(), 1_000_000).await.unwrap();
+    (status, serde_json::from_slice(&body).unwrap())
+}
+async fn create_call(state: &CloudState, body: &str) -> (StatusCode, serde_json::Value) {
+    let r = routes::router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/v1/jobs")
+                .method("POST")
+                .header("authorization", format!("Bearer {KEY}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_owned()))
                 .unwrap(),
         )
         .await
@@ -518,5 +536,135 @@ async fn api_and_pro_share_a_serialized_storage_budget() {
         jobs::create(&db.server, &pro, &input)
     );
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
+    db.drop().await;
+}
+#[tokio::test]
+async fn malformed_job_requests_get_json_errors() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = CloudState {
+        pool: db.server.clone(),
+        storage: Arc::new(MemoryStorage::default()),
+        web_secret: "s".repeat(32),
+    };
+    let with = |options: &str| {
+        format!(
+            r#"{{"input_format":"png","target_format":"jpeg","input_bytes":10,"options":{options}}}"#
+        )
+    };
+    // Values serde refuses get the same code as values the range checks refuse.
+    for options in [
+        r#"{"quality":256}"#,
+        r#"{"quality":150}"#,
+        r#"{"pages":"3-1"}"#,
+        r#"{"background":"plaid"}"#,
+        r#"{"qualty":40}"#,
+        r#""fast""#,
+    ] {
+        let (status, body) = create_call(&state, &with(options)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{options}: {body}");
+        assert_eq!(
+            body["error"]["code"], "invalid_options",
+            "{options}: {body}"
+        );
+    }
+    let (_, body) = create_call(&state, &with(r#"{"quality":256}"#)).await;
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("quality"),
+        "{body}"
+    );
+    for request in [
+        r#"{"input_format":"png","target_format":"jpeg"}"#,
+        r#"{"input_format":"png","target_format":"jpeg","input_bytes":"ten"}"#,
+        r#"{"input_format":"png","target_format":"jpeg","input_bytes":10,"extra":1}"#,
+        r#"["png"]"#,
+        "not json",
+    ] {
+        let (status, body) = create_call(&state, request).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{request}: {body}");
+        assert_eq!(
+            body["error"]["code"], "invalid_request",
+            "{request}: {body}"
+        );
+    }
+    let (status, body) = create_call(&state, &with(r#"{"quality":40}"#)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["job"]["options"]["quality"], 40);
+    db.drop().await;
+}
+#[test]
+fn create_requests_take_optional_validated_options() {
+    let plain: CreateJob = serde_json::from_value(
+        serde_json::json!({"input_format":"svg","target_format":"png","input_bytes":10}),
+    )
+    .unwrap();
+    assert_eq!(plain.options, convt_core::Options::default());
+    let with: CreateJob = serde_json::from_value(serde_json::json!({"input_format":"png","target_format":"jpeg","input_bytes":10,"options":{"quality":40,"max_size":256,"background":"black"}})).unwrap();
+    assert_eq!(with.options.quality, Some(40));
+    assert_eq!(with.options.max_size, Some(256));
+    assert!(jobs::validate_options(&with.options, "jpeg").is_ok());
+    for bad in [
+        serde_json::json!({"qualty":40}),
+        serde_json::json!({"quality":"high"}),
+        serde_json::json!({"pages":"3-1"}),
+        serde_json::json!({"video_codec":"vp8"}),
+    ] {
+        assert!(
+            serde_json::from_value::<CreateJob>(serde_json::json!({"input_format":"png","target_format":"jpeg","input_bytes":10,"options":bad})).is_err(),
+            "{bad}"
+        );
+    }
+    let out_of_range = |o: serde_json::Value, to: &str| {
+        jobs::validate_options(&serde_json::from_value(o).unwrap(), to).is_err()
+    };
+    assert!(out_of_range(serde_json::json!({"quality":0}), "jpeg"));
+    assert!(out_of_range(serde_json::json!({"quality":101}), "jpeg"));
+    assert!(out_of_range(serde_json::json!({"video_height":721}), "mp4"));
+    assert!(out_of_range(serde_json::json!({"dpi":5}), "png"));
+    assert!(out_of_range(
+        serde_json::json!({"background":"transparent"}),
+        "jpeg"
+    ));
+    assert!(!out_of_range(
+        serde_json::json!({"background":"transparent"}),
+        "png"
+    ));
+}
+#[tokio::test]
+async fn options_are_stored_returned_and_claimed() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "pro", 0).await;
+    let mut request = data(10);
+    request.options.quality = Some(150);
+    let refused = jobs::create(&db.server, &who("usr_a", false), &request)
+        .await
+        .unwrap_err();
+    assert!(format!("{refused:?}").contains("invalid_options"));
+    request.options.quality = Some(35);
+    request.options.max_size = Some(64);
+    let job = jobs::create(&db.server, &who("usr_a", false), &request)
+        .await
+        .unwrap();
+    assert_eq!(job.options.0, request.options);
+    let view = serde_json::to_value(routes::JobView::from(job.clone())).unwrap();
+    assert_eq!(view["options"]["quality"], 35);
+    assert_eq!(view["options"]["max_size"], 64);
+    sqlx::query("update cloud_jobs set status='queued',queued_at=now() where id=$1")
+        .bind(&job.id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let claimed = jobs::claim(&db.server, "w").await.unwrap().unwrap();
+    assert_eq!(claimed.id, job.id);
+    assert_eq!(claimed.options.0, request.options);
+    // Rows written before options existed read as the defaults.
+    let plain = jobs::create(&db.server, &who("usr_a", false), &data(10))
+        .await
+        .unwrap();
+    assert_eq!(plain.options.0, convt_core::Options::default());
     db.drop().await;
 }

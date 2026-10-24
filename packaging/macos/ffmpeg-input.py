@@ -18,9 +18,10 @@ import shutil
 import sys
 from pathlib import Path
 
-# The encoders convt's FFmpeg engine selects, plus PNG and ffprobe.
+# The encoders convt's FFmpeg engine selects, plus PNG, ffprobe and the
+# dav1d software AV1 decoder (FFmpeg's own AV1 decoder needs hardware).
 REQUIRED = ['libx264', 'libx265', 'libvpx-vp9', 'libmp3lame', 'libopus', 'libvorbis',
-            'PNG encode/decode with zlib', 'ffprobe']
+            'PNG encode/decode with zlib', 'ffprobe', 'libdav1d']
 # Receipt fields that hold builder paths.
 PATHS = {'path', 'notices_directory', 'source_directory', 'build_log'}
 # Home directories inside strings, such as the configure line and clang's
@@ -78,7 +79,8 @@ def main():
     checks = receipt.get('checks', [])
     if any(c.get('status') == 'FAIL' for c in checks):
         fail('receipt records a failed check')
-    passed = {c.get('codec') or c.get('tool') for c in checks if c.get('status') == 'PASS'}
+    passed = {c.get('codec') or c.get('tool') or c.get('decoder')
+              for c in checks if c.get('status') == 'PASS'}
     missing = [r for r in REQUIRED if r not in passed]
     if missing:
         fail('receipt lacks passing checks for ' + ', '.join(missing))

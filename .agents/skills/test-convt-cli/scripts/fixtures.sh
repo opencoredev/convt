@@ -24,6 +24,13 @@ cat > "$dir/sample.svg" <<'SVG'
 </svg>
 SVG
 printf 'convt fixture\nSecond line.\n' > "$dir/sample.txt"
+printf '# convt fixture\n\nSome **bold** text.\n\n- [x] done\n\n| a | b |\n|---|---|\n| 1 | 2 |\n' > "$dir/sample.md"
+printf 'name,note\n"Smith, J","two\nlines"\nÅsa,🎉\n' > "$dir/sample.csv"
+printf 'name\tqty\napple\t3\n' > "$dir/sample.tsv"
+printf '[{"name": "Åsa", "qty": 3}, {"name": "Bo", "tags": ["a", "b"]}]\n' > "$dir/sample.json"
+printf -- '- name: Åsa\n  qty: 3\n' > "$dir/sample.yaml"
+printf '1\r\n00:00:01,000 --> 00:00:02,500\r\n<i>Hello</i> & welcome\r\n\r\n' > "$dir/sample.srt"
+printf 'WEBVTT\n\nNOTE a comment\n\n00:01.000 --> 00:02.500 align:start\n<v Ann>Hello</v> &amp; welcome\n' > "$dir/sample.vtt"
 
 convt="$root/target/debug/convt"
 if command -v soffice >/dev/null && [ -x "$convt" ]; then

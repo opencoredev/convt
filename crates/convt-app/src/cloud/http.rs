@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use convt_core::Cancel;
+use convt_core::{Cancel, Options};
 use convt_license::account::{CloudCredential, secure_url};
 use ureq::unversioned::resolver::DefaultResolver;
 use ureq::unversioned::transport::{
@@ -272,17 +272,19 @@ impl CloudApi for Http {
         from: &str,
         to: &str,
         bytes: u64,
+        options: &Options,
     ) -> Result<Created, CloudError> {
-        let json = self.json(
-            "POST",
-            credential,
-            "/v1/jobs",
-            Some(serde_json::json!({
-                "input_format": from,
-                "target_format": to,
-                "input_bytes": bytes,
-            })),
-        )?;
+        let mut body = serde_json::json!({
+            "input_format": from,
+            "target_format": to,
+            "input_bytes": bytes,
+        });
+        // Only when set, so default conversions still work with a server
+        // from before options.
+        if *options != Options::default() {
+            body["options"] = serde_json::json!(options);
+        }
+        let json = self.json("POST", credential, "/v1/jobs", Some(body))?;
         let job: RemoteJob = serde_json::from_value(json.get("job").cloned().unwrap_or_default())
             .map_err(|_| CloudError::BadResponse)?;
         checked(&job.id)?;

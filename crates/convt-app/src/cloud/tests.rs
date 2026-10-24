@@ -90,8 +90,14 @@ impl CloudApi for Fake {
         from: &str,
         to: &str,
         bytes: u64,
+        options: &Options,
     ) -> Result<Created, CloudError> {
-        self.log(format!("create {from} {to} {bytes} {}", c.token));
+        let options = if *options == Options::default() {
+            String::new()
+        } else {
+            format!(" {}", serde_json::to_string(options).unwrap())
+        };
+        self.log(format!("create {from} {to} {bytes} {}{options}", c.token));
         self.create.lock().unwrap().pop_front().unwrap_or(Ok(()))?;
         Ok(Created {
             job: remote(RemoteStatus::Created, None),
@@ -875,20 +881,21 @@ mod app {
         let png = dir.path().join("photo.png");
         std::fs::write(&png, b"png bytes").unwrap();
 
-        // Not without consent, and not with options the cloud can't apply.
+        // Not without consent.
         let e = convert(cx, &app, &png, Options::default()).unwrap_err();
         assert!(e.contains("Agree"), "{e}");
+        assert!(fake.calls().is_empty());
         app.update(cx, |s, cx| {
             s.update_settings(|s| s.cloud_consent = true, cx)
         });
+
+        // The options go to the cloud with the job, and history keeps them.
         let quality = Options {
             quality: Some(40),
+            max_size: Some(512),
             ..Options::default()
         };
-        assert!(convert(cx, &app, &png, quality).is_err());
-        assert!(fake.calls().is_empty());
-
-        let ids = convert(cx, &app, &png, Options::default()).unwrap();
+        let ids = convert(cx, &app, &png, quality.clone()).unwrap();
         wait_until(cx, "the cloud job", |s| {
             s.entry(ids[0]).is_some_and(|e| e.status.is_finished())
         });
@@ -898,6 +905,7 @@ mod app {
             let entry = s.entry(ids[0]).unwrap();
             assert_eq!(entry.status, Status::Done(vec![out.clone()]));
             assert!(entry.setup.cloud);
+            assert_eq!(entry.setup.options, quality);
             let record = &s.recent[0];
             assert_eq!(record.outcome, Outcome::Done(vec![out.clone()]));
             assert!(record.setup.as_ref().unwrap().cloud);
@@ -920,12 +928,18 @@ mod app {
             s.entry(retried[0]).is_some_and(|e| e.status.is_finished())
         });
         assert!(dir.path().join("photo (1).webp").exists());
-        let creates = fake
+        let creates: Vec<String> = fake
             .calls()
-            .iter()
+            .into_iter()
             .filter(|c| c.starts_with("create"))
-            .count();
-        assert_eq!(creates, 2);
+            .collect();
+        assert_eq!(creates.len(), 2);
+        for create in &creates {
+            assert!(
+                create.ends_with(r#" {"quality":40,"max_size":512,"video_height":null,"audio_bitrate":null,"pages":null,"dpi":null,"video_codec":null,"background":null}"#),
+                "{create}"
+            );
+        }
     }
 
     #[gpui_kit::test]

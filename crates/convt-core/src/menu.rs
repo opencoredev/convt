@@ -31,7 +31,8 @@ pub const MENU_KINDS: [Category; 8] = [
 ];
 
 /// The targets a right-click menu offers for a kind of file nobody
-/// customized, most wanted first. GIF has its own list (see
+/// customized, most wanted first. GIF and the text formats (Markdown, JSON,
+/// YAML, subtitles, TSV) have their own lists (see
 /// [`crate::Registry::menu_targets`]).
 pub fn default_menu(category: Category) -> &'static [&'static str] {
     match category {
