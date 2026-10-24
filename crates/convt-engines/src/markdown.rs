@@ -105,8 +105,9 @@ pub fn to_html(markdown: &str, fallback_title: &str) -> String {
     page(markdown, fallback_title, None)
 }
 
-/// [`to_html`], with each relative image that is a file in `dir` inlined
-/// as a data URI. Other images keep their paths.
+/// [`to_html`], with each relative image that is a picture in `dir` inlined
+/// as a data URI. Other relative images link to their absolute `file://`
+/// URL; images with a scheme keep their URLs.
 pub fn to_html_with_images_from(markdown: &str, fallback_title: &str, dir: &Path) -> String {
     page(
         markdown,
@@ -126,7 +127,7 @@ fn page(markdown: &str, fallback_title: &str, mut images: Option<Images>) -> Str
             }),
             Some(images),
         ) => {
-            let dest_url = images.inline(&dest_url).map_or(dest_url, Into::into);
+            let dest_url = images.link(&dest_url).map_or(dest_url, Into::into);
             Event::Start(Tag::Image {
                 link_type,
                 dest_url,
@@ -173,19 +174,32 @@ impl Images {
         })
     }
 
-    /// A data URI of the image `dest` names. `None` for a URL with a scheme,
-    /// a fragment, a file outside the Markdown's folder (after resolving
-    /// links), a file that is missing, too big or not an image, or once the
-    /// page has inlined its fill. Only pictures are read, never a text file
-    /// or key a link happens to name, and each one only once.
-    fn inline(&mut self, dest: &str) -> Option<String> {
+    /// Where the page should find the image `dest` names: a data URI when
+    /// it can be inlined, or else its absolute `file://` URL, since the
+    /// relative path is broken next to the page. `None` keeps `dest`: a URL
+    /// with a scheme or a fragment of the page.
+    ///
+    /// A file outside the Markdown's folder, or one that is not a picture,
+    /// is never read; its link only works on this machine, and LibreOffice
+    /// embeds it in a document only if it really is an image.
+    fn link(&mut self, dest: &str) -> Option<String> {
         if dest.is_empty() || dest.starts_with('#') {
             return None;
         }
         if url::Url::parse(dest) != Err(url::ParseError::RelativeUrlWithoutBase) {
             return None;
         }
-        let path = std::fs::canonicalize(self.base.join(dest).ok()?.to_file_path().ok()?).ok()?;
+        let url = self.base.join(dest).ok()?;
+        Some(self.inline(&url).unwrap_or_else(|| url.into()))
+    }
+
+    /// A data URI of the image at `url`. `None` for a file outside the
+    /// Markdown's folder (after resolving links), a file that is missing,
+    /// too big or not an image, or once the page has inlined its fill. Only
+    /// pictures are read, never a text file or key a link happens to name,
+    /// and each one only once.
+    fn inline(&mut self, url: &url::Url) -> Option<String> {
+        let path = std::fs::canonicalize(url.to_file_path().ok()?).ok()?;
         if !path.starts_with(&self.dir) {
             return None;
         }
@@ -508,8 +522,11 @@ mod tests {
             html.contains(r#"<img src="data:image/png;base64,iVBOR"#),
             "{html}"
         );
-        assert!(html.contains(r#"src="notes.png""#), "{html}");
-        assert!(html.contains(r#"src="gone.png""#), "{html}");
+        let base = url::Url::from_directory_path(dir.path()).unwrap();
+        for kept in ["notes.png", "gone.png"] {
+            let src = format!(r#"src="{}""#, base.join(kept).unwrap());
+            assert!(html.contains(&src), "{kept}: {html}");
+        }
         assert!(html.contains(r#"src="https://x.test/d.png""#), "{html}");
         // A page the user keeps next to the Markdown stays relative.
         assert!(to_html(md, "x").contains(r#"src="my%20img/red.png""#));
@@ -574,7 +591,7 @@ mod tests {
             if made.is_ok_and(|s| s.success()) {
                 let md = "![p](pipe.png) ![z](../../../../../../../../dev/zero)\n";
                 let html = to_html_with_images_from(md, "x", dir.path());
-                assert!(html.contains(r#"src="pipe.png""#), "{html}");
+                assert!(html.contains(r#"pipe.png""#), "{html}");
                 assert!(html.contains("dev/zero"), "{html}");
             }
         }
@@ -608,8 +625,11 @@ mod tests {
             2,
             "{html}"
         );
+        // Each links to the file instead, which only this machine can open.
+        let base = url::Url::from_directory_path(&dir).unwrap();
         for kept in ["leak.svg", "../outside.svg", "notes.svg", "fake.svg"] {
-            assert!(html.contains(&format!(r#"src="{kept}""#)), "{kept}: {html}");
+            let src = format!(r#"src="{}""#, base.join(kept).unwrap());
+            assert!(html.contains(&src), "{kept}: {html}");
         }
     }
 
@@ -627,13 +647,39 @@ mod tests {
         let images = Images::new(dir.path(), len, 2 * len);
         let html = page("![a](red.png) ![b](./red.png) ![c](red.png)\n", "x", images);
         assert_eq!(html.matches("data:image/png;base64,").count(), 2, "{html}");
-        assert!(html.contains(r#"src="red.png""#), "{html}");
+        assert!(html.contains(r#"src="file:///"#), "{html}");
         // Read once: gone from the disk, it still inlines from memory.
         let mut images = Images::new(dir.path(), len, u64::MAX).unwrap();
-        assert!(images.inline("red.png").is_some());
-        std::fs::remove_file(dir.path().join("red.png")).unwrap();
+        assert!(images.link("red.png").unwrap().starts_with("data:"));
         std::fs::write(dir.path().join("red.png"), "changed").unwrap();
-        assert!(images.inline("red.png").is_some());
+        assert!(images.link("red.png").unwrap().starts_with("data:"));
+    }
+
+    #[test]
+    fn images_left_out_link_to_their_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbImage::new(2, 2)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        std::fs::create_dir(dir.path().join("my img")).unwrap();
+        let path = dir.path().join("my img/big.png");
+        std::fs::write(&path, png.get_ref()).unwrap();
+        let md = "![a](my%20img/big.png) ![s](sprite.svg#icon) ![r](https://x.test/r.png) ![d](data:image/png;base64,AA==) ![f](#top)\n";
+        // Too big to inline.
+        let images = Images::new(dir.path(), 1, u64::MAX);
+        let html = page(md, "x", images);
+        let url = url::Url::from_file_path(&path).unwrap();
+        assert!(html.contains(&format!(r#"src="{url}""#)), "{html}");
+        assert!(url.as_str().contains("my%20img"), "{url}");
+        let sprite = url::Url::from_file_path(dir.path().join("sprite.svg")).unwrap();
+        assert!(html.contains(&format!(r#"src="{sprite}#icon""#)), "{html}");
+        assert!(html.contains(r#"src="https://x.test/r.png""#), "{html}");
+        assert!(
+            html.contains(r#"src="data:image/png;base64,AA==""#),
+            "{html}"
+        );
+        assert!(html.contains(r##"src="#top""##), "{html}");
     }
 
     #[test]
