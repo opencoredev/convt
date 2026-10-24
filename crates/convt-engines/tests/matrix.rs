@@ -32,6 +32,9 @@ fn every_engine_converts_a_declared_step() {
             }
             "imageio" => ("heic", "png"),
             "ffmpeg" => ("mp4", "webm"),
+            "markdown" => ("md", "html"),
+            "data" => ("tsv", "json"),
+            "subtitle" => ("srt", "vtt"),
             "pdfium" => ("pdf", "jpeg"),
             "libreoffice" => ("odt", "docx"),
             id => panic!("new engine {id} needs a fast semantic case"),
@@ -137,6 +140,22 @@ const REQUIRED_ROUTES: &[(&str, &str, &str)] = &[
     ("xlsx", "csv", "libreoffice"),
     ("xlsx", "pdf", "libreoffice"),
     ("csv", "ods", "libreoffice"),
+    ("md", "html", "text"),
+    ("md", "txt", "text"),
+    ("html", "md", "text"),
+    ("csv", "json", "text"),
+    ("json", "yaml", "text"),
+    ("yaml", "csv", "text"),
+    ("tsv", "csv", "text"),
+    ("csv", "html", "text"),
+    ("csv", "md", "text"),
+    ("srt", "vtt", "text"),
+    ("vtt", "srt", "text"),
+    ("vtt", "txt", "text"),
+    ("md", "pdf", "libreoffice"),
+    ("md", "docx", "libreoffice"),
+    ("docx", "md", "libreoffice"),
+    ("json", "xlsx", "libreoffice"),
 ];
 
 fn require_routes(registry: &Registry) -> Check<()> {
@@ -144,6 +163,7 @@ fn require_routes(registry: &Registry) -> Check<()> {
     let mut available = BTreeMap::from([
         ("image", true),
         ("svg", true),
+        ("text", true),
         ("hevc", heif.supports_input("heic")),
         ("hevc-encoder", heif.supports_output("heic")),
         ("av1", heif.supports_input("avif")),

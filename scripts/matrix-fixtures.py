@@ -327,6 +327,8 @@ def office_check(path, kind):
         assert MARKER in text, 'Marker lost: ' + repr(text)
         if kind == 'Document':
             assert 'Known document text 12345' in text, 'Document text lost'
+        if kind == 'Table':
+            assert 'KnownCell' in text and '3.5' in text, 'Table cells lost: ' + repr(text)
 
 
 if __name__ == '__main__':
