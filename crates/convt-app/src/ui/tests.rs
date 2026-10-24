@@ -3393,6 +3393,12 @@ fn quick_convert_shows_max_file_size_for_video_and_audio(cx: &mut TestAppContext
     }
     click(cx, window, "to-mp4");
     assert!(shown(cx, window, "keep-audio") && shown(cx, window, "strip-metadata"));
+    // WAV can't be sized, so the limit is hidden and not sent.
+    if targets.iter().any(|t| t.id == "wav") {
+        click(cx, window, "to-wav");
+        assert!(!shown(cx, window, "target-size") && shown(cx, window, "strip-metadata"));
+        cx.read(|cx| assert_eq!(view.read(cx).conversion_options().target_size, None));
+    }
 }
 
 #[gpui_kit::test]

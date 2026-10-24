@@ -343,8 +343,10 @@ impl QuickView {
         if audio_applies(to) {
             options.strip_audio = self.strip_audio;
         }
-        if media(to) {
+        if target_size_applies(to) {
             options.target_size = self.target_size;
+        }
+        if media(to) {
             options.strip_metadata = self.strip_metadata;
         }
         // Where the control is hidden (video to GIF), a preset's color would
@@ -1015,7 +1017,7 @@ impl QuickView {
                 p,
             )
         });
-        let target_size = media(to).then(|| {
+        let target_size = target_size_applies(to).then(|| {
             let mut choices: Vec<Option<u64>> = TARGET_SIZES.to_vec();
             // A preset's own limit gets an entry of its own.
             if !choices.contains(&self.target_size) {
@@ -1655,6 +1657,12 @@ fn media(to: &Format) -> bool {
         to.category,
         Category::Video | Category::Audio | Category::Image
     )
+}
+
+/// Whether Max file size shows for `to`. WAV and FLAC can't trade quality
+/// for size, so the engine refuses a limit there.
+fn target_size_applies(to: &Format) -> bool {
+    media(to) && !matches!(to.id, "wav" | "flac")
 }
 
 /// "No limit" or the size as presets write it: "10MB".

@@ -33,6 +33,7 @@ impl From<convt_core::Error> for ConvtError {
 }
 
 /// Formats the file at `path` can be converted to, for the context menu.
+/// Its own format is left out: re-encoding a file lives in Quick convert.
 #[uniffi::export]
 pub fn targets_for(path: String) -> Vec<Target> {
     let Some(from) = convt_core::format_by_extension(Path::new(&path)) else {
@@ -41,6 +42,7 @@ pub fn targets_for(path: String) -> Vec<Target> {
     REGISTRY
         .targets(from)
         .into_iter()
+        .filter(|f| *f != from)
         .map(|f| Target {
             id: f.id.into(),
             name: f.name.into(),
