@@ -234,8 +234,151 @@ pub fn write_tree(value: &Value, format: &str) -> Result<String> {
         out.push('\n');
         Ok(out)
     } else {
-        serde_norway::to_string(value).map_err(failed)
+        let mut out = String::new();
+        yaml_node(&mut out, value, 0);
+        Ok(out)
     }
+}
+
+/// Writes `value` as block YAML where the cursor stands: at the start of a
+/// line already indented to `indent`, or after `- `.
+///
+/// serde_norway quotes only what a YAML 1.2 reader would misread, so `on`,
+/// `NO`, `1_000` or `2024-01-01` came out bare and PyYAML, a YAML 1.1
+/// reader, turned them into booleans, numbers and dates. Strings here are
+/// bare only when no YAML version reads them as anything else.
+fn yaml_node(out: &mut String, value: &Value, indent: usize) {
+    match value {
+        Value::Object(entries) if !entries.is_empty() => {
+            for (i, (key, value)) in entries.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(&" ".repeat(indent));
+                }
+                out.push_str(&yaml_string(key, indent));
+                out.push(':');
+                match value {
+                    Value::Object(e) if !e.is_empty() => {
+                        out.push('\n');
+                        out.push_str(&" ".repeat(indent + 2));
+                        yaml_node(out, value, indent + 2);
+                    }
+                    // A list under a key starts at the key's own indent.
+                    Value::Array(a) if !a.is_empty() => {
+                        out.push('\n');
+                        out.push_str(&" ".repeat(indent));
+                        yaml_node(out, value, indent);
+                    }
+                    _ => {
+                        out.push(' ');
+                        yaml_node(out, value, indent);
+                    }
+                }
+            }
+        }
+        Value::Array(items) if !items.is_empty() => {
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(&" ".repeat(indent));
+                }
+                out.push_str("- ");
+                yaml_node(out, item, indent + 2);
+            }
+        }
+        scalar => {
+            out.push_str(&match scalar {
+                Value::Null => "null".into(),
+                Value::Bool(b) => b.to_string(),
+                Value::Number(n) => yaml_number(&n.to_string()),
+                Value::String(s) => yaml_string(s, indent),
+                Value::Array(_) => "[]".into(),
+                Value::Object(_) => "{}".into(),
+            });
+            out.push('\n');
+        }
+    }
+}
+
+/// A JSON number as a number to YAML 1.1 too, which needs a `.` and a signed
+/// exponent in a float: `1e5` becomes `1.0e+5`.
+fn yaml_number(text: &str) -> String {
+    let Some(e) = text.find(['e', 'E']) else {
+        return text.to_owned();
+    };
+    let (mantissa, e, exponent) = (&text[..e], &text[e..=e], &text[e + 1..]);
+    let point = if mantissa.contains('.') { "" } else { ".0" };
+    let sign = if exponent.starts_with(['+', '-']) {
+        ""
+    } else {
+        "+"
+    };
+    format!("{mantissa}{point}{e}{sign}{exponent}")
+}
+
+/// `s` bare if that is safe, else quoted. Bare strings start with a letter
+/// or `_` and hold only letters, digits, spaces and `_-./()+@`, so no
+/// number, date, time, `~`, `.inf` or indicator can be mistaken for one,
+/// and are none of the YAML 1.1 and 1.2 words for booleans and null.
+fn yaml_string(s: &str, indent: usize) -> String {
+    const WORDS: &[&str] = &["y", "n", "yes", "no", "on", "off", "true", "false", "null"];
+    let mut chars = s.chars();
+    let bare = chars.next().is_some_and(|c| c.is_alphabetic() || c == '_')
+        && chars.all(|c| c.is_alphanumeric() || " _-./()+@".contains(c))
+        && !s.ends_with(' ')
+        && !WORDS.iter().any(|w| s.eq_ignore_ascii_case(w));
+    if bare {
+        return s.to_owned();
+    }
+    let printable = |c: char| !c.is_control() && !matches!(c, '\u{2028}' | '\u{2029}' | '\u{feff}');
+    if s.chars().all(printable) {
+        return format!("'{}'", s.replace('\'', "''"));
+    }
+    if let Some(block) = yaml_literal(s, indent) {
+        return block;
+    }
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c if !printable(c) => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A multi-line string as a literal block, when its lines need no escaping:
+/// no control characters but line breaks, at most one trailing break, and
+/// no leading space that would set the block's indentation.
+fn yaml_literal(s: &str, indent: usize) -> Option<String> {
+    let (body, chomp) = match s.strip_suffix('\n') {
+        Some(body) => (body, ""),
+        None => (s, "-"),
+    };
+    let plain = |c: char| {
+        c == '\t' || !c.is_control() && !matches!(c, '\u{2028}' | '\u{2029}' | '\u{feff}')
+    };
+    if !body.contains('\n')
+        || body.ends_with('\n')
+        || body.starts_with([' ', '\n'])
+        || !body.chars().all(|c| c == '\n' || plain(c))
+    {
+        return None;
+    }
+    let pad = " ".repeat(indent + 2);
+    let mut out = format!("|{chomp}");
+    for line in body.split('\n') {
+        out.push('\n');
+        if !line.is_empty() {
+            out.push_str(&pad);
+            out.push_str(line);
+        }
+    }
+    Some(out)
 }
 
 /// Every row of a CSV or TSV file. Rows may differ in length. CSV fields may
@@ -650,6 +793,90 @@ mod tests {
         let yaml = write_tree(&rows_to_tree(table("zip,flag\n02134,yes\n")), "yaml").unwrap();
         let back = tree_to_rows(read_tree("yaml", &yaml).unwrap()).unwrap();
         assert_eq!(back[1], ["02134", "yes"], "{yaml}");
+    }
+
+    #[test]
+    fn yaml_quotes_every_string_a_yaml_1_1_reader_would_misread() {
+        let words = [
+            "on",
+            "Off",
+            "NO",
+            "yes",
+            "Y",
+            "n",
+            "True",
+            "null",
+            "NULL",
+            "~",
+            "",
+            "1_000",
+            "017",
+            "0o17",
+            "0x1F",
+            "1e3",
+            ".inf",
+            "-.Inf",
+            ".NaN",
+            "+1",
+            "2024-01-01",
+            "2024-01-01 10:00:00",
+            "12:30",
+            "190:20:30",
+            "=",
+            "<<",
+            "-",
+            "a: b",
+            "#x",
+            "x #y",
+            "null ",
+            " lead",
+            "it's",
+            "tab\there",
+            "bell\u{7}",
+            "\u{2028}",
+        ];
+        let value = Value::Object(
+            words
+                .iter()
+                .map(|w| (w.to_string(), Value::String(w.to_string())))
+                .collect(),
+        );
+        let yaml = write_tree(&value, "yaml").unwrap();
+        for w in words {
+            assert!(
+                !yaml.contains(&format!("\n{w}:")),
+                "bare key {w:?}:\n{yaml}"
+            );
+            assert!(
+                !yaml.contains(&format!(": {w}\n")),
+                "bare value {w:?}:\n{yaml}"
+            );
+        }
+        assert_eq!(read_tree("yaml", &yaml).unwrap(), value, "{yaml}");
+        // Ordinary words stay bare.
+        let plain = Value::Array(vec![
+            Value::String("Åsa Berg".into()),
+            Value::String("v1.2-beta".into()),
+            Value::String("note (draft)".into()),
+        ]);
+        assert_eq!(
+            write_tree(&plain, "yaml").unwrap(),
+            "- Åsa Berg\n- v1.2-beta\n- note (draft)\n"
+        );
+    }
+
+    #[test]
+    fn yaml_keeps_numbers_numbers_and_breaks_readable() {
+        let json = r#"{"nums":[1e5,2.5E-3,-7,0.5],"text":"one\ntwo\n","more":"a\n\n b","deep":[[1,[]],{}]}"#;
+        let value = read_tree("json", json).unwrap();
+        let yaml = write_tree(&value, "yaml").unwrap();
+        assert_eq!(
+            yaml,
+            "nums:\n- 100000.0\n- 0.0025\n- -7\n- 0.5\ntext: |\n  one\n  two\nmore: |-\n  a\n\n   b\ndeep:\n- - 1\n  - []\n- {}\n"
+        );
+        assert_eq!(read_tree("yaml", &yaml).unwrap(), value);
+        assert_eq!(yaml_number("1e5"), "1.0e+5");
+        assert_eq!(yaml_number("-2.5E-3"), "-2.5E-3");
     }
 
     #[test]
