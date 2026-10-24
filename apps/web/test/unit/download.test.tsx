@@ -9,6 +9,7 @@ import {
   Homebrew,
   Platforms,
   primaryMeta,
+  Raycast,
 } from "../../src/components/site/download";
 import { releaseFromManifest } from "../../src/lib/platform";
 import type { ReleaseManifest } from "../../src/lib/release-manifest";
@@ -120,4 +121,13 @@ test("checksums are folded away with the source for the build", () => {
   expect(html).not.toContain("<details open");
   expect(html).toContain("a".repeat(64));
   expect(html).toContain(`href="${base}/convt-0.3.0-source.tar.gz"`);
+});
+
+test("Raycast links to the store listing and credits its author", () => {
+  const html = renderToStaticMarkup(<Raycast />);
+  expect(html).toContain('<h2 id="raycast-title"');
+  expect(html).toContain("Convert from Raycast");
+  expect(html).toContain('href="https://www.raycast.com/0xdhrv/convt"');
+  expect(html).toContain("By Dhruv Suthar");
+  expect(html).toContain("macOS and Windows");
 });

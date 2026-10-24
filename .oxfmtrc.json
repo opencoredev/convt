@@ -10,6 +10,7 @@
     "packaging/linux/*lock.json",
     "packaging/release/rust-notice-blockers.json",
     "packaging/release/rust-spdx/**",
-    "packaging/release/rust-*.json"
+    "packaging/release/rust-*.json",
+    "integrations/raycast/**"
   ]
 }

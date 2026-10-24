@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
-import { Checksums, DownloadStage, Homebrew, Platforms } from "#/components/site/download";
+import { Checksums, DownloadStage, Homebrew, Platforms, Raycast } from "#/components/site/download";
 import { isOs, releaseFromManifest, type Os } from "#/lib/platform";
 import { parseReleaseManifest } from "#/lib/release-manifest";
 import { downloadGate } from "#/lib/sign-in";
@@ -69,6 +69,7 @@ function DownloadPage() {
           <Platforms os={os} release={release} />
           <Checksums release={release} />
         </div>
+        {os !== "linux" && <Raycast />}
       </div>
     </>
   );
