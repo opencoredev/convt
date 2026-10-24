@@ -150,6 +150,24 @@ fn opaque_images_keep_every_pixel_in_place() {
     }
 }
 
+#[test]
+fn tiny_images_still_make_a_valid_page() {
+    let Some(r) = registry() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    // One pixel at 96 DPI is 0.75 points; PDF pages are at least 3.
+    let dot = image::RgbImage::from_pixel(1, 1, image::Rgb([255, 0, 0]));
+    let src = dir.path().join("dot.png");
+    dot.save(&src).unwrap();
+    let pdf = convert(&r, &src, "pdf", Options::default()).unwrap();
+    let page = render(&r, &pdf[0], None);
+    assert_eq!(page.dimensions(), (3, 3));
+    assert!(near(page.get_pixel(1, 1).0, [255, 0, 0, 255]));
+    // A sliver keeps its shape until the long side reaches the maximum.
+    let sliver = image::RgbImage::from_pixel(2, 40, image::Rgb([0, 0, 255]));
+    let page = round_trip(&r, dir.path(), "sliver.png", sliver.into());
+    assert_eq!(page.dimensions(), (3, 60));
+}
+
 /// A 64x32 JPEG, red on the left and blue on the right.
 fn jpeg(dir: &Path, name: &str) -> PathBuf {
     let img = image::RgbImage::from_fn(64, 32, |x, _| {

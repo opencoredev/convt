@@ -41,6 +41,10 @@ const DEFAULT_IMAGE_DPI: u32 = 96;
 /// laid out at a higher resolution so the page fits.
 const MAX_PAGE_POINTS: f32 = 14_400.0;
 
+/// The smallest page side the PDF format allows. Tiny images are laid out
+/// at a lower resolution so the page reaches it.
+const MIN_PAGE_POINTS: f32 = 3.0;
+
 fn shipped_dirs(override_dir: Option<PathBuf>, exe_dir: Option<PathBuf>) -> Vec<PathBuf> {
     override_dir.into_iter().chain(exe_dir).collect()
 }
@@ -395,6 +399,11 @@ fn image_to_pdf(pdfium: &Pdfium, ctx: &Ctx, input: &Path, out_dir: &Path) -> Res
     ctx.progress(0.5);
     let dpi = ctx.options.dpi.unwrap_or(DEFAULT_IMAGE_DPI) as f32;
     let mut scale = 72.0 / dpi;
+    let shortest = width.min(height) as f32 * scale;
+    if shortest < MIN_PAGE_POINTS {
+        scale *= MIN_PAGE_POINTS / shortest;
+    }
+    // The longest side wins when an image is too narrow for both.
     let longest = width.max(height) as f32 * scale;
     if longest > MAX_PAGE_POINTS {
         scale *= MAX_PAGE_POINTS / longest;
