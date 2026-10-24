@@ -91,6 +91,9 @@ formats! {
     "m4a", "M4A", Audio, ["m4a"], "audio/mp4";
     "ogg", "OGG", Audio, ["ogg", "oga"], "audio/ogg";
     "opus", "Opus", Audio, ["opus"], "audio/opus";
+    "aiff", "AIFF", Audio, ["aiff", "aif"], "audio/aiff";
+    "caf", "CAF", Audio, ["caf"], "audio/x-caf";
+    "m4r", "M4R ringtone", Audio, ["m4r"], "audio/mp4";
     // PDF
     "pdf", "PDF", Pdf, ["pdf"], "application/pdf";
     // Office
@@ -100,6 +103,12 @@ formats! {
     "rtf", "RTF", Document, ["rtf"], "application/rtf";
     "txt", "Plain text", Document, ["txt"], "text/plain";
     "html", "HTML", Document, ["html", "htm"], "text/html";
+    "md", "Markdown", Document, ["md", "markdown"], "text/markdown";
+    "json", "JSON", Document, ["json"], "application/json";
+    "yaml", "YAML", Document, ["yaml", "yml"], "application/yaml";
+    // Subtitles
+    "srt", "SRT subtitles", Document, ["srt"], "application/x-subrip";
+    "vtt", "WebVTT subtitles", Document, ["vtt"], "text/vtt";
     "pptx", "PPTX", Presentation, ["pptx"], "application/vnd.openxmlformats-officedocument.presentationml.presentation";
     "ppt", "PPT", Presentation, ["ppt"], "application/vnd.ms-powerpoint";
     "odp", "ODP", Presentation, ["odp"], "application/vnd.oasis.opendocument.presentation";
@@ -107,6 +116,7 @@ formats! {
     "xls", "XLS", Spreadsheet, ["xls"], "application/vnd.ms-excel";
     "ods", "ODS", Spreadsheet, ["ods"], "application/vnd.oasis.opendocument.spreadsheet";
     "csv", "CSV", Spreadsheet, ["csv"], "text/csv";
+    "tsv", "TSV", Spreadsheet, ["tsv", "tab"], "text/tab-separated-values";
 }
 
 pub fn format_by_id(id: &str) -> Option<&'static Format> {
