@@ -4782,10 +4782,19 @@ fn activity_offers_the_pack_until_it_is_installed_or_dismissed(cx: &mut TestAppC
             .starts_with("Adds Word")
     );
 
+    // While it downloads, Activity shows the download once: its own
+    // notice, not the offer as well.
+    packs.hold.store(true, Ordering::SeqCst);
     click(cx, main, "pack-download");
+    wait_for_label(cx, main, "activity-pack", |s| {
+        s == "Adding document support"
+    });
+    assert!(!shown(cx, main, "pack-hint"));
+    packs.hold.store(false, Ordering::SeqCst);
     wait_for_label(cx, main, "pack-hint", |s| {
         s == "Document support is installed"
     });
+    assert!(!shown(cx, main, "activity-pack"));
     assert!(!shown(cx, settings, "pack-about"));
     click(cx, main, "pack-hint-dismiss");
     assert!(!shown(cx, main, "pack-hint"));
@@ -7316,4 +7325,56 @@ fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut Tes
     wait_until(cx, "installed", |_| {
         !installer.installed.lock().unwrap().is_empty()
     });
+}
+
+/// Install & Convert joined to onboarding's background download keeps its
+/// promise while that download waits to try again, converts once it's in,
+/// and forgets it only when the retries run out.
+#[gpui_kit::test]
+fn install_and_convert_waits_through_a_background_retry(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "connection reset");
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Report.docx");
+    cx.update(|cx| super::pack::start_background_install(&f.app, cx));
+    wait_until(cx, "the first try failed", |cx| {
+        f.app.read(cx).pack_retry_pending()
+    });
+    let (window, view) = f.quick(cli(vec![docx.clone()], Some("pdf"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    assert_eq!(packs.installs(), 1, "joins the download, starts no other");
+    pass_pack_retry(cx, &f.app, 1);
+    wait_for_saved(&f, cx, window);
+    assert!(f.dir.path().join("Report.pdf").exists());
+    assert_eq!(packs.installs(), 2);
+
+    // Every retry fails: the promise goes with the last one.
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "offline");
+    packs.fail_always.store(true, Ordering::SeqCst);
+    let g = Fixture::with_packs(cx, packs.clone());
+    let docx = g.docx("Plan.docx");
+    cx.update(|cx| super::pack::start_background_install(&g.app, cx));
+    wait_until(cx, "the first try failed", |cx| {
+        g.app.read(cx).pack_retry_pending()
+    });
+    let (window, view) = g.quick(cli(vec![docx], Some("pdf"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    pass_pack_retry(cx, &g.app, 1);
+    // Still waiting between tries.
+    assert!(intent(&view, cx));
+    pass_pack_retry(cx, &g.app, 2);
+    wait_until(cx, "the last try failed", |cx| {
+        matches!(g.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.run_until_parked();
+    assert!(!intent(&view, cx));
+    assert_eq!(packs.installs(), 3);
+    assert_eq!(g.jobs(cx), 0);
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
 }
