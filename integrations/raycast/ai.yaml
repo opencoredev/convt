@@ -1,10 +1,11 @@
 instructions: |
   Convert files locally using the installed Convt CLI. Convt must be installed and its packaged builds need an active trial or license. Never upload files or suggest that this extension uses the cloud API.
-  Require exact local file paths supplied by the user. Do not invent paths or claim to read Finder, File Explorer, or clipboard selection. Ask for paths when missing. Folders are not supported.
-  Use get-targets to identify source file types and discover output formats before converting. Its sources list includes each file, its extension, and its detected format, or null for an unrecognized extension. Detection uses filename extensions, not file contents. Its targets list contains all formats available for every input. Its suggestedTargetIds list contains Convt's suggestions in preference order, restricted to common targets. Use exact target IDs, such as jpeg instead of jpg.
-  When asked for suggestions, explain the detected types and suggest the returned suggestedTargetIds. Do not convert unless the user asks. An explicitly requested output takes priority over suggestions when it is in targets. If no suggestions are returned, offer available targets without claiming Convt recommends one. If a source format is null, explain the unrecognized extension. Otherwise, when targets is empty, explain that the user should choose compatible inputs or install the required Convt engines. Never invent available conversions.
-  Pass only options requested by the user. Omit outputDirectory to save beside the originals. An explicit output directory must already exist. PDFs can produce multiple image files, one per selected page.
-  Let convert-files obtain confirmation before writing. Report every returned output path and any per-file failures or cancellations. Existing files are preserved and names may receive suffixes, so never predict the output filename.
+  Require exact local file or folder paths supplied by the user. Do not invent paths or claim to read Finder, File Explorer, or clipboard selection. Ask for paths when missing.
+  Folders are supported. Convt converts the files directly inside a folder; pass recursive: true to get-targets and convert-files only when the user asks to include subfolders. Files in a folder that can't become the chosen format are skipped, and hidden files are ignored.
+  Use get-targets to identify source file types and discover output formats before converting. Its sources list includes each file named directly, its extension, and its detected format, or null for an unrecognized extension. Its folders list summarizes each folder: the number of files found and the recognized formats with counts. Detection uses filename extensions, not file contents. Its targets list contains the formats every named file and at least one file in the folders can reach. Its suggestedTargetIds list contains Convt's suggestions in preference order, restricted to those targets. Its presets list contains the user's saved Convt presets with their default target, if any. Use exact target IDs, such as jpeg instead of jpg.
+  When asked for suggestions, explain the detected types and suggest the returned suggestedTargetIds. Do not convert unless the user asks. An explicitly requested output takes priority over suggestions when it is in targets. If no suggestions are returned, offer available targets without claiming Convt recommends one. If a source format is null, explain the unrecognized extension. If get-targets returns a hint, tell the user what it says; it explains that Office documents need Convt's document pack. Otherwise, when targets is empty, explain that the user should choose compatible inputs or install the required Convt engines. Never invent available conversions.
+  Pass only options requested by the user. Omit outputDirectory to save beside the originals. An explicit output directory must already exist; with folders and subfolders, Convt recreates the subfolder structure inside it. PDFs can produce multiple image files, one per selected page. Use preset only with a name from the presets list. For image targets, background sets what transparent areas become; JPEG cannot keep transparency, so suggest white or black instead. For video targets, videoHeight caps the height (2160, 1440, 1080, 720, 480, or 360 are typical; it must be even), videoCodec is h264 or hevc for MP4, MOV, or MKV, and noAudio removes the audio. audioBitrate applies to audio and video targets, in kbit/s from 8 to 640.
+  Let convert-files obtain confirmation before writing. Report every returned output path and any per-file failures or cancellations. Existing files are preserved and names may receive suffixes, so never predict the output filename. For folders, results list each converted file, not the folder.
   Never automatically retry a conversion. A batch can partially succeed. If the tool reports an unknown outcome, ask the user to check the output folder before trying again. Never claim all files succeeded when any entry failed.
 evals:
   - input: "@convt What formats can I convert /Users/me/photo.heic to?"
@@ -18,6 +19,9 @@ evals:
           - { id: jpeg, name: JPEG, category: image, extensions: [jpg, jpeg] }
           - { id: png, name: PNG, category: image, extensions: [png] }
         suggestedTargetIds: [jpeg, png]
+        folders: []
+        documentPackMissing: false
+        presets: []
     expected:
       - callsTool:
           name: get-targets
@@ -83,3 +87,73 @@ evals:
           name: get-targets
           arguments:
             files: [/Users/me/clip.mov]
+  - input: "@convt Convert everything in /Users/me/Screenshots, including subfolders, to WebP."
+    mocks:
+      get-targets:
+        sources: []
+        folders:
+          - folder: /Users/me/Screenshots
+            files: 3
+            formats:
+              - { format: { id: png, name: PNG, category: image, extensions: [png] }, files: 3 }
+            complete: true
+        targets:
+          - { id: jpeg, name: JPEG, category: image, extensions: [jpg, jpeg] }
+          - { id: webp, name: WebP, category: image, extensions: [webp] }
+        suggestedTargetIds: [webp, jpeg]
+        documentPackMissing: false
+        presets: []
+      convert-files:
+        - { status: done, input: /Users/me/Screenshots/one.png, outputs: [/Users/me/Screenshots/one.webp] }
+        - { status: done, input: /Users/me/Screenshots/two.png, outputs: [/Users/me/Screenshots/two.webp] }
+        - { status: done, input: /Users/me/Screenshots/old/three.png, outputs: [/Users/me/Screenshots/old/three.webp] }
+    expected:
+      - callsTool:
+          name: convert-files
+          arguments:
+            files: [/Users/me/Screenshots]
+            target: webp
+            recursive: true
+  - input: "@convt Convert /Users/me/talk.mov to a 720p MP4 without audio."
+    mocks:
+      get-targets:
+        sources:
+          - file: /Users/me/talk.mov
+            extension: mov
+            format: { id: mov, name: QuickTime, category: video, extensions: [mov] }
+        folders: []
+        targets:
+          - { id: mp4, name: MP4, category: video, extensions: [mp4] }
+          - { id: webm, name: WebM, category: video, extensions: [webm] }
+        suggestedTargetIds: [mp4]
+        documentPackMissing: false
+        presets: []
+      convert-files:
+        - { status: done, input: /Users/me/talk.mov, outputs: [/Users/me/talk.mp4] }
+    expected:
+      - callsTool:
+          name: convert-files
+          arguments:
+            files: [/Users/me/talk.mov]
+            target: mp4
+            videoHeight: 720
+            noAudio: true
+  - input: "@convt What can I convert /Users/me/notes.docx to?"
+    mocks:
+      get-targets:
+        sources:
+          - file: /Users/me/notes.docx
+            extension: docx
+            format: { id: docx, name: DOCX, category: document, extensions: [docx] }
+        folders: []
+        targets: []
+        suggestedTargetIds: []
+        documentPackMissing: true
+        presets: []
+        hint: "Office documents in this selection can't be converted because neither Convt's document pack nor LibreOffice is installed. The user can install the pack with the Install Document Pack action in the Convert Files command, by running `convt pack install documents`, or by downloading Convt from https://convt.app/download."
+    expected:
+      - callsTool:
+          name: get-targets
+          arguments:
+            files: [/Users/me/notes.docx]
+      - includes: "document pack"

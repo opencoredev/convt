@@ -4,7 +4,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
-import type { FileInspection, Format } from "../src/lib/convt";
+import * as convt from "../src/lib/convt";
+import type { FileInspection, Format, PackProgress, Preset } from "../src/lib/convt";
 
 type Element = { type: any; props: any };
 
@@ -22,6 +23,9 @@ const formats: Record<string, Format> = {
   webp: { id: "webp", name: "WebP", category: "image", extensions: ["webp"] },
   mov: { id: "mov", name: "MOV", category: "video", extensions: ["mov"] },
   mp4: { id: "mp4", name: "MP4", category: "video", extensions: ["mp4"] },
+  webm: { id: "webm", name: "WebM", category: "video", extensions: ["webm"] },
+  mp3: { id: "mp3", name: "MP3", category: "audio", extensions: ["mp3"] },
+  docx: { id: "docx", name: "DOCX", category: "document", extensions: ["docx"] },
 };
 
 function inspection(files: string[], targetIds = ["jpeg"], suggestedTargetIds = ["jpeg"]): FileInspection {
@@ -30,8 +34,10 @@ function inspection(files: string[], targetIds = ["jpeg"], suggestedTargetIds = 
       const extension = path.extname(file).slice(1).toLowerCase();
       return { file, extension, format: formats[extension] ?? null };
     }),
+    folders: [],
     targets: targetIds.map((id) => formats[id]),
     suggestedTargetIds,
+    documentPackMissing: false,
   };
 }
 
@@ -47,7 +53,12 @@ function deferred<T>() {
 
 function harness(
   convert: (request: any, callbacks: any) => Promise<any[]>,
-  inspect: (files: string[], signal: AbortSignal) => Promise<FileInspection> = async (files) => inspection(files),
+  inspect: (files: string[], signal: AbortSignal, recursive: boolean) => Promise<FileInspection> = async (files) =>
+    inspection(files),
+  extra: {
+    presets?: Preset[];
+    installPack?: (callbacks: { onProgress?: (progress: PackProgress) => void }) => Promise<void>;
+  } = {},
 ) {
   const slots: any[] = [];
   let cursor = 0;
@@ -55,6 +66,7 @@ function harness(
   const cleanups = new Map<number, () => void>();
   const stack: Element[] = [];
   const failures: unknown[] = [];
+  const toasts: Record<string, unknown>[] = [];
   let pops = 0;
   const jsx = (type: any, props: any) => ({ type, props });
   const component = (name: string, children: Record<string, any> = {}) =>
@@ -64,6 +76,7 @@ function harness(
     FilePicker: "FilePicker",
     Dropdown: component("Dropdown", { Item: "DropdownItem", Section: "DropdownSection" }),
     TextField: "TextField",
+    Checkbox: "Checkbox",
   });
   const api = {
     Form,
@@ -80,8 +93,12 @@ function harness(
     Detail: "Detail",
     Icon: {},
     Color: {},
-    Toast: { Style: { Success: "success", Failure: "failure" } },
-    showToast: async () => {},
+    Toast: { Style: { Success: "success", Failure: "failure", Animated: "animated" } },
+    showToast: async (options: Record<string, unknown>) => {
+      const toast = { ...options };
+      toasts.push(toast);
+      return toast;
+    },
     useNavigation: () => ({
       push: (element: Element) => stack.push(element),
       pop: () => {
@@ -138,11 +155,15 @@ function harness(
     react,
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "node:path": path,
-    "./lib/preferences": {},
+    "./lib/preferences": { getJobs: () => 2 },
     "./lib/convt": {
-      inspectFiles: (_binary: string, files: string[], signal: AbortSignal) => inspect(files, signal),
+      ...convt,
+      inspectFiles: (_binary: string, files: string[], options: { signal: AbortSignal; recursive: boolean }) =>
+        inspect(files, options.signal, options.recursive),
       validateOptions: () => {},
       convertFiles: (_binary: string, request: any, callbacks: any) => convert(request, callbacks),
+      getPresets: async () => extra.presets ?? [],
+      installDocumentPack: async (_binary: string, callbacks: any) => extra.installPack?.(callbacks),
     },
   };
   runInNewContext(outputText, {
@@ -173,6 +194,7 @@ function harness(
     effects,
     stack,
     failures,
+    toasts,
     field,
     action,
     Form,
@@ -410,4 +432,223 @@ test("unknown files, no common outputs, and an empty selection have distinct sta
     nodes(ui.field(tree, "target")).find((node) => node.type === "DropdownItem")?.props.title,
     "Choose files first",
   );
+});
+
+async function settle(ui: ReturnType<typeof harness>) {
+  ui.render();
+  ui.effects.splice(0).forEach((effect) => effect());
+  await new Promise(setImmediate);
+  return ui.render();
+}
+
+test("video targets offer height, codec, bitrate, and audio removal and pass them with parallel jobs", async () => {
+  let request: any;
+  const ui = harness(
+    async (sent) => {
+      request = sent;
+      return [];
+    },
+    async (files) => inspection(files, ["mp4", "webm", "mp3"], ["mp4"]),
+  );
+  ui.setFiles(["/fixture/clip.mov"]);
+  let tree = await settle(ui);
+  assert.equal(ui.field(tree, "target").props.value, "mp4");
+  for (const id of ["videoHeight", "videoCodec", "audioBitrate", "noAudio"]) assert.ok(ui.field(tree, id), id);
+  for (const id of ["background", "maxSize", "recursive", "preset"]) assert.equal(ui.field(tree, id), undefined, id);
+  assert.deepEqual(
+    nodes(ui.field(tree, "videoHeight"))
+      .filter((node) => node.type === "DropdownItem")
+      .map((node) => node.props.value),
+    ["", "2160", "1440", "1080", "720", "480", "360"],
+  );
+  assert.deepEqual(
+    nodes(ui.field(tree, "videoCodec"))
+      .filter((node) => node.type === "DropdownItem")
+      .map((node) => node.props.value),
+    ["", "h264", "hevc"],
+  );
+  await ui.action(tree, "Convert Files").props.onSubmit({
+    target: "mp4",
+    outputDirectory: [],
+    videoHeight: "720",
+    videoCodec: "hevc",
+    audioBitrate: "128",
+    noAudio: true,
+  });
+  assert.equal(request.videoHeight, 720);
+  assert.equal(request.videoCodec, "hevc");
+  assert.equal(request.audioBitrate, 128);
+  assert.equal(request.noAudio, true);
+  assert.equal(request.jobs, 2);
+  assert.equal(request.recursive, false);
+
+  // WebM has no codec choice; audio targets only offer the bitrate.
+  ui.field(tree, "target").props.onChange("webm");
+  tree = ui.render();
+  assert.equal(ui.field(tree, "videoCodec"), undefined);
+  ui.field(tree, "target").props.onChange("mp3");
+  tree = ui.render();
+  assert.ok(ui.field(tree, "audioBitrate"));
+  for (const id of ["videoHeight", "noAudio", "quality"]) assert.equal(ui.field(tree, id), undefined, id);
+});
+
+test("image backgrounds hide Transparent where the format can't keep it and accept a custom color", async () => {
+  const requests: any[] = [];
+  const ui = harness(
+    async (sent) => {
+      requests.push(sent);
+      return [];
+    },
+    async (files) => inspection(files, ["jpeg", "webp"], ["webp"]),
+  );
+  ui.setFiles(["/fixture/logo.png"]);
+  let tree = await settle(ui);
+  const choices = () =>
+    nodes(ui.field(ui.render(), "background"))
+      .filter((node) => node.type === "DropdownItem")
+      .map((node) => node.props.value);
+  assert.deepEqual(choices(), ["", "transparent", "white", "black", "custom"]);
+  ui.field(tree, "background").props.onChange("transparent");
+  ui.field(tree, "target").props.onChange("jpeg");
+  tree = ui.render();
+  assert.deepEqual(choices(), ["", "white", "black", "custom"]);
+  assert.equal(ui.field(tree, "background").props.value, "");
+  assert.equal(ui.field(tree, "backgroundColor"), undefined);
+  ui.field(tree, "background").props.onChange("custom");
+  tree = ui.render();
+  assert.ok(ui.field(tree, "backgroundColor"));
+  await ui.action(tree, "Convert Files").props.onSubmit({ target: "jpeg", outputDirectory: [], background: "custom" });
+  assert.equal(requests.length, 0);
+  assert.match(String(ui.toasts.at(-1)?.title), /background color/);
+  await ui
+    .action(tree, "Convert Files")
+    .props.onSubmit({ target: "jpeg", outputDirectory: [], background: "custom", backgroundColor: " #ff8800 " });
+  assert.equal(requests[0].background, "#ff8800");
+});
+
+test("presets are listed with None and choosing one selects its output format", async () => {
+  let request: any;
+  const ui = harness(
+    async (sent) => {
+      request = sent;
+      return [];
+    },
+    async (files) => inspection(files, ["jpeg", "webp"], ["jpeg"]),
+    {
+      presets: [
+        { name: "web", target: "webp" },
+        { name: "small", target: null },
+      ],
+    },
+  );
+  ui.setFiles(["/fixture/photo.png"]);
+  let tree = await settle(ui);
+  tree = ui.render();
+  const preset = ui.field(tree, "preset");
+  assert.deepEqual(
+    nodes(preset)
+      .filter((node) => node.type === "DropdownItem")
+      .map((node) => [node.props.value, node.props.title]),
+    [
+      ["", "None"],
+      ["web", "web (webp)"],
+      ["small", "small"],
+    ],
+  );
+  assert.equal(ui.field(tree, "target").props.value, "jpeg");
+  preset.props.onChange("web");
+  tree = ui.render();
+  assert.equal(ui.field(tree, "target").props.value, "webp");
+  await ui.action(tree, "Convert Files").props.onSubmit({ target: "webp", outputDirectory: [], preset: "web" });
+  assert.equal(request.preset, "web");
+  await ui.action(tree, "Convert Files").props.onSubmit({ target: "webp", outputDirectory: [], preset: "" });
+  assert.equal(request.preset, undefined);
+});
+
+test("folders offer subfolders, which reloads targets and is passed to the conversion", async () => {
+  const calls: boolean[] = [];
+  let request: any;
+  const folder = (files: string[], recursive: boolean): FileInspection => ({
+    ...inspection([], recursive ? ["jpeg", "pdf"] : ["jpeg"], ["jpeg"]),
+    folders: files.map((file) => ({
+      folder: file,
+      files: recursive ? 3 : 2,
+      formats: [{ format: formats.png, files: recursive ? 2 : 1 }],
+      complete: true,
+    })),
+  });
+  const ui = harness(
+    async (sent) => {
+      request = sent;
+      return [];
+    },
+    async (files, _signal, recursive) => {
+      calls.push(recursive);
+      return folder(files, recursive);
+    },
+  );
+  ui.setFiles(["/fixture/shots"]);
+  let tree = await settle(ui);
+  assert.deepEqual(calls, [false]);
+  assert.match(ui.action(tree, "Detected File Types").props.text, /PNG image · 1 file; 1 other file skipped/);
+  assert.match(ui.action(tree, "Detected File Types").props.text, /Includes 1 folder/);
+  const checkbox = ui.field(tree, "recursive");
+  assert.equal(checkbox.props.value, false);
+  checkbox.props.onChange(true);
+  tree = await settle(ui);
+  assert.deepEqual(calls, [false, true]);
+  assert.equal(ui.field(tree, "recursive").props.value, true);
+  assert.match(ui.action(tree, "Detected File Types").props.text, /PNG image · 2 files/);
+  await ui.action(tree, "Convert Files").props.onSubmit({ target: "jpeg", outputDirectory: [], recursive: true });
+  assert.equal(request.recursive, true);
+  assert.deepEqual(request.files, ["/fixture/shots"]);
+});
+
+test("a missing document pack offers to install it and reloads targets afterwards", async () => {
+  let installed = false;
+  const ui = harness(
+    async () => [],
+    async (files) =>
+      installed ? inspection(files, ["pdf"], ["pdf"]) : { ...inspection(files, [], []), documentPackMissing: true },
+    {
+      installPack: async ({ onProgress }) => {
+        onProgress?.({ kind: "download", bytes: 5, total: 10 });
+        installed = true;
+      },
+    },
+  );
+  ui.setFiles(["/fixture/notes.docx"]);
+  let tree = await settle(ui);
+  assert.match(ui.field(tree, "files").props.error, /document pack/);
+  assert.match(ui.action(tree, "Document Pack").props.text, /Install Document Pack/);
+  const actions = nodes(tree.props.actions).filter((node) => node.props.title);
+  assert.equal(actions[0].props.title, "Install Document Pack");
+  assert.equal(ui.action(tree, "Open Convt.app").props.url, "https://convt.app/download");
+  await ui.action(tree, "Install Document Pack").props.onAction();
+  const toast = ui.toasts.at(-1)!;
+  assert.equal(toast.style, "success");
+  assert.equal(toast.title, "Document pack installed");
+  tree = await settle(ui);
+  assert.equal(ui.field(tree, "files").props.error, undefined);
+  assert.equal(ui.field(tree, "target").props.value, "pdf");
+  assert.equal(ui.action(tree, "Install Document Pack"), undefined);
+});
+
+test("a failed document pack install keeps the form and shows the error", async () => {
+  const ui = harness(
+    async () => [],
+    async (files) => ({ ...inspection(files, [], []), documentPackMissing: true }),
+    {
+      installPack: async () => {
+        throw new Error("The document pack download failed.");
+      },
+    },
+  );
+  ui.setFiles(["/fixture/sheet.docx"]);
+  const tree = await settle(ui);
+  await ui.action(tree, "Install Document Pack").props.onAction();
+  const toast = ui.toasts.at(-1)!;
+  assert.equal(toast.style, "failure");
+  assert.match(String(toast.message), /download failed/);
+  assert.ok(ui.action(ui.render(), "Install Document Pack"));
 });
