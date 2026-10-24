@@ -26,6 +26,9 @@ pub struct CreateJob {
     pub input_format: String,
     pub target_format: String,
     pub input_bytes: i64,
+    /// Conversion settings. Omitted means the engines' defaults.
+    #[serde(default)]
+    pub options: convt_core::Options,
 }
 #[derive(FromRow, Serialize, Clone, Debug)]
 pub struct Job {
@@ -38,6 +41,7 @@ pub struct Job {
     pub status: String,
     pub input_format: String,
     pub target_format: String,
+    pub options: sqlx::types::Json<convt_core::Options>,
     pub input_key: Option<String>,
     pub input_bytes: Option<i64>,
     pub output_keys: sqlx::types::Json<Vec<String>>,
@@ -75,6 +79,9 @@ pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<
             "unsupported_format",
             "Choose distinct supported input and target formats.",
         ));
+    }
+    if let Err(e) = validate_options(&data.options, &data.target_format) {
+        return Err(ApiError::bad("invalid_options", &e));
     }
     let capabilities: serde_json::Value =
         serde_json::from_str(include_str!("../cloud-formats.json"))
@@ -133,12 +140,28 @@ pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<
         ));
     }
     let id = new_id("job");
-    let job = sqlx::query_as!(Job, r#"insert into cloud_jobs (id,user_id,source,api_key_id,subscription_id,quota_period_start,input_format,target_format,input_key,input_bytes,reserved_bytes,reserved_cents,expires_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '24 hours') returning id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at"#, &id, &who.user_id, who.source(), who.key_id.as_deref(), &sub.id, sub.period, &data.input_format, &data.target_format, format!("{id}/upload"), data.input_bytes, if kind=="pro" {data.input_bytes} else {0}, if kind=="api" {API_CENTS} else {0}).fetch_one(&mut *tx).await?;
+    let job = sqlx::query_as!(Job, r#"insert into cloud_jobs (id,user_id,source,api_key_id,subscription_id,quota_period_start,input_format,target_format,options,input_key,input_bytes,reserved_bytes,reserved_cents,expires_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now()+interval '24 hours') returning id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at"#, &id, &who.user_id, who.source(), who.key_id.as_deref(), &sub.id, sub.period, &data.input_format, &data.target_format, sqlx::types::Json(&data.options) as _, format!("{id}/upload"), data.input_bytes, if kind=="pro" {data.input_bytes} else {0}, if kind=="api" {API_CENTS} else {0}).fetch_one(&mut *tx).await?;
     tx.commit().await?;
     Ok(job)
 }
+/// The same checks the CLI makes before converting, so a bad option fails
+/// at reservation instead of in the worker.
+pub fn validate_options(options: &convt_core::Options, target: &str) -> Result<(), String> {
+    options.validate().map_err(|e| e.to_string())?;
+    if let Some(to) = convt_core::format_by_id(target)
+        && options.background == Some(convt_core::Background::Transparent)
+        && to.category == convt_core::Category::Image
+        && !to.keeps_transparency()
+    {
+        return Err(format!(
+            "{} can't store transparency; choose a background color such as white or black",
+            to.name
+        ));
+    }
+    Ok(())
+}
 pub async fn owned(pool: &PgPool, who: &Principal, id: &str) -> Result<Job, ApiError> {
-    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()"#, id, &who.user_id)
+    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()"#, id, &who.user_id)
         .fetch_optional(pool)
         .await?
         .ok_or_else(|| ApiError::not_found("Job not found."))
@@ -150,7 +173,7 @@ pub async fn cancel(pool: &PgPool, who: &Principal, id: &str) -> Result<Job, Api
 }
 pub async fn claim(pool: &PgPool, worker: &str) -> sqlx::Result<Option<Job>> {
     sqlx::query!(r#"update cloud_jobs set status='failed',reservation='released',error_code='expired_or_exhausted',lease_expires_at=null,finished_at=now() where reservation='open' and (expires_at<=now() or (status='running' and lease_expires_at<=now() and attempt>=max_attempts))"#).execute(pool).await?;
-    sqlx::query_as!(Job, r#"with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.input_key,j.input_bytes,j.output_keys as "output_keys: _",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at"#, worker).fetch_optional(pool).await
+    sqlx::query_as!(Job, r#"with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.options as "options: _",j.input_key,j.input_bytes,j.output_keys as "output_keys: _",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at"#, worker).fetch_optional(pool).await
 }
 pub async fn renew(pool: &PgPool, job: &Job) -> sqlx::Result<bool> {
     Ok(sqlx::query!(r#"update cloud_jobs set lease_expires_at=now()+interval '30 seconds',updated_at=now() where id=$1 and attempt=$2 and lease_owner=$3 and status='running' and lease_expires_at>now() and expires_at>now()"#, &job.id, job.attempt, job.lease_owner.as_deref()).execute(pool).await?.rows_affected()==1)

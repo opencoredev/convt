@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use convt_core::{Cancel, Destination, Format, Job, format_by_extension};
+use convt_core::{Cancel, Destination, Format, Job, Options, format_by_extension};
 use convt_license::account::{self, ApiError, CloudCredential};
 use convt_license::{Plan, client::State, date};
 use serde::Deserialize;
@@ -185,6 +185,7 @@ pub trait CloudApi: Send + Sync {
         from: &str,
         to: &str,
         bytes: u64,
+        options: &Options,
     ) -> Result<Created, CloudError>;
     /// Uploads exactly `bytes` bytes of `file`. `sent` gets the bytes sent
     /// so far.
@@ -419,7 +420,7 @@ pub fn run(cloud: &Cloud, job: &Job, progress: &dyn Fn(Option<f32>), cancel: &Ca
         return Err(cancelled());
     }
     let created = session
-        .call(|api, c| api.create(c, from.id, to.id, bytes))
+        .call(|api, c| api.create(c, from.id, to.id, bytes, &job.options))
         .map_err(err)?;
     let id = created.job.id.clone();
     tracing::info!(job = %id, "cloud job created");

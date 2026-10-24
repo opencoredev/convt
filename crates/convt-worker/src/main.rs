@@ -32,15 +32,18 @@ async fn run(args: Vec<String>) -> anyhow::Result<()> {
             "--sandbox-formats" => println!("{}", sandbox.formats().await?),
             "--sandbox-convert" => {
                 anyhow::ensure!(
-                    args.len() == 4,
-                    "usage: --sandbox-convert INPUT TARGET OUTPUT_DIR"
+                    matches!(args.len(), 4 | 5),
+                    "usage: --sandbox-convert INPUT TARGET OUTPUT_DIR [OPTIONS_JSON]"
                 );
                 let input = std::path::Path::new(&args[1]);
                 let extension = input
                     .extension()
                     .and_then(|x| x.to_str())
                     .ok_or_else(|| anyhow::anyhow!("missing extension"))?;
-                let root = sandbox.prepare(input, extension)?;
+                let mut root = sandbox.prepare(input, extension)?;
+                if let Some(options) = args.get(4) {
+                    root.options = serde_json::from_str(options)?;
+                }
                 let mut process = sandbox.spawn(&root, &args[2], Default::default(), true)?;
                 let (status, _, error) = process
                     .wait_report(std::time::Duration::from_secs(600))

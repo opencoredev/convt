@@ -107,3 +107,33 @@ test("completion racing cancellation does not claim released usage", async () =>
   expect(error.code).toBe("already_completed");
   expect(error.message).toContain("settled");
 });
+test("conversion options are sent with the job, and left out when unset", async () => {
+  const bodies: unknown[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs")) {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ job, upload_url: "https://objects.test/input" });
+    }
+    if (url.includes("objects.test")) return new Response("", { status: 200 });
+    if (url.endsWith("/download"))
+      return Response.json({ outputs: [{ name: "input.jpg", url: "https://objects.test/out" }] });
+    return Response.json({ ...job, status: "succeeded" });
+  }) as typeof fetch;
+  const client = new Convt({ apiKey: "test", baseUrl: "https://api.test" });
+  await client.convert(new Blob(["png"]), {
+    from: "png",
+    to: "jpeg",
+    options: { quality: 40, max_size: 512 },
+  });
+  await client.convert(new Blob(["png"]), { from: "png", to: "jpeg" });
+  expect(bodies).toEqual([
+    {
+      input_format: "png",
+      target_format: "jpeg",
+      input_bytes: 3,
+      options: { quality: 40, max_size: 512 },
+    },
+    { input_format: "png", target_format: "jpeg", input_bytes: 3 },
+  ]);
+});
