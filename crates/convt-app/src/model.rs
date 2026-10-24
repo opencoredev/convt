@@ -730,11 +730,10 @@ impl AppState {
     }
 
     /// Whether some conversion this registry offers reads documents: the
-    /// document pack or a LibreOffice on this computer is in use.
+    /// document pack or a LibreOffice on this computer is in use. Markdown,
+    /// data and subtitle files convert without either, so Word files decide.
     pub fn documents_supported(&self) -> bool {
-        convt_core::FORMATS
-            .iter()
-            .any(|f| pack::is_document(f) && !self.registry.targets(f).is_empty())
+        convt_core::format_by_id("docx").is_some_and(|f| !self.registry.targets(f).is_empty())
     }
 
     /// Why documents can't convert right now, if the pack they use is

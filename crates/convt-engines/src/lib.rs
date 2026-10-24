@@ -1,5 +1,6 @@
-//! The engines convt ships with. Each one wraps a native tool or library and
-//! declares the conversions it supports; `convt-core` handles routing.
+//! The engines convt ships with. Each one wraps a native tool or library, or
+//! converts text formats itself, and declares the conversions it supports;
+//! `convt-core` handles routing.
 
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -10,9 +11,11 @@ use std::time::{Duration, Instant};
 
 use convt_core::{Ctx, Error, Registry, Result};
 
+pub mod data;
 pub mod ffmpeg;
 pub mod heic;
 pub mod image;
+pub mod markdown;
 pub mod office;
 mod orientation;
 #[cfg(test)]
@@ -24,7 +27,9 @@ pub mod paths;
 pub mod pdfium;
 #[cfg(test)]
 mod pin;
+pub mod subtitle;
 pub mod svg;
+mod text;
 #[cfg(windows)]
 mod windows_acl;
 
@@ -53,6 +58,9 @@ fn registry(documents: bool) -> Registry {
     let mut r = Registry::new();
     r.register(Arc::new(image::ImageEngine));
     r.register(Arc::new(svg::SvgEngine));
+    r.register(Arc::new(markdown::MarkdownEngine));
+    r.register(Arc::new(data::DataEngine));
+    r.register(Arc::new(subtitle::SubtitleEngine));
     #[cfg(target_os = "macos")]
     r.register(Arc::new(heic::ImageIoEngine::new()));
     r.register(Arc::new(heic::LibheifEngine::new()));

@@ -86,7 +86,9 @@ impl Registry {
             from: from.id.into(),
             to: to.id.into(),
         };
-        if from == to {
+        // Plain text has no structure to turn into Markdown; the route
+        // through HTML would only escape its punctuation.
+        if from == to || (from.id == "txt" && to.id == "md") {
             return Err(no_route());
         }
         let mut prev: HashMap<&str, (&str, &Edge)> = HashMap::new();
@@ -97,7 +99,9 @@ impl Registry {
                 break;
             }
             let d = depth[node];
-            if d == MAX_HOPS {
+            // Plain text keeps only the words, so it ends a route: a
+            // subtitle file reaches TXT but not a PDF or Word file made from it.
+            if d == MAX_HOPS || (d > 0 && node == "txt") {
                 continue;
             }
             // HashMap order changes between runs, so equal-length routes would be
@@ -175,8 +179,17 @@ impl Registry {
                 return picked;
             }
         }
+        // Text formats that share a category with Office documents want
+        // their own neighbours: a subtitle file wants the other subtitle
+        // format, not Word.
         let preferred: &[&str] = match from.id {
             "gif" => &["mp4", "webp", "png"],
+            "md" => &["html", "pdf", "docx"],
+            "json" => &["yaml", "csv"],
+            "yaml" => &["json", "csv"],
+            "srt" => &["vtt", "txt"],
+            "vtt" => &["srt", "txt"],
+            "tsv" => &["csv", "xlsx", "json"],
             _ => default_menu(from.category),
         };
         let picked = pick(&mut preferred.iter().copied());
@@ -550,6 +563,60 @@ mod tests {
         assert_eq!(ids("png"), ["jpeg", "webp"]);
         // No preferred target is reachable: fall back to what is.
         assert_eq!(ids("flac"), ["opus"]);
+    }
+
+    #[test]
+    fn plain_text_ends_a_route_and_never_becomes_markdown() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "text",
+            0,
+            vec![
+                ("srt", "txt"),
+                ("txt", "pdf"),
+                ("txt", "html"),
+                ("html", "md"),
+                ("html", "pdf"),
+            ],
+        )));
+        assert!(r.plan(f("srt"), f("txt")).is_ok());
+        assert!(r.plan(f("srt"), f("pdf")).is_err());
+        assert!(r.plan(f("txt"), f("pdf")).is_ok());
+        assert!(r.plan(f("txt"), f("html")).is_ok());
+        assert!(r.plan(f("txt"), f("md")).is_err());
+        assert!(r.plan(f("html"), f("md")).is_ok());
+    }
+
+    #[test]
+    fn text_formats_have_their_own_menus() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "text",
+            0,
+            vec![
+                ("md", "html"),
+                ("md", "txt"),
+                ("html", "pdf"),
+                ("html", "docx"),
+                ("json", "yaml"),
+                ("json", "csv"),
+                ("csv", "pdf"),
+                ("srt", "vtt"),
+                ("srt", "txt"),
+                ("txt", "pdf"),
+                ("txt", "docx"),
+            ],
+        )));
+        let ids = |from| {
+            r.menu_targets(f(from))
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids("md"), ["html", "pdf", "docx"]);
+        assert_eq!(ids("json"), ["yaml", "csv"]);
+        // Reachable through a text file, but not what a subtitle menu offers.
+        assert_eq!(ids("srt"), ["vtt", "txt"]);
     }
 
     #[test]
