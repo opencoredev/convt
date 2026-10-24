@@ -195,8 +195,18 @@ struct Words {
     detail: Option<String>,
 }
 
-fn words(pack: &PackState, mixed: bool) -> Words {
-    let skipped = if mixed {
+/// Why Quick convert shows the card.
+pub(super) enum Need {
+    /// Files only the pack can convert. `mixed`: other files in the
+    /// selection convert now.
+    Files { mixed: bool },
+    /// The picked target needs the pack, though the files open without it:
+    /// `from` names them ("this PDF"), `to` the target.
+    Target { from: String, to: &'static str },
+}
+
+fn words(pack: &PackState, need: &Need) -> Words {
+    let skipped = if matches!(need, Need::Files { mixed: true }) {
         " Until then, documents are skipped."
     } else {
         ""
@@ -245,10 +255,16 @@ fn words(pack: &PackState, mixed: bool) -> Words {
         },
         (phase, _) => Words {
             title: "Document support isn't installed".into(),
-            body: format!(
-                "Word, Excel, PowerPoint and OpenDocument files convert with LibreOffice, which convt downloads once. After that, documents convert offline on {}, like everything else.{skipped}",
-                theme::this_machine()
-            ),
+            body: match need {
+                Need::Target { from, to } => format!(
+                    "Turning {from} into {to} uses LibreOffice, which convt downloads once. After that, documents convert offline on {}, like everything else.",
+                    theme::this_machine()
+                ),
+                Need::Files { .. } => format!(
+                    "Word, Excel, PowerPoint and OpenDocument files convert with LibreOffice, which convt downloads once. After that, documents convert offline on {}, like everything else.{skipped}",
+                    theme::this_machine()
+                ),
+            },
             detail: matches!(phase, PackPhase::Failed(f) if f.kind == FailureKind::Cancelled)
                 .then(|| "Download stopped. Downloading again picks up where it stopped.".into()),
         },
@@ -256,11 +272,12 @@ fn words(pack: &PackState, mixed: bool) -> Words {
 }
 
 /// The action under the words: Download, Try again, or progress with Cancel.
-/// With `then`, the button converts after installing: Install & Convert.
+/// Without `download`, an idle card has no button, because the window's own
+/// Install & Convert starts the download.
 fn action(
     app: &Entity<AppState>,
     pack: &PackState,
-    then: Option<After>,
+    download: bool,
     p: &Palette,
 ) -> Option<AnyElement> {
     match &pack.phase {
@@ -277,12 +294,11 @@ fn action(
                     .into_any_element(),
             )
         }
-        _ if !pack.offer.configured || pack.removing => None,
+        _ if !pack.offer.configured || pack.removing || !download => None,
         phase => {
             let verb = match (phase, &pack.status) {
                 (PackPhase::Failed(f), _) if f.kind != FailureKind::Cancelled => "Try again",
                 (_, Status::Rejected(_)) => "Download again",
-                _ if then.is_some() => "Install & Convert",
                 _ => "Download",
             };
             Some(
@@ -293,7 +309,7 @@ fn action(
                         app,
                         download_label(verb, &pack.offer),
                         false,
-                        then,
+                        None,
                     ))
                     .into_any_element(),
             )
@@ -329,17 +345,17 @@ fn page_icon(p: &Palette) -> Div {
 }
 
 /// Quick convert's card for documents nothing can convert yet, or a target
-/// that needs the pack. `mixed`: other files in the selection can convert
-/// now. `then`: a target is picked, so the button installs and converts.
+/// that needs the pack. `download`: the card carries the Download button;
+/// without it the window's Install & Convert is the one action.
 pub(super) fn card(
     app: &Entity<AppState>,
-    mixed: bool,
-    then: Option<After>,
+    need: &Need,
+    download: bool,
     p: &Palette,
     cx: &App,
 ) -> impl IntoElement + use<> {
     let pack = &app.read(cx).pack;
-    let words = words(pack, mixed);
+    let words = words(pack, need);
     let idle = !matches!(pack.phase, PackPhase::Working(_));
     let sizes = sizes_line(&pack.offer);
     div()
@@ -387,7 +403,7 @@ pub(super) fn card(
                         .child(mono(11., 14., p.tertiary).child(detail))
                 }))
                 .children(pack.notice.clone().map(|e| error_text(e, p)))
-                .children(action(app, pack, then, p).map(|a| div().pt(px(6.)).child(a))),
+                .children(action(app, pack, download, p).map(|a| div().pt(px(6.)).child(a))),
         )
 }
 
@@ -492,10 +508,10 @@ pub(super) fn settings_row(
     // Offer the download where it would help: nothing installed and no
     // LibreOffice on this computer, a failed try, or a rejected pack.
     let offer = match (&pack.phase, &pack.status) {
-        (PackPhase::Working(_), _) => action(app, pack, None, p),
+        (PackPhase::Working(_), _) => action(app, pack, true, p),
         (_, Status::Installed(_)) => None,
         (_, Status::NotInstalled) if system => None,
-        _ => action(app, pack, None, p),
+        _ => action(app, pack, true, p),
     };
     // What the pack is for, while it would still add something.
     let about = (pack.offer.configured && !system && !installed_status(&pack.status)).then(|| {
@@ -575,7 +591,7 @@ pub(super) fn activity_card(
             None,
         )
     } else {
-        let words = words(pack, false);
+        let words = words(pack, &Need::Files { mixed: false });
         (words.title, words.body, words.detail)
     };
     let sizes = sizes_line(&pack.offer);
@@ -588,7 +604,7 @@ pub(super) fn activity_card(
         )
         .on_click(move |_, window, cx| on_dismiss(window, cx))
     });
-    let action = (!done).then(|| action(app, pack, None, p)).flatten();
+    let action = (!done).then(|| action(app, pack, true, p)).flatten();
     Some(
         div()
             .id("pack-hint")

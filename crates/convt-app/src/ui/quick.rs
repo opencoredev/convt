@@ -81,8 +81,10 @@ pub struct QuickView {
     /// The target the request named, kept while the document pack it needs
     /// isn't installed, and picked again once it is.
     pub(super) wanted: Option<&'static Format>,
-    /// Some file needed the document pack when the window opened.
-    pub(super) offered_pack: bool,
+    /// The window waited on the pack: a file needed it, or a target that
+    /// needs it was asked for or picked. Only then does it say once the
+    /// pack is in.
+    waited_for_pack: bool,
     /// Install & Convert was clicked: convert as soon as the pack is in.
     /// Cleared when the download fails or stops, so nothing converts later
     /// without another click.
@@ -105,8 +107,8 @@ impl QuickView {
         let files = expanded.files;
         let targets = state.targets_with_pack(&files);
         let generation = state.registry_generation;
-        let offered_pack =
-            !targets.pack.is_empty() || files.iter().any(|f| pack::needs_pack(&state.registry, f));
+        let file_needs_pack = files.iter().any(|f| pack::needs_pack(&state.registry, f));
+        let offered_pack = !targets.pack.is_empty() || file_needs_pack;
         let mut wanted = None;
         let save_dir = state.settings.output_dir.clone();
         let mut error = None;
@@ -136,6 +138,7 @@ impl QuickView {
         } else if files.is_empty() {
             error = Some("There are no files to convert here.".into());
         }
+        let waited_for_pack = file_needs_pack || wanted.is_some_and(|f| targets.pack.contains(&f));
         let file_name = cx.new(|cx| InputState::new(window, cx));
         let mut view = Self {
             _observe: cx.observe_in(&app, window, |this: &mut Self, app, window, cx| {
@@ -161,8 +164,8 @@ impl QuickView {
             jobs: Vec::new(),
             seen: HashMap::new(),
             error,
+            waited_for_pack,
             wanted,
-            offered_pack,
             convert_when_ready: false,
             generation,
         };
@@ -239,6 +242,22 @@ impl QuickView {
         })
     }
 
+    /// The files in a sentence: "this PDF", "these PDF files" or "these
+    /// files".
+    fn files_named(&self) -> String {
+        let mut formats = self
+            .files
+            .iter()
+            .map(|f| convt_core::format_by_extension(f));
+        let first = formats.next().flatten();
+        let same = first.filter(|f| formats.all(|o| o == Some(*f)));
+        match (self.files.len(), same) {
+            (1, Some(f)) => format!("this {}", f.name),
+            (_, Some(f)) => format!("these {} files", f.name),
+            _ => "these files".to_string(),
+        }
+    }
+
     /// Files that only the document pack could convert.
     fn waiting_for_pack(&self, cx: &App) -> usize {
         let registry = &self.app.read(cx).registry;
@@ -291,6 +310,7 @@ impl QuickView {
     ) {
         let changed = self.to != Some(to);
         self.to = Some(to);
+        self.waited_for_pack |= self.targets.pack.contains(&to);
         if changed {
             // Install & Convert was for the other target.
             self.convert_when_ready = false;
@@ -651,9 +671,18 @@ impl QuickView {
         let waiting = self.waiting_for_pack(cx);
         let content = if waiting > 0 || self.needs_pack() {
             let mixed = waiting < self.files.len();
-            let then = self.needs_pack().then(|| self.after_install(cx));
-            super::pack::card(&self.app, mixed, then, p, cx).into_any_element()
-        } else if self.offered_pack && self.app.read(cx).pack.phase == PackPhase::Done {
+            let need = match self.to {
+                // The files open without the pack; only the target needs it.
+                Some(to) if self.needs_pack() && mixed => super::pack::Need::Target {
+                    from: self.files_named(),
+                    to: to.name,
+                },
+                _ => super::pack::Need::Files { mixed },
+            };
+            // With a target that needs the pack, Install & Convert below
+            // is the one action.
+            super::pack::card(&self.app, &need, !self.needs_pack(), p, cx).into_any_element()
+        } else if self.waited_for_pack && self.app.read(cx).pack.phase == PackPhase::Done {
             super::pack::installed_notice(self.to.is_some(), p).into_any_element()
         } else {
             return None;

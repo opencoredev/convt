@@ -205,11 +205,41 @@ impl Engine for TestOffice {
     }
 }
 
+/// Fixed steps that write a placeholder file: PDFium's PDF to PNG and HTML
+/// without the pack, or LibreOffice's HTML to DOCX with it.
+struct TestSteps(&'static str, &'static [(&'static str, &'static str)]);
+
+impl Engine for TestSteps {
+    fn id(&self) -> &'static str {
+        self.0
+    }
+    fn steps(&self) -> Vec<convt_core::Step> {
+        let f = |id| format_by_id(id).unwrap();
+        self.1
+            .iter()
+            .map(|(from, to)| convt_core::Step {
+                from: f(from),
+                to: f(to),
+            })
+            .collect()
+    }
+    fn convert(&self, ctx: &Ctx, _: &Path, out_dir: &Path) -> convt_core::Result<Vec<PathBuf>> {
+        let out = ctx.artifact(out_dir, 0);
+        std::fs::write(&out, b"test")?;
+        Ok(vec![out])
+    }
+}
+
+const TEST_PDFIUM: TestSteps = TestSteps("test-pdfium", &[("pdf", "png"), ("pdf", "html")]);
+const TEST_HTML_TO_WORD: TestSteps = TestSteps("test-office-html", &[("html", "docx")]);
+
 /// A scripted document pack: it downloads 150 MB in 10 MB steps, can hold
 /// mid-download, fail as told, and counts every call.
 #[derive(Default)]
 struct TestPacks {
     unconfigured: bool,
+    /// PDFs open without the pack, and with it reach DOCX through HTML.
+    pdf: bool,
     installed: AtomicBool,
     rejected: Mutex<Option<String>>,
     /// How the next install ends; `None` installs.
@@ -225,6 +255,13 @@ struct TestPacks {
 const PACK_SIZE: u64 = 150_000_000;
 
 impl TestPacks {
+    fn register_office(&self, registry: &mut Registry) {
+        registry.register(Arc::new(TestOffice));
+        if self.pdf {
+            registry.register(Arc::new(TEST_HTML_TO_WORD));
+        }
+    }
+
     fn installs(&self) -> usize {
         self.installs.load(Ordering::SeqCst)
     }
@@ -298,8 +335,11 @@ impl pack::Backend for TestPacks {
         let mut registry = Registry::new();
         registry.register(Arc::new(convt_engines::image::ImageEngine));
         registry.register(Arc::new(convt_engines::svg::SvgEngine));
+        if self.pdf {
+            registry.register(Arc::new(TEST_PDFIUM));
+        }
         if self.installed.load(Ordering::SeqCst) {
-            registry.register(Arc::new(TestOffice));
+            self.register_office(&mut registry);
         }
         registry
     }
@@ -307,12 +347,15 @@ impl pack::Backend for TestPacks {
         let mut registry = Registry::new();
         registry.register(Arc::new(convt_engines::image::ImageEngine));
         registry.register(Arc::new(convt_engines::svg::SvgEngine));
+        if self.pdf {
+            registry.register(Arc::new(TEST_PDFIUM));
+        }
         registry
     }
     /// As if installed: what the pack would add.
     fn planned_registry(&self) -> Registry {
         let mut registry = self.registry_without_documents();
-        registry.register(Arc::new(TestOffice));
+        self.register_office(&mut registry);
         registry
     }
 }
@@ -2474,18 +2517,16 @@ fn a_silent_convert_of_a_document_opens_the_offer_and_never_downloads(cx: &mut T
         "the card explains, not an error"
     );
     cx.read(|cx| assert_eq!(view.read(cx).wanted.map(|f| f.id), Some("pdf")));
-    // The target the menu asked for is picked, with Install & Convert.
+    // The target the menu asked for is picked, and Install & Convert is
+    // the one action: the card has no button of its own.
     cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
-    assert_eq!(
-        label(cx, window, "pack-download").as_deref(),
-        Some("Install & Convert (150 MB)")
-    );
+    assert!(!shown(cx, window, "pack-download"));
     assert_eq!(
         label(cx, window, "convert").as_deref(),
         Some("Install & Convert")
     );
 
-    click(cx, window, "pack-download");
+    click(cx, window, "convert");
     // One click installs and converts.
     wait_until(cx, "the job", |cx| !f.app.read(cx).queue.entries.is_empty());
     let job = f.last_job(cx);
@@ -2524,7 +2565,11 @@ fn documents_added_dropped_or_in_folders_reach_the_offer(cx: &mut TestAppContext
     main.update(cx, |v, cx| v.add(&[png.clone(), docx.clone()], cx));
     let (window, view) = last_quick(cx);
     cx.read(|cx| assert_eq!(view.read(cx).files, std::slice::from_ref(&docx)));
-    assert!(shown(cx, window, "pack-download"));
+    assert!(shown(cx, window, "pack-card"));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
 
     // A folder's documents aren't dropped on the floor.
     main.update(cx, |v, cx| v.add(std::slice::from_ref(&folder), cx));
@@ -2988,10 +3033,8 @@ fn the_picker_shows_what_the_pack_would_unlock(cx: &mut TestAppContext) {
         assert_eq!(label(cx, window, "convert").as_deref(), Some("Convert"));
         click(cx, window, "to-txt");
         cx.read(|cx| assert!(view.read(cx).needs_pack()));
-        assert_eq!(
-            label(cx, window, "pack-download").as_deref(),
-            Some("Install & Convert (150 MB)")
-        );
+        // Picked: Install & Convert below is the one action.
+        assert!(!shown(cx, window, "pack-download"));
         assert_eq!(
             label(cx, window, "convert").as_deref(),
             Some("Install & Convert")
@@ -3015,6 +3058,54 @@ fn the_picker_shows_what_the_pack_would_unlock(cx: &mut TestAppContext) {
         assert!(!pack.contains(&"webp"), "{pack:?}");
     });
     assert_eq!(packs.installs(), 0, "showing targets never downloads");
+}
+
+#[gpui_kit::test]
+fn a_pdf_to_word_card_talks_about_the_target(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs.clone());
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    let (window, _) = f.quick(cli(vec![pdf.clone()], None, None), cx);
+    // The PDF opens without the pack: no card until a target needs it.
+    assert!(shown(cx, window, "to-png"));
+    assert!(!shown(cx, window, "pack-card"));
+    click(cx, window, "to-docx");
+    let body = label(cx, window, "pack-body").unwrap();
+    assert!(
+        body.starts_with(
+            "Turning this PDF into DOCX uses LibreOffice, which convt downloads once."
+        ),
+        "{body}"
+    );
+    assert!(!body.contains("skipped"), "{body}");
+    // Several PDFs.
+    let other = f.dir.path().join("Other.pdf");
+    std::fs::write(&other, b"%PDF-1.4 test").unwrap();
+    let (two, _) = f.quick(cli(vec![pdf.clone(), other], Some("docx"), None), cx);
+    assert!(
+        label(cx, two, "pack-body")
+            .unwrap()
+            .starts_with("Turning these PDF files into DOCX")
+    );
+
+    // A window where PNG was picked never waited on the pack, so it says
+    // nothing when the pack goes in; the DOCX window says what's left.
+    let (png, _) = f.quick(cli(vec![pdf], Some("png"), None), cx);
+    assert!(!shown(cx, png, "pack-card"));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "pack-download");
+    wait_until(cx, "the install", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+    wait_for_label(cx, window, "pack-done", |s| {
+        s == "Document support is installed. Click Convert to finish."
+    });
+    assert!(!shown(cx, png, "pack-done"));
+    assert_eq!(f.jobs(cx), 0);
 }
 
 #[gpui_kit::test]
@@ -3083,10 +3174,8 @@ fn a_failed_or_stopped_install_forgets_the_conversion(cx: &mut TestAppContext) {
         s == "Couldn't download document support"
     });
     assert!(!intent(&view, cx));
-    assert_eq!(
-        label(cx, window, "pack-download").as_deref(),
-        Some("Try again (150 MB)")
-    );
+    // Install & Convert tries again; the card has no second button.
+    assert!(!shown(cx, window, "pack-download"));
     assert_eq!(
         label(cx, window, "convert").as_deref(),
         Some("Install & Convert")
@@ -3281,7 +3370,8 @@ fn add_files_opens_documents_with_their_default_picked(cx: &mut TestAppContext) 
     );
     assert_eq!(f.jobs(cx), 0);
     assert_eq!(packs.installs(), 0);
-    click(cx, window, "pack-download");
+    assert!(!shown(cx, window, "pack-download"));
+    click(cx, window, "convert");
     wait_until(cx, "both jobs", |cx| {
         let q = &f.app.read(cx).queue;
         q.entries.len() == 2 && q.active() == 0
