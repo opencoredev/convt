@@ -438,6 +438,11 @@ pub fn write_vtt(cues: &[Cue]) -> String {
 /// to count as carried over, in milliseconds.
 const CARRY_GAP: u64 = 1000;
 
+/// The most lines one subtitle carries over from the one before. Rolling
+/// captions repeat one or two, and checking every possible overlap of two
+/// huge subtitles would take time growing with the square of their length.
+const MAX_CARRIED_LINES: usize = 8;
+
 /// The dialogue, one line per subtitle line. Lines a subtitle carries over
 /// from the one just before, as rolling captions repeat their last line,
 /// are written once. A line repeated within one subtitle, or said again
@@ -452,7 +457,7 @@ pub fn transcript(cues: &[Cue]) -> String {
             continue;
         }
         let carried = if cue.start <= previous_end.saturating_add(CARRY_GAP) {
-            (1..=lines.len().min(previous.len()))
+            (1..=lines.len().min(previous.len()).min(MAX_CARRIED_LINES))
                 .rev()
                 .find(|&k| previous[previous.len() - k..] == lines[..k])
                 .unwrap_or(0)
@@ -592,6 +597,26 @@ mod tests {
             transcript(&parse_srt(&srt).unwrap()),
             "Hello\nHello\nLa la\nLa la la\nLa la\nLa la la\nNext\n"
         );
+    }
+
+    #[test]
+    fn huge_subtitles_that_almost_overlap_stay_fast() {
+        // Every candidate overlap of these two once failed only at its last
+        // line: about five billion comparisons.
+        let n = 100_000;
+        let first = format!("{}different", "same\n".repeat(n - 1));
+        let second = "same\n".repeat(n);
+        let srt = format!(
+            "1\n00:00:01,000 --> 00:00:02,000\n{first}\n\n2\n00:00:02,000 --> 00:00:03,000\n{second}\n"
+        );
+        let cues = parse_srt(&srt).unwrap();
+        let start = std::time::Instant::now();
+        let text = transcript(&cues);
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
+        assert_eq!(text.lines().count(), 2 * n);
+        // A short rolling overlap is still carried over.
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\none\ntwo\n\n2\n00:00:02,000 --> 00:00:03,000\ntwo\nthree\n";
+        assert_eq!(transcript(&parse_srt(srt).unwrap()), "one\ntwo\nthree\n");
     }
 
     #[test]
