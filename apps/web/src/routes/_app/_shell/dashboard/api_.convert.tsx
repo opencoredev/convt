@@ -17,6 +17,13 @@ import {
   focusRing,
 } from "#/components/app/ui";
 import capabilities from "#/generated/cloud-formats.json";
+import {
+  QUALITY_CHOICES,
+  type Choice,
+  jobOptions,
+  qualityApplies,
+  sizeControl,
+} from "#/lib/cloud-options";
 import { fetchCloudAccess, fetchCloudCredential } from "#/server/cloud-fns";
 
 export const Route = createFileRoute("/_app/_shell/dashboard/api_/convert")({
@@ -29,6 +36,8 @@ function Converter() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [target, setTarget] = useState<Format>("pdf");
+  const [quality, setQuality] = useState<number | null>(null);
+  const [size, setSize] = useState<number | null>(null);
   const [stage, setStage] = useState("idle");
   const [job, setJob] = useState<Job | null>(null);
   const [result, setResult] = useState<Conversion | null>(null);
@@ -40,6 +49,12 @@ function Converter() {
     (f.extensions as readonly string[]).includes(file?.name.split(".").pop()?.toLowerCase() ?? ""),
   );
   const busy = stage === "uploading" || stage === "queued" || stage === "running";
+  const sizes = sizeControl(target);
+  function pickTarget(next: Format) {
+    // A size means pixels on one control and lines on the other, so it doesn't carry over.
+    if (sizeControl(next)?.field !== sizes?.field) setSize(null);
+    setTarget(next);
+  }
   async function convert() {
     if (!file || !inputFormat) return;
     setError("");
@@ -71,6 +86,7 @@ function Converter() {
       });
       const converted = await client.convert(file, {
         to: target,
+        options: jobOptions(target, { quality, size }),
         signal: controller.current.signal,
         onProgress: (j) => {
           setJob(j);
@@ -163,7 +179,7 @@ function Converter() {
                 );
                 const reachable =
                   capabilities.formats.find((f) => f.id === source?.id)?.targets ?? [];
-                if (!reachable.includes(target)) setTarget((reachable[0] ?? "pdf") as Format);
+                if (!reachable.includes(target)) pickTarget((reachable[0] ?? "pdf") as Format);
                 setResult(null);
                 setError("");
                 setStage("idle");
@@ -184,7 +200,7 @@ function Converter() {
               id="cloud-target"
               value={target}
               disabled={busy}
-              onChange={(e) => setTarget(e.target.value as Format)}
+              onChange={(e) => pickTarget(e.target.value as Format)}
               className={`w-full rounded-lg border border-line bg-page px-3 py-2.5 text-sm ${focusRing}`}
             >
               {formats
@@ -207,6 +223,30 @@ function Converter() {
                 : "Choose a file to see the formats it can convert to."}
             </p>
           </div>
+          {(qualityApplies(target) || sizes) && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {qualityApplies(target) && (
+                <OptionSelect
+                  id="cloud-quality"
+                  label="Quality"
+                  choices={QUALITY_CHOICES}
+                  value={quality}
+                  disabled={busy}
+                  onChange={setQuality}
+                />
+              )}
+              {sizes && (
+                <OptionSelect
+                  id="cloud-size"
+                  label={sizes.label}
+                  choices={sizes.choices}
+                  value={size}
+                  disabled={busy}
+                  onChange={setSize}
+                />
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-4">
             <PrimaryButton
               disabled={busy || !!pendingCancel || !file || !inputFormat}
@@ -272,6 +312,43 @@ function Converter() {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+function OptionSelect({
+  id,
+  label,
+  choices,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  choices: readonly Choice[];
+  value: number | null;
+  disabled: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-sm font-semibold">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+        className={`w-full rounded-lg border border-line bg-page px-3 py-2.5 text-sm ${focusRing}`}
+      >
+        {choices.map((choice) => (
+          <option key={choice.label} value={choice.value ?? ""}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

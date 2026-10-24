@@ -1,10 +1,32 @@
 import { formats, type Format } from "./formats.js";
 export { formats, type Format };
+/** Conversion settings. Every field is optional; ones that don't apply to the target are ignored. */
+export type JobOptions = {
+  /** Lossy quality from 1 to 100 for JPEG, WebP, AVIF, HEIC and video. */
+  quality?: number | null;
+  /** Longest edge of image output in pixels. Scales down only. */
+  max_size?: number | null;
+  /** Maximum video height in pixels, an even number. Scales down only. */
+  video_height?: number | null;
+  /** Audio bitrate in kbit/s, from 8 to 640. */
+  audio_bitrate?: number | null;
+  /** PDF pages to render: "2", "1-3" or "4-". */
+  pages?: string | null;
+  /** Resolution for PDF and SVG pages, from 18 to 1200. */
+  dpi?: number | null;
+  video_codec?: "h264" | "hevc" | null;
+  /** "transparent", "white", "black" or a color like "#ff8800". */
+  background?: string | null;
+  /** Leave the audio out of video output. */
+  strip_audio?: boolean;
+};
 export type Job = {
   id: string;
   status: "created" | "uploaded" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
   input_format: Format;
   target_format: Format;
+  /** Absent from servers that predate options. */
+  options?: JobOptions;
   input_bytes: number;
   attempt: number;
   error_code: string | null;
@@ -42,6 +64,8 @@ async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): P
 export type ConvertOptions = {
   to: Format;
   from?: Format;
+  /** Conversion settings sent with the job. */
+  options?: JobOptions;
   signal?: AbortSignal;
   onProgress?: (job: Job) => void;
   timeoutMs?: number;
@@ -132,7 +156,12 @@ export class Convt {
     return value as T;
   }
   create(
-    input: { input_format: Format; target_format: Format; input_bytes: number },
+    input: {
+      input_format: Format;
+      target_format: Format;
+      input_bytes: number;
+      options?: JobOptions;
+    },
     signal?: AbortSignal,
   ) {
     return this.request<{ job: Job; upload_url: string; upload_expires_in: number }>(
@@ -187,7 +216,12 @@ export class Convt {
     const deadline = AbortSignal.timeout(options.timeoutMs ?? 660_000);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     const created = await this.create(
-      { input_format: from, target_format: options.to, input_bytes: body.size },
+      {
+        input_format: from,
+        target_format: options.to,
+        input_bytes: body.size,
+        ...(options.options ? { options: options.options } : {}),
+      },
       signal,
     );
     try {
