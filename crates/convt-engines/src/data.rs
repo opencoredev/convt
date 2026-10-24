@@ -521,84 +521,162 @@ fn yaml_literal(s: &str, indent: usize) -> Option<String> {
     Some(out)
 }
 
-/// Every row of a CSV or TSV file. Rows may differ in length. CSV fields may
-/// be quoted. TSV (a tab `delimiter`) has no quoting: a quote is text, and
-/// `\t`, `\n`, `\r` and `\\` stand for a tab, line breaks and a backslash.
-/// Any other backslash stays as written.
+/// Every row of a CSV or TSV file. Rows may differ in length and blank
+/// lines are skipped. CSV fields may be quoted; TSV is read as
+/// [`read_tsv`] describes.
 pub fn read_table(source: &str, delimiter: u8) -> Result<Vec<Vec<String>>> {
-    let tsv = delimiter == b'\t';
+    if delimiter == b'\t' {
+        return Ok(read_tsv(source));
+    }
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
-        .quoting(!tsv)
         .delimiter(delimiter)
         .from_reader(source.as_bytes());
     let mut rows = Vec::new();
     for record in reader.records() {
         let record = record.map_err(|e| failed(format!("invalid table: {e}")))?;
-        let cell = |s: &str| if tsv { tsv_unescape(s) } else { s.to_owned() };
-        rows.push(record.iter().map(cell).collect());
+        rows.push(record.iter().map(str::to_owned).collect());
     }
     Ok(rows)
 }
 
-/// CSV with fields quoted where needed, or TSV with tabs, line breaks and
-/// backslashes inside cells escaped, as [`read_table`] reads them.
+/// CSV with fields quoted where needed, or TSV as [`write_tsv`] writes it.
 pub fn write_table(rows: &[Vec<String>], delimiter: u8) -> Result<String> {
-    let tsv = delimiter == b'\t';
+    if delimiter == b'\t' {
+        return Ok(write_tsv(rows));
+    }
     let mut writer = csv::WriterBuilder::new()
         .flexible(true)
-        .quote_style(if tsv {
-            csv::QuoteStyle::Never
-        } else {
-            csv::QuoteStyle::Necessary
-        })
+        .quote_style(csv::QuoteStyle::Necessary)
         .delimiter(delimiter)
         .from_writer(Vec::new());
     for row in rows {
-        if tsv {
-            writer.write_record(row.iter().map(|c| tsv_escape(c)))
-        } else {
-            writer.write_record(row)
-        }
-        .map_err(failed)?;
+        writer.write_record(row).map_err(failed)?;
     }
     let bytes = writer.into_inner().map_err(failed)?;
     String::from_utf8(bytes).map_err(failed)
 }
 
-fn tsv_escape(cell: &str) -> String {
-    let mut out = String::with_capacity(cell.len());
-    for c in cell.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c => out.push(c),
+/// TSV rows. Most TSV has no quoting, but Excel and LibreOffice quote cells
+/// that hold a tab, a line break or a quote, doubling inner quotes. So a
+/// cell is quoted only if it starts with `"` and its closing quote comes
+/// right before a tab, a line break or the end; any other cell, quotes and
+/// backslashes included, is text as written, like `"Hello" she said` or
+/// `C:\temp`. Lines end with LF, CRLF or CR.
+pub fn read_tsv(source: &str) -> Vec<Vec<String>> {
+    let bytes = source.as_bytes();
+    let mut rows = Vec::new();
+    let mut row: Vec<String> = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        let close = match tsv_quote(&bytes[at..]) {
+            TsvQuote::Closes(i) => Some(at + i),
+            TsvQuote::Open | TsvQuote::Not => None,
+        };
+        let (cell, next) = match close {
+            Some(close) => (source[at + 1..close].replace("\"\"", "\""), close + 1),
+            None => {
+                let end = source[at..]
+                    .find(['\t', '\n', '\r'])
+                    .map_or(source.len(), |i| at + i);
+                (source[at..end].to_owned(), end)
+            }
+        };
+        row.push(cell);
+        at = next;
+        match bytes.get(at) {
+            Some(b'\t') => {
+                at += 1;
+                // A tab at the very end still opens an empty last cell.
+                if at == bytes.len() {
+                    row.push(String::new());
+                }
+            }
+            Some(b'\r' | b'\n') | None => {
+                at += if bytes[at..].starts_with(b"\r\n") {
+                    2
+                } else {
+                    1
+                };
+                // A blank line is no row, but a line of just `""` is one.
+                if row.len() == 1 && row[0].is_empty() && close.is_none() {
+                    row.clear();
+                } else {
+                    rows.push(std::mem::take(&mut row));
+                }
+            }
+            Some(_) => unreachable!("a cell ends at a tab, a line break or the end"),
         }
+    }
+    if !row.is_empty() {
+        rows.push(row);
+    }
+    rows
+}
+
+/// How a TSV cell starting at `bytes[0]` reads.
+#[derive(Debug, PartialEq)]
+enum TsvQuote {
+    /// Quoted, closed by the quote at this index.
+    Closes(usize),
+    /// Starts with a quote that nothing closes before the end.
+    Open,
+    /// Plain text: no leading quote, or a quote followed by other text.
+    Not,
+}
+
+/// Doubled quotes go on, a quote before a tab, a line break or the end
+/// closes the cell, and a quote before anything else makes it plain text.
+///
+/// Reading a whole file scans each byte about once: a scan runs past the
+/// next cell's opening quotes only if they are an even run, and that cell's
+/// own scan stops at once on such a run.
+fn tsv_quote(bytes: &[u8]) -> TsvQuote {
+    if bytes.first() != Some(&b'"') {
+        return TsvQuote::Not;
+    }
+    let mut from = 1;
+    while let Some(i) = bytes[from..].iter().position(|&b| b == b'"') {
+        let quote = from + i;
+        match bytes.get(quote + 1) {
+            Some(b'"') => from = quote + 2,
+            None | Some(b'\t' | b'\n' | b'\r') => return TsvQuote::Closes(quote),
+            Some(_) => return TsvQuote::Not,
+        }
+    }
+    TsvQuote::Open
+}
+
+/// TSV that [`read_tsv`] reads back as `rows`. A cell is quoted, with inner
+/// quotes doubled, only if it holds a tab or a line break, or starts with a
+/// quote that would otherwise read as quoting. Everything else is written
+/// as it is.
+pub fn write_tsv(rows: &[Vec<String>]) -> String {
+    let mut out = String::new();
+    for row in rows {
+        for (i, cell) in row.iter().enumerate() {
+            if i > 0 {
+                out.push('\t');
+            }
+            if tsv_needs_quotes(cell) || row.len() == 1 && cell.is_empty() {
+                out.push('"');
+                out.push_str(&cell.replace('"', "\"\""));
+                out.push('"');
+            } else {
+                out.push_str(cell);
+            }
+        }
+        out.push('\n');
     }
     out
 }
 
-fn tsv_unescape(cell: &str) -> String {
-    let mut out = String::with_capacity(cell.len());
-    let mut chars = cell.chars().peekable();
-    while let Some(c) = chars.next() {
-        let escaped = match (c, chars.peek()) {
-            ('\\', Some('\\')) => '\\',
-            ('\\', Some('t')) => '\t',
-            ('\\', Some('n')) => '\n',
-            ('\\', Some('r')) => '\r',
-            _ => {
-                out.push(c);
-                continue;
-            }
-        };
-        chars.next();
-        out.push(escaped);
-    }
-    out
+/// Whether `cell` written bare could read as anything else: it holds a tab
+/// or a line break, or it starts with `"` and its own quotes don't make it
+/// plain text. A cell like `"x` depends on what follows, so it is quoted.
+fn tsv_needs_quotes(cell: &str) -> bool {
+    cell.contains(['\t', '\n', '\r']) || tsv_quote(cell.as_bytes()) != TsvQuote::Not
 }
 
 /// The header row, padded so every column has a distinct, non-empty name.
@@ -821,20 +899,87 @@ mod tests {
     }
 
     #[test]
-    fn tsv_keeps_quotes_and_escapes_tabs_and_breaks() {
-        let tsv = "note\tpath\n\"Hello\" she said\tC:\\data\n";
-        let rows = read_table(tsv, b'\t').unwrap();
-        assert_eq!(rows[1], ["\"Hello\" she said", "C:\\data"]);
-        let cells = vec![
-            vec!["a\tb".to_owned(), "line\nbreak\r".into()],
-            vec![r"back\slash \t not a tab".into(), "\"".into()],
-        ];
+    fn tsv_reads_excel_quoting_and_keeps_other_quotes_and_backslashes() {
+        // As Excel and LibreOffice save it: quoted where a cell holds a tab,
+        // a line break or a quote.
+        let excel =
+            "name\tnote\tpath\r\n\"Smith\tJ\"\t\"two\r\nlines, \"\"quoted\"\"\"\tC:\\temp\\new\r\n";
+        let rows = read_table(excel, b'\t').unwrap();
+        assert_eq!(
+            rows,
+            [
+                vec!["name", "note", "path"],
+                vec!["Smith\tJ", "two\r\nlines, \"quoted\"", r"C:\temp\new"],
+            ]
+        );
+        // Plain TSV: a quote that does not close a cell is text.
+        let plain = "note\tq\tx\n\"Hello\" she said\t\"x\"\"\t\"open\n\"\tend\n";
+        let rows = read_table(plain, b'\t').unwrap();
+        assert_eq!(
+            rows,
+            [
+                vec!["note", "q", "x"],
+                // `"x""` never closes, so it is text; `"open` closes on the
+                // next line, before a tab.
+                vec!["\"Hello\" she said", "\"x\"\"", "open\n", "end"],
+            ]
+        );
+        assert_eq!(
+            read_table("\"unclosed\tb\n\"c\n", b'\t').unwrap()[0],
+            ["\"unclosed", "b"]
+        );
+        // Blank lines are skipped; a lone `""` is a row with an empty cell.
+        assert_eq!(
+            read_table("a\n\n\"\"\nb\t\n", b'\t').unwrap(),
+            [vec!["a"], vec![""], vec!["b", ""]]
+        );
+    }
+
+    #[test]
+    fn tsv_quotes_only_what_would_read_back_differently() {
+        let cells: Vec<Vec<String>> = [
+            vec!["tab\there", "line\nbreak\r", r"C:\temp\new"],
+            vec!["\"Hello\" she said", "\"x\"", "\"open"],
+            vec!["\"a\"\"b\"", "\"a\"b", "plain \"quote\""],
+            vec!["", "\"\"", "\\t"],
+        ]
+        .iter()
+        .map(|row| row.iter().map(|c| c.to_string()).collect())
+        .collect();
         let written = write_table(&cells, b'\t').unwrap();
         assert_eq!(
             written,
-            "a\\tb\tline\\nbreak\\r\nback\\\\slash \\\\t not a tab\t\"\n"
+            "\"tab\there\"\t\"line\nbreak\r\"\tC:\\temp\\new\n\
+             \"Hello\" she said\t\"\"\"x\"\"\"\t\"\"\"open\"\n\
+             \"\"\"a\"\"\"\"b\"\"\"\t\"a\"b\tplain \"quote\"\n\
+             \t\"\"\"\"\"\"\t\\t\n"
         );
         assert_eq!(read_table(&written, b'\t').unwrap(), cells);
+        let lone = vec![vec![String::new()], vec!["x".to_owned()]];
+        assert_eq!(
+            read_table(&write_table(&lone, b'\t').unwrap(), b'\t').unwrap(),
+            lone
+        );
+    }
+
+    #[test]
+    fn tsv_survives_json_round_trips() {
+        let json = r#"[{"note":"Smith\tJ","path":"C:\\temp\\new","said":"\"Hello\" she said","exact":"\"x\"","lines":"a\r\nb"}]"#;
+        let value = read_tree("json", json).unwrap();
+        let tsv = write_table(&tree_to_rows(value.clone()).unwrap(), b'\t').unwrap();
+        let back = rows_to_tree(read_table(&tsv, b'\t').unwrap()).unwrap();
+        assert_eq!(back, value, "{tsv}");
+    }
+
+    #[test]
+    fn unclosed_tsv_quotes_read_in_linear_time() {
+        // Every `"x` would scan to the end if a scan ran past the next one.
+        let tsv = "\"x\n".repeat(200_000) + "\"\"\n";
+        let started = std::time::Instant::now();
+        let rows = read_table(&tsv, b'\t').unwrap();
+        assert_eq!(rows.len(), 200_001);
+        assert_eq!(rows[0], ["\"x"]);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 
     #[test]
