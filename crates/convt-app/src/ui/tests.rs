@@ -3221,6 +3221,8 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
     }
     click(cx, window, "to-mp4");
     click(cx, window, "options-toggle");
+    // Video reaches enough formats that the options sit below the fold.
+    scroll_quick(cx, window, -2000.);
     // Defaults change nothing.
     assert_eq!(label(cx, window, "codec").as_deref(), Some("H.264"));
     assert_eq!(
@@ -3244,6 +3246,7 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
     cx.read(|cx| assert!(!view.read(cx).conversion_options().strip_audio));
 
     // WebM has no codec choice but can drop audio; GIF has neither.
+    scroll_quick(cx, window, 2000.);
     click(cx, window, "to-webm");
     assert!(!shown(cx, window, "codec") && shown(cx, window, "keep-audio"));
     click(cx, window, "to-gif");
@@ -3258,6 +3261,7 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
             (Some(VideoCodec::Hevc), true)
         );
     });
+    scroll_quick(cx, window, -2000.);
     click(cx, window, "codec");
     click(cx, window, "codec-h264");
     click(cx, window, "keep-audio");
@@ -3268,6 +3272,21 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
             (Some(VideoCodec::H264), false)
         );
     });
+}
+
+/// Turns the wheel over Quick convert's Options toggle, which scrolls the
+/// window's body. A negative `dy` scrolls down.
+fn scroll_quick(cx: &mut TestAppContext, handle: AnyWindowHandle, dy: f32) {
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.scroll(
+            id("options-toggle"),
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(dy))),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.run_until_parked();
 }
 
 /// Whether the element is drawn inside the window, not cut off below it.
