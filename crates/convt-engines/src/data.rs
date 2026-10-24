@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use convt_core::{Ctx, Engine, Error, Result, Step};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
+use serde_json::value::RawValue;
 
 use crate::text;
 
@@ -84,7 +85,8 @@ fn title(input: &Path) -> String {
 pub enum Value {
     Null,
     Bool(bool),
-    Number(serde_json::Number),
+    /// The number as written, so `12345678901234567890123` stays exact.
+    Number(String),
     String(String),
     Array(Vec<Value>),
     Object(Vec<(String, Value)>),
@@ -96,7 +98,7 @@ impl Value {
         match self {
             Value::Null => String::new(),
             Value::Bool(b) => b.to_string(),
-            Value::Number(n) => n.to_string(),
+            Value::Number(n) => n,
             Value::String(s) => s,
             nested => serde_json::to_string(&nested).expect("values always serialize"),
         }
@@ -115,15 +117,23 @@ impl<'de> Deserialize<'de> for Value {
                 Ok(Value::Bool(b))
             }
             fn visit_i64<E>(self, n: i64) -> std::result::Result<Value, E> {
-                Ok(Value::Number(n.into()))
+                Ok(Value::Number(n.to_string()))
             }
             fn visit_u64<E>(self, n: u64) -> std::result::Result<Value, E> {
-                Ok(Value::Number(n.into()))
+                Ok(Value::Number(n.to_string()))
+            }
+            fn visit_i128<E>(self, n: i128) -> std::result::Result<Value, E> {
+                Ok(Value::Number(n.to_string()))
+            }
+            fn visit_u128<E>(self, n: u128) -> std::result::Result<Value, E> {
+                Ok(Value::Number(n.to_string()))
             }
             fn visit_f64<E>(self, n: f64) -> std::result::Result<Value, E> {
                 // JSON has no NaN or infinity; YAML's `.nan` and `.inf` stay text.
-                Ok(serde_json::Number::from_f64(n)
-                    .map_or_else(|| Value::String(n.to_string()), Value::Number))
+                Ok(serde_json::Number::from_f64(n).map_or_else(
+                    || Value::String(n.to_string()),
+                    |n| Value::Number(n.to_string()),
+                ))
             }
             fn visit_str<E>(self, s: &str) -> std::result::Result<Value, E> {
                 Ok(Value::String(s.to_owned()))
@@ -184,7 +194,10 @@ impl Serialize for Value {
         match self {
             Value::Null => s.serialize_unit(),
             Value::Bool(b) => s.serialize_bool(*b),
-            Value::Number(n) => n.serialize(s),
+            // Raw, so JSON gets the digits as written rather than an f64.
+            Value::Number(n) => serde_json::value::RawValue::from_string(n.clone())
+                .map_err(serde::ser::Error::custom)?
+                .serialize(s),
             Value::String(v) => s.serialize_str(v),
             Value::Array(items) => {
                 let mut seq = s.serialize_seq(Some(items.len()))?;
@@ -214,7 +227,9 @@ pub fn read_tree(format: &str, source: &str) -> Result<Value> {
         )));
     }
     if format == "json" {
-        return serde_json::from_str(source).map_err(|e| failed(format!("invalid JSON: {e}")));
+        let invalid = |e: serde_json::Error| failed(format!("invalid JSON: {e}"));
+        let raw: &RawValue = serde_json::from_str(source).map_err(invalid)?;
+        return json_value(raw, 0).map_err(invalid);
     }
     let mut documents = Vec::new();
     for document in serde_norway::Deserializer::from_str(source) {
@@ -225,6 +240,71 @@ pub fn read_tree(format: &str, source: &str) -> Result<Value> {
         0 => Err(failed("the YAML file is empty")),
         1 => Ok(documents.pop().expect("one document")),
         _ => Ok(Value::Array(documents)),
+    }
+}
+
+/// How deep JSON may nest, as serde_json allows.
+const MAX_DEPTH: usize = 128;
+
+/// A JSON value with every number kept as written. serde_json without its
+/// workspace-wide `arbitrary_precision` feature reads numbers as `f64`,
+/// which rounds `12345678901234567890123` to `1.2345678901234568e22`.
+fn json_value(raw: &RawValue, depth: usize) -> serde_json::Result<Value> {
+    use serde::de::Error as _;
+    if depth == MAX_DEPTH {
+        return Err(serde_json::Error::custom("recursion limit exceeded"));
+    }
+    let text = raw.get();
+    match text.as_bytes().first() {
+        Some(b'{') => {
+            let RawEntries(raw_entries) = serde_json::from_str(text)?;
+            let mut entries: Vec<(String, Value)> = Vec::with_capacity(raw_entries.len());
+            for (key, raw) in raw_entries {
+                let value = json_value(raw, depth + 1)?;
+                // A repeated key keeps its first place and its last value.
+                match entries.iter_mut().find(|(k, _)| *k == key) {
+                    Some(entry) => entry.1 = value,
+                    None => entries.push((key, value)),
+                }
+            }
+            Ok(Value::Object(entries))
+        }
+        Some(b'[') => {
+            let items: Vec<&RawValue> = serde_json::from_str(text)?;
+            items
+                .into_iter()
+                .map(|raw| json_value(raw, depth + 1))
+                .collect::<serde_json::Result<_>>()
+                .map(Value::Array)
+        }
+        Some(b'-' | b'0'..=b'9') => Ok(Value::Number(text.to_owned())),
+        _ => serde_json::from_str(text),
+    }
+}
+
+/// A JSON object's members in order, each value still unparsed.
+struct RawEntries<'a>(Vec<(String, &'a RawValue)>);
+
+impl<'de: 'a, 'a> Deserialize<'de> for RawEntries<'a> {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = RawEntries<'de>;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a JSON object")
+            }
+            fn visit_map<A: MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> std::result::Result<Self::Value, A::Error> {
+                let mut entries = Vec::new();
+                while let Some(entry) = map.next_entry()? {
+                    entries.push(entry);
+                }
+                Ok(RawEntries(entries))
+            }
+        }
+        d.deserialize_map(V)
     }
 }
 
@@ -288,7 +368,7 @@ fn yaml_node(out: &mut String, value: &Value, indent: usize) {
             out.push_str(&match scalar {
                 Value::Null => "null".into(),
                 Value::Bool(b) => b.to_string(),
-                Value::Number(n) => yaml_number(&n.to_string()),
+                Value::Number(n) => yaml_number(n),
                 Value::String(s) => yaml_string(s, indent),
                 Value::Array(_) => "[]".into(),
                 Value::Object(_) => "{}".into(),
@@ -872,11 +952,45 @@ mod tests {
         let yaml = write_tree(&value, "yaml").unwrap();
         assert_eq!(
             yaml,
-            "nums:\n- 100000.0\n- 0.0025\n- -7\n- 0.5\ntext: |\n  one\n  two\nmore: |-\n  a\n\n   b\ndeep:\n- - 1\n  - []\n- {}\n"
+            "nums:\n- 1.0e+5\n- 2.5E-3\n- -7\n- 0.5\ntext: |\n  one\n  two\nmore: |-\n  a\n\n   b\ndeep:\n- - 1\n  - []\n- {}\n"
         );
-        assert_eq!(read_tree("yaml", &yaml).unwrap(), value);
+        // The same values, though floats come back in their shortest form.
+        let parsed = |v: &Value| {
+            serde_json::from_str::<serde_json::Value>(&serde_json::to_string(v).unwrap()).unwrap()
+        };
+        assert_eq!(parsed(&read_tree("yaml", &yaml).unwrap()), parsed(&value));
         assert_eq!(yaml_number("1e5"), "1.0e+5");
         assert_eq!(yaml_number("-2.5E-3"), "-2.5E-3");
+    }
+
+    #[test]
+    fn json_numbers_keep_every_digit() {
+        let json = r#"[{"big":12345678901234567890123,"neg":-98765432109876543210,"f":0.1000000000000000055511151231257827,"e":1E400}]"#;
+        let value = read_tree("json", json).unwrap();
+        assert_eq!(serde_json::to_string(&value).unwrap(), json);
+        let yaml = write_tree(&value, "yaml").unwrap();
+        assert_eq!(
+            yaml,
+            "- big: 12345678901234567890123\n  neg: -98765432109876543210\n  f: 0.1000000000000000055511151231257827\n  e: 1.0E+400\n"
+        );
+        let back = read_tree(
+            "yaml",
+            "- big: 12345678901234567890123\n  neg: -98765432109876543210\n",
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_string(&back).unwrap(),
+            r#"[{"big":12345678901234567890123,"neg":-98765432109876543210}]"#
+        );
+        let rows = tree_to_rows(value).unwrap();
+        assert_eq!(rows[1][0], "12345678901234567890123");
+        let nested = format!("{}1{}", "[".repeat(200), "]".repeat(200));
+        assert!(read_tree("json", &nested).is_err());
+        let deep = format!("{}1{}", "[".repeat(100), "]".repeat(100));
+        assert_eq!(
+            serde_json::to_string(&read_tree("json", &deep).unwrap()).unwrap(),
+            deep
+        );
     }
 
     #[test]
