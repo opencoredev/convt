@@ -360,6 +360,10 @@ impl QuickView {
                 self.options = options;
                 self.error = None;
                 if let Some(to) = to {
+                    if self.to != Some(to) {
+                        // Install & Convert was for the other target.
+                        self.convert_when_ready = false;
+                    }
                     if self.targets.formats.contains(&to) {
                         self.to = Some(to);
                         self.reset_name(window, cx);
