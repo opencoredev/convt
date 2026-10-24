@@ -726,15 +726,9 @@ pub fn table_markdown(rows: &[Vec<String>]) -> String {
     if width == 0 {
         return String::new();
     }
-    let escape = |s: &str| {
-        s.replace('\\', "\\\\")
-            .replace('|', "\\|")
-            .replace("\r\n", "<br>")
-            .replace(['\n', '\r'], "<br>")
-    };
     let line = |r: &Vec<String>| {
         let cells: Vec<String> = (0..width)
-            .map(|i| escape(r.get(i).map_or("", String::as_str)))
+            .map(|i| markdown_cell(r.get(i).map_or("", String::as_str)))
             .collect();
         format!("| {} |\n", cells.join(" | "))
     };
@@ -742,6 +736,33 @@ pub fn table_markdown(rows: &[Vec<String>]) -> String {
     out.push_str(&format!("|{}\n", " --- |".repeat(width)));
     for r in &rows[1..] {
         out.push_str(&line(r));
+    }
+    out
+}
+
+/// A cell's text for a pipe table, shown as written: inline Markdown
+/// characters are backslash-escaped, `&`, `<` and `>` become entities so no
+/// HTML or entity comes alive, and line breaks become `<br>`. Block markers
+/// like a leading `#` or `-` need nothing, since a cell holds inline text only.
+fn markdown_cell(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' | '`' | '*' | '_' | '[' | ']' | '|' | '~' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\r' => {
+                chars.next_if_eq(&'\n');
+                out.push_str("<br>");
+            }
+            '\n' => out.push_str("<br>"),
+            c => out.push(c),
+        }
     }
     out
 }
@@ -1140,6 +1161,29 @@ mod tests {
     fn markdown_tables_escape_pipes() {
         let md = table_markdown(&table("a|b,c\n\"x\ny\",\\\n"));
         assert_eq!(md, "| a\\|b | c |\n| --- | --- |\n| x<br>y | \\\\ |\n");
+    }
+
+    #[test]
+    fn markdown_tables_show_markup_as_written() {
+        let rows = table(
+            "h\n<b>literal</b>\n**value**\n&amp;\n[x](y) `c` _u_ ~~s~~\n# not a heading\n\"a\r\nb\rc\"\n",
+        );
+        let md = table_markdown(&rows);
+        assert!(md.contains("| &lt;b&gt;literal&lt;/b&gt; |"), "{md}");
+        assert!(md.contains("| \\*\\*value\\*\\* |"), "{md}");
+        assert!(md.contains("| a<br>b<br>c |"), "{md}");
+        // Rendered, every cell reads exactly as the CSV wrote it.
+        let html = crate::markdown::to_html(&md, "t");
+        for cell in [
+            "<td>&lt;b&gt;literal&lt;/b&gt;</td>",
+            "<td>**value**</td>",
+            "<td>&amp;amp;</td>",
+            "<td>[x](y) `c` _u_ ~~s~~</td>",
+            "<td># not a heading</td>",
+            "<td>a<br>b<br>c</td>",
+        ] {
+            assert!(html.contains(cell), "{cell}\n{html}");
+        }
     }
 
     #[test]
