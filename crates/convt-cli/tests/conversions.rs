@@ -333,3 +333,46 @@ fn pdf_pages_keep_original_page_names_through_multiple_hops() {
     );
     assert_eq!(std::fs::read_dir(bad).unwrap().count(), 0);
 }
+
+/// A route that exists only through an engine this machine lacks names that
+/// engine; one that can't exist at all is still "no way to convert".
+#[cfg(target_os = "linux")]
+#[test]
+fn missing_engines_are_named_instead_of_no_route() {
+    let root = tempfile::tempdir().unwrap();
+    // Planning fails before the file is read.
+    let input = root.path().join("doc.pdf");
+    std::fs::write(&input, b"%PDF-1.4\n").unwrap();
+    let run = |to: &str| {
+        Command::new(env!("CARGO_BIN_EXE_convt"))
+            .env_clear()
+            .env("PATH", root.path().join("empty"))
+            .env("CONVT_LICENSE_STORE", "file")
+            .env("CONVT_CONFIG_DIR", root.path().join("config"))
+            .env("CONVT_DATA_DIR", root.path().join("data"))
+            .args([
+                input.as_os_str(),
+                "--to".as_ref(),
+                to.as_ref(),
+                "--json".as_ref(),
+            ])
+            .output()
+            .unwrap()
+    };
+    let out = run("docx");
+    assert!(!out.status.success());
+    let failed = events(&out)
+        .into_iter()
+        .find(|e| e["event"] == "failed")
+        .unwrap();
+    assert_eq!(failed["kind"], "engine_missing", "{failed}");
+    let message = failed["message"].as_str().unwrap();
+    assert!(message.contains("is not available"), "{message}");
+
+    let out = run("mp4");
+    let failed = events(&out)
+        .into_iter()
+        .find(|e| e["event"] == "failed")
+        .unwrap();
+    assert_eq!(failed["kind"], "no_route", "{failed}");
+}
