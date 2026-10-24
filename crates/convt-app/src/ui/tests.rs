@@ -2750,6 +2750,16 @@ fn a_screenshot_automation_converts_and_can_copy(cx: &mut TestAppContext) {
     f.app.update(cx, |s, cx| s.poll_automations(cx));
     assert_eq!(cx.read(|cx| f.app.read(cx).recent.len()), 1);
     assert!(!shots.join("IMG_2041.png").exists());
+
+    // A screenshot already in the rule's format is not re-encoded, now that
+    // PNG to PNG is a route: each copy would feed the rule again.
+    image::RgbImage::from_pixel(4, 4, image::Rgb([10, 10, 10]))
+        .save(shots.join("Screenshot 2.png"))
+        .unwrap();
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    assert_eq!(cx.read(|cx| f.app.read(cx).recent.len()), 1);
+    assert!(!shots.join("Screenshot 2 (1).png").exists());
 }
 
 #[gpui_kit::test]
