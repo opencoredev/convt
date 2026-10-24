@@ -1087,7 +1087,6 @@ impl AppState {
     /// The registry right-click menus are built from: with the document
     /// pack's targets when it can be downloaded, so a document still gets
     /// its menu and the click lands on the pack's offer.
-    #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
     pub fn menu_registry(&self) -> &Registry {
         self.planned_registry().unwrap_or(&self.registry)
     }

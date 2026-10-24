@@ -7378,3 +7378,30 @@ fn install_and_convert_waits_through_a_background_retry(cx: &mut TestAppContext)
         Some("Install & Convert")
     );
 }
+
+/// Settings → Menu offers what the right-click menus can: documents too,
+/// while the pack can be downloaded, so a pick there reaches Finder's list.
+#[gpui_kit::test]
+fn the_menu_tab_lists_documents_while_the_pack_can_be_downloaded(cx: &mut TestAppContext) {
+    let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
+    let (window, _) = f.settings(SettingsTab::Menu, cx);
+    assert!(shown(cx, window, "menu-summary-document"));
+    click(cx, window, "menu-document-pdf");
+    cx.read(|cx| {
+        let state = f.app.read(cx);
+        let list = crate::finder::target_list(state.menu_registry(), &state.menu);
+        let docx: Vec<_> = list.targets["docx"].iter().map(|t| t.id).collect();
+        assert!(!docx.contains(&"pdf"), "unpicked: {docx:?}");
+        assert!(!docx.is_empty());
+    });
+
+    let g = Fixture::with_packs(
+        cx,
+        Arc::new(TestPacks {
+            unconfigured: true,
+            ..TestPacks::default()
+        }),
+    );
+    let (window, _) = g.settings(SettingsTab::Menu, cx);
+    assert!(!shown(cx, window, "menu-summary-document"));
+}
