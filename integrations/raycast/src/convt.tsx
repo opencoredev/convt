@@ -23,6 +23,7 @@ import {
   inspectFiles,
   installDocumentPack,
   keepsTransparency,
+  resolveFormatId,
   validateOptions,
   VIDEO_CODECS,
   VIDEO_HEIGHTS,
@@ -524,7 +525,8 @@ function Converter({
           onChange={(value) => {
             setPreset(value);
             const presetTarget = presets.find((entry) => entry.name === value)?.target;
-            if (presetTarget && formats.some((format) => format.id === presetTarget)) setManualTarget(presetTarget);
+            const presetFormat = presetTarget ? resolveFormatId(formats, presetTarget) : null;
+            if (presetFormat) setManualTarget(presetFormat);
           }}
           info="Saved Convt presets. Options you set below override the preset's."
         >

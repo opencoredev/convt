@@ -48,6 +48,7 @@ const {
   parseFormats,
   parsePackProgress,
   parsePresets,
+  resolveFormatId,
   resolveBinary,
   validateFiles,
   validateOptions,
@@ -614,6 +615,24 @@ test("a selected folder with nothing for the target is reported as skipped", asy
   assert.equal(results[1].status !== "done" && results[1].message, "Nothing in this folder converts to JPEG.");
 });
 
+test("a folder too large to scan is still skipped when only a named file inside it converts", async (t) => {
+  const { directory, binary } = await fixture(t, ["big/sub/a.png"]);
+  const big = path.join(directory, "big");
+  // One more than the scan limit, none of which reach JPEG.
+  await Promise.all(Array.from({ length: 10_001 }, (_, i) => writeFile(path.join(big, `${i}.wav`), "")));
+  const results = await convertFiles(binary, {
+    files: [big, path.join(big, "sub", "a.png")],
+    target: "jpeg",
+  });
+  assert.deepEqual(
+    results.map((result) => [result.status, path.basename(result.input)]),
+    [
+      ["done", "a.png"],
+      ["skipped", "big"],
+    ],
+  );
+});
+
 test("a folder is skipped even when a file named directly sits inside it", async (t) => {
   const { directory, binary } = await fixture(t, ["photos/notes.wav", "photos/sub/a.png"]);
   const results = await convertFiles(binary, {
@@ -692,4 +711,19 @@ test("lists saved presets and skips invalid ones", async (t) => {
     { name: "a-very-long-preset-name", target: "png" },
   ]);
   assert.deepEqual(parsePresets(""), []);
+  // Convt accepts any case and extension aliases in a preset's `to`, and prints it as written.
+  assert.deepEqual(parsePresets("photos           jpg\nloud             JPEG\n"), [
+    { name: "photos", target: "jpg" },
+    { name: "loud", target: "JPEG" },
+  ]);
+  const formats = parseFormats(
+    JSON.stringify([
+      { id: "jpeg", name: "JPEG", category: "image", extensions: ["jpg", "jpeg", "jfif"] },
+      { id: "webp", name: "WebP", category: "image", extensions: ["webp"] },
+    ]),
+  );
+  assert.equal(resolveFormatId(formats, "jpg"), "jpeg");
+  assert.equal(resolveFormatId(formats, "JPEG"), "jpeg");
+  assert.equal(resolveFormatId(formats, "WebP"), "webp");
+  assert.equal(resolveFormatId(formats, "mp4"), null);
 });

@@ -404,9 +404,19 @@ export function parsePresets(text: string): Preset[] {
   // `convt presets` prints `name<padding> target` (`-` without one) or `name<padding> invalid: reason`.
   return text.split(/\r?\n/).flatMap((line): Preset[] => {
     if (/^.+? +invalid: /.test(line)) return [];
-    const match = /^(.+?) +(-|[a-z0-9]+)$/.exec(line.trimEnd());
+    // A preset's `to` is printed as written; Convt accepts any case and extension aliases (jpg, JPEG).
+    const match = /^(.+?) +(\S+)$/.exec(line.trimEnd());
     return match ? [{ name: match[1], target: match[2] === "-" ? null : match[2] }] : [];
   });
+}
+
+/** The format id Convt picks for a preset's `to`: an id or an extension, in any case. */
+export function resolveFormatId(formats: Format[], value: string): string | null {
+  const wanted = value.toLowerCase();
+  const format =
+    formats.find((entry) => entry.id === wanted) ??
+    formats.find((entry) => entry.extensions.some((extension) => extension.toLowerCase() === wanted));
+  return format?.id ?? null;
 }
 
 export async function getPresets(binary: string, signal?: AbortSignal): Promise<Preset[]> {
@@ -630,10 +640,17 @@ export async function convertFiles(
   const expectedJobs = folderJobs.every((jobs) => jobs !== undefined)
     ? selection.sources.length + folderJobs.reduce<number>((sum, jobs) => sum + (jobs ?? 0), 0)
     : 0;
-  // A fully scanned folder contributes nothing exactly when no file in it passes that filter. Paths
-  // can't tell, since a file named directly may also sit inside a selected folder.
-  const contributes = (index: number, folder: string, reported: ConversionResult[]) =>
-    folderJobs[index] === undefined ? reported.some((result) => isInside(folder, result.input)) : folderJobs[index] > 0;
+  // A fully scanned folder contributes nothing exactly when no file in it passes that filter. For a
+  // folder too large to scan, look for a result inside it that isn't a file named directly; a named
+  // file reported more often than it was named also ran as a folder job.
+  const named = new Map<string, number>();
+  for (const { file } of selection.sources) named.set(file, (named.get(file) ?? 0) + 1);
+  const contributes = (index: number, folder: string, reported: ConversionResult[]) => {
+    if (folderJobs[index] !== undefined) return folderJobs[index] > 0;
+    const seen = new Map<string, number>();
+    for (const { input } of reported) seen.set(input, (seen.get(input) ?? 0) + 1);
+    return [...seen].some(([input, count]) => isInside(folder, input) && count > (named.get(input) ?? 0));
+  };
 
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { env: cliEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
