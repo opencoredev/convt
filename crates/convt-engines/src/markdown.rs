@@ -165,8 +165,9 @@ fn read_capped(path: &Path, cap: u64) -> Option<Vec<u8>> {
 }
 
 /// A data URI of the image `dest` names relative to `base`. `None` for a URL
-/// with a scheme, a fragment, or a file that is missing or not an image, so
-/// only pictures are read and never a text file a link happens to name.
+/// with a scheme, a fragment, a file outside the Markdown's folder (after
+/// resolving links), or a file that is missing or not an image, so only
+/// pictures are read and never a text file or key a link happens to name.
 fn inline_image(base: &url::Url, dest: &str) -> Option<String> {
     use base64::Engine as _;
     if dest.is_empty() || dest.starts_with('#') {
@@ -175,21 +176,29 @@ fn inline_image(base: &url::Url, dest: &str) -> Option<String> {
     if url::Url::parse(dest) != Err(url::ParseError::RelativeUrlWithoutBase) {
         return None;
     }
-    let path = base.join(dest).ok()?.to_file_path().ok()?;
+    let dir = std::fs::canonicalize(base.to_file_path().ok()?).ok()?;
+    let path = std::fs::canonicalize(base.join(dest).ok()?.to_file_path().ok()?).ok()?;
+    if !path.starts_with(&dir) {
+        return None;
+    }
     let bytes = read_capped(&path, MAX_INLINE_IMAGE)?;
-    let mime = match image::guess_format(&bytes) {
-        Ok(format) => format.to_mime_type(),
-        Err(_)
-            if path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("svg")) =>
-        {
-            "image/svg+xml"
-        }
-        Err(_) => return None,
-    };
+    let mime = image_mime(&bytes)?;
     let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Some(format!("data:{mime};base64,{data}"))
+}
+
+/// The MIME type of `bytes` if they are a picture, judged by content and
+/// never by the file name: a raster format `image` recognizes, or an SVG
+/// document.
+fn image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if let Ok(format) = image::guess_format(bytes) {
+        return Some(format.to_mime_type());
+    }
+    let text = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
+    let text = text.trim_ascii_start();
+    let svg = (text.starts_with(b"<?xml") || text.starts_with(b"<svg"))
+        && text.windows(4).any(|w| w == b"<svg");
+    svg.then_some("image/svg+xml")
 }
 
 fn first_heading(markdown: &str) -> Option<String> {
@@ -526,6 +535,39 @@ mod tests {
                 assert!(html.contains(r#"src="pipe.png""#), "{html}");
                 assert!(html.contains("dev/zero"), "{html}");
             }
+        }
+    }
+
+    #[test]
+    fn only_pictures_inside_the_markdown_folder_are_inlined() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("doc");
+        std::fs::create_dir(&dir).unwrap();
+        let secret = root.path().join("id_ed25519");
+        std::fs::write(&secret, "-----BEGIN OPENSSH PRIVATE KEY-----\n").unwrap();
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#;
+        std::fs::write(root.path().join("outside.svg"), svg).unwrap();
+        std::fs::write(
+            dir.join("logo.svg"),
+            format!("\u{feff}\n<?xml version=\"1.0\"?>{svg}"),
+        )
+        .unwrap();
+        std::fs::write(dir.join("bare.svg"), svg).unwrap();
+        // Named like a picture, but not one.
+        std::fs::write(dir.join("notes.svg"), "plain words").unwrap();
+        std::fs::write(dir.join("fake.svg"), "<?xml version=\"1.0\"?><html/>").unwrap();
+        let md = "![k](leak.svg) ![o](../outside.svg) ![l](logo.svg) ![b](bare.svg) ![n](notes.svg) ![f](fake.svg)\n";
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&secret, dir.join("leak.svg")).unwrap();
+        let html = to_html_with_images_from(md, "x", &dir);
+        assert!(!html.contains("LS0tLS1CRUdJTi"), "the key leaked: {html}");
+        assert_eq!(
+            html.matches("data:image/svg+xml;base64,").count(),
+            2,
+            "{html}"
+        );
+        for kept in ["leak.svg", "../outside.svg", "notes.svg", "fake.svg"] {
+            assert!(html.contains(&format!(r#"src="{kept}""#)), "{kept}: {html}");
         }
     }
 
