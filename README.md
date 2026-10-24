@@ -48,7 +48,7 @@ From a checkout, prefix those with `cargo run -p convt-cli --`. Output lands nex
 
 ## Raycast
 
-[convt for Raycast](https://www.raycast.com/0xdhrv/convt), built by Dhruv Suthar ([0xdhrv](https://github.com/0xdhrv)), converts the files selected in Finder or Explorer from Raycast's search bar, and Raycast AI can call it too. It runs the `convt` CLI you already installed and finds it in the app bundle, the Windows install folder, Homebrew or `PATH`. Install it from the Raycast Store.
+[convt for Raycast](https://www.raycast.com/0xdhrv/convt), built by Dhruv Suthar ([0xdhrv](https://github.com/0xdhrv)), converts the files selected in Finder, or files and folders you pick in Raycast on Windows and macOS, and Raycast AI can call it too. It runs the `convt` CLI you already installed and finds it in the app bundle, the Windows install folder, Homebrew or `PATH`. Install it from the Raycast Store.
 
 The extension's source lives in [raycast/extensions](https://github.com/raycast/extensions/tree/main/extensions/convt), with a working copy in [`integrations/raycast`](integrations/raycast) that tracks new CLI options. `crates/convt-cli/tests/raycast_contract.rs` pins the output it parses (`convt formats --json`, `convt targets`, `convt presets` and the `--json` events), so a change that would break the extension fails `cargo test`.
 

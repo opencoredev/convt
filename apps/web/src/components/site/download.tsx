@@ -213,8 +213,8 @@ export function Raycast() {
           Convert from Raycast
         </h2>
         <p className="text-[14px]/[22px] text-pretty text-ink-2">
-          Select files in Finder or Explorer, open Raycast and pick a format. The extension uses the
-          convt you install here, so files still stay on your computer.
+          Select files in Finder, or pick them in Raycast on Windows, then choose a format. The
+          extension uses the convt you install here, so files still stay on your computer.
         </p>
       </div>
       <div className="flex items-center justify-between gap-4 rounded-2xl bg-raised px-5 py-4 shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/4%)] dark:bg-panel">
