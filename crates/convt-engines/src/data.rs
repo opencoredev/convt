@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -105,6 +107,27 @@ impl Value {
     }
 }
 
+/// An object's members in the order they are read. A repeated key keeps its
+/// first place and its last value.
+#[derive(Default)]
+struct Members {
+    entries: Vec<(String, Value)>,
+    /// Each key's place in `entries`.
+    index: HashMap<String, usize>,
+}
+
+impl Members {
+    fn insert(&mut self, key: String, value: Value) {
+        match self.index.entry(key) {
+            Entry::Occupied(slot) => self.entries[*slot.get()].1 = value,
+            Entry::Vacant(slot) => {
+                self.entries.push((slot.key().clone(), value));
+                slot.insert(self.entries.len() - 1);
+            }
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for Value {
     fn deserialize<D: Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
         struct V;
@@ -167,16 +190,11 @@ impl<'de> Deserialize<'de> for Value {
                 self,
                 mut map: A,
             ) -> std::result::Result<Value, A::Error> {
-                let mut entries: Vec<(String, Value)> = Vec::new();
+                let mut members = Members::default();
                 while let Some((key, value)) = map.next_entry::<Value, Value>()? {
-                    let key = key.into_cell();
-                    // A repeated key keeps its first place and its last value.
-                    match entries.iter_mut().find(|(k, _)| *k == key) {
-                        Some(entry) => entry.1 = value,
-                        None => entries.push((key, value)),
-                    }
+                    members.insert(key.into_cell(), value);
                 }
-                Ok(Value::Object(entries))
+                Ok(Value::Object(members.entries))
             }
             fn visit_enum<A: de::EnumAccess<'de>>(
                 self,
@@ -258,16 +276,12 @@ fn json_value(raw: &RawValue, depth: usize) -> serde_json::Result<Value> {
     match text.as_bytes().first() {
         Some(b'{') => {
             let RawEntries(raw_entries) = serde_json::from_str(text)?;
-            let mut entries: Vec<(String, Value)> = Vec::with_capacity(raw_entries.len());
+            let mut members = Members::default();
             for (key, raw) in raw_entries {
                 let value = json_value(raw, depth + 1)?;
-                // A repeated key keeps its first place and its last value.
-                match entries.iter_mut().find(|(k, _)| *k == key) {
-                    Some(entry) => entry.1 = value,
-                    None => entries.push((key, value)),
-                }
+                members.insert(key, value);
             }
-            Ok(Value::Object(entries))
+            Ok(Value::Object(members.entries))
         }
         Some(b'[') => {
             let items: Vec<&RawValue> = serde_json::from_str(text)?;
@@ -545,6 +559,10 @@ fn tsv_unescape(cell: &str) -> String {
 fn header(rows: &[Vec<String>]) -> Vec<String> {
     let width = rows.iter().map(Vec::len).max().unwrap_or(0);
     let mut names: Vec<String> = Vec::with_capacity(width);
+    let mut taken: HashSet<String> = HashSet::with_capacity(width);
+    // The next suffix to try for each name, so a thousand `a` columns don't
+    // each count up from 2.
+    let mut next: HashMap<String, usize> = HashMap::new();
     for i in 0..width {
         let given = rows[0].get(i).map(|s| s.trim()).unwrap_or_default();
         let base = if given.is_empty() {
@@ -553,11 +571,17 @@ fn header(rows: &[Vec<String>]) -> Vec<String> {
             given.to_owned()
         };
         let mut name = base.clone();
-        let mut n = 2;
-        while names.contains(&name) {
-            name = format!("{base} {n}");
-            n += 1;
+        if taken.contains(&name) {
+            let n = next.entry(base.clone()).or_insert(2);
+            loop {
+                name = format!("{base} {n}");
+                *n += 1;
+                if !taken.contains(&name) {
+                    break;
+                }
+            }
         }
+        taken.insert(name.clone());
         names.push(name);
     }
     names
@@ -606,10 +630,11 @@ pub fn tree_to_rows(value: Value) -> Result<Vec<Vec<String>>> {
     }
     if items.iter().all(|v| matches!(v, Value::Object(_))) {
         let mut keys: Vec<String> = Vec::new();
+        let mut seen: HashSet<&str> = HashSet::new();
         for item in &items {
             if let Value::Object(entries) = item {
                 for (k, _) in entries {
-                    if !keys.contains(k) {
+                    if seen.insert(k) {
                         keys.push(k.clone());
                     }
                 }
@@ -620,18 +645,13 @@ pub fn tree_to_rows(value: Value) -> Result<Vec<Vec<String>>> {
         }
         let mut rows = vec![keys.clone()];
         for item in items {
-            let Value::Object(mut entries) = item else {
+            let Value::Object(entries) = item else {
                 unreachable!()
             };
+            let mut cells: HashMap<String, Value> = entries.into_iter().collect();
             rows.push(
                 keys.iter()
-                    .map(|k| {
-                        entries
-                            .iter()
-                            .position(|(key, _)| key == k)
-                            .map(|i| entries.swap_remove(i).1.into_cell())
-                            .unwrap_or_default()
-                    })
+                    .map(|k| cells.remove(k).map(Value::into_cell).unwrap_or_default())
                     .collect(),
             );
         }
@@ -875,6 +895,36 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&read_tree("json", &back).unwrap()).unwrap(),
             json
+        );
+    }
+
+    #[test]
+    fn objects_with_many_keys_stay_in_order() {
+        // Each key once looked through every key before it: 100,000 keys
+        // took half a minute.
+        let n = 100_000;
+        let json = format!(
+            "{{{}}}",
+            (0..n)
+                .map(|i| format!("\"k{i}\":{i}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let value = read_tree("json", &json).unwrap();
+        let yaml = write_tree(&value, "yaml").unwrap();
+        let again = read_tree("yaml", &yaml).unwrap();
+        assert_eq!(again, value);
+        let rows = tree_to_rows(again).unwrap();
+        assert_eq!(rows[0].len(), n);
+        assert_eq!(
+            (rows[0][n - 1].as_str(), rows[1][n - 1].as_str()),
+            ("k99999", "99999")
+        );
+        let csv = format!("{}\n", vec!["a"; n].join(","));
+        let names = header(&table(&csv));
+        assert_eq!(
+            (names[1].as_str(), names[n - 1].as_str()),
+            ("a 2", "a 100000")
         );
     }
 
