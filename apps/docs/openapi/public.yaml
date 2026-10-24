@@ -282,7 +282,7 @@ actions:
       description: "Conversion settings. Every field is optional, and an unknown field, a value of the wrong type or an out-of-range value fails with `400 invalid_options` when you create the job."
   - target: $.components.schemas.Options.properties.quality
     update:
-      description: "Lossy quality from 1 to 100 for JPEG, WebP, AVIF, HEIC and video output."
+      description: "Lossy quality from 1 to 100 for JPEG, AVIF, HEIC and video output. WebP output is lossless and ignores it."
   - target: $.components.schemas.Options.properties.max_size
     update:
       description: "Longest edge of image output in pixels. Larger images are scaled down; smaller ones are left alone."

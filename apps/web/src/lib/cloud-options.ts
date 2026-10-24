@@ -46,13 +46,10 @@ function categoryOf(target: Format) {
   return formats.find((f) => f.id === target)?.category;
 }
 
+/** WebP is left out: the image engine writes it lossless and ignores quality. */
 export function qualityApplies(target: Format): boolean {
   return (
-    categoryOf(target) === "video" ||
-    target === "jpeg" ||
-    target === "webp" ||
-    target === "avif" ||
-    target === "heic"
+    categoryOf(target) === "video" || target === "jpeg" || target === "avif" || target === "heic"
   );
 }
 

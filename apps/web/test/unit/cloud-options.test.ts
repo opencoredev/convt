@@ -6,6 +6,8 @@ test("each target offers only the controls its engine applies", () => {
   expect(qualityApplies("jpeg")).toBe(true);
   expect(qualityApplies("mp4")).toBe(true);
   expect(qualityApplies("png")).toBe(false);
+  expect(qualityApplies("heic")).toBe(true);
+  expect(qualityApplies("webp")).toBe(false);
   expect(qualityApplies("pdf")).toBe(false);
   expect(sizeControl("png")?.field).toBe("max_size");
   expect(sizeControl("mp4")?.field).toBe("video_height");
