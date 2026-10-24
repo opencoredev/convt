@@ -374,7 +374,16 @@ fn yaml_node(out: &mut String, value: &Value, indent: usize) {
                 if i > 0 {
                     out.push_str(&" ".repeat(indent));
                 }
-                out.push_str(&yaml_string(key, indent));
+                let key = yaml_key(key);
+                // An implicit key may be at most 1024 characters long.
+                if key.chars().count() > 1024 {
+                    out.push_str("? ");
+                    out.push_str(&key);
+                    out.push('\n');
+                    out.push_str(&" ".repeat(indent));
+                } else {
+                    out.push_str(&key);
+                }
                 out.push(':');
                 match value {
                     Value::Object(e) if !e.is_empty() => {
@@ -439,6 +448,17 @@ fn yaml_number(text: &str) -> String {
 /// number, date, time, `~`, `.inf` or indicator can be mistaken for one,
 /// and are none of the YAML 1.1 and 1.2 words for booleans and null.
 fn yaml_string(s: &str, indent: usize) -> String {
+    yaml_scalar(s, Some(indent))
+}
+
+/// A mapping key, always on one line: a block scalar there would make the
+/// next lines its text, so a key with line breaks is double-quoted.
+fn yaml_key(s: &str) -> String {
+    yaml_scalar(s, None)
+}
+
+/// [`yaml_string`], allowing a literal block at `block_indent` if given.
+fn yaml_scalar(s: &str, block_indent: Option<usize>) -> String {
     const WORDS: &[&str] = &["y", "n", "yes", "no", "on", "off", "true", "false", "null"];
     let mut chars = s.chars();
     let bare = chars.next().is_some_and(|c| c.is_alphabetic() || c == '_')
@@ -452,7 +472,7 @@ fn yaml_string(s: &str, indent: usize) -> String {
     if s.chars().all(printable) {
         return format!("'{}'", s.replace('\'', "''"));
     }
-    if let Some(block) = yaml_literal(s, indent) {
+    if let Some(block) = block_indent.and_then(|indent| yaml_literal(s, indent)) {
         return block;
     }
     let mut out = String::from("\"");
@@ -1125,6 +1145,49 @@ mod tests {
         assert_eq!(parsed(&read_tree("yaml", &yaml).unwrap()), parsed(&value));
         assert_eq!(yaml_number("1e5"), "1.0e+5");
         assert_eq!(yaml_number("-2.5E-3"), "-2.5E-3");
+    }
+
+    #[test]
+    fn yaml_keys_stay_on_one_line() {
+        let long = "k".repeat(1100);
+        let json = format!(
+            r#"{{"a\nb":1,"line\n":{{"x\ny":[1]}},"tab\tkey":"v","{long}":{{"m":2}},"{long}2":[3]}}"#
+        );
+        let value = read_tree("json", &json).unwrap();
+        let yaml = write_tree(&value, "yaml").unwrap();
+        assert!(
+            yaml.starts_with("\"a\\nb\": 1\n\"line\\n\":\n  \"x\\ny\":\n  - 1\n"),
+            "{yaml}"
+        );
+        assert!(!yaml.contains('|'), "{yaml}");
+        assert!(yaml.contains(&format!("? {long}\n:\n  m: 2\n")), "{yaml}");
+        assert_eq!(read_tree("yaml", &yaml).unwrap(), value, "{yaml}");
+        // A YAML 1.1 reader agrees.
+        let python = std::process::Command::new("python3")
+            .args([
+                "-I",
+                "-c",
+                "import json, sys, yaml; print(json.dumps(yaml.safe_load(sys.stdin.read())))",
+            ])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        let Ok(mut python) = python else { return };
+        use std::io::Write as _;
+        python
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(yaml.as_bytes())
+            .unwrap();
+        let out = python.wait_with_output().unwrap();
+        if !out.status.success() {
+            eprintln!("skipped the PyYAML check: no yaml module");
+            return;
+        }
+        let parsed = read_tree("json", &String::from_utf8(out.stdout).unwrap()).unwrap();
+        assert_eq!(parsed, value, "{yaml}");
     }
 
     #[test]
