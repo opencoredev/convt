@@ -194,18 +194,19 @@ fn rewrite(s: &str, tag: &dyn Fn(&str) -> String, text: &dyn Fn(&str) -> String)
         let opens_tag = after
             .trim_start_matches('/')
             .starts_with(|c: char| c.is_ascii_alphanumeric());
-        match after.find('>').filter(|_| opens_tag) {
-            Some(gt) => {
-                literal.push_str(&rest[..lt]);
-                out.push_str(&text(&std::mem::take(&mut literal)));
-                out.push_str(&tag(&after[..gt]));
-                rest = &after[gt + 1..];
-            }
-            None => {
-                literal.push_str(&rest[..=lt]);
-                rest = after;
-            }
+        if !opens_tag {
+            literal.push_str(&rest[..=lt]);
+            rest = after;
+            continue;
         }
+        // With no `>` left, no later `<` closes a tag either.
+        let Some(gt) = after.find('>') else {
+            break;
+        };
+        literal.push_str(&rest[..lt]);
+        out.push_str(&text(&std::mem::take(&mut literal)));
+        out.push_str(&tag(&after[..gt]));
+        rest = &after[gt + 1..];
     }
     literal.push_str(rest);
     out.push_str(&text(&literal));
@@ -249,7 +250,11 @@ fn decode_entities(s: &str) -> String {
     while let Some(amp) = rest.find('&') {
         out.push_str(&rest[..amp]);
         rest = &rest[amp..];
-        let decoded = rest.find(';').filter(|&semi| semi <= 10).and_then(|semi| {
+        // The longest entity, `&#x10FFFF;`, ends by byte 10, so the `;` is
+        // looked for no further than that.
+        let window = &rest.as_bytes()[..rest.len().min(11)];
+        let semi = window.iter().position(|&b| b == b';');
+        let decoded = semi.and_then(|semi| {
             let name = &rest[1..semi];
             let c = match name {
                 "amp" => Some("&".to_owned()),
@@ -469,6 +474,29 @@ mod tests {
         assert!(error.to_string().contains("no subtitles"), "{error}");
         let error = parse_vtt("WEBVTT\n\nNOTE nothing here\n").unwrap_err();
         assert!(error.to_string().contains("no subtitles"), "{error}");
+    }
+
+    #[test]
+    fn cues_full_of_ampersands_and_angle_brackets_stay_linear() {
+        // Each `&` once looked for a `;` to the end of the text, and each
+        // `<` for a `>`, so a long cue took time growing with its square.
+        let n = 1_000_000;
+        let lines = ["&".repeat(n), "<a".repeat(n), "< ".repeat(n)].join("\n");
+        let srt = format!("1\n00:00:01,000 --> 00:00:02,000\n{lines}\nx <i>end</i> &amp;\n");
+        let start = std::time::Instant::now();
+        let cues = parse_srt(&srt).unwrap();
+        let vtt = write_vtt(&cues);
+        assert!(vtt.ends_with("x <i>end</i> &amp;amp;\n\n"));
+        let back = parse_vtt(&vtt).unwrap();
+        assert_eq!(back[0].lines[1].len(), "&lt;a".len() * n);
+        assert_eq!(transcript(&back), transcript(&cues));
+        assert!(transcript(&back).ends_with("\nx end &amp;\n"));
+        // Generous for a debug build; the quadratic scans took minutes.
+        assert!(start.elapsed() < std::time::Duration::from_secs(20));
+        assert_eq!(
+            decode_entities("&#x10FFFF;&#1114111;&amp"),
+            "\u{10ffff}\u{10ffff}&amp"
+        );
     }
 
     #[test]
