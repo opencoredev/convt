@@ -1,5 +1,8 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, VideoCodec};
 
@@ -9,7 +12,13 @@ const VIDEO_OUT: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
 /// `image` engine: FFmpeg has no WebP encoder of its own, and the bundled
 /// builds leave out libwebp.
 const FRAME: &[&str] = &["png", "jpeg"];
-const AUDIO: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus"];
+const AUDIO: &[&str] = &[
+    "mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "aiff", "caf", "m4r",
+];
+/// Containers whose first subtitle stream can be extracted as text. MP4 and
+/// MOV carry mov_text, MKV and WebM carry SubRip, ASS or WebVTT.
+const SUBTITLE_IN: &[&str] = &["mp4", "mov", "mkv", "webm"];
+const SUBTITLE_OUT: &[&str] = &["srt", "vtt"];
 
 /// The FFmpeg binary the engine would run, found the way every tool is:
 /// `CONVT_FFMPEG`, next to the executable, then `PATH`. The desktop app uses
@@ -24,7 +33,7 @@ pub const LOCAL_INPUT_ARGS: &[&str] = &[
     "-protocol_whitelist",
     "file,pipe",
     "-format_whitelist",
-    "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,gif,mp3,wav,flac,aac,ogg",
+    "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,gif,mp3,wav,flac,aac,ogg,aiff,caf",
 ];
 
 fn local_path(path: &Path) -> std::ffi::OsString {
@@ -66,19 +75,22 @@ impl FfmpegEngine {
     /// The input's duration for progress, or `None` when ffprobe is missing
     /// or can't tell. Only cancellation is an error.
     fn duration_us(&self, ctx: &Ctx, input: &Path) -> Result<Option<f64>> {
+        Ok(self
+            .format_secs(ctx, input, "duration")?
+            .map(|s| s * 1_000_000.0))
+    }
+
+    /// One numeric `format` field from ffprobe, in seconds, or `None` when
+    /// ffprobe is missing or can't tell. Only cancellation is an error.
+    fn format_secs(&self, ctx: &Ctx, input: &Path, field: &str) -> Result<Option<f64>> {
         let Some(ffprobe) = &self.ffprobe else {
             return Ok(None);
         };
         let mut cmd = Command::new(ffprobe);
         cmd.args(LOCAL_INPUT_ARGS)
-            .args([
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "csv=p=0",
-            ])
+            .args(["-v", "error", "-show_entries"])
+            .arg(format!("format={field}"))
+            .args(["-of", "csv=p=0"])
             .arg(local_path(input));
         let mut secs = None;
         match crate::run_tool("ffprobe", cmd, ctx, |line| {
@@ -86,25 +98,241 @@ impl FfmpegEngine {
         }) {
             Err(Error::Cancelled) => Err(Error::Cancelled),
             Err(_) => Ok(None),
-            Ok(()) => Ok(secs.map(|s| s * 1_000_000.0)),
+            Ok(()) => Ok(secs),
         }
     }
 }
 
-/// Targets are offered per format, so a silent video still lists audio ones.
-/// Name the cause instead of passing on FFmpeg's empty-output message.
-fn no_audio_error(e: Error, to: &str) -> Error {
-    match e {
+/// Targets are offered per format, so a silent video still lists audio ones
+/// and a video without subtitles still lists SRT. Name the cause instead of
+/// passing on FFmpeg's empty-output or stream-map message.
+fn missing_stream_error(e: Error, to: &str) -> Error {
+    let message = match &e {
         Error::EngineFailed { message, .. }
             if AUDIO.contains(&to) && message.contains("does not contain any stream") =>
         {
-            Error::EngineFailed {
-                engine: "ffmpeg",
-                message: "this file has no audio track to convert".into(),
+            "this file has no audio track to convert"
+        }
+        Error::EngineFailed { message, .. }
+            if SUBTITLE_OUT.contains(&to) && message.contains("matches no streams") =>
+        {
+            "this video has no subtitle track"
+        }
+        // DVD and Blu-ray subtitles are pictures; FFmpeg can't OCR them.
+        Error::EngineFailed { message, .. }
+            if SUBTITLE_OUT.contains(&to)
+                && message.contains("text to text or bitmap to bitmap") =>
+        {
+            "this video's subtitles are images, not text, so they can't be saved as text"
+        }
+        _ => return e,
+    };
+    Error::EngineFailed {
+        engine: "ffmpeg",
+        message: message.into(),
+    }
+}
+
+/// A hardware video encoder family. VideoToolbox (macOS) and NVENC (NVIDIA
+/// on Windows and Linux) take frames from system memory, so the software
+/// path's filters and pixel format work unchanged. VAAPI and Quick Sync are
+/// left out: they need a device chosen per machine and `hwupload` or `nv12`
+/// conversions that change the filter chain, and none of the release
+/// platforms needs them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum HwEncoder {
+    VideoToolbox,
+    Nvenc,
+}
+
+impl HwEncoder {
+    /// The families worth probing on this OS, in preference order.
+    fn candidates() -> &'static [HwEncoder] {
+        if cfg!(target_os = "macos") {
+            &[HwEncoder::VideoToolbox]
+        } else if cfg!(any(windows, target_os = "linux")) {
+            &[HwEncoder::Nvenc]
+        } else {
+            &[]
+        }
+    }
+
+    fn encoder(self, codec: VideoCodec) -> &'static str {
+        match (self, codec) {
+            (HwEncoder::VideoToolbox, VideoCodec::H264) => "h264_videotoolbox",
+            (HwEncoder::VideoToolbox, VideoCodec::Hevc) => "hevc_videotoolbox",
+            (HwEncoder::Nvenc, VideoCodec::H264) => "h264_nvenc",
+            (HwEncoder::Nvenc, VideoCodec::Hevc) => "hevc_nvenc",
+        }
+    }
+
+    /// Encoder and rate-control arguments for 1-100 `quality`, `None`
+    /// meaning the software default's equivalent (quality 80, CRF 20).
+    fn video_args(self, codec: VideoCodec, quality: Option<u8>) -> Vec<String> {
+        let q = f32::from(quality.unwrap_or(80));
+        let mut args = vec!["-c:v".to_string(), self.encoder(codec).to_string()];
+        match self {
+            // Constant quality, where higher is better. Intel Macs without
+            // a constant-quality encoder fail the probe and stay software.
+            HwEncoder::VideoToolbox => {
+                args.extend(["-q:v".into(), format!("{:.0}", 20.0 + q * 0.6)]);
+            }
+            // Constant quality with VBR, on a scale like CRF. NVENC files run
+            // a little larger than x264's at the same number, so it starts two
+            // points higher.
+            HwEncoder::Nvenc => {
+                let worst = match codec {
+                    VideoCodec::H264 => 42.0,
+                    VideoCodec::Hevc => 46.0,
+                };
+                let cq = crf(quality.unwrap_or(80), worst);
+                args.extend(
+                    [
+                        "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", &cq, "-b:v", "0",
+                    ]
+                    .map(String::from),
+                );
             }
         }
-        e => e,
+        args
     }
+}
+
+/// Encoder names from `ffmpeg -encoders`, which lists one per line after a
+/// dashed rule as `<flags> <name> <description>`.
+fn listed_encoders(list: &str) -> Vec<&str> {
+    list.lines()
+        .skip_while(|line| !line.trim_start().starts_with("---"))
+        .skip(1)
+        .filter_map(|line| {
+            let mut words = line.split_whitespace();
+            let flags = words.next()?;
+            let name = words.next()?;
+            (flags.len() == 6 && flags.starts_with('V')).then_some(name)
+        })
+        .collect()
+}
+
+/// Runs `run` with `hw`, and once more in software when that fails for any
+/// reason but cancellation, calling `before_retry` first to clear the failed
+/// attempt's output.
+fn with_software_fallback(
+    hw: Option<HwEncoder>,
+    mut run: impl FnMut(Option<HwEncoder>) -> Result<()>,
+    before_retry: impl FnOnce(),
+) -> Result<()> {
+    let Some(hw) = hw else {
+        return run(None);
+    };
+    match run(Some(hw)) {
+        Err(e) if !matches!(e, Error::Cancelled) => {
+            before_retry();
+            run(None)
+        }
+        done => done,
+    }
+}
+
+/// Hardware encoding is on unless `CONVT_HWACCEL` is `0`, `off`, `false` or
+/// `no`, and never inside the cloud worker's sandbox, where there is no GPU
+/// and device access is refused.
+fn hardware_allowed() -> bool {
+    if crate::CLOUD_SUPERVISED.load(std::sync::atomic::Ordering::SeqCst) {
+        return false;
+    }
+    !std::env::var("CONVT_HWACCEL").is_ok_and(|v| hwaccel_off(&v))
+}
+
+fn hwaccel_off(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "0" | "off" | "false" | "no"
+    )
+}
+
+/// How long a probe encode may take before the encoder counts as broken.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// The working hardware encoder per FFmpeg binary and codec, probed once per
+/// process. Being listed proves nothing (FFmpeg lists NVENC on machines
+/// without an NVIDIA GPU), so each candidate must encode a few real frames.
+static HARDWARE: OnceLock<Mutex<HardwareCache>> = OnceLock::new();
+type HardwareCache = HashMap<(PathBuf, VideoCodec), Option<HwEncoder>>;
+
+fn hardware_encoder(ffmpeg: &Path, codec: VideoCodec, ctx: &Ctx) -> Result<Option<HwEncoder>> {
+    let cache = HARDWARE.get_or_init(Mutex::default);
+    // Held through the probe, so concurrent jobs wait for one answer.
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+    let key = (ffmpeg.to_path_buf(), codec);
+    if let Some(found) = cache.get(&key) {
+        return Ok(*found);
+    }
+    let found = probe_hardware(ffmpeg, codec, ctx)?;
+    cache.insert(key, found);
+    Ok(found)
+}
+
+fn probe_hardware(ffmpeg: &Path, codec: VideoCodec, ctx: &Ctx) -> Result<Option<HwEncoder>> {
+    let mut list = Command::new(ffmpeg);
+    list.args(["-hide_banner", "-encoders"]);
+    let Some(list) = run_probe(list, ctx)? else {
+        return Ok(None);
+    };
+    let listed = listed_encoders(&list);
+    for &hw in HwEncoder::candidates() {
+        if !listed.contains(&hw.encoder(codec)) {
+            continue;
+        }
+        let mut test = Command::new(ffmpeg);
+        test.args(["-hide_banner", "-nostdin", "-v", "error"])
+            .args(["-f", "lavfi", "-i", "color=c=gray:s=256x256:r=10:d=0.3"])
+            .args(hw.video_args(codec, None))
+            .args(["-pix_fmt", "yuv420p", "-f", "null", "-"]);
+        if run_probe(test, ctx)?.is_some() {
+            return Ok(Some(hw));
+        }
+    }
+    Ok(None)
+}
+
+/// Runs a probe to completion and returns its stdout, or `None` when it
+/// fails or outlives [`PROBE_TIMEOUT`]. Only cancellation is an error.
+fn run_probe(mut cmd: Command, ctx: &Ctx) -> Result<Option<String>> {
+    crate::hide_console(&mut cmd);
+    let Ok(mut child) = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return Ok(None);
+    };
+    // `-encoders` prints a few kilobytes, more than a pipe buffer on some
+    // systems, so read while waiting.
+    let mut stdout = child.stdout.take().expect("piped");
+    let reader = std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = std::io::Read::read_to_string(&mut stdout, &mut out);
+        out
+    });
+    let deadline = Instant::now() + PROBE_TIMEOUT;
+    let status = loop {
+        if ctx.is_cancelled() || Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            if ctx.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+            return Ok(None);
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(_) => return Ok(None),
+        }
+    };
+    let out = reader.join().unwrap_or_default();
+    Ok(status.success().then_some(out))
 }
 
 /// FFmpeg writes the extracted frame's (possibly scaled) pixel ratio in pHYs.
@@ -174,10 +402,16 @@ fn video_scale(height: u32) -> String {
     )
 }
 
-/// Encoder arguments for one output format and the user's options.
-/// Hardware encoders (VideoToolbox, NVENC, QSV, VAAPI, AMF) get picked here
-/// once detection lands.
+/// [`encoder_args`] with the software encoders.
+#[cfg(test)]
 fn output_args(to: &str, o: &Options) -> Vec<String> {
+    encoder_args(to, o, None)
+}
+
+/// Encoder arguments for one output format and the user's options. `hw`
+/// replaces libx264 or libx265 for MP4, MOV and MKV; everything else (pixel
+/// format, tags, audio, faststart, scaling) is the same on both paths.
+fn encoder_args(to: &str, o: &Options, hw: Option<HwEncoder>) -> Vec<String> {
     let q = o.quality;
     let x264_crf = q.map_or("20".into(), |q| crf(q, 40.0));
     let vp9_crf = q.map_or("32".into(), |q| crf(q, 52.0));
@@ -188,18 +422,23 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
     let mut push = |a: &[&str]| args.extend(a.iter().map(|s| s.to_string()));
     match to {
         "mp4" | "mov" | "mkv" => {
-            match o.video_codec.unwrap_or(VideoCodec::H264) {
-                VideoCodec::H264 => {
+            let codec = o.video_codec.unwrap_or(VideoCodec::H264);
+            match (hw, codec) {
+                (Some(hw), _) => {
+                    let video = hw.video_args(codec, q);
+                    push(&video.iter().map(String::as_str).collect::<Vec<_>>());
+                }
+                (None, VideoCodec::H264) => {
                     push(&["-c:v", "libx264", "-preset", "medium", "-crf", &x264_crf]);
                 }
-                VideoCodec::Hevc => {
+                (None, VideoCodec::Hevc) => {
                     let x265_crf = q.map_or("24".into(), |q| crf(q, 44.0));
                     push(&["-c:v", "libx265", "-preset", "medium", "-crf", &x265_crf]);
-                    // QuickTime and Apple devices only play HEVC tagged hvc1.
-                    if to != "mkv" {
-                        push(&["-tag:v", "hvc1"]);
-                    }
                 }
+            }
+            // QuickTime and Apple devices only play HEVC tagged hvc1.
+            if codec == VideoCodec::Hevc && to != "mkv" {
+                push(&["-tag:v", "hvc1"]);
             }
             push(&["-pix_fmt", "yuv420p"]);
             if !o.strip_audio {
@@ -273,6 +512,16 @@ fn output_args(to: &str, o: &Options) -> Vec<String> {
         "flac" => push(&["-vn", "-c:a", "flac", "-frame_size", "4096"]),
         "aac" => push(&["-vn", "-c:a", "aac", "-b:a", &aac, "-f", "adts"]),
         "m4a" => push(&["-vn", "-c:a", "aac", "-b:a", &aac]),
+        // An iPhone ringtone is an M4A by another name. FFmpeg doesn't know
+        // the extension, so name the muxer.
+        "m4r" => push(&["-vn", "-c:a", "aac", "-b:a", &aac, "-f", "ipod"]),
+        // Big-endian PCM, the AIFF Apple tools write.
+        "aiff" => push(&["-vn", "-c:a", "pcm_s16be"]),
+        // Apple Lossless, which every Apple app reads from CAF, at a
+        // fraction of PCM's size.
+        "caf" => push(&["-vn", "-c:a", "alac"]),
+        "srt" => push(&["-map", "0:s:0", "-c:s", "srt", "-f", "srt"]),
+        "vtt" => push(&["-map", "0:s:0", "-c:s", "webvtt", "-f", "webvtt"]),
         "ogg" => match &bitrate {
             Some(b) => push(&["-vn", "-c:a", "libvorbis", "-b:a", b]),
             None => push(&["-vn", "-c:a", "libvorbis", "-q:a", "5"]),
@@ -314,10 +563,37 @@ impl Engine for FfmpegEngine {
             // GIF has no audio stream, so extraction is never meaningful.
             .filter(|step| !(step.from.id == "gif" && AUDIO.contains(&step.to.id)))
             .chain(crate::steps(AUDIO, AUDIO))
+            .chain(crate::steps(SUBTITLE_IN, SUBTITLE_OUT))
             .collect()
     }
 
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
+        let ffmpeg = self.ffmpeg.as_ref().ok_or(Error::EngineUnavailable {
+            engine: "ffmpeg",
+            reason: "ffmpeg not found".into(),
+        })?;
+        let hw = if matches!(ctx.step.to.id, "mp4" | "mov" | "mkv") && hardware_allowed() {
+            let codec = ctx.options.video_codec.unwrap_or(VideoCodec::H264);
+            hardware_encoder(ffmpeg, codec, ctx)?
+        } else {
+            None
+        };
+        self.convert_with(ctx, input, out_dir, hw)
+    }
+}
+
+impl FfmpegEngine {
+    /// Converts with `hw` when given, and if that fails for any reason but
+    /// cancellation, deletes its output and converts again in software. A
+    /// probe can pass while a particular input still fails in hardware (too
+    /// large a frame, a busy or reset GPU).
+    fn convert_with(
+        &self,
+        ctx: &Ctx,
+        input: &Path,
+        out_dir: &Path,
+        hw: Option<HwEncoder>,
+    ) -> Result<Vec<PathBuf>> {
         let ffmpeg = self.ffmpeg.as_ref().ok_or(Error::EngineUnavailable {
             engine: "ffmpeg",
             reason: "ffmpeg not found".into(),
@@ -340,22 +616,43 @@ impl Engine for FfmpegEngine {
         let via_png = to == "jpeg";
         let frame = out_dir.join("frame.png");
         let written = if via_png { &frame } else { &output };
-        let mut cmd = Command::new(ffmpeg);
-        cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
-            .args(LOCAL_INPUT_ARGS)
-            .args(["-progress", "pipe:1", "-nostats", "-i"])
-            .arg(local_path(input))
-            .args(output_args(if via_png { "png" } else { to }, ctx.options))
-            .arg(written);
-        crate::run_tool("ffmpeg", cmd, ctx, |line| {
-            let us = line
-                .strip_prefix("out_time_us=")
-                .and_then(|v| v.parse::<f64>().ok());
-            if let (Some(us), Some(total)) = (us, total) {
-                ctx.progress((us / total) as f32);
+        // FFmpeg shifts output to start at the input's start time. AAC
+        // priming often makes that negative in MKV (-0.023 s), which would
+        // move every cue late; a later start (a trimmed recording) should
+        // still be subtracted, since players count from it.
+        let copy_times = SUBTITLE_OUT.contains(&to)
+            && self
+                .format_secs(ctx, input, "start_time")?
+                .is_some_and(|start| start <= 0.0);
+        let run = |hw: Option<HwEncoder>| {
+            let mut cmd = Command::new(ffmpeg);
+            cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
+                .args(copy_times.then_some("-copyts"))
+                .args(LOCAL_INPUT_ARGS)
+                .args(["-progress", "pipe:1", "-nostats", "-i"])
+                .arg(local_path(input))
+                .args(encoder_args(
+                    if via_png { "png" } else { to },
+                    ctx.options,
+                    hw,
+                ))
+                .arg(written);
+            crate::run_tool("ffmpeg", cmd, ctx, |line| {
+                let us = line
+                    .strip_prefix("out_time_us=")
+                    .and_then(|v| v.parse::<f64>().ok());
+                if let (Some(us), Some(total)) = (us, total) {
+                    ctx.progress((us / total) as f32);
+                }
+            })
+        };
+        with_software_fallback(hw, run, || {
+            let _ = std::fs::remove_file(written);
+            if total.is_some() {
+                ctx.progress(0.0);
             }
         })
-        .map_err(|e| no_audio_error(e, to))?;
+        .map_err(|e| missing_stream_error(e, to))?;
         if via_png {
             let img = image::open(&frame).map_err(|e| Error::EngineFailed {
                 engine: "ffmpeg",
@@ -403,12 +700,12 @@ mod tests {
             message: "Output file does not contain any stream".into(),
         };
         assert!(
-            no_audio_error(empty(), "mp3")
+            missing_stream_error(empty(), "mp3")
                 .to_string()
                 .contains("no audio track")
         );
         assert!(
-            no_audio_error(empty(), "mp4")
+            missing_stream_error(empty(), "mp4")
                 .to_string()
                 .contains("does not contain")
         );
@@ -461,6 +758,209 @@ mod tests {
         }
         // Audio targets ignore it rather than producing an empty file.
         assert!(!output_args("mp3", &silent).contains(&"-an".to_string()));
+    }
+
+    #[test]
+    fn apple_audio_and_subtitle_args() {
+        let o = Options {
+            audio_bitrate: Some(128),
+            ..Options::default()
+        };
+        assert_eq!(output_args("aiff", &o).join(" "), "-vn -c:a pcm_s16be");
+        assert_eq!(output_args("caf", &o).join(" "), "-vn -c:a alac");
+        assert_eq!(
+            output_args("m4r", &o).join(" "),
+            "-vn -c:a aac -b:a 128k -f ipod"
+        );
+        assert_eq!(
+            output_args("m4r", &Options::default()).join(" "),
+            "-vn -c:a aac -b:a 192k -f ipod"
+        );
+        assert_eq!(
+            output_args("srt", &o).join(" "),
+            "-map 0:s:0 -c:s srt -f srt"
+        );
+        assert_eq!(
+            output_args("vtt", &o).join(" "),
+            "-map 0:s:0 -c:s webvtt -f webvtt"
+        );
+    }
+
+    #[test]
+    fn subtitles_only_come_out_of_video_containers() {
+        let steps = FfmpegEngine::new().steps();
+        let has = |from: &str, to: &str| steps.iter().any(|s| s.from.id == from && s.to.id == to);
+        for from in ["mp4", "mov", "mkv", "webm"] {
+            assert!(has(from, "srt") && has(from, "vtt"), "{from}");
+        }
+        for to in ["mp4", "mkv", "mp3", "srt", "vtt", "txt"] {
+            assert!(!has("srt", to) && !has("vtt", to), "subtitles -> {to}");
+        }
+        assert!(!has("gif", "srt") && !has("avi", "srt") && !has("mp3", "srt"));
+        for to in ["aiff", "caf", "m4r"] {
+            assert!(has("mp4", to) && has("wav", to) && has(to, "mp3"), "{to}");
+            assert!(!has("gif", to), "gif -> {to}");
+        }
+    }
+
+    #[test]
+    fn missing_subtitles_are_named() {
+        let failed = |message: &str| Error::EngineFailed {
+            engine: "ffmpeg",
+            message: message.into(),
+        };
+        let map = "Stream map '0:s:0' matches no streams.";
+        assert_eq!(
+            missing_stream_error(failed(map), "srt").to_string(),
+            "ffmpeg failed: this video has no subtitle track"
+        );
+        assert!(
+            missing_stream_error(failed(map), "mp4")
+                .to_string()
+                .contains("matches no streams")
+        );
+        let bitmap =
+            "Subtitle encoding currently only possible from text to text or bitmap to bitmap";
+        assert!(
+            missing_stream_error(failed(bitmap), "vtt")
+                .to_string()
+                .contains("images, not text")
+        );
+    }
+
+    #[test]
+    fn encoder_list_parsing() {
+        let list = "Encoders:\n V..... = Video\n A..... = Audio\n ------\n \
+            V....D libx264              libx264 H.264 (codec h264)\n \
+            V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)\n \
+            V....D hevc_videotoolbox    VideoToolbox H.265 Encoder (codec hevc)\n \
+            A....D aac                  AAC (Advanced Audio Coding)\n";
+        assert_eq!(
+            listed_encoders(list),
+            ["libx264", "h264_nvenc", "hevc_videotoolbox"]
+        );
+        assert!(listed_encoders("garbage\nwithout a rule").is_empty());
+    }
+
+    #[test]
+    fn hardware_encoder_args() {
+        let hevc = Options {
+            video_codec: Some(VideoCodec::Hevc),
+            ..Options::default()
+        };
+        let best = Options {
+            quality: Some(100),
+            ..Options::default()
+        };
+        let args = |to: &str, o: &Options, hw| encoder_args(to, o, Some(hw)).join(" ");
+        assert_eq!(
+            args("mp4", &Options::default(), HwEncoder::VideoToolbox),
+            "-c:v h264_videotoolbox -q:v 68 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart"
+        );
+        assert_eq!(
+            args("mov", &hevc, HwEncoder::VideoToolbox),
+            "-c:v hevc_videotoolbox -q:v 68 -tag:v hvc1 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart"
+        );
+        assert!(args("mp4", &best, HwEncoder::VideoToolbox).contains("-q:v 80"));
+        assert_eq!(
+            args("mkv", &Options::default(), HwEncoder::Nvenc),
+            "-c:v h264_nvenc -preset p5 -tune hq -rc vbr -cq 22 -b:v 0 -pix_fmt yuv420p -c:a aac -b:a 192k"
+        );
+        let nvenc_hevc = args("mp4", &hevc, HwEncoder::Nvenc);
+        assert!(
+            nvenc_hevc.starts_with("-c:v hevc_nvenc ")
+                && nvenc_hevc.contains("-cq 26")
+                && nvenc_hevc.contains("-tag:v hvc1"),
+            "{nvenc_hevc}"
+        );
+        assert!(!args("mkv", &hevc, HwEncoder::Nvenc).contains("hvc1"));
+        assert!(args("mp4", &best, HwEncoder::Nvenc).contains("-cq 17"));
+        // Options that aren't the encoder's carry over.
+        let silent_small = Options {
+            strip_audio: true,
+            video_height: Some(480),
+            ..Options::default()
+        };
+        let a = args("mp4", &silent_small, HwEncoder::Nvenc);
+        assert!(
+            a.contains("-an") && !a.contains("-c:a") && a.ends_with(&video_scale(480)),
+            "{a}"
+        );
+        // Only H.264 and HEVC containers have hardware encoders.
+        for to in ["webm", "avi", "gif", "mp3"] {
+            assert_eq!(
+                encoder_args(to, &Options::default(), Some(HwEncoder::Nvenc)),
+                output_args(to, &Options::default()),
+                "{to}"
+            );
+        }
+    }
+
+    #[test]
+    fn hwaccel_escape_hatch() {
+        for off in ["0", "off", "FALSE", " no "] {
+            assert!(hwaccel_off(off), "{off}");
+        }
+        for on in ["1", "", "auto", "yes"] {
+            assert!(!hwaccel_off(on), "{on}");
+        }
+    }
+
+    #[test]
+    fn hardware_failure_retries_in_software_but_cancellation_does_not() {
+        let failed = || Error::EngineFailed {
+            engine: "ffmpeg",
+            message: "Error while opening encoder".into(),
+        };
+        let mut tries = Vec::new();
+        let mut cleared = false;
+        let result = with_software_fallback(
+            Some(HwEncoder::Nvenc),
+            |hw| {
+                tries.push(hw);
+                if hw.is_some() { Err(failed()) } else { Ok(()) }
+            },
+            || cleared = true,
+        );
+        assert!(result.is_ok() && cleared);
+        assert_eq!(tries, [Some(HwEncoder::Nvenc), None]);
+
+        let mut tries = Vec::new();
+        let result = with_software_fallback(
+            Some(HwEncoder::VideoToolbox),
+            |hw| {
+                tries.push(hw);
+                Err(Error::Cancelled)
+            },
+            || panic!("cancellation must not retry"),
+        );
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert_eq!(tries, [Some(HwEncoder::VideoToolbox)]);
+
+        let mut tries = Vec::new();
+        let result = with_software_fallback(
+            None,
+            |hw| {
+                tries.push(hw);
+                Err(failed())
+            },
+            || panic!("nothing to clear without hardware"),
+        );
+        assert!(result.is_err());
+        assert_eq!(tries, [None]);
+
+        // A software failure after a hardware one reports the software error.
+        let result = with_software_fallback(
+            Some(HwEncoder::Nvenc),
+            |hw| {
+                Err(Error::EngineFailed {
+                    engine: "ffmpeg",
+                    message: if hw.is_some() { "hw" } else { "sw" }.into(),
+                })
+            },
+            || {},
+        );
+        assert_eq!(result.unwrap_err().to_string(), "ffmpeg failed: sw");
     }
 
     /// Converts a generated clip with FFmpeg, if it is installed.
@@ -674,6 +1174,263 @@ mod tests {
                 "{streams:?}"
             );
         }
+    }
+
+    /// Generates `name` in a fresh directory from FFmpeg arguments, or `None`
+    /// when FFmpeg (or an encoder the fixture needs) is missing.
+    fn fixture(name: &str, args: &[&str]) -> Option<(FfmpegEngine, tempfile::TempDir, PathBuf)> {
+        let engine = FfmpegEngine::new();
+        let Some(ffmpeg) = engine.ffmpeg.clone() else {
+            eprintln!("SKIP: FFmpeg missing");
+            return None;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(name);
+        let out = Command::new(ffmpeg)
+            .args(["-v", "error", "-y"])
+            .args(args)
+            .arg(&path)
+            .output()
+            .unwrap();
+        if !out.status.success() {
+            eprintln!(
+                "SKIP: cannot generate {name}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return None;
+        }
+        Some((engine, dir, path))
+    }
+
+    fn convert_file(
+        engine: &FfmpegEngine,
+        input: &Path,
+        to: &str,
+        options: &Options,
+        hw: Option<HwEncoder>,
+    ) -> (Result<Vec<PathBuf>>, PathBuf) {
+        let from = convt_core::format_by_extension(input).unwrap();
+        let step = Step {
+            from,
+            to: convt_core::format_by_id(to).unwrap(),
+        };
+        let cancel = convt_core::Cancel::new();
+        let ctx = Ctx::new(step, options, &|_| {}, &cancel);
+        let out = input.with_file_name(format!("out-{to}"));
+        std::fs::create_dir_all(&out).unwrap();
+        (engine.convert_with(&ctx, input, &out, hw), out)
+    }
+
+    const SUBTITLES: &str = "1\n00:00:00,000 --> 00:00:00,900\nHello from convt\n\n2\n00:00:01,000 --> 00:00:01,900\nSecond line\n";
+
+    #[test]
+    fn real_ffmpeg_extracts_subtitles() {
+        let Some((engine, dir, _)) =
+            fixture("probe.wav", &["-f", "lavfi", "-i", "anullsrc", "-t", "0.1"])
+        else {
+            return;
+        };
+        let srt = dir.path().join("subs.srt");
+        std::fs::write(&srt, SUBTITLES).unwrap();
+        let ffmpeg = engine.ffmpeg.clone().unwrap();
+        // AAC priming gives the MKV a start time of -0.023 s, which must
+        // not move the cues.
+        let video = [
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=64x48:rate=5:duration=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=duration=2",
+        ];
+        for (name, codec) in [
+            ("subbed.mkv", "srt"),
+            ("subbed.mp4", "mov_text"),
+            ("plain.mp4", ""),
+        ] {
+            let path = dir.path().join(name);
+            let mut cmd = Command::new(&ffmpeg);
+            cmd.args(["-v", "error", "-y"]).args(video);
+            if !codec.is_empty() {
+                cmd.arg("-i")
+                    .arg(&srt)
+                    .args(["-map", "0", "-map", "1", "-map", "2", "-c:s", codec]);
+            }
+            let made = cmd
+                .args(["-c:v", "mpeg4", "-c:a", "aac"])
+                .arg(&path)
+                .output()
+                .unwrap();
+            assert!(
+                made.status.success(),
+                "{}",
+                String::from_utf8_lossy(&made.stderr)
+            );
+            for to in ["srt", "vtt"] {
+                let (result, _) = convert_file(&engine, &path, to, &Options::default(), None);
+                if codec.is_empty() {
+                    let e = result.unwrap_err().to_string();
+                    assert!(e.contains("this video has no subtitle track"), "{e}");
+                    continue;
+                }
+                let text = std::fs::read_to_string(&result.unwrap()[0]).unwrap();
+                assert!(
+                    text.contains("Hello from convt") && text.contains("Second line"),
+                    "{name} -> {to}: {text}"
+                );
+                if to == "vtt" {
+                    assert!(
+                        text.starts_with("WEBVTT") && text.contains("00:01.000 --> 00:01.900"),
+                        "{text}"
+                    );
+                } else {
+                    assert!(text.contains("00:00:01,000 --> 00:00:01,900"), "{text}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn real_ffmpeg_writes_apple_audio() {
+        let Some((engine, _dir, wav)) = fixture(
+            "tone.wav",
+            &["-f", "lavfi", "-i", "sine=frequency=440:duration=1"],
+        ) else {
+            return;
+        };
+        for (to, codec, container) in [
+            ("aiff", "pcm_s16be", "aiff"),
+            ("caf", "alac", "caf"),
+            ("m4r", "aac", "mov,mp4,m4a,3gp,3g2,mj2"),
+        ] {
+            let (result, _) = convert_file(&engine, &wav, to, &Options::default(), None);
+            let output = result.unwrap().remove(0);
+            let Some(probe) = &engine.ffprobe else {
+                eprintln!("SKIP stream check: ffprobe missing");
+                return;
+            };
+            let info = Command::new(probe)
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_name:format=format_name",
+                ])
+                .args(["-of", "default=nw=1:nk=1"])
+                .arg(&output)
+                .output()
+                .unwrap();
+            let info = String::from_utf8(info.stdout).unwrap();
+            assert_eq!(info.lines().collect::<Vec<_>>(), [codec, container], "{to}");
+            // And back: each one is also an input.
+            let (back, _) = convert_file(&engine, &output, "wav", &Options::default(), None);
+            assert!(back.is_ok(), "{to} -> wav: {back:?}");
+        }
+    }
+
+    /// A forced hardware encoder that can't run here (VideoToolbox off macOS,
+    /// NVENC without an NVIDIA GPU) must still produce the requested codec,
+    /// in software, with nothing left over from the failed attempt. On a
+    /// machine where the encoder works, this checks the hardware output.
+    #[test]
+    fn real_ffmpeg_falls_back_from_unusable_hardware() {
+        let Some((engine, dir, clip)) = fixture(
+            "clip.mov",
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=128x96:rate=10:duration=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=1",
+                "-c:v",
+                "mpeg4",
+                "-shortest",
+            ],
+        ) else {
+            return;
+        };
+        for hw in [HwEncoder::VideoToolbox, HwEncoder::Nvenc] {
+            for (codec, name) in [(VideoCodec::H264, "h264"), (VideoCodec::Hevc, "hevc")] {
+                let options = Options {
+                    video_codec: Some(codec),
+                    ..Options::default()
+                };
+                let (result, out) = convert_file(&engine, &clip, "mp4", &options, Some(hw));
+                let outputs = match result {
+                    Ok(outputs) => outputs,
+                    Err(e) if e.to_string().contains("Unknown encoder") => {
+                        eprintln!("SKIP {name}: this FFmpeg lacks its software encoder");
+                        continue;
+                    }
+                    Err(e) => panic!("{hw:?} {name}: {e}"),
+                };
+                let left: Vec<_> = std::fs::read_dir(&out)
+                    .unwrap()
+                    .map(|e| e.unwrap().path())
+                    .collect();
+                assert_eq!(left, outputs, "{hw:?} {name}");
+                let Some(streams) = streams(&outputs[0]) else {
+                    return;
+                };
+                assert!(
+                    streams.contains(&format!("{name},video")),
+                    "{hw:?}: {streams:?}"
+                );
+                assert!(streams.contains(&"aac,audio".to_string()), "{streams:?}");
+                std::fs::remove_dir_all(&out).unwrap();
+            }
+        }
+        drop(dir);
+    }
+
+    /// The probe only accepts an encoder that really encodes, and the full
+    /// conversion works whichever path it picks.
+    #[test]
+    fn real_ffmpeg_probe_and_convert() {
+        let Some((engine, _dir, clip)) = fixture(
+            "clip.mov",
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=128x96:rate=10:duration=1",
+                "-c:v",
+                "mpeg4",
+            ],
+        ) else {
+            return;
+        };
+        let options = Options::default();
+        let cancel = convt_core::Cancel::new();
+        let step = Step {
+            from: convt_core::format_by_id("mov").unwrap(),
+            to: convt_core::format_by_id("mp4").unwrap(),
+        };
+        let ctx = Ctx::new(step, &options, &|_| {}, &cancel);
+        let ffmpeg = engine.ffmpeg.as_ref().unwrap();
+        for codec in VideoCodec::ALL {
+            let found = probe_hardware(ffmpeg, codec, &ctx).unwrap();
+            eprintln!("hardware {codec}: {found:?}");
+            if let Some(hw) = found {
+                assert!(HwEncoder::candidates().contains(&hw));
+            }
+        }
+        let out = clip.with_file_name("out");
+        std::fs::create_dir(&out).unwrap();
+        let outputs = engine.convert(&ctx, &clip, &out).unwrap();
+        assert!(streams(&outputs[0]).is_none_or(|s| s.contains(&"h264,video".to_string())));
+
+        // A cancelled job stops in the probe, so no answer gets cached.
+        cancel.cancel();
+        assert!(matches!(
+            probe_hardware(ffmpeg, VideoCodec::H264, &ctx),
+            Err(Error::Cancelled)
+        ));
     }
 }
 
