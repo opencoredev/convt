@@ -80,14 +80,21 @@ impl Registry {
         &self.unavailable
     }
 
-    /// Finds the shortest chain of engines from `from` to `to`.
+    /// Finds the shortest chain of engines from `from` to `to`. A file
+    /// converts to its own format (to compress or trim it) only through an
+    /// engine that declares that step directly, never by a round trip.
     pub fn plan(&self, from: &'static Format, to: &'static Format) -> Result<Plan> {
         let no_route = || Error::NoRoute {
             from: from.id.into(),
             to: to.id.into(),
         };
         if from == to {
-            return Err(no_route());
+            let edge = self.edges.get(from.id).and_then(|t| t.get(to.id));
+            return edge
+                .map(|edge| Plan {
+                    hops: vec![edge.clone()],
+                })
+                .ok_or_else(no_route);
         }
         let mut prev: HashMap<&str, (&str, &Edge)> = HashMap::new();
         let mut depth: HashMap<&str, usize> = HashMap::from([(from.id, 0)]);
@@ -149,7 +156,8 @@ impl Registry {
     /// first. Everything else stays one click away in Quick convert, so a
     /// HEIC photo is offered JPEG, PNG and WebP rather than ICO or QOI. Only
     /// targets [`targets`](Self::targets) reaches are listed; a format with
-    /// none of its preferred targets gets the first few it can reach.
+    /// none of its preferred targets gets the first few it can reach. The
+    /// file's own format is never offered: re-encoding lives in Quick convert.
     pub fn menu_targets(&self, from: &'static Format) -> Vec<&'static Format> {
         self.menu_targets_with(from, &MenuChoices::default())
     }
@@ -164,7 +172,8 @@ impl Registry {
         choices: &MenuChoices,
     ) -> Vec<&'static Format> {
         const MENU_SIZE: usize = 4;
-        let reachable = self.targets(from);
+        let mut reachable = self.targets(from);
+        reachable.retain(|f| *f != from);
         let pick = |ids: &mut dyn Iterator<Item = &str>| -> Vec<&'static Format> {
             ids.filter_map(|id| reachable.iter().find(|f| f.id == id).copied())
                 .collect()
@@ -500,6 +509,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["png", "pdf"]
         );
+    }
+
+    #[test]
+    fn same_format_needs_a_declared_step_and_stays_one_hop() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "img",
+            0,
+            vec![("png", "jpeg"), ("jpeg", "png")],
+        )));
+        // A round trip through another format is not a same-format route.
+        assert!(r.plan(f("png"), f("png")).is_err());
+        assert!(!r.targets(f("png")).contains(&f("png")));
+        r.register(Arc::new(Fake("squash", 0, vec![("png", "png")])));
+        assert_eq!(
+            r.plan(f("png"), f("png")).unwrap().describe(),
+            "png -[squash]-> png"
+        );
+        assert!(r.targets(f("png")).contains(&f("png")));
+        // The self step never shortens or loops another route.
+        assert_eq!(
+            r.plan(f("png"), f("jpeg")).unwrap().describe(),
+            "png -[img]-> jpeg"
+        );
+        // Menus keep offering other formats only.
+        assert!(!r.menu_targets(f("png")).contains(&f("png")));
+        assert!(r.menu_targets(f("png")).contains(&f("jpeg")));
+    }
+
+    #[test]
+    fn same_format_output_never_replaces_the_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("photo.png");
+        std::fs::write(&input, "original").unwrap();
+        let mut r = Registry::new();
+        r.register(pager("squash", ("png", "png"), 1));
+        let out = r
+            .run(&Job::new(&input, f("png")), &no_progress, &Cancel::new())
+            .unwrap();
+        assert_eq!(out, [dir.path().join("photo (1).png")]);
+        assert_eq!(std::fs::read_to_string(&input).unwrap(), "original");
+        // Exact output onto the input itself is refused, not overwritten.
+        let mut job = Job::new(&input, f("png"));
+        job.output = Output::Exact(input.clone());
+        let err = r.run(&job, &no_progress, &Cancel::new()).unwrap_err();
+        assert!(matches!(err, Error::OutputExists(_)), "{err}");
+        assert_eq!(std::fs::read_to_string(&input).unwrap(), "original");
     }
 
     #[test]

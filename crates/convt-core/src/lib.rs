@@ -16,5 +16,8 @@ pub use engine::{Cancel, Ctx, Engine, Progress, Step};
 pub use error::{Error, Result, stderr_tail};
 pub use formats::{Category, FORMATS, Format, format_by_extension, format_by_id};
 pub use menu::{MENU_KINDS, MenuChoices, category_by_key, category_key, default_menu};
-pub use options::{Background, Options, PageRange, Preset, VideoCodec};
+pub use options::{
+    Background, MIN_TARGET_SIZE, Options, PageRange, Preset, Timestamp, VideoCodec, format_size,
+    parse_size,
+};
 pub use registry::{Destination, Job, Output, Plan, Registry};
