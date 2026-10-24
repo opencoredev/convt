@@ -1023,9 +1023,12 @@ impl QuickView {
         });
         let target_size = target_size_applies(to).then(|| {
             let mut choices: Vec<Option<u64>> = TARGET_SIZES.to_vec();
-            // A preset's own limit gets an entry of its own.
-            if !choices.contains(&self.target_size) {
-                choices.push(self.target_size);
+            // A preset's own limit gets an entry of its own, which stays
+            // pickable after choosing another.
+            for custom in [self.options.target_size, self.target_size] {
+                if !choices.contains(&custom) {
+                    choices.push(custom);
+                }
             }
             let id = |v: Option<u64>| v.map_or("none".into(), |v| v.to_string());
             let toggle = cx.entity().downgrade();

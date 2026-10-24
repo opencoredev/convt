@@ -3374,6 +3374,15 @@ fn quick_convert_offers_max_file_size_and_strip_metadata_for_media(cx: &mut Test
         let o = view.read(cx).conversion_options();
         assert_eq!((o.target_size, o.strip_metadata), (Some(8_000_000), true));
     });
+    // The preset's limit is still there to go back to.
+    click(cx, window, "target-size");
+    click(cx, window, "target-size-3500000");
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).conversion_options().target_size,
+            Some(3_500_000)
+        )
+    });
 }
 
 #[gpui_kit::test]

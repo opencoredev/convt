@@ -54,15 +54,24 @@ impl Engine for ImageEngine {
             )));
         }
         let img = crate::orientation::open_oriented(input)?;
+        // A profile that can't be read is left out, as before.
+        let icc = image::ImageReader::open(input)
+            .and_then(|r| r.with_guessed_format())
+            .ok()
+            .and_then(|r| r.into_decoder().ok())
+            .and_then(|mut d| image::ImageDecoder::icc_profile(&mut d).ok().flatten());
         ctx.check()?;
         ctx.progress(0.5);
         let output = ctx.artifact(out_dir, 0);
-        encode_with_pixel_aspect(
+        encode_with_meta(
             fit(img, ctx.options.max_size),
             ctx.step.to.id,
             ctx.options,
             &output,
-            None,
+            &Meta {
+                pixel_aspect: None,
+                icc,
+            },
             &|| ctx.check(),
         )?;
         Ok(vec![output])
@@ -335,24 +344,34 @@ pub(crate) fn flatten(img: DynamicImage, color: [u8; 3]) -> DynamicImage {
 /// `options.target_size` set, quality and then dimensions come down until
 /// the file fits.
 pub(crate) fn encode(img: DynamicImage, to: &str, options: &Options, output: &Path) -> Result<()> {
-    encode_with_pixel_aspect(img, to, options, output, None, &|| Ok(()))
+    encode_with_meta(img, to, options, output, &Meta::default(), &|| Ok(()))
 }
 
-/// [`encode`] with a JPEG pixel aspect ratio, and `check` run before each
-/// attempt of a size search so a cancelled job stops searching.
-pub(crate) fn encode_with_pixel_aspect(
+/// What an encoding carries besides pixels.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Meta {
+    /// JPEG pixel aspect ratio, for non-square video frames.
+    pub pixel_aspect: Option<(u16, u16)>,
+    /// The source's ICC profile, written where the format can hold one
+    /// (JPEG, PNG, TIFF, WebP) so colors look the same.
+    pub icc: Option<Vec<u8>>,
+}
+
+/// [`encode`] with [`Meta`], and `check` run before each attempt of a size
+/// search so a cancelled job stops searching.
+pub(crate) fn encode_with_meta(
     img: DynamicImage,
     to: &str,
     options: &Options,
     output: &Path,
-    pixel_aspect: Option<(u16, u16)>,
+    meta: &Meta,
     check: &dyn Fn() -> Result<()>,
 ) -> Result<()> {
     let img = prepare(apply_background(img, to, options)?, to);
     let mut w = BufWriter::new(File::create(output)?);
     match options.target_size {
         // Without a size, stream straight to the file.
-        None => encode_into(&img, to, options.quality, pixel_aspect, &mut w)?,
+        None => encode_into(&img, to, options.quality, meta, &mut w)?,
         Some(target) => {
             let longest = img.width().max(img.height());
             let cap = options.quality.unwrap_or(default_quality(to));
@@ -369,7 +388,7 @@ pub(crate) fn encode_with_pixel_aspect(
                     None => &img,
                 };
                 let mut buf = std::io::Cursor::new(Vec::new());
-                encode_into(scaled, to, Some(quality), pixel_aspect, &mut buf)?;
+                encode_into(scaled, to, Some(quality), meta, &mut buf)?;
                 best = buf.into_inner();
                 Ok(best.len() as u64)
             })?;
@@ -498,14 +517,23 @@ fn encode_into<W: Write + std::io::Seek>(
     img: &DynamicImage,
     to: &str,
     quality: Option<u8>,
-    pixel_aspect: Option<(u16, u16)>,
+    meta: &Meta,
     mut w: &mut W,
 ) -> Result<()> {
+    use image::ImageEncoder;
+    // Every encoder that takes a profile accepts any bytes, so ignoring the
+    // error is only for formats that have nowhere to put one.
+    let with_icc = |encoder: &mut dyn ImageEncoder| {
+        if let Some(icc) = &meta.icc {
+            let _ = encoder.set_icc_profile(icc.clone());
+        }
+    };
     match to {
         "jpeg" => {
             let quality = quality.unwrap_or(default_quality(to));
             let mut encoder = JpegEncoder::new_with_quality(&mut w, quality);
-            if let Some((num, den)) = pixel_aspect {
+            with_icc(&mut encoder);
+            if let Some((num, den)) = meta.pixel_aspect {
                 encoder.set_pixel_density(image::codecs::jpeg::PixelDensity {
                     density: (num, den),
                     unit: image::codecs::jpeg::PixelDensityUnit::PixelAspectRatio,
@@ -514,7 +542,10 @@ fn encode_into<W: Write + std::io::Seek>(
             DynamicImage::ImageRgb8(img.to_rgb8()).write_with_encoder(encoder)
         }
         "webp" => {
-            let bytes = webp(img, quality.unwrap_or(default_quality(to)))?;
+            let mut bytes = webp(img, quality.unwrap_or(default_quality(to)))?;
+            if let Some(icc) = &meta.icc {
+                bytes = webp_with_icc(&bytes, icc)?;
+            }
             return Ok(w.write_all(&bytes)?);
         }
         "avif" => img.write_with_encoder(AvifEncoder::new_with_speed_quality(
@@ -529,6 +560,16 @@ fn encode_into<W: Write + std::io::Seek>(
             DynamicImage::ImageRgba32F(img.to_rgba32f()).write_to(&mut w, ImageFormat::OpenExr)
         }
         "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut w, ImageFormat::Pnm),
+        "png" => {
+            let mut encoder = image::codecs::png::PngEncoder::new(&mut w);
+            with_icc(&mut encoder);
+            img.write_with_encoder(encoder)
+        }
+        "tiff" => {
+            let mut encoder = image::codecs::tiff::TiffEncoder::new(&mut w);
+            with_icc(&mut encoder);
+            img.write_with_encoder(encoder)
+        }
         "bmp" => {
             let mut bmp = BmpV5Writer::new(&mut w);
             img.write_with_encoder(image::codecs::bmp::BmpEncoder::new(&mut bmp))
@@ -542,6 +583,42 @@ fn encode_into<W: Write + std::io::Seek>(
     }
     .map_err(failed)?;
     Ok(())
+}
+
+/// Adds `icc` to a WebP file as an ICCP chunk, through libwebp's muxer.
+fn webp_with_icc(webp: &[u8], icc: &[u8]) -> Result<Vec<u8>> {
+    use libwebp_sys as w;
+    let image = w::WebPData {
+        bytes: webp.as_ptr(),
+        size: webp.len(),
+    };
+    let profile = w::WebPData {
+        bytes: icc.as_ptr(),
+        size: icc.len(),
+    };
+    // SAFETY: both WebPData point at live slices for the calls that copy
+    // them (copy_data = 1). The mux and the assembled buffer are released
+    // here, on every path.
+    unsafe {
+        let mux = w::WebPMuxCreateInternal(&image, 1, w::WEBP_MUX_ABI_VERSION as i32);
+        if mux.is_null() {
+            return Err(failed("libwebp could not read its own output"));
+        }
+        let mut out = w::WebPData {
+            bytes: std::ptr::null(),
+            size: 0,
+        };
+        let ok = w::WebPMuxSetChunk(mux, c"ICCP".as_ptr(), &profile, 1)
+            == w::WebPMuxError::WEBP_MUX_OK
+            && w::WebPMuxAssemble(mux, &mut out) == w::WebPMuxError::WEBP_MUX_OK;
+        w::WebPMuxDelete(mux);
+        let bytes = (ok && !out.bytes.is_null())
+            .then(|| std::slice::from_raw_parts(out.bytes, out.size).to_vec());
+        if !out.bytes.is_null() {
+            w::WebPFree(out.bytes as *mut _);
+        }
+        bytes.ok_or_else(|| failed("libwebp could not add the color profile"))
+    }
 }
 
 /// Encodes WebP with libwebp: lossy at `quality`, lossless at 100, the way
@@ -1042,6 +1119,64 @@ mod tests {
     }
 
     #[test]
+    fn color_profiles_survive_compression_and_conversion() {
+        use image::{ImageDecoder, ImageEncoder};
+        let dir = tempfile::tempdir().unwrap();
+        // Any bytes do: encoders embed the profile without parsing it.
+        let icc: Vec<u8> = (0..600u32).map(|i| (i % 251) as u8).collect();
+        let src = dir.path().join("p3.jpg");
+        {
+            let file = BufWriter::new(File::create(&src).unwrap());
+            let mut enc = JpegEncoder::new_with_quality(file, 95);
+            enc.set_icc_profile(icc.clone()).unwrap();
+            let px = photo(64, 48).to_rgb8();
+            enc.write_image(px.as_raw(), 64, 48, image::ExtendedColorType::Rgb8)
+                .unwrap();
+        }
+        let jpeg = format_by_id("jpeg").unwrap();
+        let cancel = Cancel::new();
+        for (to, quality) in [
+            ("jpeg", Some(60)),
+            ("png", None),
+            ("webp", None),
+            ("webp", Some(100)),
+            ("tiff", None),
+        ] {
+            let out = tempfile::tempdir().unwrap();
+            let options = Options {
+                quality,
+                strip_metadata: true,
+                ..Options::default()
+            };
+            let step = Step {
+                from: jpeg,
+                to: format_by_id(to).unwrap(),
+            };
+            let ctx = Ctx::new(step, &options, &|_| {}, &cancel);
+            let files = ImageEngine.convert(&ctx, &src, out.path()).unwrap();
+            let mut decoder = image::ImageReader::open(&files[0])
+                .unwrap()
+                .with_guessed_format()
+                .unwrap()
+                .into_decoder()
+                .unwrap();
+            if to == "tiff" {
+                // The image crate's TIFF decoder doesn't read the tag back,
+                // so look for the profile in the file itself.
+                let raw = std::fs::read(&files[0]).unwrap();
+                assert!(raw.windows(icc.len()).any(|w| w == &icc[..]), "{to}");
+            } else {
+                assert_eq!(
+                    decoder.icc_profile().unwrap().as_deref(),
+                    Some(&icc[..]),
+                    "{to} {quality:?}"
+                );
+            }
+            assert_eq!(image::open(&files[0]).unwrap().width(), 64, "{to}");
+        }
+    }
+
+    #[test]
     fn compressing_never_drops_frames_or_pages() {
         let dir = tempfile::tempdir().unwrap();
         // A two-frame APNG.
@@ -1115,12 +1250,12 @@ mod tests {
             ..Options::default()
         };
         let tries = std::cell::Cell::new(0);
-        let err = encode_with_pixel_aspect(
+        let err = encode_with_meta(
             photo(256, 256),
             "jpeg",
             &options,
             &dir.path().join("a.jpg"),
-            None,
+            &Meta::default(),
             &|| {
                 tries.set(tries.get() + 1);
                 if tries.get() > 1 {

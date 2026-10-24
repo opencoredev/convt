@@ -630,14 +630,11 @@ impl Engine for FfmpegEngine {
             })?;
             let pixel_aspect = png_pixel_aspect(&frame);
             let _ = std::fs::remove_file(&frame);
-            crate::image::encode_with_pixel_aspect(
-                img,
-                to,
-                ctx.options,
-                &output,
+            let meta = crate::image::Meta {
                 pixel_aspect,
-                &|| ctx.check(),
-            )?;
+                icc: None,
+            };
+            crate::image::encode_with_meta(img, to, ctx.options, &output, &meta, &|| ctx.check())?;
         } else if to == "png" {
             crate::image::background_png(&output, ctx.options)?;
         }
