@@ -434,22 +434,34 @@ pub fn write_vtt(cues: &[Cue]) -> String {
     out
 }
 
+/// How soon after a subtitle ends the next must start for its first lines
+/// to count as carried over, in milliseconds.
+const CARRY_GAP: u64 = 1000;
+
 /// The dialogue, one line per subtitle line. Lines a subtitle carries over
-/// from the one before, as rolling captions repeat their last line, are
-/// written once; a line repeated within one subtitle stays.
+/// from the one just before, as rolling captions repeat their last line,
+/// are written once. A line repeated within one subtitle, or said again
+/// after a pause, stays.
 pub fn transcript(cues: &[Cue]) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut previous: Vec<String> = Vec::new();
-    for lines in cues.iter().map(Cue::text_lines) {
+    let mut previous_end: u64 = 0;
+    for cue in cues {
+        let lines = cue.text_lines();
         if lines.is_empty() {
             continue;
         }
-        let carried = (1..=lines.len().min(previous.len()))
-            .rev()
-            .find(|&k| previous[previous.len() - k..] == lines[..k])
-            .unwrap_or(0);
+        let carried = if cue.start <= previous_end.saturating_add(CARRY_GAP) {
+            (1..=lines.len().min(previous.len()))
+                .rev()
+                .find(|&k| previous[previous.len() - k..] == lines[..k])
+                .unwrap_or(0)
+        } else {
+            0
+        };
         out.extend_from_slice(&lines[carried..]);
         previous = lines;
+        previous_end = cue.end;
     }
     let mut text = out.join("\n");
     if !text.is_empty() {
@@ -558,6 +570,27 @@ mod tests {
         assert_eq!(
             transcript(&parse_srt(&srt).unwrap()),
             "No!\nNo!\nWait.\nNo!\none\ntwo\nthree\nthree\n"
+        );
+    }
+
+    #[test]
+    fn transcripts_keep_lines_said_again_after_a_pause() {
+        let cue = |n: u32, from: &str, to: &str, text: &str| {
+            format!("{n}\n00:{from},000 --> 00:{to},000\n{text}\n\n")
+        };
+        let srt = [
+            cue(1, "00:01", "00:02", "Hello"),
+            cue(2, "03:00", "03:02", "Hello"),
+            // A verse sung twice, a minute apart.
+            cue(3, "04:00", "04:03", "La la\nLa la la"),
+            cue(4, "05:00", "05:03", "La la\nLa la la"),
+            // Within a second of the end, a repeat is still carried over.
+            cue(5, "05:04", "05:06", "La la la\nNext"),
+        ]
+        .concat();
+        assert_eq!(
+            transcript(&parse_srt(&srt).unwrap()),
+            "Hello\nHello\nLa la\nLa la la\nLa la\nLa la la\nNext\n"
         );
     }
 
