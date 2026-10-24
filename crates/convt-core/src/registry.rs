@@ -726,8 +726,9 @@ mod tests {
         // Subtitles don't turn a video into a document.
         assert!(r.plan(f("mp4"), f("docx")).is_err());
         assert!(r.plan(f("mp4"), f("pdf")).is_err());
-        // Text that didn't come from a video routes as before.
-        assert!(r.plan(f("srt"), f("docx")).is_ok());
+        // Text that didn't come from a video routes as before, and plain
+        // text is never a middle hop.
+        assert!(r.plan(f("srt"), f("docx")).is_err());
         assert!(r.plan(f("txt"), f("vtt")).is_ok());
     }
 
