@@ -168,7 +168,7 @@ export const deleteAccount = createServerFn({ method: "POST" })
         message: "Type your account's email exactly to confirm.",
       };
     const d = await billing().requestDeletion(userId);
-    // Every other browser and every Mac is signed out now; this session ends with the account.
+    // Every other browser and every device is signed out now; this session ends with the account.
     await revokeOtherSessions(db, userId, sessionId, new Date());
     return { ok: true as const, status: d.status };
   });

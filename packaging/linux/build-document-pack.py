@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Build a local headless pack from an installed, trusted LibreOffice.
+"""Build a headless document pack from an installed, trusted LibreOffice.
 
-This is a proof artifact. Release inputs must come from pinned packages/source.
-It performs no network requests and never includes system libc or the loader.
+Release CI runs it through document-pack.sh, in a pinned Ubuntu 22.04 image with
+apt pinned to one snapshot. Run directly, it packs this machine's LibreOffice
+for local validation. It performs no network requests and never includes
+system libc or the loader.
 """
+import gzip
 import hashlib
 import json
 import os
@@ -59,6 +62,10 @@ shutil.copytree('/usr/share/fonts/truetype/dejavu', pack / 'fonts')
 ''')
 (pack / 'soffice').write_text('''#!/bin/sh
 set -eu
+# LibreOffice writes its extension cache inside the pack on first run. Keep
+# that free of group and world write bits, or discovery rightly rejects the
+# pack under a umask such as Ubuntu's 002.
+umask "$(printf '%o' $(( $(umask) | 022 )))"
 pack_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 export LD_LIBRARY_PATH="$pack_dir/lib:$pack_dir/libreoffice/program"
 # Fontconfig 2.13 resolves relative font directories against the working
@@ -74,7 +81,7 @@ export CONVT_LANGTAG_DIR="$pack_dir/langtag" LD_PRELOAD="$pack_dir/lib/convt-lan
 ''')
 (pack / 'soffice').chmod(0o755)
 versions = subprocess.check_output(['dpkg-query', '-W', '-f=${db:Status-Abbrev} ${Package} ${Version}\n', 'libreoffice*'], text=True)
-(pack / 'BUILD.txt').write_text('Local validation pack, not a public release.\n' + '\n'.join(l for l in versions.splitlines() if l.startswith('ii'))+'\n')
+(pack / 'BUILD.txt').write_text('LibreOffice from these Ubuntu packages:\n' + '\n'.join(l for l in versions.splitlines() if l.startswith('ii'))+'\n')
 # Preserve redistribution notices for every installed package owning copied libraries.
 (pack / 'licenses').mkdir()
 packages = set()
@@ -87,15 +94,44 @@ for package in sorted(packages):
     copyright = Path('/usr/share/doc') / package / 'copyright'
     if copyright.is_file():
         shutil.copy2(copyright, pack / 'licenses' / (package + '.txt'))
+# Where the corresponding source of every copied package is: the same
+# versions, as Ubuntu source packages, in the snapshot release CI pins.
+snapshot = os.environ.get('CONVT_DOCUMENT_PACK_SNAPSHOT', '')
+where = (f'https://snapshot.ubuntu.com/ubuntu/{snapshot}/' if snapshot
+         else 'the Ubuntu archive (apt-get source <package>=<version>)')
+pinned = subprocess.check_output(
+    ['dpkg-query', '-W', '-f=${binary:Package} ${Version} ${source:Package} ${source:Version}\n',
+     *sorted(packages)], text=True)
+(pack / 'SOURCES.txt').write_text(
+    'Corresponding source for this document pack.\n\n'
+    f'Each package below comes from Ubuntu 22.04; its source package is in {where}.\n'
+    'convt changes only the bootstrap paths and adds a liblangtag shim and the launcher; those are in\n'
+    'packaging/linux/build-document-pack.py and langtag-path.c in https://github.com/opencoredev/convt,\n'
+    'and langtag-path.c is also in this pack. Licence notices are in licenses/.\n\n'
+    'binary-package version source-package source-version\n' + pinned)
 archive = out / 'documents-linux-x86_64.tar.gz'
 # No symbolic or hard links: extraction rejects them before publishing executable code.
-with tarfile.open(archive, 'w:gz', dereference=True) as tar:
+# Fixed owners, times and gzip header, so the same packages give the same bytes.
+installed = 0
+with archive.open('wb') as raw, gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0) as zipped, \
+        tarfile.open(fileobj=zipped, mode='w', format=tarfile.PAX_FORMAT, dereference=True) as tar:
     for p in sorted(pack.rglob('*')):
-        tar.add(p, arcname=str(p.relative_to(pack)), recursive=False)
+        info = tar.gettarinfo(str(p), arcname=str(p.relative_to(pack)))
+        info.uid = info.gid = info.mtime = 0
+        info.uname = info.gname = ''
+        info.pax_headers = {}
+        if info.isfile():
+            installed += info.size
+            with p.open('rb') as stream:
+                tar.addfile(info, stream)
+        else:
+            tar.addfile(info)
 digest = hashlib.sha256()
 with archive.open('rb') as stream:
     for block in iter(lambda: stream.read(1024 * 1024), b''):
         digest.update(block)
 sha = digest.hexdigest()
 (out / 'documents.sha256').write_text(sha + '\n')
-print(json.dumps(dict(path=str(pack),archive=str(archive),sha256=sha,bytes=archive.stat().st_size), indent=2))
+core = re.search(r'^ii\s+libreoffice-core\s+(?:\d+:)?(\d+(?:\.\d+)*)', versions, re.M)
+label = f'LibreOffice {core.group(1)} Linux x86_64' if core else 'LibreOffice Linux x86_64'
+print(json.dumps(dict(path=str(pack),archive=str(archive),sha256=sha,bytes=archive.stat().st_size,installed_bytes=installed,version=label), indent=2))

@@ -18,6 +18,20 @@ export type AppEnv = {
   google: { clientId: string; clientSecret: string } | null;
   /** Public PostHog project key + host for the marketing site. Null when unset. */
   posthog: { key: string; host: string } | null;
+  /**
+   * The PostHog API survey the feedback form answers. Null when PostHog or the
+   * survey id is unset; /api/feedback then answers 503.
+   */
+  feedback: FeedbackSurvey | null;
+};
+
+export type FeedbackSurvey = {
+  key: string;
+  host: string;
+  surveyId: string;
+  /** The survey's question ids. Without them only the legacy index keys are sent. */
+  messageQuestionId: string | null;
+  emailQuestionId: string | null;
 };
 
 export type RawEnv = Record<string, unknown>;
@@ -96,6 +110,16 @@ export function readEnv(raw: RawEnv): AppEnv {
   const posthogKey = str(raw, "POSTHOG_KEY");
   const posthogHost = str(raw, "POSTHOG_HOST") ?? "https://us.i.posthog.com";
   const posthog = posthogKey ? { key: posthogKey, host: posthogHost.replace(/\/$/, "") } : null;
+  const surveyId = str(raw, "POSTHOG_FEEDBACK_SURVEY_ID");
+  const feedback =
+    posthog && surveyId
+      ? {
+          ...posthog,
+          surveyId,
+          messageQuestionId: str(raw, "POSTHOG_FEEDBACK_MESSAGE_QUESTION_ID") ?? null,
+          emailQuestionId: str(raw, "POSTHOG_FEEDBACK_EMAIL_QUESTION_ID") ?? null,
+        }
+      : null;
 
   return {
     env: envName,
@@ -107,11 +131,20 @@ export function readEnv(raw: RawEnv): AppEnv {
     github: pair("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"),
     google: pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
     posthog,
+    feedback,
   };
 }
 
-/** Matches createAuth's real providers and its all-or-nothing local OAuth mock. */
+/**
+ * Matches createAuth's real providers and its all-or-nothing local OAuth mock.
+ * Apple stays off until createAuth registers it (CNV-20); its buttons render only
+ * when this says it is available.
+ */
 export function availableProviders(env: AppEnv) {
   const mock = env.oauthMock !== null && env.github === null && env.google === null;
-  return { github: env.github !== null || mock, google: env.google !== null || mock };
+  return {
+    github: env.github !== null || mock,
+    google: env.google !== null || mock,
+    apple: false,
+  };
 }

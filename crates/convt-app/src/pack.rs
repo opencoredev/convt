@@ -1,8 +1,9 @@
 //! The document pack: LibreOffice as a one-click add-on. Images, video,
 //! audio, PDF and SVG work out of the box; Word, Excel, PowerPoint and
 //! OpenDocument files need the pack. Status checks never touch the network.
-//! The only download starts from the user's click on Download (see
-//! `AppState::download_pack`), and runs through [`Backend::install`].
+//! The only download starts from the user's click on Download or on
+//! onboarding's Yes (see `AppState::download_pack`), and runs through
+//! [`Backend::install`].
 
 use std::path::{Path, PathBuf};
 
@@ -158,6 +159,16 @@ pub fn needs_pack(registry: &Registry, file: &Path) -> bool {
         .is_some_and(|f| is_document(f) && registry.targets(f).is_empty())
 }
 
+/// Whether a failure may pass if the download simply tries again: the
+/// network, a server error or rate limit, or another convt holding the lock.
+pub fn transient(kind: FailureKind) -> bool {
+    match kind {
+        FailureKind::Network | FailureKind::Busy => true,
+        FailureKind::HttpStatus(status) => status >= 500 || status == 408 || status == 429,
+        _ => false,
+    }
+}
+
 /// Why an installed pack was rejected, for people. The engines' message
 /// goes underneath as the detail.
 pub fn plain_reason(reason: &str) -> &'static str {
@@ -231,6 +242,32 @@ pub fn plain_failure(failure: &Failure, offer: &Offer) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_failures_another_try_can_fix_are_transient() {
+        for kind in [
+            FailureKind::Network,
+            FailureKind::Busy,
+            FailureKind::HttpStatus(500),
+            FailureKind::HttpStatus(503),
+            FailureKind::HttpStatus(429),
+            FailureKind::HttpStatus(408),
+        ] {
+            assert!(transient(kind), "{kind:?}");
+        }
+        for kind in [
+            FailureKind::HttpStatus(404),
+            FailureKind::HttpStatus(403),
+            FailureKind::Checksum,
+            FailureKind::DiskFull,
+            FailureKind::Permission,
+            FailureKind::Rejected,
+            FailureKind::Cancelled,
+            FailureKind::Other,
+        ] {
+            assert!(!transient(kind), "{kind:?}");
+        }
+    }
 
     #[test]
     fn every_failure_kind_has_its_own_words() {

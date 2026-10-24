@@ -2,7 +2,7 @@
 
 The per-user MSI installs **Convert with convt** in Explorer. Windows 11's compact menu uses a sparse MSIX identity and the Rust `convt-shell` COM handler. Windows 10 and **Show more options** use the same handler through classic HKCU registry verbs. No administrator privileges are needed for those registry entries.
 
-The DLL asks the installed `convt.exe targets <file> --menu` for targets. It keeps the first file's order and offers only targets shared by every selected file. Unsupported selections and folders have no menu. Probes run without a console, time out after two seconds, and cache each extension for 30 seconds. Installing or removing document support therefore refreshes the menu without restarting Explorer.
+The DLL asks the installed `convt.exe targets <file> --menu` for targets. It keeps the first file's order and offers only targets shared by every selected file. Unsupported selections and folders have no menu. Probes run without a console, time out after two seconds, and cache each extension for 30 seconds. Installing or removing document support, or changing the menu in Settings → Menu or with `convt menu`, therefore refreshes the menu without restarting Explorer.
 
 Choosing a target launches `convt-app.exe open --show-progress --to <format> -- <files...>`. The existing Activity window displays progress and the output goes next to the input. The Windows-only flag leaves Linux and Finder launches unchanged. The app and its conversion subprocesses do not open console windows.
 

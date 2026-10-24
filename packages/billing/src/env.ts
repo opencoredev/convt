@@ -4,11 +4,12 @@
 
 import { importSigningKey, parseSeed, publicKeyOf } from "@convt/license";
 
-import type { CatalogEnv } from "./catalog";
+import { loadCatalog, type CatalogEnv } from "./catalog";
 
 export type BillingEnv = {
   env: "production" | "staging" | "development" | "test";
   catalogEnv: CatalogEnv;
+  desktopProduct: { productId: string; priceId: string };
   polar: { accessToken: string; apiUrl: string; webhookSecret: string; portalOrigin: string };
   mail:
     | { transport: "sequenzy"; apiKey: string; from: string }
@@ -22,6 +23,26 @@ export type BillingEnv = {
   licensePublicKey: string | null;
   /** Public keys that must never sign in production (the local dev keys). */
   devPublicKeys: string[];
+  /** Public PostHog project key + host. Null when unset (staging, local). */
+  posthog: { key: string; host: string } | null;
+  marketing: MarketingEnv;
+};
+
+/**
+ * Campaign email. `sync` is null until Sequenzy's marketing key is set; consent
+ * is still recorded and rows wait. `linkSecret` signs the preferences links in
+ * campaign footers; `webhookSecret` checks Sequenzy's unsubscribe webhooks.
+ */
+export type MarketingEnv = {
+  sync: {
+    apiKey: string;
+    apiUrl: string;
+    /** Sequenzy list ids new contacts join; null keeps the workspace defaults. */
+    lists: string[] | null;
+    tags: string[];
+  } | null;
+  linkSecret: string | null;
+  webhookSecret: string | null;
 };
 
 export type RawEnv = Record<string, unknown>;
@@ -47,6 +68,37 @@ export class ConfigError extends Error {
   }
 }
 
+const csv = (value: string | undefined) =>
+  (value ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+function readMarketingEnv(raw: RawEnv, production: boolean): MarketingEnv {
+  const apiKey = str(raw, "SEQUENZY_MARKETING_API_KEY");
+  const linkSecret = str(raw, "MARKETING_LINK_SECRET") ?? null;
+  const webhookSecret = str(raw, "SEQUENZY_WEBHOOK_SECRET") ?? null;
+  const apiUrl = (str(raw, "SEQUENZY_API_URL") ?? "https://api.sequenzy.com/api/v1").replace(
+    /\/$/,
+    "",
+  );
+  if (linkSecret !== null && linkSecret.length < 32)
+    throw new ConfigError("MARKETING_LINK_SECRET must be at least 32 characters");
+  if (apiKey && !linkSecret)
+    throw new ConfigError(
+      "MARKETING_LINK_SECRET is required with SEQUENZY_MARKETING_API_KEY: every contact gets a preferences link",
+    );
+  if (production && (isLoopback(apiUrl) || !apiUrl.startsWith("https://")))
+    throw new ConfigError("SEQUENZY_API_URL must be a public https URL in production");
+  const lists = csv(str(raw, "SEQUENZY_MARKETING_LIST_IDS"));
+  const tags = csv(str(raw, "SEQUENZY_MARKETING_TAGS") ?? "convt-account");
+  return {
+    sync: apiKey ? { apiKey, apiUrl, lists: lists.length ? lists : null, tags } : null,
+    linkSecret,
+    webhookSecret,
+  };
+}
+
 export function readBillingEnv(raw: RawEnv): BillingEnv {
   const envName = str(raw, "ENV") ?? "production";
   if (
@@ -66,6 +118,16 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
     (envName === "staging" ? "sandbox" : production ? "production" : "local")) as CatalogEnv;
   if (!["local", "sandbox", "production"].includes(catalogEnv))
     throw new ConfigError(`unknown BILLING_CATALOG ${catalogEnv}`);
+  const desktopProductId = str(raw, "POLAR_DESKTOP_LIFETIME_PRODUCT_ID");
+  const desktopPriceId = str(raw, "POLAR_DESKTOP_LIFETIME_PRICE_ID");
+  if ((desktopProductId && !desktopPriceId) || (!desktopProductId && desktopPriceId))
+    throw new ConfigError(
+      "POLAR_DESKTOP_LIFETIME_PRODUCT_ID and POLAR_DESKTOP_LIFETIME_PRICE_ID must be set together",
+    );
+  if ((envName === "production" || envName === "staging") && (!desktopProductId || !desktopPriceId))
+    throw new ConfigError(
+      "POLAR_DESKTOP_LIFETIME_PRODUCT_ID and POLAR_DESKTOP_LIFETIME_PRICE_ID are required in production",
+    );
   const apiUrl =
     str(raw, "POLAR_API_URL") ??
     (catalogEnv === "sandbox" ? "https://sandbox-api.polar.sh" : "https://api.polar.sh");
@@ -115,9 +177,16 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
   } else if (str(raw, "POLAR_API_URL") && !isLoopback(apiUrl) && catalogEnv === "local") {
     throw new ConfigError("the local catalog only talks to a loopback billing mock");
   }
+  const posthogKey = str(raw, "POSTHOG_KEY");
+  const posthogHost = (str(raw, "POSTHOG_HOST") ?? "https://us.i.posthog.com").replace(/\/$/, "");
+  const posthog = posthogKey ? { key: posthogKey, host: posthogHost } : null;
   return {
     env: envName,
     catalogEnv,
+    desktopProduct: {
+      productId: desktopProductId ?? loadCatalog(catalogEnv).products.desktop.productId,
+      priceId: desktopPriceId ?? loadCatalog(catalogEnv).products.desktop.priceId,
+    },
     polar: {
       accessToken: need("POLAR_ACCESS_TOKEN"),
       apiUrl,
@@ -134,6 +203,8 @@ export function readBillingEnv(raw: RawEnv): BillingEnv {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    posthog,
+    marketing: readMarketingEnv(raw, production),
   };
 }
 

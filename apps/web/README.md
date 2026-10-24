@@ -35,3 +35,27 @@ The landing page is `src/routes/index.tsx` (dark only). The other public pages l
 - `content/changelog.md`: the changelog page. Each `## ` heading is a release.
 
 Everything under `/docs`, including the API reference at `/docs/api`, is the Blume site in `apps/docs`, deployed as its own Worker. This app has no `/docs` routes.
+
+## Sign-in providers
+
+Email sign-in always works. Google and GitHub show on `/sign-in` and the desktop sign-in page (`/device`) only when the Worker has both the client ID and the secret for that provider (`availableProviders` in `src/server/env.ts`). With one missing, the button stays hidden and sign-in falls back to email. Locally, `bun run dev:web` uses the OAuth mock in `tools/oauth-mock` for both.
+
+To turn on Google for a deployed Worker:
+
+1. In Google Cloud Console, under Google Auth Platform, set up the consent screen (app name convt, support email, the `convt.app` domain, links to `https://convt.app/privacy` and `https://convt.app/terms`) and publish it to production. The default scopes `openid`, `email` and `profile` need no verification.
+2. Create an OAuth client of type Web application:
+   - Authorized JavaScript origin: `https://convt.app`
+   - Authorized redirect URI: `https://convt.app/api/auth/callback/google`
+   - For staging, a second client (or the same one) with `https://convt-web-staging.leoisadev.workers.dev` and `https://convt-web-staging.leoisadev.workers.dev/api/auth/callback/google`.
+3. Store the pair on the Worker. Both may be secrets; the Worker reads vars and secrets the same way.
+
+   ```sh
+   cd apps/web
+   bunx wrangler secret put GOOGLE_CLIENT_ID
+   bunx wrangler secret put GOOGLE_CLIENT_SECRET
+   # staging: add --env staging to both
+   ```
+
+   `wrangler secret put` deploys a new version, so "Continue with Google" appears on the next page load. Check with `bunx wrangler secret list`, which prints names only.
+
+GitHub works the same way with `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` and the callback `https://convt.app/api/auth/callback/github`.

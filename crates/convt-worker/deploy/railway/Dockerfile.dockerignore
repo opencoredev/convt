@@ -1,6 +1,8 @@
 **
 !Cargo.toml
 !Cargo.lock
+!vendor/
+!vendor/**
 !crates/
 !crates/**
 !packages/

@@ -15,6 +15,24 @@ pub fn presets_dir() -> Option<PathBuf> {
     config_dir().map(|d| d.join("presets"))
 }
 
+/// The formats right-click menus offer, by kind of file
+/// (`convt_core::MenuChoices`).
+pub fn menu_file() -> Option<PathBuf> {
+    config_dir().map(|d| d.join("menu.toml"))
+}
+
+/// The menu lists saved in [`menu_file`]. Menus must always open, so an
+/// unreadable file is logged and treated as no choice.
+pub fn menu_choices() -> convt_core::MenuChoices {
+    let Some(path) = menu_file() else {
+        return convt_core::MenuChoices::default();
+    };
+    convt_core::MenuChoices::load(&path).unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "ignoring the saved menu choices");
+        convt_core::MenuChoices::default()
+    })
+}
+
 /// `$CONVT_DATA_DIR`, else the platform data directory plus `convt`.
 pub fn data_dir() -> Option<PathBuf> {
     std::env::var_os("CONVT_DATA_DIR")

@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  A plain article page for the first store screenshot. The toast on it is real (the
+  extension runs a conversion against this page); the menu is the extension's own
+  drawing of Chrome's menu, because headless Chrome can't open the native one.
+  Served from localhost by scripts/store-shots.ts.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A field guide to sunny windowsills</title>
+    <link rel="stylesheet" href="/ext/tokens.css" />
+    <link rel="stylesheet" href="/ext/menu-demo.css" />
+    <style>
+      body {
+        margin: 0;
+        background: #fbfaf7;
+        color: #1d1b17;
+        font-family: Georgia, "Times New Roman", serif;
+        color-scheme: light;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 60px;
+        padding: 0 48px;
+        border-bottom: 1px solid #e8e4dc;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 14px;
+      }
+      header b {
+        font-family: Georgia, serif;
+        font-size: 20px;
+        letter-spacing: -0.01em;
+      }
+      header nav {
+        display: flex;
+        gap: 22px;
+        color: #6d685e;
+      }
+      main {
+        width: 640px;
+        margin: 40px 0 0 120px;
+      }
+      .kicker {
+        color: #9a5b2b;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 10px 0 12px;
+        font-size: 40px;
+        font-weight: 400;
+        line-height: 46px;
+        letter-spacing: -0.01em;
+      }
+      .by {
+        margin: 0 0 24px;
+        color: #6d685e;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 13px;
+      }
+      .figure {
+        position: relative;
+        margin: 0;
+      }
+      .figure img {
+        display: block;
+        width: 640px;
+        height: 440px;
+        border-radius: 4px;
+      }
+      .figure figcaption {
+        margin-top: 8px;
+        color: #6d685e;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 12px;
+      }
+      /* Where the menu opens: at the pointer, over the photo. */
+      .menu {
+        position: absolute;
+        top: 190px;
+        left: 330px;
+        z-index: 2;
+      }
+      .menu .md {
+        padding-bottom: 0;
+        align-items: flex-start;
+      }
+      .menu .md-sub {
+        margin: 93px 0 0 -6px;
+      }
+      .menu .md-menu {
+        box-shadow:
+          0 0 0 1px rgb(0 0 0 / 10%),
+          rgb(0 0 0 / 18%) 0 10px 28px,
+          rgb(0 0 0 / 10%) 0 2px 6px;
+      }
+      .pointer {
+        position: absolute;
+        top: 178px;
+        left: 318px;
+        z-index: 3;
+      }
+      p.body {
+        margin: 22px 0 0;
+        font-size: 18px;
+        line-height: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>The Windowsill</b>
+      <nav><span>Cats</span><span>Plants</span><span>Light</span><span>Subscribe</span></nav>
+    </header>
+    <main>
+      <div class="kicker">Field notes</div>
+      <h1>A field guide to sunny windowsills</h1>
+      <p class="by">By the Windowsill staff · 6 min read</p>
+      <figure class="figure">
+        <img id="photo" src="/miso.webp" alt="Miso the cat" />
+        <figcaption>Miso, supervising the afternoon light.</figcaption>
+        <svg class="pointer" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M5 3l14 8-6 1.5L10 19z"
+            fill="#111"
+            stroke="#fff"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <div class="menu" id="menu"></div>
+      </figure>
+      <p class="body">
+        Every cat knows the best seat in the house is wherever the sun lands at three o'clock.
+      </p>
+    </main>
+  </body>
+</html>

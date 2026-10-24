@@ -6,6 +6,9 @@ import { decode, encode } from "./base64url";
 
 export type Plan = "desktop" | "pro";
 
+/** Signed date sentinel used for paid Desktop licenses, including legacy keys. */
+export const LIFETIME_UPDATES_UNTIL = "9999-12-31";
+
 /** Field order matters: it must match the Rust struct so tokens are identical. */
 export type License = {
   id: string;

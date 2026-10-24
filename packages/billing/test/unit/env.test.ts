@@ -9,6 +9,8 @@ const prod = {
   SITE_URL: "https://convt.app",
   POLAR_ACCESS_TOKEN: "polar_oat_x",
   POLAR_WEBHOOK_SECRET: "whsec_x",
+  POLAR_DESKTOP_LIFETIME_PRODUCT_ID: "prod_lifetime_test",
+  POLAR_DESKTOP_LIFETIME_PRICE_ID: "price_lifetime_test",
   RESEND_API_KEY: "re_x",
   LICENSE_SIGNING_KEY: seed,
   DEV_LICENSE_PUBKEYS: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -110,6 +112,15 @@ test("staging uses sandbox with public URLs and a separate non-dev signing key",
   ).rejects.toThrow(/dev signing key/);
 });
 
+test("an empty POSTHOG_KEY turns billing capture off", () => {
+  expect(readBillingEnv(prod).posthog).toBeNull();
+  expect(readBillingEnv({ ...prod, POSTHOG_KEY: "" }).posthog).toBeNull();
+  expect(readBillingEnv({ ...prod, POSTHOG_KEY: "phc_test" }).posthog).toEqual({
+    key: "phc_test",
+    host: "https://us.i.posthog.com",
+  });
+});
+
 test("license mail defaults to the site's download page and allows an override", () => {
   expect(readBillingEnv(prod).downloadUrl).toBe("https://convt.app/download");
   expect(
@@ -126,4 +137,67 @@ test("Sequenzy requires its own key in production and staging, leaving Resend op
       readBillingEnv({ ...raw, RESEND_API_KEY: undefined, SEQUENZY_API_KEY: "sq_test" }).mail,
     ).toEqual({ transport: "sequenzy", apiKey: "sq_test", from: "convt <hello@convt.app>" });
   }
+});
+
+describe("marketing settings", () => {
+  const dev = {
+    ENV: "development",
+    SITE_URL: "http://localhost:3000",
+    POLAR_ACCESS_TOKEN: "polar_oat_x",
+    POLAR_WEBHOOK_SECRET: "whsec_x",
+    MAIL_TRANSPORT: "log",
+    LICENSE_SIGNING_KEY: seed,
+  };
+  const linkSecret = "a".repeat(32);
+
+  test("off by default: consent is kept, nothing is pushed", () => {
+    expect(readBillingEnv(dev).marketing).toEqual({
+      sync: null,
+      linkSecret: null,
+      webhookSecret: null,
+    });
+  });
+
+  test("a marketing key needs a link secret of at least 32 characters", () => {
+    expect(() => readBillingEnv({ ...dev, SEQUENZY_MARKETING_API_KEY: "sqz_x" })).toThrow(
+      /MARKETING_LINK_SECRET is required/,
+    );
+    expect(() => readBillingEnv({ ...dev, MARKETING_LINK_SECRET: "short" })).toThrow(/at least 32/);
+  });
+
+  test("lists and tags come from comma lists; the API URL defaults to Sequenzy", () => {
+    const m = readBillingEnv({
+      ...dev,
+      SEQUENZY_MARKETING_API_KEY: "sqz_x",
+      MARKETING_LINK_SECRET: linkSecret,
+      SEQUENZY_MARKETING_LIST_IDS: " list_a, list_b ,",
+      SEQUENZY_MARKETING_TAGS: "convt-account,early",
+      SEQUENZY_WEBHOOK_SECRET: "whsec_y",
+    }).marketing;
+    expect(m).toEqual({
+      sync: {
+        apiKey: "sqz_x",
+        apiUrl: "https://api.sequenzy.com/api/v1",
+        lists: ["list_a", "list_b"],
+        tags: ["convt-account", "early"],
+      },
+      linkSecret,
+      webhookSecret: "whsec_y",
+    });
+    expect(
+      readBillingEnv({ ...dev, SEQUENZY_MARKETING_API_KEY: "k", MARKETING_LINK_SECRET: linkSecret })
+        .marketing.sync,
+    ).toMatchObject({ lists: null, tags: ["convt-account"] });
+  });
+
+  test("production refuses a loopback Sequenzy URL", () => {
+    expect(() =>
+      readBillingEnv({
+        ...prod,
+        POLAR_DESKTOP_LIFETIME_PRODUCT_ID: "prod_placeholder",
+        POLAR_DESKTOP_LIFETIME_PRICE_ID: "price_placeholder",
+        SEQUENZY_API_URL: "http://127.0.0.1:4000/api/v1",
+      }),
+    ).toThrow(/SEQUENZY_API_URL/);
+  });
 });

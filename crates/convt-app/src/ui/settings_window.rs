@@ -1,31 +1,58 @@
-//! The Settings window: General, Presets and License.
+//! The Settings window: General, Menu, Presets and License.
 
-use convt_core::{FORMATS, Format, Options, Preset, format_by_id};
-use convt_license::client::{BUY_URL, State};
+use convt_core::{
+    Category, FORMATS, Format, MENU_KINDS, MenuChoices, Options, Preset, category_key, format_by_id,
+};
+use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use super::theme::IconName;
+
 use super::theme::{
-    self, Choice, Palette, mono, primary_button, secondary_button, text, text_button,
+    self, Button, Choice, Palette, Tone, icon, mono, primary_button, radius, secondary_button,
+    size, space, styled, text_button,
 };
-use super::{describe, error_text, open_folder};
-use crate::finder::EXTENSION_SETTINGS;
+use super::{LICENSE_PRICE, describe, error_text, open_folder};
+use crate::account::masked_email;
 use crate::model::AppState;
 use crate::settings::{Settings, auto_concurrency};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
     General,
+    Menu,
     Presets,
     License,
 }
 
-const TABS: [(SettingsTab, &str, &str); 3] = [
-    (SettingsTab::General, "tab-general", "General"),
-    (SettingsTab::Presets, "tab-presets", "Presets"),
-    (SettingsTab::License, "tab-license", "License"),
+const TABS: [(SettingsTab, &str, &str, IconName); 4] = [
+    (
+        SettingsTab::General,
+        "tab-general",
+        "General",
+        IconName::Settings,
+    ),
+    (SettingsTab::Menu, "tab-menu", "Menu", IconName::Menu),
+    (
+        SettingsTab::Presets,
+        "tab-presets",
+        "Presets",
+        IconName::Star,
+    ),
+    (
+        SettingsTab::License,
+        "tab-license",
+        "License",
+        IconName::CircleCheck,
+    ),
 ];
+
+/// Space between the window edge and the settings content.
+const GUTTER: f32 = 24.;
+/// The width of the dropdowns in General, so they line up.
+const SELECT_WIDTH: f32 = 200.;
 
 /// The dropdown that is open, if any.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +67,10 @@ pub struct SettingsView {
     open: Option<Open>,
     /// Formats some input can become, for the preset form.
     outputs: Vec<&'static Format>,
+    /// What each kind of file can become, for the Menu tab, and the
+    /// registry rebuild it was worked out for.
+    menu_options: Vec<(Category, Vec<&'static Format>)>,
+    menu_options_generation: u64,
     pub(super) preset_name: Entity<InputState>,
     pub(super) preset_quality: Entity<InputState>,
     pub(super) preset_max_size: Entity<InputState>,
@@ -53,6 +84,7 @@ pub struct SettingsView {
     pub(super) license_notice: Option<String>,
     /// Remove was clicked once under Documents; the row asks again.
     pub(super) confirm_remove_pack: bool,
+    scroll: ScrollHandle,
     _observe: Subscription,
     _appearance: Subscription,
 }
@@ -60,6 +92,8 @@ pub struct SettingsView {
 impl SettingsView {
     pub fn new(app: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let registry = app.read(cx).registry.clone();
+        let menu_options_generation = app.read(cx).registry_generation;
+        let menu_options = kinds_and_targets(&registry);
         let outputs = FORMATS
             .iter()
             .filter(|f| {
@@ -72,12 +106,22 @@ impl SettingsView {
             cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
         };
         Self {
-            _observe: cx.observe(&app, |_, _, cx| cx.notify()),
+            _observe: cx.observe(&app, |this, app, cx| {
+                // Document support was installed or removed.
+                let state = app.read(cx);
+                if state.registry_generation != this.menu_options_generation {
+                    this.menu_options_generation = state.registry_generation;
+                    this.menu_options = kinds_and_targets(&state.registry);
+                }
+                cx.notify()
+            }),
             _appearance: theme::observe_appearance(window, cx),
             app,
             tab: SettingsTab::General,
             open: None,
             outputs,
+            menu_options,
+            menu_options_generation,
             preset_name: input("Name, e.g. web", window, cx),
             preset_quality: input("Quality 1-100", window, cx),
             preset_max_size: input("Longest edge in px", window, cx),
@@ -88,13 +132,24 @@ impl SettingsView {
             license_error: None,
             license_notice: None,
             confirm_remove_pack: false,
+            scroll: ScrollHandle::new(),
         }
     }
 
     pub fn set_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
+        if tab == SettingsTab::Menu {
+            self.app.update(cx, |s, cx| s.reload_menu(cx));
+        }
         self.tab = tab;
         self.open = None;
         cx.notify();
+    }
+
+    /// Shows General scrolled to the end, where Updates sits above the
+    /// network list.
+    pub fn reveal_updates(&mut self, cx: &mut Context<Self>) {
+        self.set_tab(SettingsTab::General, cx);
+        self.scroll.scroll_to_bottom();
     }
 
     /// Shows the License tab, filling in `key` if given.
@@ -133,9 +188,9 @@ impl SettingsView {
                 // the status above says it can't convert here.
                 let allowed = self.app.read(cx).license.allows_conversion();
                 self.license_notice = Some(if allowed {
-                    format!("License activated for {}.", license.email)
+                    format!("License activated for {}.", masked_email(&license.email))
                 } else {
-                    format!("Saved the license for {}.", license.email)
+                    format!("Saved the license for {}.", masked_email(&license.email))
                 });
                 self.license_key
                     .update(cx, |s, cx| s.set_value("", window, cx));
@@ -213,7 +268,12 @@ impl SettingsView {
         let output_select = theme::select(
             "output",
             output,
-            220.,
+            if settings.output_dir.is_none() {
+                "beside"
+            } else {
+                ""
+            },
+            SELECT_WIDTH,
             false,
             self.open == Some(Open::Output),
             vec![
@@ -246,8 +306,11 @@ impl SettingsView {
         let jobs_select = theme::select(
             "jobs",
             jobs,
-            120.,
-            true,
+            &settings
+                .concurrency
+                .map_or_else(|| "auto".to_string(), |n| n.to_string()),
+            SELECT_WIDTH,
+            false,
             self.open == Some(Open::Jobs),
             job_choices,
             p,
@@ -268,10 +331,12 @@ impl SettingsView {
         );
 
         let app = self.app.clone();
-        let notifications = theme::checkbox(
+        let reveal_label = format!("Reveal it in {}", theme::file_manager_name());
+        let notifications = theme::switch(
             "notifications",
             "Show a notification",
             settings.notifications,
+            false,
             p,
         )
         .on_click({
@@ -279,10 +344,11 @@ impl SettingsView {
             let on = settings.notifications;
             move |_, _, cx| app.update(cx, |s, cx| s.update_settings(|s| s.notifications = !on, cx))
         });
-        let reveal = theme::checkbox(
+        let reveal = theme::switch(
             "reveal",
-            format!("Reveal it in {}", theme::file_manager_name()),
+            reveal_label.clone(),
             settings.reveal_when_done,
+            false,
             p,
         )
         .on_click({
@@ -294,7 +360,14 @@ impl SettingsView {
                 })
             }
         });
-        let menu_bar = theme::switch("menu-bar-icon", settings.menu_bar_icon, false, p).on_click({
+        let menu_bar = theme::switch(
+            "menu-bar-icon",
+            "Keep running in the background",
+            settings.menu_bar_icon,
+            false,
+            p,
+        )
+        .on_click({
             let app = app.clone();
             let on = settings.menu_bar_icon;
             move |_, _, cx| app.update(cx, |s, cx| s.update_settings(|s| s.menu_bar_icon = !on, cx))
@@ -321,126 +394,338 @@ impl SettingsView {
 
         // Always on macOS; on other platforms only when a test set finder_on.
         let finder = (cfg!(target_os = "macos") || state.finder_on.is_some()).then(|| {
-            let (status, button) = match state.finder_on {
+            let (status, button, on) = match state.finder_on {
                 Some(true) => (
                     "On. Right-click a file in Finder to convert.",
                     "Manage in System Settings",
+                    true,
                 ),
                 Some(false) => (
                     "Off. Open System Settings, scroll to Extensions, and turn on convt.",
                     "Open System Settings",
+                    false,
                 ),
                 None => (
                     "Open System Settings, scroll to Extensions, and turn on convt.",
                     "Open System Settings",
+                    false,
                 ),
             };
-            field_top(
+            theme::row(
                 "Finder menu",
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .child(
-                        div()
-                            .id("finder-status")
-                            .test_support()
-                            .aria_label(status)
-                            .child(text(12., 16., p.secondary).child(status)),
-                    )
-                    .child(
-                        text_button("manage-finder", button, p.green, 12.)
-                            .on_click(|_, _, cx| cx.open_url(EXTENSION_SETTINGS)),
-                    ),
+                Some(
+                    div()
+                        .id("finder-status")
+                        .test_support()
+                        .aria_label(status)
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(
+                            div()
+                                .size(px(6.))
+                                .flex_shrink_0()
+                                .rounded(px(3.))
+                                .bg(if on { p.green } else { p.toggle_off }),
+                        )
+                        .child(styled(size::SMALL, p.secondary).child(status))
+                        .into_any_element(),
+                ),
+                Button::secondary("manage-finder", button)
+                    .small()
+                    .build(p)
+                    .on_click(|_, _, cx| crate::finder::open_settings(cx)),
                 p,
             )
+            .into_any_element()
         });
+        // Every platform: the tray icon keeps convt running with no window.
+        let menu_bar = theme::row(
+            "Keep running in the background",
+            Some(
+                div()
+                    .id("menu-bar-icon-note")
+                    .test_support()
+                    .aria_label(SharedString::from(background_note()))
+                    .child(styled(size::SMALL, p.secondary).child(background_note()))
+                    .into_any_element(),
+            ),
+            menu_bar,
+            p,
+        )
+        .into_any_element();
+        let desktop = section(
+            if finder.is_some() {
+                "Finder and menu bar"
+            } else {
+                "Background"
+            },
+            theme::group(finder.into_iter().chain([menu_bar]), p),
+            p,
+        );
 
         div()
             .flex()
             .flex_col()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(18.))
-                    .px(px(40.))
-                    .pt(px(28.))
-                    .pb(px(30.))
-                    .child(field("Save converted files", output_select, p))
-                    .child(field_top(
-                        "When a file is done",
+            .gap(px(space::XL))
+            .px(px(GUTTER))
+            .pt(px(space::XL))
+            .pb(px(space::XXL))
+            .children((!errors.is_empty()).then(|| {
+                theme::callout(
+                    IconName::TriangleAlert,
+                    Tone::Error,
+                    div().flex().flex_col().gap(px(4.)).children(
+                        errors
+                            .into_iter()
+                            .map(|e| styled(size::SMALL, p.error).child(e)),
+                    ),
+                    p,
+                )
+            }))
+            .child(section(
+                "Converting",
+                theme::group(
+                    [
+                        theme::row(
+                            "Save converted files",
+                            Some(theme::detail(
+                                "Quick convert can pick a folder each time",
+                                p,
+                            )),
+                            output_select,
+                            p,
+                        )
+                        .into_any_element(),
+                        theme::row(
+                            "Jobs at once",
+                            None,
+                            div()
+                                .id("concurrency")
+                                .test_support()
+                                .aria_label(SharedString::from(match settings.concurrency {
+                                    Some(n) => n.to_string(),
+                                    None => format!("Auto ({auto})"),
+                                }))
+                                .child(jobs_select),
+                            p,
+                        )
+                        .into_any_element(),
+                    ],
+                    p,
+                ),
+                p,
+            ))
+            .child(section(
+                "When a file is done",
+                theme::group(
+                    [
+                        theme::row("Show a notification", None, notifications, p)
+                            .into_any_element(),
+                        theme::row(reveal_label, None, reveal, p).into_any_element(),
+                    ],
+                    p,
+                ),
+                p,
+            ))
+            .child(desktop)
+            .child(section(
+                "Documents",
+                theme::group([documents.into_any_element()], p),
+                p,
+            ))
+            .child(section(
+                "Updates",
+                theme::group(super::update::settings_rows(&self.app, p, cx), p),
+                p,
+            ))
+            .child(section("What reaches the network", network(p), p))
+    }
+
+    /// One card per kind of file: every format it can become, with the
+    /// ones its right-click menu offers picked and numbered in menu order.
+    fn menu(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+        let state = self.app.read(cx);
+        let choices = state.menu.clone();
+        let error = state.menu_error.clone();
+        let cards =
+            self.menu_options.iter().map(|(kind, options)| {
+                let kind = *kind;
+                let key = category_key(kind);
+                // Picks this machine can't convert to (document support was
+                // removed) get no chip and no number, but stay saved for when
+                // they can.
+                let (picked, _hidden) = shown_and_hidden(&choices, kind, options);
+                let custom = choices.get(kind).is_some();
+                let chip = |to: &'static Format| {
+                    let place = picked.iter().position(|f| *f == to);
+                    let on = place.is_some();
+                    let app = self.app.clone();
+                    let options = options.clone();
+                    theme::clickable(SharedString::from(format!("menu-{key}-{}", to.id)), to.name)
+                        .aria_selected(on)
+                        .flex()
+                        .items_center()
+                        .gap(px(5.))
+                        .h(px(26.))
+                        .pl(px(if on { 4. } else { 11. }))
+                        .pr(px(11.))
+                        .rounded_full()
+                        .map(|d| {
+                            if on {
+                                d.bg(p.green_tint)
+                                    .shadow(vec![theme::inset_ring(p.green, 1.5)])
+                            } else {
+                                d.bg(p.surface)
+                                    .shadow(vec![theme::inset_ring(p.border, 1.)])
+                                    .hover(|s| s.bg(p.recessed))
+                            }
+                        })
+                        .on_click(move |_, _, cx| {
+                            app.update(cx, |s, cx| {
+                                s.update_menu(|m| toggle(m, kind, to, &options), cx)
+                            });
+                        })
+                        .children(place.map(|i| {
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size(px(18.))
+                                .rounded_full()
+                                .bg(p.green)
+                                .child(
+                                    mono(10., 12., p.window)
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child((i + 1).to_string()),
+                                )
+                        }))
+                        .child(
+                            mono(11., 14., if on { p.green_text } else { p.text })
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(to.name),
+                        )
+                };
+                let app = self.app.clone();
+                let summary = format!("Offers {}", list_names(&picked));
+                // GIFs have their own default (MP4, WebP, PNG) until Images is
+                // changed; then they follow it.
+                let gif_note = (kind == Category::Image && !custom)
+                    .then_some("GIFs offer MP4, WebP and PNG until you change this.");
+                // Group the chips by what they are, as the Finder menu does, when
+                // a kind can become more than one sort of file.
+                let mut groups: Vec<(Category, Vec<&'static Format>)> = Vec::new();
+                for f in options.iter().copied() {
+                    match groups.iter_mut().find(|(c, _)| *c == f.category) {
+                        Some((_, list)) => list.push(f),
+                        None => groups.push((f.category, vec![f])),
+                    }
+                }
+                let grouped = groups.len() > 1;
+                theme::card(p)
+                    .id(SharedString::from(format!("menu-kind-{key}")))
+                    .gap(px(space::MD))
+                    .p(px(space::LG))
+                    .child(
                         div()
                             .flex()
-                            .flex_col()
-                            .gap(px(8.))
-                            .child(notifications)
-                            .child(reveal),
-                        p,
-                    )),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(18.))
-                    .px(px(40.))
-                    .pt(px(22.))
-                    .pb(px(28.))
-                    .border_t_1()
-                    .border_color(p.hairline)
-                    .children(finder)
-                    .child(field("Menu bar icon", menu_bar, p))
-                    .child(field(
-                        "Jobs at once",
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(14.))
+                            .items_start()
+                            .justify_between()
+                            .gap(px(space::MD))
                             .child(
                                 div()
-                                    .id("concurrency")
-                                    .test_support()
-                                    .aria_label(SharedString::from(match settings.concurrency {
-                                        Some(n) => n.to_string(),
-                                        None => format!("Auto ({auto})"),
-                                    }))
-                                    .child(jobs_select),
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.))
+                                    .child(
+                                        styled(size::BODY, p.text)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child(kind_label(kind)),
+                                    )
+                                    .child(
+                                        div()
+                                            .id(SharedString::from(format!("menu-summary-{key}")))
+                                            .test_support()
+                                            .aria_label(SharedString::from(summary.clone()))
+                                            .child(styled(size::SMALL, p.secondary).child(summary)),
+                                    )
+                                    .children(
+                                        gif_note.map(|note| {
+                                            styled(size::SMALL, p.tertiary).child(note)
+                                        }),
+                                    ),
                             )
-                            .child(text(12., 16., p.tertiary).child("Auto runs one per CPU core")),
-                        p,
+                            .child(if custom {
+                                text_button(
+                                    SharedString::from(format!("menu-reset-{key}")),
+                                    "Reset",
+                                    p.green_text,
+                                    12.,
+                                )
+                                .on_click(move |_, _, cx| {
+                                    app.update(cx, |s, cx| s.update_menu(|m| m.reset(kind), cx))
+                                })
+                                .into_any_element()
+                            } else {
+                                styled(size::SMALL, p.tertiary)
+                                    .child("Default")
+                                    .into_any_element()
+                            }),
+                    )
+                    .child(div().flex().flex_col().gap(px(space::SM)).children(
+                        groups.into_iter().map(|(category, formats)| {
+                            div()
+                                .flex()
+                                .items_start()
+                                .gap(px(space::MD))
+                                .when(grouped, |row| {
+                                    row.child(
+                                        styled(size::SMALL, p.secondary)
+                                            .w(px(84.))
+                                            .flex_shrink_0()
+                                            .pt(px(4.))
+                                            .child(match (kind, category) {
+                                                (Category::Video, Category::Audio) => "Audio only",
+                                                _ => kind_label(category),
+                                            }),
+                                    )
+                                })
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_1()
+                                        .flex_wrap()
+                                        .gap(px(6.))
+                                        .children(formats.into_iter().map(chip)),
+                                )
+                        }),
                     ))
-                    .children(errors.into_iter().map(|e| text(12., 16., p.error).child(e))),
-            )
+            });
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(space::MD))
+            .px(px(GUTTER))
+            .pt(px(space::XL))
+            .pb(px(space::XXL))
+            .children(error.map(|e| {
+                theme::callout(
+                    IconName::TriangleAlert,
+                    Tone::Error,
+                    div()
+                        .id("menu-error")
+                        .test_support()
+                        .aria_label(SharedString::from(e.clone()))
+                        .child(styled(size::SMALL, p.error).child(e)),
+                    p,
+                )
+            }))
             .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(18.))
-                    .px(px(40.))
-                    .pt(px(22.))
-                    .pb(px(28.))
-                    .border_t_1()
-                    .border_color(p.hairline)
-                    .child(field_top("Documents", documents, p)),
+                styled(size::SMALL, p.secondary)
+                    .px(px(2.))
+                    .child(MENU_INTRO),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(18.))
-                    .px(px(40.))
-                    .pt(px(22.))
-                    .pb(px(28.))
-                    .border_t_1()
-                    .border_color(p.hairline)
-                    .child(field_top(
-                        "Update checks",
-                        super::update::settings_row(&self.app, p, cx),
-                        p,
-                    ))
-                    .child(field_top("Network", network(p), p)),
-            )
+            .children(cards)
     }
 
     fn presets(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
@@ -457,180 +742,338 @@ impl SettingsView {
                 )
             })
             .collect();
-        let rows = list.into_iter().map(|(name, about)| {
-            let valid = about.is_ok();
-            let (about, color) = match about {
-                Ok(text) => (text, p.secondary),
-                Err(e) => (e, p.error),
-            };
-            let edit_name = name.clone();
-            let edit =
-                valid.then(|| {
-                    text_button(
-                        SharedString::from(format!("edit-preset-{name}")),
-                        "Edit",
-                        p.text,
-                        12.,
-                    )
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.edit_preset(&edit_name, window, cx)
-                    }))
+        let rows: Vec<AnyElement> = list
+            .into_iter()
+            .map(|(name, about)| {
+                let valid = about.is_ok();
+                let (about, color) = match about {
+                    Ok(text) => (text, p.secondary),
+                    Err(e) => (e, p.error),
+                };
+                let edit_name = name.clone();
+                let edit = valid.then(|| {
+                    Button::secondary(SharedString::from(format!("edit-preset-{name}")), "Edit")
+                        .small()
+                        .build(p)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.edit_preset(&edit_name, window, cx)
+                        }))
                 });
-            let app = self.app.clone();
-            let delete_name = name.clone();
-            div()
+                let app = self.app.clone();
+                let delete_name = name.clone();
+                theme::row(
+                    name.clone(),
+                    Some(mono(11., 15., color).child(about).into_any_element()),
+                    div().flex().gap(px(space::SM)).children(edit).child(
+                        Button::ghost(
+                            SharedString::from(format!("delete-preset-{name}")),
+                            "Delete",
+                        )
+                        .small()
+                        .build(p)
+                        .on_click(move |_, _, cx| {
+                            if let Err(e) =
+                                app.update(cx, |s, cx| s.delete_preset(&delete_name, cx))
+                            {
+                                tracing::warn!(error = %e, "could not delete a preset");
+                            }
+                        }),
+                    ),
+                    p,
+                )
+                .into_any_element()
+            })
+            .collect();
+        let chip = |to: &'static Format| {
+            let on = self.preset_to == Some(to);
+            let weak = cx.entity().downgrade();
+            theme::clickable(SharedString::from(format!("new-to-{}", to.id)), to.name)
+                .aria_selected(on)
                 .flex()
                 .items_center()
-                .gap(px(14.))
-                .py(px(10.))
-                .border_b_1()
-                .border_color(p.row_divider)
+                .h(px(26.))
+                .px(px(11.))
+                .rounded_full()
+                .map(|d| {
+                    if on {
+                        d.bg(p.green_tint)
+                            .shadow(vec![theme::inset_ring(p.green, 1.5)])
+                    } else {
+                        d.bg(p.surface)
+                            .shadow(vec![theme::inset_ring(p.border, 1.)])
+                            .hover(|s| s.bg(p.recessed))
+                    }
+                })
+                .on_click(move |_, _, cx| {
+                    let _ = weak.update(cx, |this, cx| {
+                        this.preset_to = (this.preset_to != Some(to)).then_some(to);
+                        cx.notify();
+                    });
+                })
                 .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .flex_1()
-                        .gap(px(2.))
-                        .child(text(13., 16., p.text).child(name.clone()))
-                        .child(mono(11., 14., color).child(about)),
+                    mono(11., 14., if on { p.green_text } else { p.text })
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(to.name),
                 )
-                .children(edit)
-                .child(
-                    text_button(
-                        SharedString::from(format!("delete-preset-{name}")),
-                        "Delete",
-                        p.secondary,
-                        12.,
-                    )
-                    .on_click(move |_, _, cx| {
-                        if let Err(e) = app.update(cx, |s, cx| s.delete_preset(&delete_name, cx)) {
-                            tracing::warn!(error = %e, "could not delete a preset");
-                        }
-                    }),
-                )
-        });
-        let chips = div()
-            .flex()
-            .flex_wrap()
-            .gap(px(6.))
-            .children(self.outputs.iter().map(|&to| {
-                let on = self.preset_to == Some(to);
-                let weak = cx.entity().downgrade();
-                theme::clickable(SharedString::from(format!("new-to-{}", to.id)), to.name)
-                    .aria_selected(on)
-                    .px(px(8.))
-                    .py(px(2.))
-                    .rounded(px(5.))
-                    .bg(if on { p.green_tint } else { p.chip })
-                    .border_1()
-                    .border_color(if on { p.green } else { p.chip_border })
-                    .on_click(move |_, _, cx| {
-                        let _ = weak.update(cx, |this, cx| {
-                            this.preset_to = (this.preset_to != Some(to)).then_some(to);
-                            cx.notify();
-                        });
+        };
+        // The targets by kind, so the list reads in groups.
+        let chips =
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(space::SM))
+                .children(TARGET_GROUPS.iter().filter_map(|(label, kinds)| {
+                    let formats: Vec<&'static Format> = self
+                        .outputs
+                        .iter()
+                        .copied()
+                        .filter(|f| kinds.contains(&f.category))
+                        .collect();
+                    (!formats.is_empty()).then(|| {
+                        div()
+                            .flex()
+                            .items_start()
+                            .gap(px(space::MD))
+                            .child(
+                                styled(size::SMALL, p.secondary)
+                                    .w(px(76.))
+                                    .flex_shrink_0()
+                                    .pt(px(4.))
+                                    .child(*label),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_1()
+                                    .flex_wrap()
+                                    .gap(px(6.))
+                                    .children(formats.into_iter().map(chip)),
+                            )
                     })
-                    .child(text(12., 16., if on { p.green } else { p.text }).child(to.name))
-            }));
-        let form = div()
-            .flex()
-            .flex_col()
-            .gap(px(12.))
-            .pt(px(18.))
-            .child(
-                text(12., 16., p.secondary)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(match &self.editing {
-                        Some(name) => format!("Edit preset \"{name}\""),
-                        None => "New preset".to_string(),
-                    }),
-            )
-            .child(theme::field(&self.preset_name, "preset-name"))
-            .child(text(11., 14., p.secondary).child("Target (optional)"))
-            .child(chips)
+                }));
+        let labelled = |label: &'static str, field: AnyElement| {
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .gap(px(6.))
+                .child(
+                    styled(size::CAPTION, p.secondary)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(label),
+                )
+                .child(field)
+        };
+        let form = theme::card(p)
+            .gap(px(14.))
+            .p(px(space::LG))
+            .child(labelled(
+                "Name",
+                theme::field(&self.preset_name, "preset-name").into_any_element(),
+            ))
+            .child(labelled("Target (optional)", chips.into_any_element()))
             .child(
                 div()
                     .flex()
-                    .gap(px(8.))
-                    .child(theme::field(&self.preset_quality, "preset-quality"))
-                    .child(theme::field(&self.preset_max_size, "preset-max-size")),
+                    .gap(px(space::MD))
+                    .child(labelled(
+                        "Quality",
+                        theme::field(&self.preset_quality, "preset-quality").into_any_element(),
+                    ))
+                    .child(labelled(
+                        "Longest edge",
+                        theme::field(&self.preset_max_size, "preset-max-size").into_any_element(),
+                    )),
             )
             .children(self.preset_error.clone().map(|e| error_text(e, p)))
             .child(
                 div()
                     .flex()
                     .justify_end()
-                    .gap(px(10.))
+                    .gap(px(space::SM))
                     .when(self.editing.is_some(), |row| {
                         row.child(secondary_button("cancel-edit", "Cancel", p).on_click(
                             cx.listener(|this, _, window, cx| this.reset_preset_form(window, cx)),
                         ))
                     })
                     .child(
-                        primary_button("save-preset", "Save preset", 13., false).on_click(
+                        primary_button("save-preset", "Save preset", p).on_click(
                             cx.listener(|this, _, window, cx| this.save_preset(window, cx)),
                         ),
                     ),
             );
+        let list = if empty {
+            theme::card(p)
+                .items_center()
+                .gap(px(4.))
+                .py(px(space::XL))
+                .px(px(space::LG))
+                .child(
+                    styled(size::BODY, p.text)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child("No presets yet."),
+                )
+                .child(
+                    styled(size::SMALL, p.secondary)
+                        .text_center()
+                        .child("Save one below. Quick convert and the CLI's --preset use them."),
+                )
+        } else {
+            theme::group(rows, p)
+        };
         div()
             .flex()
             .flex_col()
-            .px(px(40.))
-            .pt(px(24.))
-            .pb(px(28.))
+            .gap(px(space::XL))
+            .px(px(GUTTER))
+            .pt(px(space::XL))
+            .pb(px(space::XXL))
             .child(
                 div()
                     .flex()
-                    .items_center()
-                    .justify_between()
-                    .pb(px(4.))
+                    .flex_col()
                     .child(
-                        text(12., 16., p.secondary)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(if empty { "No presets yet." } else { "Presets" }),
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(theme::section_label("Presets", p))
+                            .children(dir.map(|dir| {
+                                div().pb(px(space::SM)).child(
+                                    text_button(
+                                        "open-presets",
+                                        "Open presets folder",
+                                        p.green_text,
+                                        12.,
+                                    )
+                                    .on_click(move |_, _, cx| open_folder(&dir, cx)),
+                                )
+                            })),
                     )
-                    .children(dir.map(|dir| {
-                        text_button("open-presets", "Open presets folder", p.green, 12.)
-                            .on_click(move |_, _, cx| open_folder(&dir, cx))
-                    })),
+                    .child(list),
             )
-            .children(rows)
-            .child(form)
+            .child(section(
+                match &self.editing {
+                    Some(name) => format!("Edit preset \"{name}\""),
+                    None => "New preset".to_string(),
+                },
+                form,
+                p,
+            ))
     }
 
     fn license(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx).license.clone();
-        let summary = SharedString::from(state.summary());
-        let status = div()
-            .id("license-status")
-            .test_support()
-            .aria_label(summary.clone())
+        let can_start_trial =
+            self.app.read(cx).account.can_start_trial() && !state.allows_conversion();
+        let summary = SharedString::from(match &state {
+            State::Licensed(l) if l.plan == convt_license::Plan::Pro => {
+                "You have convt Pro".to_string()
+            }
+            State::Licensed(_) => "You have a convt license".to_string(),
+            _ if can_start_trial => format!("Start your {TRIAL_DAYS}-day Pro trial."),
+            _ => state.summary(),
+        });
+        let allowed = state.allows_conversion();
+        let (glyph, tone, about) = match &state {
+            // An offer, not an error, though nothing converts yet.
+            _ if can_start_trial => (
+                IconName::Calendar,
+                Tone::Green,
+                "Your convt.app account includes a free Pro trial. Start it below, or enter a license key.".to_string(),
+            ),
+            State::Unrestricted => (
+                IconName::CircleCheck,
+                Tone::Green,
+                "Built from source, so every feature is on.".to_string(),
+            ),
+            State::Trial { .. } => (
+                IconName::Calendar,
+                Tone::Green,
+                format!(
+                    "Every feature works during the trial. A {LICENSE_PRICE} license keeps them."
+                ),
+            ),
+            State::AccountTrial { .. } => (
+                IconName::Calendar,
+                Tone::Green,
+                "Every feature works during your Pro trial.".to_string(),
+            ),
+            State::SignInNeeded => (
+                IconName::TriangleAlert,
+                Tone::Error,
+                "The 7-day Pro trial comes with a convt.app account. Sign in below, or enter a license key.".to_string(),
+            ),
+            State::TrialEnded => (
+                IconName::TriangleAlert,
+                Tone::Error,
+                "Buy a license or paste your key to keep converting.".to_string(),
+            ),
+            State::Licensed(l) => (
+                IconName::CircleCheck,
+                Tone::Green,
+                format!(
+                    "{} · updates until {}. Checked offline; the key stays on {}.",
+                    masked_email(&l.email),
+                    l.updates_until,
+                    theme::this_machine()
+                ),
+            ),
+            State::NotCovered(_) => (
+                IconName::TriangleAlert,
+                Tone::Error,
+                "Renew to use this version, or download a build your license covers.".to_string(),
+            ),
+        };
+        let status = theme::card(p)
+            .relative()
+            .overflow_hidden()
+            .flex_row()
+            .items_center()
+            .gap(px(14.))
+            .px(px(20.))
+            .py(px(22.))
+            .rounded(px(radius::PANEL))
+            .when(allowed, |d| d.child(theme::glow(0.6, 300., p)))
+            .child(theme::icon_tile(glyph, tone, 40., p))
             .child(
-                text(
-                    13.,
-                    19.,
-                    if state.allows_conversion() {
-                        p.text
-                    } else {
-                        p.error
-                    },
-                )
-                .child(summary),
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .id("license-status")
+                            .test_support()
+                            .aria_label(summary.clone())
+                            .child(
+                                styled(
+                                    size::BODY,
+                                    if allowed || can_start_trial {
+                                        p.text
+                                    } else {
+                                        p.error
+                                    },
+                                )
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(summary),
+                            ),
+                    )
+                    .child(styled(size::SMALL, p.secondary).child(about)),
             );
         let body = div()
             .flex()
             .flex_col()
-            .gap(px(14.))
-            .px(px(40.))
-            .pt(px(28.))
-            .pb(px(30.));
+            .gap(px(space::XL))
+            .px(px(GUTTER))
+            .pt(px(space::XL))
+            .pb(px(space::XXL))
+            .child(status);
         let account = super::account::section(&self.app, p, cx);
         if state == State::Unrestricted {
-            return div()
-                .flex()
-                .flex_col()
-                .child(body.child(status))
-                .child(account);
+            return body.child(account);
         }
         let licensed = matches!(state, State::Licensed(_) | State::NotCovered(_));
         let notice = self.license_notice.clone().map(|message| {
@@ -638,32 +1081,33 @@ impl SettingsView {
                 .id("license-notice")
                 .test_support()
                 .aria_label(SharedString::from(message.clone()))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .children(allowed.then(|| icon(IconName::CircleCheck, 13., p.green)))
                 .child(
-                    text(
-                        12.,
-                        16.,
-                        if state.allows_conversion() {
-                            p.green
-                        } else {
-                            p.secondary
-                        },
+                    styled(
+                        size::SMALL,
+                        if allowed { p.green_text } else { p.secondary },
                     )
                     .child(message),
                 )
         });
-        let license = body
-            .child(status)
+        let key = theme::card(p)
+            .gap(px(space::MD))
+            .p(px(space::LG))
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(10.))
+                    .gap(px(space::SM))
                     .child(
                         div()
                             .flex_1()
+                            .font_family(theme::MONO)
                             .child(theme::field(&self.license_key, "license-key")),
                     )
-                    .child(primary_button("activate", "Activate", 13., false).on_click(
+                    .child(primary_button("activate", "Activate", p).on_click(
                         cx.listener(|this, _, window, cx| this.activate_license(window, cx)),
                     )),
             )
@@ -672,7 +1116,8 @@ impl SettingsView {
             .child(
                 div()
                     .flex()
-                    .gap(px(14.))
+                    .items_center()
+                    .gap(px(space::LG))
                     .when(!matches!(state, State::Licensed(_)), |row| {
                         row.child(
                             text_button(
@@ -682,7 +1127,7 @@ impl SettingsView {
                                 } else {
                                     "Buy a license"
                                 },
-                                p.green,
+                                p.green_text,
                                 12.,
                             )
                             .on_click(|_, _, cx| cx.open_url(BUY_URL)),
@@ -695,7 +1140,7 @@ impl SettingsView {
                         )
                     }),
             );
-        div().flex().flex_col().child(license).child(account)
+        body.child(section("License key", key, p)).child(account)
     }
 
     fn save_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -779,74 +1224,173 @@ impl SettingsView {
     }
 }
 
+/// The groups the preset form lists targets in.
+const TARGET_GROUPS: [(&str, &[Category]); 4] = [
+    ("Images", &[Category::Image, Category::Vector]),
+    ("Video", &[Category::Video]),
+    ("Audio", &[Category::Audio]),
+    (
+        "Documents",
+        &[
+            Category::Pdf,
+            Category::Document,
+            Category::Presentation,
+            Category::Spreadsheet,
+        ],
+    ),
+];
+
 /// What reaches the network without a click, for the General tab. Update
 /// checks and license refresh are listed together, as the privacy policy
 /// lists them.
 pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     (
         "network-updates",
-        "Update checks: while they're on, once a day at launch and when you click Check now, \
-         convt downloads the signed list of releases from convt.app. The request carries the \
-         app version and nothing about your files.",
+        "Update checks: while automatic checks are on, at every launch and every 5 hours, and \
+         whenever you click Check now, convt downloads the signed list of releases from \
+         convt.app. The request carries the app version and nothing about your files. When a \
+         new version your license covers is out and automatic checks are on, convt downloads \
+         its installer from the release's host (GitHub) and checks it against that list before \
+         offering to restart.",
     ),
     (
         "network-refresh",
-        "License refresh: only while you're signed in to convt.app, once a day at launch, \
+        "License refresh: only while you're signed in to convt.app, at most once a day, \
          to fetch your current Pro key. See License.",
     ),
     (
         "network-other",
-        "Anything else, such as downloading document support, waits for your click. \
-         Your files never leave this computer.",
+        "Anything else waits for your click, such as downloading document support or sending \
+         feedback. Files leave this computer only when you pick Cloud in Quick convert and agree \
+         to the upload.",
     ),
 ];
 
 fn network(p: &Palette) -> Div {
+    let glyphs = [
+        IconName::RefreshCw,
+        IconName::CircleUser,
+        IconName::HardDrive,
+    ];
+    theme::group(
+        NETWORK_LINES
+            .iter()
+            .zip(glyphs)
+            .map(|(&(id, line), glyph)| {
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(space::MD))
+                    .px(px(space::LG))
+                    .py(px(space::MD))
+                    .child(div().pt(px(2.)).child(icon(glyph, 14., p.tertiary)))
+                    .child(
+                        div()
+                            .id(id)
+                            .test_support()
+                            .aria_label(line)
+                            .flex_1()
+                            .min_w(px(0.))
+                            .child(styled(size::SMALL, p.secondary).child(line)),
+                    )
+                    .into_any_element()
+            }),
+        p,
+    )
+}
+
+/// What the Menu tab is for, above its cards.
+const MENU_INTRO: &str = "Click formats in the order you want \"Convert with convt\" to list them \
+     when you right-click a file. The number is each one's place in the menu. Every other \
+     format stays under More options…";
+
+/// Every kind of file with something to convert to, and what it can become.
+fn kinds_and_targets(registry: &convt_core::Registry) -> Vec<(Category, Vec<&'static Format>)> {
+    MENU_KINDS
+        .into_iter()
+        .map(|kind| (kind, registry.category_targets(kind)))
+        .filter(|(_, options)| !options.is_empty())
+        .collect()
+}
+
+/// A kind of file as the Menu tab names it.
+/// The picks for `kind` this machine can convert to, in menu order, and the
+/// ones it can't.
+fn shown_and_hidden(
+    choices: &MenuChoices,
+    kind: Category,
+    options: &[&'static Format],
+) -> (Vec<&'static Format>, Vec<&'static Format>) {
+    choices
+        .effective(kind)
+        .into_iter()
+        .partition(|f| options.contains(f))
+}
+
+/// Adds `to` at the end of the menu for `kind`, or takes it out. It works on
+/// the choices as saved, so a `convt menu` change made since the tab drew is
+/// kept. The menu keeps at least one format; Reset brings the defaults back.
+fn toggle(
+    choices: &mut MenuChoices,
+    kind: Category,
+    to: &'static Format,
+    options: &[&'static Format],
+) {
+    let (mut next, hidden) = shown_and_hidden(choices, kind, options);
+    match next.iter().position(|f| *f == to) {
+        Some(_) if next.len() == 1 => return,
+        Some(i) => {
+            next.remove(i);
+        }
+        None => next.push(to),
+    }
+    next.extend(hidden);
+    choices.set(kind, next);
+}
+
+fn kind_label(kind: Category) -> &'static str {
+    match kind {
+        Category::Image => "Images",
+        Category::Vector => "SVG",
+        Category::Video => "Video",
+        Category::Audio => "Audio",
+        Category::Pdf => "PDFs",
+        Category::Document => "Documents",
+        Category::Spreadsheet => "Spreadsheets",
+        Category::Presentation => "Presentations",
+    }
+}
+
+/// "MP3, M4A and WAV".
+fn list_names(formats: &[&Format]) -> String {
+    match formats {
+        [] => String::new(),
+        [one] => one.name.to_string(),
+        [rest @ .., last] => format!(
+            "{} and {}",
+            rest.iter().map(|f| f.name).collect::<Vec<_>>().join(", "),
+            last.name
+        ),
+    }
+}
+
+/// A labelled section of a tab: the small label, then its card.
+fn section(label: impl Into<SharedString>, content: impl IntoElement, p: &Palette) -> Div {
     div()
         .flex()
         .flex_col()
-        .flex_1()
-        .min_w(px(0.))
-        .gap(px(6.))
-        .children(NETWORK_LINES.iter().map(|&(id, line)| {
-            div()
-                .id(id)
-                .test_support()
-                .aria_label(line)
-                .child(text(12., 17., p.secondary).child(line))
-        }))
+        .child(theme::section_label(label, p))
+        .child(content)
 }
 
-/// A right-aligned label and its control, as in the design's settings rows.
-fn field(label: &'static str, control: impl IntoElement, p: &Palette) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(14.))
-        .child(
-            text(13., 16., p.text)
-                .w(px(170.))
-                .flex_shrink_0()
-                .text_right()
-                .child(label),
-        )
-        .child(control)
-}
-
-/// [`field`] for a control taller than one line.
-fn field_top(label: &'static str, control: impl IntoElement, p: &Palette) -> Div {
-    div()
-        .flex()
-        .items_start()
-        .gap(px(14.))
-        .child(
-            text(13., 16., p.text)
-                .w(px(170.))
-                .flex_shrink_0()
-                .text_right()
-                .child(label),
-        )
-        .child(control)
+/// What "Keep running in the background" does, in this platform's words.
+fn background_note() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Shows convt in the menu bar so conversions start instantly. Quit from there or with ⌘Q."
+    } else {
+        "Shows convt in the system tray so conversions start instantly. Quit from there or with \
+         Ctrl+Q."
+    }
 }
 
 /// Parses an optional number field. Empty means unset.
@@ -866,35 +1410,47 @@ impl Render for SettingsView {
         let title = TABS
             .iter()
             .find(|(t, ..)| *t == self.tab)
-            .map_or("Settings", |(_, _, label)| label);
+            .map_or("Settings", |(_, _, label, _)| label);
         let tabs = div()
             .flex()
             .flex_shrink_0()
             .justify_center()
-            .gap(px(4.))
-            .px(px(16.))
+            .px(px(space::LG))
             .pb(px(10.))
-            .when(!theme::transparent_titlebar(), |d| d.pt(px(10.)))
+            .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
             .bg(p.chrome)
             .border_b_1()
             .border_color(p.chrome_border)
-            .children(TABS.iter().map(|&(tab, id, label)| {
-                let on = self.tab == tab;
-                theme::clickable(id, label)
-                    .aria_selected(on)
-                    .px(px(14.))
-                    .py(px(5.))
-                    .rounded(px(6.))
-                    .when(on, |d| d.bg(p.tab_selected))
-                    .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
-                    .child(
-                        text(12., 16., if on { p.text } else { p.secondary })
-                            .when(on, |d| d.font_weight(FontWeight::MEDIUM))
-                            .child(label),
-                    )
-            }));
+            .child(theme::pill_track(&p).children(TABS.into_iter().map(
+                |(tab, id, label, glyph)| {
+                    let on = self.tab == tab;
+                    theme::clickable(id, label)
+                        .aria_selected(on)
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .h(px(28.))
+                        .px(px(16.))
+                        .rounded_full()
+                        .map(|d| {
+                            if on {
+                                theme::pill_segment_on(d, &p)
+                            } else {
+                                d.hover(|s| s.bg(p.hover))
+                            }
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
+                        .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
+                        .child(
+                            styled(size::SMALL, if on { p.text } else { p.secondary })
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(label),
+                        )
+                },
+            )));
         let body = match self.tab {
             SettingsTab::General => self.general(&p, cx),
+            SettingsTab::Menu => self.menu(&p, cx),
             SettingsTab::Presets => self.presets(&p, cx),
             SettingsTab::License => self.license(&p, cx),
         };
@@ -913,6 +1469,7 @@ impl Render for SettingsView {
                     .id("settings-body")
                     .flex_1()
                     .overflow_y_scroll()
+                    .track_scroll(&self.scroll)
                     .child(body),
             )
     }

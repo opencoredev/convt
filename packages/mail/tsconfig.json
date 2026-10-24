@@ -1,5 +1,5 @@
 {
-  "include": ["src", "test"],
+  "include": ["src", "test", "scripts"],
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

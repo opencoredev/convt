@@ -4,9 +4,10 @@
 // See docs/p7-billing-plan.md, section 3.
 
 import { sql } from "drizzle-orm";
-import { newId, sign } from "@convt/license";
+import { LIFETIME_UPDATES_UNTIL, newId, sign } from "@convt/license";
 
-import { addYears, alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
+import { licensePurchasedEvent, type AnalyticsEvent } from "./analytics";
+import { alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
 import { enqueueEmail } from "./outbox";
 
 /** The account's verified email when the purchase has a user, else the purchase's email. */
@@ -30,7 +31,13 @@ async function revoke(
     where revoked_at is null and ${where}`);
 }
 
-export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: string, now: Date) {
+export async function convergeDesktop(
+  ctx: BillingContext,
+  tx: Q,
+  orderId: string,
+  now: Date,
+  events: AnalyticsEvent[] = [],
+) {
   const o = await one<{
     id: string;
     status: string;
@@ -51,10 +58,19 @@ export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: strin
   if (o.lost) return revoke(tx, original, "dispute_lost", now);
   if (o.status !== "paid" && o.status !== "partially_refunded") return;
 
-  const id = newId("lic");
   const email = await licenseEmail(tx, o.user_id, o.email);
   const issued = isoDay(o.billed_at);
-  const updatesUntil = addYears(issued, 1);
+  const existing = await one<{ id: string; updates_until: string }>(
+    tx,
+    sql`select id, updates_until::text from licenses where order_id = ${o.id} and plan = 'desktop' and reissue_of is null`,
+  );
+  if (existing) {
+    // Existing signed rows are immutable for the billing role. Clients treat
+    // every verified Desktop key as lifetime, so no rewrite is required.
+    return;
+  }
+  const id = newId("lic");
+  const updatesUntil = LIFETIME_UPDATES_UNTIL;
   const token = await sign(
     { id, email, plan: "desktop", issued, updates_until: updatesUntil },
     await ctx.signingKey(),
@@ -68,6 +84,7 @@ export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: strin
     returning id`,
   );
   if (inserted.length === 0) return;
+  if (o.user_id) events.push(licensePurchasedEvent(o.user_id, "desktop", o.id));
   await fault(ctx, "after-license-insert");
   await enqueueEmail(tx, {
     kind: "license_issued",
@@ -85,7 +102,13 @@ export async function convergeDesktop(ctx: BillingContext, tx: Q, orderId: strin
  * end among funded rows; if its date is past every unrevoked original key of the
  * subscription, issue one key up to it.
  */
-export async function convergePro(ctx: BillingContext, tx: Q, subscriptionId: string, now: Date) {
+export async function convergePro(
+  ctx: BillingContext,
+  tx: Q,
+  subscriptionId: string,
+  now: Date,
+  events: AnalyticsEvent[] = [],
+) {
   // Revocations first, so a refunded invoice's key never counts as covering.
   await revoke(
     tx,
@@ -186,6 +209,7 @@ export async function convergePro(ctx: BillingContext, tx: Q, subscriptionId: st
     return;
   }
   await fault(ctx, "after-license-insert");
+  if (!current?.any && sub.user_id) events.push(licensePurchasedEvent(sub.user_id, "pro", sub.id));
   // Only a subscription's first Pro key is emailed; renewals appear on the dashboard.
   if (!current?.any) {
     await enqueueEmail(tx, {

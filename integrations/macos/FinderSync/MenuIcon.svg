@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 128 128">
+  <!-- Finder menu icon: the app icon's tile cropped to the edges, as in
+       apps/extension/assets/icon-toolbar.svg. It is a full-color image, not a
+       template: Finder copies the menu into its own process and draws template
+       images black even on a dark menu. The dark tile keeps the mark legible on
+       light and dark menus. -->
+  <defs>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#46d08b"/>
+      <stop offset="1" stop-color="#1fa463"/>
+    </linearGradient>
+    <clipPath id="source"><rect x="2" y="2" width="19" height="19" rx="5"/></clipPath>
+  </defs>
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#131615"/>
+  <g transform="translate(16 16) scale(3)">
+    <rect x="2" y="2" width="19" height="19" rx="5" fill="#edefee"/>
+    <rect x="11" y="11" width="19" height="19" rx="5" fill="url(#green)"/>
+    <rect x="11" y="11" width="19" height="19" rx="5" fill="#a6f0c8" clip-path="url(#source)"/>
+  </g>
+</svg>

@@ -26,6 +26,8 @@ export type ManifestBuild = {
   artifacts: ManifestArtifact[];
   /** convt's source for this exact build, which the AGPL requires next to the binaries. */
   source: ManifestArtifact;
+  /** Generated corresponding-source closure used for offline rebuilds. */
+  source_closure?: ManifestArtifact;
 };
 
 export type ReleaseManifest = {
@@ -84,6 +86,8 @@ export function parseReleaseManifest(input: unknown): ReleaseManifest {
       checkArtifact(`${path}.artifacts[${j}]`, a),
     );
     checkArtifact(`${path}.source`, b.source as Record<string, unknown>);
+    if (b.source_closure !== undefined)
+      checkArtifact(`${path}.source_closure`, b.source_closure as Record<string, unknown>);
   });
   return m as unknown as ReleaseManifest;
 }

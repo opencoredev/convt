@@ -383,7 +383,10 @@ fn image_to_pdf(pdfium: &Pdfium, ctx: &Ctx, input: &Path, out_dir: &Path) -> Res
             h,
         ),
         None => {
-            let img = crate::image::fit(crate::image::open_upright(input)?, ctx.options.max_size);
+            let img = crate::image::fit(
+                crate::orientation::open_oriented(input)?,
+                ctx.options.max_size,
+            );
             ctx.check()?;
             // A chosen color goes under transparent areas. Otherwise PDFium
             // keeps the alpha channel as a soft mask, and viewers show the

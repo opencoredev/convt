@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import geistMonoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url";
-import geistUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
+import interUrl from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 
 import { getPublicConfig } from "#/server/public-config";
 import { getSession } from "#/server/session";
@@ -41,24 +41,39 @@ const structuredData = {
 };
 
 export const Route = createFileRoute("/")({
-  // The landing page is designed dark only. __root reads this and puts `dark` on <html>.
-  staticData: { theme: "dark" },
   head: () => {
     const tags = seo({ title, description, path: "/" });
     return {
       ...tags,
-      meta: [...tags.meta, { name: "theme-color", content: "#0a0b0b" }],
+      meta: [
+        ...tags.meta,
+        { name: "theme-color", content: "#ffffff", media: "(prefers-color-scheme: light)" },
+        { name: "theme-color", content: "#0a0b0b", media: "(prefers-color-scheme: dark)" },
+      ],
       links: [
         ...tags.links,
         // The glow behind the hero is the largest paint, but CSS hides it from the preload
         // scanner, so ask for it up front.
-        { rel: "preload", as: "image", href: "/landing/dither-glow.png", fetchPriority: "high" },
+        {
+          rel: "preload",
+          as: "image",
+          href: "/landing/dither-glow-light.png",
+          media: "(prefers-color-scheme: light)",
+          fetchPriority: "high",
+        },
+        {
+          rel: "preload",
+          as: "image",
+          href: "/landing/dither-glow.png",
+          media: "(prefers-color-scheme: dark)",
+          fetchPriority: "high",
+        },
         // Both fonts are in the first paint; without these they load only after the CSS.
         {
           rel: "preload",
           as: "font",
           type: "font/woff2",
-          href: geistUrl,
+          href: interUrl,
           crossOrigin: "anonymous",
         },
         {

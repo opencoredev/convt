@@ -12,14 +12,20 @@
 // 4. The app posts the token to /api/device/license. `renewDevice` finds the
 //    unrevoked device, notes when it was seen, and asks convt-billing for the
 //    account's current Pro key.
+// 5. For a cloud conversion, the app posts the token to /api/device/cloud.
+//    `deviceCloudCredential` checks paid Pro again and returns a five-minute
+//    credential for convt-server (cloud-credential.ts).
 //
 // The /api/device routes never read cookies: they authenticate by code and verifier
 // or by bearer token, which is why request.ts lets them skip the Origin check.
 // Revoking a device on the dashboard (revokeDevice) makes its token answer 401.
 
 import { schema as t, consumeSendBucket, type Db } from "@convt/db";
+import { cloudAllowance } from "@convt/db/queries";
 import { base64urlEncode, newId, randomBytes } from "@convt/license";
 import { and, eq, isNull, sql } from "drizzle-orm";
+
+import { cloudCredentialSeconds, mintCloudCredential, type CloudConfig } from "./cloud-credential";
 
 const codeTtlMs = 5 * 60 * 1000;
 const hourMs = 60 * 60 * 1000;
@@ -31,7 +37,11 @@ export const deviceLimits = {
   approvePerUser: 10,
   tokenPerIp: 30,
   renewPerIp: 120,
-  renewPerDevice: 30,
+  /** The app polls while a trial checkout is open (about 50 asks in 15 minutes). */
+  renewPerDevice: 90,
+  /** A credential lasts five minutes, and a batch of files can share one. */
+  cloudPerIp: 600,
+  cloudPerDevice: 240,
 };
 
 /** The largest JSON body the /api/device routes read. */
@@ -236,6 +246,14 @@ async function activeDevice(db: Db, token: string) {
 export type ProKeySource = (
   userId: string,
 ) => Promise<{ key: string; updatesUntil: string } | null>;
+export type ProAccessSource = (
+  userId: string,
+) => Promise<
+  | { kind: "pro" }
+  | { kind: "trial"; endsOn: string; endsAt: string }
+  | { kind: "can_start_trial"; checkoutUrl: string }
+  | { kind: "lapsed" }
+>;
 
 /** Step 4: the current Pro key for the device's account. */
 export async function renewDevice(
@@ -245,6 +263,7 @@ export async function renewDevice(
   input: unknown,
   ip: string,
   now: Date,
+  proAccess: ProAccessSource = async () => ({ kind: "lapsed" }),
 ): Promise<DeviceResponse> {
   const byIp = await consumeSendBucket(db, `device-renew:ip:${ip}`, hourMs, now);
   if (byIp > deviceLimits.renewPerIp) return json(429, { error: "rate_limited" });
@@ -263,7 +282,39 @@ export async function renewDevice(
     })
     .where(eq(t.devices.id, device.id));
   const current = await proKey(device.userId);
-  return json(200, { key: current?.key ?? null, updates_until: current?.updatesUntil ?? null });
+  const access = await proAccess(device.userId);
+  return json(200, {
+    key: current?.key ?? null,
+    updates_until: current?.updatesUntil ?? null,
+    access:
+      access.kind === "trial"
+        ? { kind: access.kind, ends_on: access.endsOn, ends_at: access.endsAt }
+        : access.kind === "can_start_trial"
+          ? { kind: access.kind, checkout_url: access.checkoutUrl }
+          : { kind: access.kind },
+  });
+}
+
+/** Step 5: a cloud credential, for a device whose account has paid Pro. */
+export async function deviceCloudCredential(
+  db: Db,
+  config: CloudConfig,
+  token: string | null,
+  ip: string,
+  now: Date,
+): Promise<DeviceResponse> {
+  const byIp = await consumeSendBucket(db, `device-cloud:ip:${ip}`, hourMs, now);
+  if (byIp > deviceLimits.cloudPerIp) return json(429, { error: "rate_limited" });
+  if (!token) return json(401, { error: "signed_out" });
+  const device = await activeDevice(db, token);
+  if (!device) return json(401, { error: "signed_out" });
+  const byDevice = await consumeSendBucket(db, `device-cloud:dev:${device.id}`, hourMs, now);
+  if (byDevice > deviceLimits.cloudPerDevice) return json(429, { error: "rate_limited" });
+  if (!(await cloudAllowance(db, device.userId, "pro")).allowed)
+    return json(403, { error: "not_pro" });
+  if (config.kind === "missing") return json(503, { error: "not_configured" });
+  const credential = await mintCloudCredential({ config, userId: device.userId, now });
+  return json(200, { ...credential, expiresIn: cloudCredentialSeconds });
 }
 
 /** The app's Sign out: revokes the device the token belongs to. */

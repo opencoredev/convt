@@ -15,7 +15,13 @@ import {
   table,
 } from "#/components/app/ui";
 import { getBilling } from "#/lib/account";
-import { apiSpendLine, billingHasNoPlan } from "#/lib/billing-display";
+import {
+  apiSpendLine,
+  billingCardCopy,
+  billingHasNoPlan,
+  showGetDesktop,
+  showPolarBilling,
+} from "#/lib/billing-display";
 import { links } from "#/lib/config";
 import { formatDate, formatMoney } from "#/lib/format";
 import { openPortal, openReceipt, setPlanCancel, switchPlanInterval } from "#/server/billing-fns";
@@ -72,6 +78,11 @@ function BillingPage() {
   const plan = billing.plan;
   const noPlan = billingHasNoPlan(billing);
   const apiLine = apiSpendLine(billing.api);
+  const cardCopy = billingCardCopy(billing);
+  const offerDesktop = showGetDesktop(billing);
+  const polarBilling = showPolarBilling(billing);
+  const isDesktop = plan?.kind === "desktop";
+  const isPro = plan?.kind === "pro";
   const otherInterval = plan?.interval === "year" ? "month" : "year";
   const otherLabel = otherInterval === "year" ? "yearly" : "monthly";
 
@@ -126,13 +137,24 @@ function BillingPage() {
                       : "green"
                   }
                 >
-                  {plan.cancelsOn
-                    ? `ENDS ${formatDate(plan.cancelsOn).toUpperCase()}`
-                    : statusLabel[plan.status]}
+                  {isDesktop
+                    ? "LIFETIME"
+                    : plan.cancelsOn
+                      ? `ENDS ${formatDate(plan.cancelsOn).toUpperCase()}`
+                      : statusLabel[plan.status]}
                 </Badge>
               </div>
               <p className="text-[13px]/5 text-ink-2">{plan.summary}</p>
-              {confirm ? (
+              {isDesktop ? (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <SecondaryLink href={links.buyPro}>
+                    {billing.hadPro ? "Start Pro" : "Start free trial"}
+                  </SecondaryLink>
+                  <TextButton tone="muted" onClick={() => window.location.assign(links.pricing)}>
+                    See pricing
+                  </TextButton>
+                </div>
+              ) : confirm ? (
                 <div
                   className="flex flex-col gap-3 rounded-lg bg-sunken p-4 ring-1 ring-line"
                   role="group"
@@ -248,7 +270,9 @@ function BillingPage() {
                 <SecondaryLink href={links.buyPro}>
                   {billing.hadPro ? "Start Pro" : "Start free trial"}
                 </SecondaryLink>
-                <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
+                {offerDesktop ? (
+                  <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
+                ) : null}
                 <TextButton tone="muted" onClick={() => window.location.assign(links.pricing)}>
                   See pricing
                 </TextButton>
@@ -271,7 +295,9 @@ function BillingPage() {
                 <SecondaryLink href={links.buyPro}>
                   {billing.hadPro ? "Start Pro" : "Start free trial"}
                 </SecondaryLink>
-                <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
+                {offerDesktop ? (
+                  <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
+                ) : null}
                 <SecondaryLink href="/dashboard/api">Manage API</SecondaryLink>
               </div>
             </>
@@ -315,15 +341,15 @@ function BillingPage() {
               </span>
             </div>
           ) : (
-            <p className="text-[13px]/4 text-ink-2">No card on file.</p>
+            <p className="text-[13px]/4 text-ink-2">{cardCopy}</p>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {billing.card || plan || billing.api.state !== "none" ? (
+            {billing.card || isPro || billing.api.state !== "none" ? (
               <TextButton disabled={portal.busy} onClick={portal.open}>
                 {billing.card ? "Update card" : "Add card"}
               </TextButton>
             ) : null}
-            {plan || billing.api.state !== "none" ? (
+            {polarBilling ? (
               <TextButton tone="muted" disabled={portal.busy} onClick={portal.open}>
                 Manage billing
               </TextButton>
@@ -335,7 +361,7 @@ function BillingPage() {
       <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4.5">
         <h2 className="text-[13px]/4 text-ink-2 sm:w-[200px] sm:shrink-0">Receipts go to</h2>
         <p className="min-w-0 flex-1 font-mono text-[13px]/4 break-all">{billing.receiptEmail}</p>
-        {plan || billing.api.state !== "none" ? (
+        {polarBilling ? (
           <TextButton disabled={portal.busy} onClick={portal.open}>
             Change
           </TextButton>

@@ -1905,7 +1905,7 @@
     },
     {
       "name": "zlib-1.3.2-r0.apk",
-      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/zlib-1.3.2-r0.apk",
+      "url": "https://github.com/opencoredev/convt/releases/download/build-inputs/zlib-1.3.2-r0.apk",
       "sha256": "b224a975eb04ec3ec9bce7db2fce91c9e9d669996f79a9a750d4a3cd9324a404",
       "cache": "appimage-source/apks/zlib-1.3.2-r0.apk",
       "role": "build-apk",
@@ -1918,7 +1918,7 @@
     },
     {
       "name": "zlib-dev-1.3.2-r0.apk",
-      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/zlib-dev-1.3.2-r0.apk",
+      "url": "https://github.com/opencoredev/convt/releases/download/build-inputs/zlib-dev-1.3.2-r0.apk",
       "sha256": "3569be1b98225e97a2cff5c1377553c26d2e643873186ea20117fa094a698447",
       "cache": "appimage-source/apks/zlib-dev-1.3.2-r0.apk",
       "role": "build-apk",
@@ -1931,7 +1931,7 @@
     },
     {
       "name": "zlib-static-1.3.2-r0.apk",
-      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/zlib-static-1.3.2-r0.apk",
+      "url": "https://github.com/opencoredev/convt/releases/download/build-inputs/zlib-static-1.3.2-r0.apk",
       "sha256": "25ddc9ad82e822afda4cb90cf1081e7530f38ec2c8d53dcc2898f08dae82cb88",
       "cache": "appimage-source/apks/zlib-static-1.3.2-r0.apk",
       "role": "build-apk",

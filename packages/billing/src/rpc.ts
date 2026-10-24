@@ -5,6 +5,7 @@
 
 import type { CatalogProduct } from "./catalog";
 import type { CheckoutRefusal, CheckoutResult } from "./checkout";
+import type { MarketingPreference, TokenPreference } from "./marketing";
 
 export type ActionReason =
   | "not_found"
@@ -20,6 +21,8 @@ export interface BillingRpc {
     product: CatalogProduct;
     user: { id: string; email: string } | null;
     spendCapCents?: number | null;
+    /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
+    fromApp?: boolean;
   }): Promise<
     | { ok: true; url: string; checkoutId: string; cookieValue: string }
     | { ok: false; refusal: CheckoutRefusal }
@@ -53,6 +56,29 @@ export interface BillingRpc {
    * it for a signed-in desktop device, with the user id from the device token.
    */
   currentProKey(userId: string): Promise<{ key: string; updatesUntil: string } | null>;
+  currentProAccess(
+    userId: string,
+  ): Promise<
+    | { kind: "pro" }
+    | { kind: "trial"; endsOn: string; endsAt: string }
+    | { kind: "can_start_trial"; checkoutUrl: string }
+    | { kind: "lapsed" }
+  >;
+  /** Whether the signed-in account gets campaign email. */
+  marketingPreference(userId: string): Promise<MarketingPreference>;
+  setMarketingPreference(userId: string, subscribed: boolean): Promise<MarketingPreference>;
+  /**
+   * The same for a preferences link from an email, without signing in. Null when
+   * the token is not one convt-billing signed.
+   */
+  preferenceByToken(token: string): Promise<TokenPreference | null>;
+  setPreferenceByToken(token: string, subscribed: boolean): Promise<TokenPreference | null>;
 }
 
-export type { CheckoutRefusal, CheckoutResult, CatalogProduct };
+export type {
+  CheckoutRefusal,
+  CheckoutResult,
+  CatalogProduct,
+  MarketingPreference,
+  TokenPreference,
+};

@@ -147,7 +147,8 @@ if (cmd === "keygen") {
     };
   }
   const artifacts = names.flatMap((name) => {
-    if (name.endsWith("-source.tar.gz")) return [];
+    // Document packs are pinned into each build, not update downloads.
+    if (name.endsWith("-source.tar.gz") || name.endsWith("-documents.tar.gz")) return [];
     let platform: string, kind: string;
     if (name.endsWith(".deb")) {
       platform = "linux-x86_64";
@@ -174,6 +175,7 @@ if (cmd === "keygen") {
   if (new Set(artifacts.map((a) => `${a.platform}/${a.kind}`)).size !== artifacts.length)
     throw Error("duplicate platform/kind");
   const sourceName = `convt-${version}-source.tar.gz`;
+  const sourceClosureName = `convt-${version}-source-closure.tar.gz`;
   if (!existsSync(resolve(dir, sourceName))) throw Error("missing matching source archive");
   const audit = JSON.parse(readFileSync(resolve(dir, "source-audit.json"), "utf8"));
   const previous = history ? JSON.parse(readFileSync(history, "utf8")) : null;
@@ -184,6 +186,9 @@ if (cmd === "keygen") {
     build_date: date,
     artifacts,
     source: artifact(sourceName, "source", "tar.gz"),
+    ...(existsSync(resolve(dir, sourceClosureName))
+      ? { source_closure: artifact(sourceClosureName, "source", "tar.gz") }
+      : {}),
   };
   const builds = [...(previous?.builds ?? []).filter((b: any) => b.version !== version), build];
   const manifest = {

@@ -5,7 +5,13 @@
 
 import { sql } from "drizzle-orm";
 
-import { discountProblem, isPro, type CatalogProduct } from "./catalog";
+import {
+  desktopTrialStartedEvent,
+  emitAnalytics,
+  purchaseEventsFromLicenses,
+  type AnalyticsEvent,
+} from "./analytics";
+import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
 import { convergeDesktop, convergePro, convergeApi } from "./converge";
 import { emptyFacts } from "./provider";
@@ -21,7 +27,7 @@ import { newId } from "@convt/license";
 
 export type IngestOutcome =
   | { rejected: string }
-  | { rejected: null; notes: string[]; userIds: string[] };
+  | { rejected: null; notes: string[]; userIds: string[]; events: AnalyticsEvent[] };
 
 export class BudgetExceeded extends Error {
   constructor() {
@@ -130,6 +136,7 @@ export async function checkFacts(
   const prices = new Map(
     Object.entries(catalog.products).map(([k, v]) => [v.priceId, k as CatalogProduct]),
   );
+  for (const legacy of catalog.legacyDesktop ?? []) prices.set(legacy.priceId, "desktop");
   const yearly = catalog.products.pro_year.amountCents!;
 
   const checkCheckout = async (
@@ -201,12 +208,12 @@ export async function checkFacts(
     if (o.product === "desktop") {
       const price = catalog.products.desktop;
       if (o.reason !== "purchase") return `amount: a Desktop order with reason ${o.reason}`;
-      if (
-        o.items.length !== 1 ||
-        o.items[0].priceId !== price.priceId ||
-        o.items[0].amountCents !== price.amountCents ||
-        o.subtotalCents !== price.amountCents
-      )
+      const listPrice =
+        o.items.length === 1 &&
+        o.items[0].priceId === price.priceId &&
+        o.items[0].amountCents === price.amountCents &&
+        o.subtotalCents === price.amountCents;
+      if (!listPrice && !complimentaryDesktop(catalog, o))
         return `amount: Desktop is ${price.amountCents}, the order is ${o.subtotalCents}`;
       const r = await checkCheckout(
         "order",
@@ -215,7 +222,9 @@ export async function checkFacts(
         o.checkoutRef,
         o.userId,
       );
-      if (r) return r;
+      // Polar-hosted or guest Desktop checkouts we did not record still grant a
+      // license: the payload is Polar-signed for our product and has an email.
+      if (r && !r.startsWith("foreign_checkout:")) return r;
     } else if (isPro(o.product)) {
       if (o.reason === "subscription_create" || o.reason === "subscription_cycle") {
         for (const i of o.items) {
@@ -330,6 +339,7 @@ type Touched = {
   subscriptions: Set<string>;
   notes: string[];
   userIds: Set<string>;
+  events: AnalyticsEvent[];
 };
 
 async function applyCustomer(ctx: BillingContext, tx: Q, c: CustomerFact, now: Date) {
@@ -451,6 +461,8 @@ async function applySubscription(
     );
     touched.subscriptions.add(inserted!.id);
     if (userId) touched.userIds.add(userId);
+    if (kind === "pro" && s.status === "trialing" && userId)
+      touched.events.push(desktopTrialStartedEvent(userId, s.providerSubscriptionId));
     await duplicateCheck(tx, userId, kind, now);
     return;
   }
@@ -522,7 +534,7 @@ async function duplicateCheck(tx: Q, userId: string | null, kind: string, now: D
 }
 
 function describeOrder(o: OrderFact): string {
-  if (o.product === "desktop") return "Desktop License, 12 months of updates";
+  if (o.product === "desktop") return "Desktop License, lifetime updates";
   if (o.product === "api")
     return o.reason === "subscription_create" ? "API enrollment" : "API usage";
   const interval = o.product === "pro_year" ? "yearly" : "monthly";
@@ -812,6 +824,16 @@ export async function applyFacts(
   const subs = allSubscriptions(facts);
   const users = new Set<string>();
   for (const x of [...facts.orders, ...subs, ...facts.customers]) if (x.userId) users.add(x.userId);
+  // A guest Polar order names no user id. If a verified account already has that
+  // email (or signs up later and claim_purchases runs), attach it now.
+  for (const o of facts.orders) {
+    if (o.userId || !o.email) continue;
+    const u = await one<{ id: string }>(
+      tx,
+      sql`select id from users where email = ${o.email} and email_verified`,
+    );
+    if (u) users.add(u.id);
+  }
   // A dispute on a subscription invoice converges that subscription, so it takes
   // the subscription's lock like every other fact about it.
   const disputeSubs: string[] = [];
@@ -846,6 +868,7 @@ export async function applyFacts(
     subscriptions: new Set(),
     notes: [],
     userIds: new Set(),
+    events: [],
   };
   for (const a of facts.alerts) await alert(tx, now, a.kind, a.subject, a.detail);
   for (const c of facts.customers) await applyCustomer(ctx, tx, c, now);
@@ -857,17 +880,48 @@ export async function applyFacts(
   }
   for (const d of facts.disputes) await applyDispute(ctx, tx, d, touched, now);
 
-  for (const orderId of touched.orders) await convergeDesktop(ctx, tx, orderId, now);
+  for (const orderId of touched.orders)
+    await convergeDesktop(ctx, tx, orderId, now, touched.events);
   for (const subId of touched.subscriptions) {
     const s = await one<{ kind: string }>(
       tx,
       sql`select kind from subscriptions where id = ${subId}`,
     );
-    if (s?.kind === "pro") await convergePro(ctx, tx, subId, now);
+    if (s?.kind === "pro") await convergePro(ctx, tx, subId, now, touched.events);
     else if (s?.kind === "api") await convergeApi(ctx, tx, subId, now);
   }
-  for (const u of touched.userIds) await tx.execute(sql`select * from claim_purchases(${u})`);
-  return { rejected: null, notes: touched.notes, userIds: [...touched.userIds] };
+  for (const u of users) touched.userIds.add(u);
+  for (const u of touched.userIds) {
+    const claimed = await one<{ claimed_licenses: number }>(
+      tx,
+      sql`select claimed_licenses from claim_purchases(${u})`,
+    );
+    if (!claimed || Number(claimed.claimed_licenses) === 0) continue;
+    const licenses = await rows<{
+      plan: string;
+      order_id: string | null;
+      subscription_id: string | null;
+    }>(
+      tx,
+      sql`select plan, order_id, subscription_id from licenses where user_id = ${u} and revoked_at is null`,
+    );
+    touched.events.push(
+      ...purchaseEventsFromLicenses(
+        u,
+        licenses.map((license) => ({
+          plan: license.plan,
+          orderId: license.order_id,
+          subscriptionId: license.subscription_id,
+        })),
+      ),
+    );
+  }
+  return {
+    rejected: null,
+    notes: touched.notes,
+    userIds: [...touched.userIds],
+    events: touched.events,
+  };
 }
 
 /**
@@ -883,7 +937,7 @@ export async function ingestFacts(
   const deadline = Date.now() + ctx.config.budgetMs * 4;
   const { cards } = await hydrate(ctx, facts, deadline);
   const outcome = await ctx.db.transaction(async (tx) => applyFacts(ctx, tx, facts, cards));
-  if (outcome.rejected) {
+  if (outcome.rejected !== null) {
     const subject =
       facts.orders[0]?.providerOrderId ??
       facts.subscriptions[0]?.providerSubscriptionId ??
@@ -891,6 +945,8 @@ export async function ingestFacts(
       "facts";
     await alert(ctx.db, ctx.clock(), "rejected_fact", `${source}:${subject}`, outcome.rejected);
     ctx.log(`[billing] ${source}: rejected ${subject}: ${outcome.rejected}`);
+  } else {
+    await emitAnalytics(ctx.captureAnalytics, outcome.events);
   }
   return outcome;
 }

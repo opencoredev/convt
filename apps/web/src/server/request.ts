@@ -29,9 +29,11 @@ export const requestMiddleware = createMiddleware({ type: "request" }).server(
     // Better Auth checks Origin on its own endpoints; OAuth providers may POST callbacks.
     // The desktop app's /api/device calls carry no cookies and no Origin; they
     // authenticate by one-time code and verifier or by device token.
+    // /api/feedback checks Origin itself, since the desktop app posts there too.
     if (
       !url.pathname.startsWith("/api/auth/") &&
       !url.pathname.startsWith("/api/device/") &&
+      url.pathname !== "/api/feedback" &&
       !isSameOriginRequest(request, new URL(appEnv.authUrl).origin)
     ) {
       return new Response("Forbidden", { status: 403 });

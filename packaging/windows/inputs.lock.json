@@ -32,7 +32,7 @@
     },
     {
       "name": "libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libd/libde265/libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
+      "url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/libde265/1.0.15-1ubuntu0.1/libde265_1.0.15-1ubuntu0.1.debian.tar.xz",
       "sha256": "53277b637f1bfe29e1d249ab1981f947f6425e7f5793430989c54534a265a0ac",
       "package": "libde265",
       "version": "1.0.15-1ubuntu0.1",

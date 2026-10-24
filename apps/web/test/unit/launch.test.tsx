@@ -21,20 +21,22 @@ test("flipping launch enables Desktop and Pro without enabling API sales", () =>
   expect(cloud).not.toContain("API is not on sale yet");
 });
 
-test("the landing hero Download CTA is OS-aware and does not hedge", () => {
-  const html = renderToStaticMarkup(<Hero />);
-  expect(html).toContain('href="/download"');
+test("the landing hero CTA is Get convt and does not hedge", () => {
+  const html = renderToStaticMarkup(<Hero signedIn={false} />);
+  expect(html).toContain('href="/sign-in?redirect=%2Fdownload"');
+  expect(renderToStaticMarkup(<Hero signedIn />)).toContain('href="/download"');
   expect(html).not.toContain("os=linux");
   expect(html).not.toContain("Out now for Linux");
   expect(html).not.toContain("in progress");
   expect(html).not.toContain("Download for Linux");
-  expect(html).toContain("Download</a>");
+  expect(html).toContain("Get convt</a>");
 });
 
-test("the closing Download CTA uses the same /download entry", () => {
-  const html = renderToStaticMarkup(<CallToAction />);
-  expect(html).toContain('href="/download"');
+test("the closing Get convt CTA uses the same /download entry", () => {
+  const html = renderToStaticMarkup(<CallToAction signedIn={false} />);
+  expect(html).toContain('href="/sign-in?redirect=%2Fdownload"');
+  expect(renderToStaticMarkup(<CallToAction signedIn />)).toContain('href="/download"');
   expect(html).not.toContain("os=linux");
   expect(html).not.toContain("Download for Linux");
-  expect(html).toContain("Download</a>");
+  expect(html).toContain("Get convt</a>");
 });

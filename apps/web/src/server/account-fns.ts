@@ -16,6 +16,7 @@ import {
   userAccounts,
   userInvoices,
   userLicenses,
+  userPolarCustomerId,
   userSessions,
   userSubscriptions,
 } from "@convt/db/queries";
@@ -33,6 +34,7 @@ import {
   licensesView,
   overviewView,
   settingsView,
+  visibleMethods,
 } from "./views";
 
 export const fetchOverview = createServerFn({ method: "GET" })
@@ -94,10 +96,12 @@ export const fetchBilling = createServerFn({ method: "GET" })
       ...billingView({
         user,
         subscriptions: await userSubscriptions(db, userId),
+        licenses: await userLicenses(db, userId),
         invoices: await userInvoices(db, userId),
         card,
         openApiCheckout: (await openApiCheckout(db, userId, now)) !== null,
         now,
+        polarCustomerId: await userPolarCustomerId(db, userId),
       }),
     };
   });
@@ -146,14 +150,13 @@ export const fetchAccountSettings = createServerFn({ method: "GET" })
       deletion: await openDeletion(db, userId),
       now,
     });
-    const providers = availableProviders(appEnv);
     return {
       ...settings,
-      // An unconfigured provider can't be connected, but a method already linked
-      // stays listed so its owner can see and remove it.
-      methods: settings.methods.filter(
-        (m) => (m.id !== "github" && m.id !== "google") || providers[m.id] || m.accountId !== null,
-      ),
+      methods: visibleMethods(settings.methods, availableProviders(appEnv)),
+      // Null when convt-billing cannot answer; the page says so instead of guessing.
+      marketing: await billing()
+        .marketingPreference(userId)
+        .catch(() => null),
     };
   });
 

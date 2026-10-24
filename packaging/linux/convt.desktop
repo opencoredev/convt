@@ -3,4 +3,5 @@ Name=convt
 Exec=convt-app open %F
 Type=Application
 Icon=convt
+Terminal=false
 Categories=Utility;

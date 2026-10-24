@@ -14,14 +14,15 @@ fi
   exit 1
 }
 cd "$ROOT/apps/$worker"
-# Refuse placeholder origins and database bindings before any network call.
+# Refuse placeholder origins, ids and database bindings before any network call.
 bun - "$environment" <<'JS'
 import { parse } from "jsonc-parser";
 const raw = parse(await Bun.file("wrangler.jsonc").text());
 const env = process.argv[2] === "staging" ? raw.env.staging : raw;
 if (env.hyperdrive.some(h => /^0{30}/.test(h.id)) ||
-    Object.values(env.vars).some(v => typeof v === "string" && v.includes("<subdomain>"))) {
-  console.error("deploy: fill the environment's Hyperdrive ids and origins first");
+    Object.values(env.vars).some(v => typeof v === "string" &&
+      (v.includes("<subdomain>") || v === "SET_IN_WORKER_ENV"))) {
+  console.error("deploy: replace the environment's placeholder Hyperdrive ids, origins or SET_IN_WORKER_ENV vars first");
   process.exit(1);
 }
 JS

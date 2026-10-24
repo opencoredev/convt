@@ -7,6 +7,7 @@
 import { sql } from "drizzle-orm";
 import { newId } from "@convt/license";
 
+import type { AnalyticsEvent } from "./analytics";
 import { alert, type BillingContext, fault, one, type Q } from "./context";
 import { applyFacts, BudgetExceeded, checkDeadline, hydrate } from "./ingest";
 import { safeError } from "./outbox";
@@ -14,7 +15,14 @@ import { isRejected } from "./verify";
 
 export const maxAttempts = 10;
 
-export type WebhookResult = { status: number; body: string; eventStatus?: string; drain: boolean };
+export type WebhookResult = {
+  status: number;
+  body: string;
+  eventStatus?: string;
+  drain: boolean;
+  /** Captured after the response so PostHog cannot delay Polar. */
+  analytics?: AnalyticsEvent[];
+};
 
 const text = (status: number, body: string, extra: Partial<WebhookResult> = {}): WebhookResult => ({
   status,
@@ -111,13 +119,21 @@ export async function processEvent(
         );
       checkDeadline(deadline);
       await fault(ctx, "before-commit");
-      return finish(
-        "processed",
-        outcome.notes.length ? outcome.notes.join("; ").slice(0, 500) : null,
-      );
+      return {
+        ...(await finish(
+          "processed",
+          outcome.notes.length ? outcome.notes.join("; ").slice(0, 500) : null,
+        )),
+        events: outcome.events,
+      };
     });
     if (mode === "delivery") await fault(ctx, "after-commit");
-    return text(200, "ok", { eventStatus: result.done, drain: result.done === "processed" });
+    const analytics = result.done === "processed" && "events" in result ? result.events : undefined;
+    return text(200, "ok", {
+      eventStatus: result.done,
+      drain: result.done === "processed",
+      analytics,
+    });
   } catch (e) {
     const reason =
       e instanceof BudgetExceeded

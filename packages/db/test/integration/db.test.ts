@@ -662,6 +662,6 @@ describe("migrations and the guard", () => {
   });
 
   test("the guard refuses a database it does not own", () => {
-    expect(() => assertOwnedDatabase(tdb.ownerUrl)).toThrow(/guard/);
+    expect(() => assertOwnedDatabase(tdb.ownerUrl)).toThrow(/guard|services\.env/);
   });
 });

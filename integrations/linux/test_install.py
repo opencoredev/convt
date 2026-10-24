@@ -117,8 +117,8 @@ class DesktopEntries(Fixture):
         menus = install.dolphin_menus(GROUPS)
         text = menus["convt-0.desktop"]
         self.assertIn("MimeType=image/png;", text)
-        self.assertIn("Actions=convert_jpeg;convert_webp;options;", text)
-        exec_line = re.search(r"\[Desktop Action convert_webp\]\n.*?\n.*?\n(Exec=.*)\n", text).group(1)
+        self.assertIn("Actions=convert_00_jpeg;convert_01_webp;options;", text)
+        exec_line = re.search(r"\[Desktop Action convert_01_webp\]\n.*?\n.*?\n(Exec=.*)\n", text).group(1)
         self.launch(exec_line, map(str, self.files))
         self.assertEqual(self.received(), self.expected("webp"))
 
@@ -195,6 +195,27 @@ class DesktopEntries(Fixture):
         result = subprocess.run(["desktop-file-validate", str(entry)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_app_entry_does_not_need_a_terminal(self):
+        self.assertIn("\nTerminal=false\n", install.app_entry())
+
+    @unittest.skipUnless(shutil.which("desktop-file-validate"), "needs desktop-file-validate")
+    def test_packaged_desktop_is_valid_without_a_terminal(self):
+        desktop = HERE.parent.parent / "packaging/linux/convt.desktop"
+        text = desktop.read_text()
+        self.assertIn("\nTerminal=false\n", text)
+        result = subprocess.run(["desktop-file-validate", str(desktop)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class Dolphin(Fixture):
+    def test_actions_follow_menu_order(self):
+        # KIO sorts a submenu's actions by ID, so the IDs carry the order.
+        groups = [([{"mime": "audio/x-wav", "extensions": ["wav"]}], ("opus", "flac", "mp3"))]
+        text = install.dolphin_menus(groups)["convt-0.desktop"]
+        actions = re.search(r"Actions=(.*);", text).group(1).split(";")
+        self.assertEqual(actions, ["convert_00_opus", "convert_01_flac", "convert_02_mp3", "options"])
+        self.assertEqual(actions, sorted(actions))
+
 
 class Thunar(Fixture):
     def test_commands_survive_thunar_and_sh(self):
@@ -223,6 +244,11 @@ class Thunar(Fixture):
                        env={**os.environ, "CONVT_TEST_OUT": str(self.out)}, timeout=20)
         self.assertEqual(self.received(), self.expected())
 
+    def test_actions_follow_menu_order(self):
+        groups = [([{"mime": "audio/wav", "extensions": ["wav"]}], ("opus", "flac", "mp3"))]
+        ids = [re.search(r"<unique-id>(.*?)</unique-id>", a).group(1) for a in install.thunar_actions(groups)]
+        self.assertEqual(ids, ["convt-opus", "convt-flac", "convt-mp3", "convt-more-options"])
+
     def test_reinstall_replaces_old_actions_and_keeps_others(self):
         with mock.patch.object(install, "HOME", self.tmp):
             uca = self.tmp / ".config/Thunar/uca.xml"
@@ -242,7 +268,7 @@ class Thunar(Fixture):
 class Nemo(Fixture):
     def test_commands_survive_nemo(self):
         actions = install.nemo_actions(GROUPS)
-        text = actions["convt-webp.nemo_action"]
+        text = actions["convt-02-webp.nemo_action"]
         self.assertIn("Extensions=png;", text)
         keys = GLib.KeyFile()
         keys.load_from_data(text, len(text.encode()), GLib.KeyFileFlags.NONE)
@@ -253,6 +279,12 @@ class Nemo(Fixture):
         ok, argv = GLib.shell_parse_argv(exec_.replace("%F", escaped))
         self.assertTrue(ok)
         self.assertEqual(argv, [str(self.app), *self.expected("webp")])
+
+    def test_nemo_lists_targets_in_menu_order(self):
+        groups = [([{"mime": "audio/wav", "extensions": ["wav"]}], ("opus", "flac", "mp3"))]
+        names = sorted(install.nemo_actions(groups), key=str.encode)
+        self.assertEqual(names, ["convt-00-opus.nemo_action", "convt-01-flac.nemo_action",
+                                 "convt-02-mp3.nemo_action", "convt-zz-more-options.nemo_action"])
 
     def test_nemo_lists_more_options_last(self):
         # Nemo orders actions by file name, comparing bytes.
@@ -449,6 +481,11 @@ class Ownership(Fixture):
             for name, text in files.items():
                 if legacy and kind == 'nautilus':
                     text = (HERE / 'fixtures/legacy-nautilus.txt').read_text()
+                if legacy:
+                    # Before menus followed the picked order, IDs and names
+                    # carried no place.
+                    text = re.sub(r'convert_\d{2}_', 'convert_', text)
+                    name = re.sub(r'^convt-\d{2}-', 'convt-', name)
                 path = directory / name
                 path.write_text(text.removeprefix(install.MARKER) if legacy else text)
                 paths.append(path)
@@ -502,7 +539,7 @@ class Ownership(Fixture):
     def test_install_does_not_overwrite_unrelated_colliding_file(self):
         directory = self.data / 'nemo/actions'
         directory.mkdir(parents=True)
-        path = directory / 'convt-webp.nemo_action'
+        path = directory / 'convt-02-webp.nemo_action'
         path.write_text('my custom menu')
         with contextlib.redirect_stdout(io.StringIO()):
             install.install_nemo(GROUPS)

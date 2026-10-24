@@ -108,7 +108,8 @@ type_code() {
 
 sign_out_all_cookies() { ab cookies clear >/dev/null; }
 
-# Signs in through the sign-in form and the code from Mailpit; ends on the dashboard.
+# Signs in through the sign-in form and the code from Mailpit; ends on the dashboard,
+# or on /download for an account created by this sign-in.
 sign_in_code() {
   local email=$1
   reset_limits
@@ -118,7 +119,12 @@ sign_in_code() {
   ab click 'button[type=submit]' >/dev/null
   wait_url /sign-in/check-email
   type_code "$(mail_code "$email")"
-  wait_url /dashboard
+  for _ in $(seq 60); do
+    case $(url_now) in *"/dashboard"* | *"/download"*) hydrated && return 0 ;; esac
+    sleep 0.25
+  done
+  echo "still at $(url_now), wanted /dashboard or /download" >&2
+  return 1
 }
 
 shot() { ab screenshot --full "$E2E_SHOTS/$1.png" >/dev/null; }

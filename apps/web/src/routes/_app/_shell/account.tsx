@@ -27,6 +27,7 @@ import {
 import { signInCodeLength } from "#/lib/config";
 import type { SignInMethod } from "#/lib/types";
 import { endOtherSessions, endSession, saveName } from "#/server/account-fns";
+import { saveMarketingPreference } from "#/server/marketing-fns";
 import { deleteAccount } from "#/server/billing-fns";
 
 export const Route = createFileRoute("/_app/_shell/account")({
@@ -86,7 +87,7 @@ function CardHeader({
 function SettingsPage() {
   const settings = Route.useLoaderData();
   const { error: linkError } = Route.useSearch();
-  // Apple sign-in is not available yet; it says so.
+  // Apple is hidden until it is configured (CNV-20); its branch below waits for that.
   const placeholder = usePlaceholderAction();
   const notice = useNotice();
   const router = useRouter();
@@ -166,6 +167,8 @@ function SettingsPage() {
         </section>
       </Card>
 
+      <MarketingEmail subscribed={settings.marketing?.subscribed ?? null} />
+
       <section aria-labelledby="methods-title" className={table.wrap}>
         <CardHeader
           id="methods-title"
@@ -241,7 +244,7 @@ function SettingsPage() {
         <CardHeader
           id="sessions-title"
           title="Where you're signed in"
-          body="Browsers and Macs using this account. Signing out a Mac frees its license seat."
+          body="Browsers and computers using this account. Signing out a computer frees its license seat."
         >
           <SecondaryButton
             onClick={async () => {
@@ -335,6 +338,66 @@ function SettingsPage() {
   );
 }
 
+/** Campaign email. Account and license email is not affected and has no switch. */
+function MarketingEmail({ subscribed }: { subscribed: boolean | null }) {
+  const notice = useNotice();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function choose(next: boolean) {
+    setBusy(true);
+    try {
+      await saveMarketingPreference({ data: { subscribed: next } });
+      notice(next ? "Subscribed to product news." : "Unsubscribed from product news.");
+      await router.invalidate();
+    } catch {
+      notice("Unable to save your email preference. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <section aria-labelledby="email-title">
+        <CardHeader
+          id="email-title"
+          title="Email"
+          body="Sign-in codes, license keys and billing notices always arrive."
+        />
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
+          <div className="flex flex-col gap-1">
+            <p className="text-[13px]/4 font-medium">Product news and tips</p>
+            <p className="text-[13px]/[18px] text-ink-2">
+              {subscribed === null
+                ? "Unable to load this setting right now."
+                : subscribed
+                  ? "Occasional emails about new features, releases and offers."
+                  : "You don't get product news or tips."}
+            </p>
+          </div>
+          {subscribed === null ? null : (
+            <div className="flex items-center gap-4">
+              <span className={cx("text-[13px]/4", subscribed ? "text-green" : "text-ink-3")}>
+                {subscribed ? "Subscribed" : "Unsubscribed"}
+              </span>
+              {/* aria-disabled, not disabled: a disabled button drops keyboard focus. */}
+              <SecondaryButton
+                aria-disabled={busy}
+                onClick={() => {
+                  if (!busy) void choose(!subscribed);
+                }}
+              >
+                {subscribed ? "Unsubscribe" : "Subscribe"}
+              </SecondaryButton>
+            </div>
+          )}
+        </div>
+      </section>
+    </Card>
+  );
+}
+
 /**
  * Deletion ends Pro and API billing first (an immediate end, no refund), then
  * removes the account. It needs a sign-in within the last hour and the email typed.
@@ -385,9 +448,9 @@ function DeleteAccount({
           Deleting your account
         </h2>
         <p className="text-[13px]/5 text-ink-2">
-          We're ending your subscriptions, then removing the account. Every other browser and Mac is
-          already signed out. If this takes more than a few minutes, it continues in the background
-          and finishes on its own.
+          We're ending your subscriptions, then removing the account. Every other browser and
+          computer is already signed out. If this takes more than a few minutes, it continues in the
+          background and finishes on its own.
         </p>
       </section>
     );
@@ -404,8 +467,8 @@ function DeleteAccount({
             Delete account
           </h2>
           <p className="text-[13px]/4 text-ink-2">
-            Cancels Pro, revokes API keys and signs out every Mac. Receipts stay with our payment
-            provider.
+            Cancels Pro, revokes API keys and signs out every computer. Receipts stay with our
+            payment provider.
           </p>
         </div>
         {open ? null : (
@@ -504,7 +567,6 @@ function EmailRow({
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [attempt, setAttempt] = useState(0);
 
   function fail(result: Exclude<AuthResult, { ok: true }>) {
     if (result.code === "SESSION_NOT_FRESH") {
@@ -575,21 +637,22 @@ function EmailRow({
             Code sent to {newEmail}
           </p>
           <CodeInput
-            key={attempt}
             length={signInCodeLength}
             labelId={codeLabelId}
-            onComplete={async (code) => {
+            autoFocus
+            verify={async (code) => {
               setError(null);
               const result = await changeEmail(newEmail, code);
-              if (result.ok) {
-                setStep("view");
-                notice("Email changed. Other sessions were signed out.");
-                await router.invalidate();
-              } else {
+              if (!result.ok) {
                 fail(result);
-                setAttempt((n) => n + 1);
+                return false;
               }
+              // Refresh now, so leaving during the success ring can't keep the old address.
+              notice("Email changed. Other sessions were signed out.");
+              void router.invalidate();
+              return true;
             }}
+            onAccepted={() => setStep("view")}
           />
         </div>
       ) : null}

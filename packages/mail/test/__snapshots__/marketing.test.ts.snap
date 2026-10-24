@@ -1,0 +1,174 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`marketing templates snapshots 1`] = `
+{
+  "name": "welcome-free",
+  "subject": "welcome to convt",
+  "text": 
+"hey {{firstName|there}},
+
+i'm leo, i'm making convt. thanks for giving it a try.
+
+you've got 7 days free. download it, right-click any file, pick a format. that's it, and it all stays on your computer.
+
+download convt: https://convt.app/download
+
+if something breaks, feels off, or you wish it did something it doesn't, hit reply and tell me.
+
+leo
+
+--
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+{{company.address}}
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 2`] = `
+{
+  "name": "welcome-paid",
+  "subject": "thanks for buying convt",
+  "text": 
+"hey {{firstName|there}},
+
+i'm leo, i'm making convt. thank you for buying it. that genuinely means a lot.
+
+if you haven't grabbed it yet, here it is. right-click any file, pick a format, done.
+
+download convt: https://convt.app/download
+
+got an idea, found a bug, or stuck on something? just reply. it goes straight to me, not a support queue.
+
+leo
+
+--
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+{{company.address}}
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 3`] = `
+{
+  "name": "lifetime",
+  "subject": "your convt license is now lifetime",
+  "text": 
+"hey {{firstName|there}},
+
+when i launched convt desktop, i made it a yearly license. that was the wrong call on my part, and i'm sorry. you paid for an app, not a subscription.
+
+so i've fixed it. desktop licenses are now lifetime, including yours. same key, no renewal, nothing to do.
+
+thank you for backing convt this early. it means more than you'd think.
+
+and if there's something you want convt to do next, or something that's bugging you, i'd love to hear it. just reply.
+
+leo
+
+--
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+{{company.address}}
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 4`] = `
+{
+  "name": "lifetime-free",
+  "subject": "convt desktop is lifetime now",
+  "text": 
+"hey {{firstName|there}},
+
+when i launched convt desktop, i made it a yearly license. that was a mistake on my part. you should be able to buy an app once and keep it, not rent it.
+
+so i've changed it. desktop is a lifetime license now: pay once, keep it, and get every future update.
+
+and since the yearly thing was my fault, i'd like to make it up to you. if you want convt desktop, reply to this email and i'll send you a code for 30% off.
+
+see convt desktop: https://convt.app/#pricing
+
+and if something else is holding you back, tell me that too.
+
+leo
+
+--
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+{{company.address}}
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 5`] = `
+{
+  "name": "pro-trial",
+  "subject": "Getting started with convt Pro",
+  "text": 
+"Your Pro trial has started.
+
+For the next 7 days the convt app is yours to use. Here's how to start.
+
+1. Sign in on your computer
+   Open Settings in the convt app and choose Sign in with convt.app. Pro turns on for that computer.
+2. Right-click any file
+   Choose Convert with convt and pick a format. Everything runs on your computer.
+
+Cloud conversions start when Pro is paid
+Once your trial becomes a paid plan, you can convert from your phone or browser and send heavy video to the cloud.
+
+Open your dashboard: https://convt.app/dashboard
+
+We'll email you before the trial ends. You can cancel any time from Billing, and nothing is charged until then.
+
+Manage your plan: https://convt.app/dashboard/billing
+
+--
+You're getting this because you have a convt account. Account and license emails, like sign-in codes and keys, still arrive if you unsubscribe.
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+convt · 1 Example Street, Test City
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 6`] = `
+{
+  "name": "product-update",
+  "subject": "what's new in convt",
+  "text": 
+"hey {{firstName|there}},
+
+a quick roundup of what changed since the last update.
+
+desktop is a lifetime license now
+buy it once and get every future desktop update. existing desktop keys count as lifetime too.
+
+save web images as png, jpg or webp
+the convt extension for chrome and edge adds convert with convt to the image right-click menu. it converts in your browser.
+
+get the latest version: https://convt.app/download
+
+full changelog: https://convt.app/changelog
+
+what should i build next? reply and let me know.
+
+leo
+
+--
+Email preferences: {{preferencesUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+{{company.address}}
+"
+,
+}
+`;
+
+exports[`marketing templates snapshots 7`] = `"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>welcome to convt</title><style>:root{color-scheme:light dark;supported-color-schemes:light dark}@media (max-width:620px){.wrap{width:100%!important;max-width:100%!important}.pad{padding-left:24px!important;padding-right:24px!important}}@media (prefers-color-scheme: dark){.bg{background:#0a0b0b!important}.ink{color:#edefee!important}.ink2{color:#a1a6a3!important}.ink3{color:#868b88!important}.brand,.link{color:#3fcb84!important}.rule{border-color:#232726!important}.lt{display:none!important}.dk{display:block!important;max-height:none!important}}[data-ogsc] .ink{color:#edefee!important}[data-ogsc] .ink2{color:#a1a6a3!important}[data-ogsc] .brand,[data-ogsc] .link{color:#3fcb84!important}</style></head><body class="bg" style="margin:0;padding:0;background:#ffffff"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg" bgcolor="#ffffff"><tr><td align="center"><table class="wrap" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px"><tr><td class="pad" style="padding:48px 48px 0 48px"><img class="lt" src="https://convt.app/brand/convt-lockup-on-light.png" width="89" height="22" alt="convt" style="display:block;width:89px;height:22px;border:0"><!--[if !mso]><!--><img class="dk" src="https://convt.app/brand/convt-lockup-on-dark.png" width="89" height="22" alt="convt" style="display:none;width:89px;height:22px;border:0;max-height:0;overflow:hidden;mso-hide:all"><!--<![endif]--></td></tr><tr><td class="ink pad" style="padding:36px 48px 0 48px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:26px;color:#0a0a0a"><p style="margin:0 0 16px 0">hey {{firstName|there}},</p><p style="margin:0 0 16px 0">i&#39;m leo, i&#39;m making convt. thanks for giving it a try.</p><p style="margin:0 0 16px 0">you&#39;ve got 7 days free. download it, right-click any file, pick a format. that&#39;s it, and it all stays on your computer.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px 0"><tr><td bgcolor="#127a47" style="background:#127a47;border-radius:8px"><a href="https://convt.app/download" style="display:inline-block;padding:11px 20px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">download convt</a></td></tr></table><p style="margin:0 0 16px 0">if something breaks, feels off, or you wish it did something it doesn&#39;t, hit reply and tell me.</p><p class="ink" style="margin:12px 0 0 0">leo</p></td></tr><tr><td class="pad" style="padding:40px 48px 0 48px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="rule" style="border-top:1px solid #e6e8e7;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr><tr><td class="ink3 pad" style="padding:14px 48px 40px 48px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#6c716e">{{company.address}} &middot; <a class="ink3" href="{{unsubscribeUrl}}" style="color:#6c716e;text-decoration:underline">unsubscribe</a> &middot; <a class="ink3" href="{{preferencesUrl}}" style="color:#6c716e;text-decoration:underline">preferences</a></td></tr></table></td></tr></table></body></html>"`;

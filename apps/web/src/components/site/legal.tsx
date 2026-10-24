@@ -8,7 +8,7 @@ import { siteColumn } from "./layout";
 export type LegalSection = { id: string; title: string; body: ReactNode };
 
 /**
- * Template for the privacy policy and terms: a draft notice, the title, a contents
+ * Template for the privacy policy and terms: the title, the effective date, a contents
  * list (sticky beside the text on wide screens) and numbered sections.
  */
 export function LegalPage({
@@ -22,15 +22,12 @@ export function LegalPage({
 }) {
   return (
     <div className={cx(siteColumn, "flex flex-col gap-10 pt-12 pb-20 md:pt-16")}>
-      <DraftNotice />
       <div className="flex max-w-[680px] flex-col gap-3">
         <p className="font-mono text-xs/4 text-ink-2 uppercase">Legal</p>
         <h1 className="text-[34px]/10 font-semibold tracking-[-0.03em] md:text-[44px]/12">
           {title}
         </h1>
-        <p className="text-sm/5 text-ink-2">
-          Effective <Placeholder>{legal.effectiveDate}</Placeholder>
-        </p>
+        <p className="text-sm/5 text-ink-2">Effective {legal.effectiveDate}</p>
         <div className="pt-2 text-[17px]/[26px] text-ink-2">{summary}</div>
       </div>
       <div className="grid gap-10 lg:grid-cols-[220px_1fr] lg:gap-16">
@@ -71,30 +68,6 @@ export function LegalPage({
         </div>
       </div>
     </div>
-  );
-}
-
-function DraftNotice() {
-  return (
-    <div
-      role="note"
-      className="flex flex-col gap-1 rounded-xl bg-[#fff8e6] px-4 py-3 text-sm/5 text-[#5c4300] shadow-[inset_0_0_0_1px_#f0dca6] dark:bg-[#2a2210] dark:text-[#f0d48a] dark:shadow-[inset_0_0_0_1px_#4a3c17]"
-    >
-      <p className="font-semibold">Draft, pending legal review</p>
-      <p>
-        This text has not been reviewed by a lawyer yet and may change before convt launches.
-        Highlighted parts are placeholders.
-      </p>
-    </div>
-  );
-}
-
-/** A value Leo still has to fill in, highlighted until then. */
-export function Placeholder({ children }: { children: ReactNode }) {
-  return (
-    <mark className="rounded-[4px] bg-[#fff1c2] px-1 text-[#5c4300] dark:bg-[#3a2f12] dark:text-[#f0d48a]">
-      {children}
-    </mark>
   );
 }
 

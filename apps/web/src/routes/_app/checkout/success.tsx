@@ -1,32 +1,43 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthLayout } from "#/components/app/auth-layout";
 import { useNotice } from "#/components/app/notice";
 import { PrimaryButton, SecondaryLink, TextButton, cx, focusRing } from "#/components/app/ui";
 import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
+import {
+  checkoutAside,
+  checkoutOrigin,
+  downloadAction,
+  type CheckoutOrigin,
+} from "#/lib/checkout-copy";
+import { pollCheckout } from "#/lib/checkout-poll";
+import type { Os } from "#/lib/platform";
 import { fetchCheckoutResult } from "#/server/billing-fns";
-import { checkoutGiveUp, type CheckoutView } from "#/server/views";
+import type { CheckoutView } from "#/server/views";
+import { visitorOs } from "#/server/visitor-os";
 
 // Where the provider sends the buyer back. The page renders with no order data;
 // the key arrives only in the client-side server function call (private, no-store)
 // and only for the browser holding the checkout's cookie or the owning account.
 // No Paper artboard exists for these states; they use the sign-in layout.
 export const Route = createFileRoute("/_app/checkout/success")({
-  validateSearch: (search: Record<string, unknown>): { checkout_id?: string; error?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { checkout_id?: string; error?: string; from?: "app" } => ({
     ...(typeof search.checkout_id === "string" ? { checkout_id: search.checkout_id } : {}),
     ...(typeof search.error === "string" ? { error: search.error } : {}),
+    // Set when the desktop app opened the checkout (convt-billing adds it to the return URL).
+    ...(checkoutOrigin(search.from) === "app" ? { from: "app" as const } : {}),
   }),
+  // The visitor's OS names the download step; nothing about the order loads here.
+  loader: async () => ({ os: await visitorOs() }),
   head: () => ({
     meta: [{ title: "Checkout · convt" }, { name: "referrer", content: "no-referrer" }],
   }),
   component: SuccessPage,
 });
-
-const pollMs = 2000;
-const giveUpMs = 60_000;
-const callTimeoutMs = 12_000;
 
 type State =
   | CheckoutView
@@ -43,26 +54,10 @@ const errors: Record<string, string> = {
   already_enrolled: "This account already has API billing.",
 };
 
-const keyAside = {
-  title: "WHAT'S NEXT",
-  items: [
-    "Download convt for your Mac",
-    "Open the key in the app, or paste it in Settings",
-    "Find it again under Licenses",
-  ],
-};
-
-const trialAside = {
-  title: "WHAT'S NEXT",
-  items: [
-    "Download convt for your Mac",
-    "Open the app and start converting",
-    "Cancel any time from Billing before the first charge",
-  ],
-};
-
 function SuccessPage() {
-  const { checkout_id: checkoutId, error } = Route.useSearch();
+  const { checkout_id: checkoutId, error, from } = Route.useSearch();
+  const origin = checkoutOrigin(from);
+  const { os } = Route.useLoaderData();
   const [state, setState] = useState<State>(
     error
       ? { state: "error", reason: error }
@@ -70,66 +65,20 @@ function SuccessPage() {
         ? { state: "loading" }
         : { state: "not_found", product: null, allowTrial: false },
   );
-  // After the first pending answer, later calls ask convt-billing to sync this
-  // checkout from the provider. Keep asking while Polar is still attaching the
-  // subscription; a single early GET used to give up and show "key by email".
-  const syncNext = useRef(false);
-  const syncedOnce = useRef(false);
-  const lastKnown = useRef<{ product: CheckoutView["product"]; allowTrial: boolean }>({
-    product: null,
-    allowTrial: false,
-  });
-
   useEffect(() => {
     if (!checkoutId || error) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const started = Date.now();
-    const poll = async () => {
-      try {
-        const sync = syncNext.current;
-        if (sync) syncedOnce.current = true;
-        // A call that never answers (a dropped connection) must not stall the page.
-        const r = await Promise.race([
-          fetchCheckoutResult({ data: { checkoutId, sync } }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), callTimeoutMs),
-          ),
-        ]);
-        if (stopped) return;
-        if (r.state !== "ready")
-          lastKnown.current = { product: r.product, allowTrial: r.allowTrial };
-        if (r.state === "pending") {
-          syncNext.current = true;
-          if (Date.now() - started > giveUpMs) {
-            setState(checkoutGiveUp(r.product, r.allowTrial));
-            return;
-          }
-          setState(r);
-          timer = setTimeout(poll, syncedOnce.current ? pollMs : 0);
-          return;
-        }
-        setState(r);
-      } catch {
-        if (stopped) return;
-        if (Date.now() - started > giveUpMs) {
-          setState(checkoutGiveUp(lastKnown.current.product, lastKnown.current.allowTrial));
-          return;
-        }
-        timer = setTimeout(poll, pollMs);
-      }
-    };
-    void poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
+    return pollCheckout({
+      fetch: ({ sync, signal }) => fetchCheckoutResult({ data: { checkoutId, sync }, signal }),
+      onState: setState,
+    });
   }, [checkoutId, error]);
 
   return (
-    <AuthLayout aside={state.state === "trial" ? trialAside : keyAside}>
+    <AuthLayout
+      aside={checkoutAside({ kind: state.state === "trial" ? "trial" : "key", os, origin })}
+    >
       <div aria-live="polite" className="flex flex-col gap-6">
-        <Body state={state} />
+        <Body state={state} os={os} origin={origin} />
       </div>
     </AuthLayout>
   );
@@ -146,25 +95,38 @@ function Heading({ children, eyebrow }: { children: React.ReactNode; eyebrow?: s
 
 const lead = "text-sm/5 text-ink-2";
 
-function Body({ state }: { state: State }) {
+function Body({ state, os, origin }: { state: State; os: Os | null; origin: CheckoutOrigin }) {
   switch (state.state) {
     case "loading":
-    case "pending":
+    case "pending": {
+      // A trial charges nothing today, so don't call it a payment once we know.
+      const trial = state.state === "pending" && state.allowTrial;
       return (
         <>
-          <Heading eyebrow="CHECKOUT">Confirming your payment</Heading>
+          <Heading eyebrow="CHECKOUT">
+            {trial ? "Starting your trial" : "Confirming your payment"}
+          </Heading>
           <p className={lead}>This usually takes a few seconds. Keep this page open.</p>
           <Progress />
         </>
       );
+    }
     case "ready":
-      return <Ready state={state} />;
+      return <Ready state={state} os={os} origin={origin} />;
     case "trial":
-      return (
+      return origin === "app" ? (
+        <>
+          <Heading eyebrow="CONVT PRO">Your trial is on</Heading>
+          <p className={lead}>
+            Go back to convt. It shows your trial within a few seconds, and you can close this tab.
+          </p>
+          <Actions secondary={{ href: "/dashboard/billing", label: "Manage billing" }} />
+        </>
+      ) : (
         <>
           <Heading eyebrow="CONVT PRO">Your trial has started</Heading>
-          <p className={lead}>You can go download the app here.</p>
-          <Actions primary={{ href: links.download, label: "Download convt" }} />
+          <p className={lead}>Download convt and sign in with this account to use Pro.</p>
+          <Actions primary={downloadAction(os)} />
         </>
       );
     case "api_enrolled":
@@ -234,7 +196,15 @@ function Body({ state }: { state: State }) {
   }
 }
 
-function Ready({ state }: { state: Extract<CheckoutView, { state: "ready" }> }) {
+function Ready({
+  state,
+  os,
+  origin,
+}: {
+  state: Extract<CheckoutView, { state: "ready" }>;
+  os: Os | null;
+  origin: CheckoutOrigin;
+}) {
   const notice = useNotice();
   const product = state.product === "pro" ? "convt Pro" : "convt Desktop";
   return (
@@ -266,12 +236,16 @@ function Ready({ state }: { state: Extract<CheckoutView, { state: "ready" }> }) 
         </div>
       </div>
       <ul className="flex flex-col gap-1.5 text-[13px]/5 text-ink-2">
-        <li>Covers every build released up to {state.updatesUntil}.</li>
+        <li>
+          {state.product === "desktop"
+            ? "Includes lifetime desktop updates."
+            : `Covers every build released up to ${state.updatesUntil}.`}
+        </li>
         <li>We also emailed it to {state.maskedEmail}.</li>
         <li>Open in convt asks the app to confirm before it adds the key.</li>
       </ul>
       <Actions
-        primary={{ href: links.download, label: "Download convt" }}
+        primary={origin === "app" ? undefined : downloadAction(os)}
         secondary={{ href: "/dashboard/licenses", label: "Go to Licenses" }}
       />
     </>
@@ -282,14 +256,16 @@ function Actions({
   primary,
   secondary,
 }: {
-  primary: { href: string; label: string };
+  primary?: { href: string; label: string };
   secondary?: { href: string; label: string };
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <SecondaryLink href={primary.href} className="px-3.5 py-2">
-        {primary.label}
-      </SecondaryLink>
+      {primary ? (
+        <SecondaryLink href={primary.href} className="px-3.5 py-2">
+          {primary.label}
+        </SecondaryLink>
+      ) : null}
       {secondary ? (
         <a
           href={secondary.href}

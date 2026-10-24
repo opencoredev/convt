@@ -682,9 +682,11 @@ export function createPolarProvider(options: PolarOptions): BillingProvider {
         wrap("subscriptions.revoke", e);
       }
     },
-    async portalUrl(userId, returnUrl) {
+    async portalUrl(userId, returnUrl, customerId) {
       const session = await call("customerSessions.create", () =>
-        polar.customerSessions.create({ external_customer_id: userId, return_url: returnUrl }),
+        customerId
+          ? polar.customerSessions.create({ customer_id: customerId, return_url: returnUrl })
+          : polar.customerSessions.create({ external_customer_id: userId, return_url: returnUrl }),
       );
       const url = new URL(session.customer_portal_url);
       if (url.origin !== new URL(options.portalOrigin).origin)

@@ -60,7 +60,9 @@ export CONVT_BUILD_WORK=${CONVT_RELEASE_BUILD_WORK:-$work/build}
 flags=()
 (( ! verification )) || flags+=(--verification-only)
 python3 scripts/release/source.py archive "$source_tree" "$out" "$version" "$SOURCE_DATE_EPOCH" "${flags[@]}"
-timeout --foreground 900 bash scripts/release/rebuild-cli.sh "$out/convt-$version-source.tar.gz"
+timeout --foreground 900 bash scripts/release/rebuild-cli.sh \
+  "$out/convt-$version-source.tar.gz" \
+  "$out/convt-$version-source-closure.tar.gz"
 bun scripts/release/manifest.ts generate "$out" "$version" "$build_date" "${CONVT_RELEASE_BASE_URL:-https://downloads.convt.app}" ${CONVT_RELEASE_HISTORY:+"$CONVT_RELEASE_HISTORY"}
 bun scripts/release/manifest.ts sign "$out/release-manifest.json" "$key" "$out/update-manifest.json"
 bun scripts/release/manifest.ts verify "$out/release-manifest.json" "$out/update-manifest.json"

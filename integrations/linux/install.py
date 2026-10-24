@@ -5,7 +5,8 @@ The menus open the convt app (`convt-app open --to <format> <files>`), which
 shows progress, lets the user cancel and reports errors. Dolphin, Nemo and
 Thunar use static menu files, so this script generates them from
 `convt formats --json` and `convt targets`, then writes them to the user's
-config. Rerun it after updating convt. Nautilus uses the dynamic extension in
+config. Rerun it after updating convt or changing the menu (Settings → Menu in
+the app, or `convt menu`). Nautilus uses the dynamic extension in
 nautilus/ instead.
 
 It also installs convt-app.desktop, which handles convt:// links and lists
@@ -98,20 +99,27 @@ def groups():
 
 
 def extensions_by_target(groups):
+    """Each target with the extensions that offer it, in menu order: by the
+    earliest place any kind of file lists it (Settings → Menu or `convt menu`
+    picks that order), then by name."""
     out = defaultdict(set)
+    place = {}
     for sources, targets in groups:
-        for t in targets:
+        for i, t in enumerate(targets):
             out[t].update(e for s in sources for e in s["extensions"])
-    return out
+            place[t] = min(place.get(t, i), i)
+    return sorted(out.items(), key=lambda item: (place[item[0]], item[0]))
 
 
 def dolphin_menus(groups):
     """Service menu files by name. KIO sorts a submenu's actions by their
-    IDs, not their labels, so "options" sorts after every "convert_" ID."""
+    IDs, not their labels, so each ID starts with the target's place in the
+    menu, and "options" sorts after every "convert_" ID."""
     menus = {}
     for i, (sources, targets) in enumerate(groups):
         mimes = ";".join(sorted({s["mime"] for s in sources})) + ";"
-        actions = ";".join([*(f"convert_{t}" for t in targets), "options"]) + ";"
+        ids = [f"convert_{i:02}_{t}" for i, t in enumerate(targets)]
+        actions = ";".join([*ids, "options"]) + ";"
         lines = [
             "[Desktop Entry]",
             "Type=Service",
@@ -121,9 +129,9 @@ def dolphin_menus(groups):
             "X-KDE-Priority=TopLevel",
             "",
         ]
-        for t in targets:
+        for id_, t in zip(ids, targets):
             exec_ = desktop_exec(*menu_command(t)) + " %F"
-            lines += [f"[Desktop Action convert_{t}]", f"Name={t.upper()}", "Icon=convt", f"Exec={exec_}", ""]
+            lines += [f"[Desktop Action {id_}]", f"Name={t.upper()}", "Icon=convt", f"Exec={exec_}", ""]
         lines += ["[Desktop Action options]", "Name=More options…", "Icon=convt",
                   f"Exec={desktop_exec(*menu_command())} %F", ""]
         menus[f"convt-{i}.desktop"] = MARKER + "\n".join(lines)
@@ -148,11 +156,12 @@ def nemo_actions(groups):
     """Nemo action files by name. Nemo shell-quotes each path it puts in %F
     and splits Exec like a shell, after reading it as a key file string.
     Nemo 6.0 has no action submenus and lists actions in file name order,
-    so "More options…" gets a name that sorts after every target."""
+    so each name starts with the target's place in the menu, and "More
+    options…" gets a name that sorts after every target."""
     actions = {}
-    for t, exts in sorted(extensions_by_target(groups).items()):
+    for i, (t, exts) in enumerate(extensions_by_target(groups)):
         exec_ = (shlex.join(menu_command(t)) + " %F").replace("\\", "\\\\")
-        actions[f"convt-{t}.nemo_action"] = MARKER + "\n".join([
+        actions[f"convt-{i:02}-{t}.nemo_action"] = MARKER + "\n".join([
             "[Nemo Action]",
             f"Name=Convert to {t.upper()}",
             "Comment=Convert with convt",
@@ -186,9 +195,10 @@ def install_nemo(groups):
 
 def thunar_actions(groups):
     """The <action> elements for uca.xml. Thunar shell-quotes each path it
-    puts in %F, turns %% into %, and splits the command like a shell."""
+    puts in %F, turns %% into %, and splits the command like a shell.
+    Thunar lists them in the order uca.xml has them."""
     out = []
-    for t, exts in sorted(extensions_by_target(groups).items()):
+    for t, exts in extensions_by_target(groups):
         command = shlex.join(menu_command(t)).replace("%", "%%") + " %F"
         patterns = ";".join("*." + e for e in sorted(exts))
         out.append(
@@ -339,11 +349,15 @@ def legacy_generated(text, kind, name):
                     return False
                 sources = [{"mime": mime} for mime in mimes]
                 expected = dolphin_menus([(sources, tuple(a[8:] for a in actions[:-1]))])["convt-0.desktop"]
+                # Old menus had no place in their action IDs.
+                expected = re.sub(r"convert_\d{2}_", "convert_", expected)
             elif kind == "nemo":
                 exts = re.search(r"^Extensions=(.*);$", text, re.M).group(1).split(";")
                 target = re.fullmatch(r"convt-([a-z0-9]+|zz-more-options)\.nemo_action", name).group(1)
                 targets = () if target == "zz-more-options" else (target,)
-                expected = nemo_actions([([{"extensions": exts}], targets)])[name]
+                # Old actions had no place in their file names.
+                actions = nemo_actions([([{"extensions": exts}], targets)])
+                expected = actions[name if not targets else f"convt-00-{target}.nemo_action"]
             else:
                 return False
         return text == expected.removeprefix(MARKER)

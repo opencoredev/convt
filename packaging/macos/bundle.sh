@@ -281,10 +281,12 @@ for size in 16 32 128 256 512; do
   sips -z $double $double "$icons/convt.png" --out "$icons/convt.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$icons/convt.iconset" -o "$contents/Resources/convt.icns"
-cp "$ext_src/MenuIconTemplate.svg" "$icons/menu.svg"
+# The Finder menu icon is 16 pt. The source is 16 px at 96 DPI, so 192 DPI
+# renders the 32 px @2x image.
+cp "$ext_src/MenuIcon.svg" "$icons/menu.svg"
 render "$icons/menu.svg" 192
-cp "$icons/menu.png" "$appex/Contents/Resources/MenuIconTemplate@2x.png"
-sips -z 16 16 "$icons/menu.png" --out "$appex/Contents/Resources/MenuIconTemplate.png" >/dev/null
+cp "$icons/menu.png" "$appex/Contents/Resources/MenuIcon@2x.png"
+sips -z 16 16 "$icons/menu.png" --out "$appex/Contents/Resources/MenuIcon.png" >/dev/null
 rm -rf "$icons"
 
 # --- Signing (inside out, never --deep) -------------------------------------

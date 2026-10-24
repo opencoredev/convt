@@ -32,12 +32,19 @@ export function ProductHuntBadge({ className }: { className?: string }) {
       rel="noopener noreferrer"
       className={cx("inline-flex rounded-[10px]", focusRing, className)}
     >
-      <img
-        alt="convt - Convert any file with a right-click, without uploading it | Product Hunt"
-        width={250}
-        height={54}
-        src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1272021&theme=dark&t=1791317983505"
-      />
+      {/* The badge follows the visitor's theme, as the page does. */}
+      <picture>
+        <source
+          media="(prefers-color-scheme: dark)"
+          srcSet="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1272021&theme=dark&t=1791317983505"
+        />
+        <img
+          alt="convt - Convert any file with a right-click, without uploading it | Product Hunt"
+          width={250}
+          height={54}
+          src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1272021&theme=light&t=1791317983505"
+        />
+      </picture>
     </a>
   );
 }

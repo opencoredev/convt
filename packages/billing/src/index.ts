@@ -1,3 +1,4 @@
+export * from "./analytics";
 export * from "./catalog";
 export * from "./provider";
 export * from "./verify";
@@ -11,7 +12,9 @@ export * from "./checkout";
 export * from "./actions";
 export * from "./deletion";
 export * from "./reconcile";
+export * from "./backfill";
 export * from "./env";
 export * from "./service";
 export * from "./renewal";
+export * from "./marketing";
 export type * from "./rpc";

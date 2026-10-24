@@ -9,8 +9,8 @@ import {
 } from "react";
 
 // Notices at the bottom of the account pages. `usePlaceholderAction` is for
-// buttons whose backend does not exist yet (billing in P7, API keys in P9, account
-// deletion, Apple sign-in): they say so instead of pretending to succeed.
+// buttons whose backend does not exist yet: they say so instead of pretending to
+// succeed. Apple sign-in is hidden instead until it is configured (CNV-20).
 // `useNotice` confirms real actions, such as a copied key.
 
 type Notify = (action: string) => void;

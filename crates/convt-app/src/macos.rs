@@ -1,11 +1,12 @@
 //! macOS glue: the Finder extension's target list and request inbox, files
-//! opened with convt, the check that the extension is on, and the Services
-//! menu entry.
+//! opened with convt, the check that the extension is on, the Services
+//! menu entry, and hiding from the Dock.
 //!
 //! The Finder Sync extension is sandboxed and runs from its own executable, so
 //! probing tools there would give different targets than the app. Instead the
 //! app writes what each format can become to the App Group container shared
-//! with the extension, at launch and whenever the engines change.
+//! with the extension, at launch and whenever the engines or the right-click
+//! menu choices (Settings, Menu) change.
 //!
 //! A sandboxed process can't pass launch arguments (AppKit drops
 //! `NSWorkspace.OpenConfiguration.arguments` for sandboxed callers), so the
@@ -20,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use convt_core::Registry;
+use convt_core::{MenuChoices, Registry};
 use futures::channel::mpsc::UnboundedSender;
 use gpui_kit::{App, Entity};
 use serde::Deserialize;
@@ -45,19 +46,20 @@ const REQUEST_MAX_BYTES: u64 = 1 << 20;
 /// A Finder request has been taken since launch.
 static TOOK_REQUEST: AtomicBool = AtomicBool::new(false);
 
-/// Publishes the target list now and after every registry rebuild, and
-/// registers the Services menu entry.
+/// Publishes the target list now and after every registry rebuild or menu
+/// change, and registers the Services menu entry.
 pub fn init(state: &Entity<AppState>, requests: UnboundedSender<Request>, cx: &mut App) {
     services::register(requests);
+    let generation = |state: &AppState| (state.registry_generation, state.menu_generation);
+    let mut published = generation(state.read(cx));
     // With the pack's targets while it can be downloaded, so documents keep
     // their menu and a click opens Quick convert with Install & Convert.
-    publish(state.read(cx).menu_registry());
-    let mut generation = state.read(cx).registry_generation;
+    publish(state.read(cx).menu_registry(), &state.read(cx).menu);
     cx.observe(state, move |state, cx| {
         let state = state.read(cx);
-        if state.registry_generation != generation {
-            generation = state.registry_generation;
-            publish(state.menu_registry());
+        if generation(state) != published {
+            published = generation(state);
+            publish(state.menu_registry(), &state.menu);
         }
     })
     .detach();
@@ -108,12 +110,13 @@ pub fn open_urls(links: Vec<String>) -> (Vec<Request>, Vec<String>) {
     (requests, rest)
 }
 
-fn publish(registry: &Registry) {
+fn publish(registry: &Registry, menu: &MenuChoices) {
     let Some(dir) = cocoa::group_container() else {
         tracing::debug!("no App Group container; not publishing Finder targets");
         return;
     };
-    let json = serde_json::to_vec(&crate::finder::target_list(registry)).expect("serializable");
+    let json =
+        serde_json::to_vec(&crate::finder::target_list(registry, menu)).expect("serializable");
     match crate::settings::write_atomic(&dir.join(TARGETS_FILE), &json) {
         Ok(()) => tracing::debug!(dir = %dir.display(), "published Finder targets"),
         Err(e) => tracing::warn!(error = %e, "could not publish Finder targets"),
@@ -204,6 +207,25 @@ fn parse_pluginkit(out: &str) -> Option<bool> {
         None
     } else {
         Some(marks.contains(&'+'))
+    }
+}
+
+/// Shows or hides the Dock icon (and the app's menu bar menus). convt hides
+/// from the Dock while no window is open and the menu bar item keeps it
+/// running, and comes back when a window opens.
+pub fn show_in_dock(show: bool) {
+    use objc::runtime::{BOOL, Object};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    // NSApplicationActivationPolicyRegular and ...Accessory.
+    let policy: i64 = if show { 0 } else { 1 };
+    // SAFETY: called on the main thread, where GPUI runs every App callback.
+    unsafe {
+        let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+        let current: i64 = msg_send![app, activationPolicy];
+        if current != policy {
+            let _: BOOL = msg_send![app, setActivationPolicy: policy];
+        }
     }
 }
 

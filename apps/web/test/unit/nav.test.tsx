@@ -20,7 +20,6 @@ mock.module("@tanstack/react-router", () => ({
 
 import { Nav } from "../../src/components/landing/nav";
 import { headerLinks } from "../../src/components/site/links";
-import { routes } from "../../src/lib/site";
 import type { Account } from "../../src/lib/types";
 
 const leo: Account = {
@@ -48,7 +47,8 @@ test("header links are the launched set, never Coming soon", () => {
 test("signed-out visitors get one green Download, not a second text link", () => {
   const html = renderToStaticMarkup(<Nav account={null} path="/" />);
   expect(downloads(html)).toBe(1);
-  expect(html).toContain(`href="${routes.download}"`);
+  // Straight to sign-in: /download would only redirect there.
+  expect(html).toContain(`href="/sign-in?redirect=%2Fdownload"`);
   expect(html).toContain("Sign in");
 });
 

@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::menu::{MenuChoices, default_menu};
 use crate::publish::publish;
 use crate::{
     Cancel, Category, Ctx, Engine, Error, Format, Options, Progress, Result, Step,
@@ -177,25 +178,35 @@ impl Registry {
     /// targets [`targets`](Self::targets) reaches are listed; a format with
     /// none of its preferred targets gets the first few it can reach.
     pub fn menu_targets(&self, from: &'static Format) -> Vec<&'static Format> {
+        self.menu_targets_with(from, &MenuChoices::default())
+    }
+
+    /// [`menu_targets`](Self::menu_targets), with the lists someone picked
+    /// in `choices`. A picked list that `from` can reach none of (an audio
+    /// list of only MP3, for an MP3) falls back to the default, so the menu
+    /// never comes up empty.
+    pub fn menu_targets_with(
+        &self,
+        from: &'static Format,
+        choices: &MenuChoices,
+    ) -> Vec<&'static Format> {
         const MENU_SIZE: usize = 4;
-        let preferred: &[&str] = match (from.id, from.category) {
-            ("gif", _) => &["mp4", "webp", "png"],
-            (_, Category::Image) => &["jpeg", "png", "webp", "pdf"],
-            // A PDF made from an SVG holds a picture of it, not its paths,
-            // so it stays in Quick convert.
-            (_, Category::Vector) => &["png", "jpeg"],
-            (_, Category::Video) => &["mp4", "mov", "gif", "mp3"],
-            (_, Category::Audio) => &["mp3", "m4a", "wav"],
-            (_, Category::Pdf) => &["png", "jpeg", "docx", "txt"],
-            (_, Category::Document) => &["pdf", "docx", "txt"],
-            (_, Category::Spreadsheet) => &["pdf", "xlsx", "csv"],
-            (_, Category::Presentation) => &["pdf", "pptx"],
-        };
         let reachable = self.targets(from);
-        let picked: Vec<_> = preferred
-            .iter()
-            .filter_map(|id| reachable.iter().find(|f| f.id == *id).copied())
-            .collect();
+        let pick = |ids: &mut dyn Iterator<Item = &str>| -> Vec<&'static Format> {
+            ids.filter_map(|id| reachable.iter().find(|f| f.id == id).copied())
+                .collect()
+        };
+        if let Some(list) = choices.get(from.category) {
+            let picked = pick(&mut list.iter().map(|f| f.id));
+            if !picked.is_empty() {
+                return picked;
+            }
+        }
+        let preferred: &[&str] = match from.id {
+            "gif" => &["mp4", "webp", "png"],
+            _ => default_menu(from.category),
+        };
+        let picked = pick(&mut preferred.iter().copied());
         if picked.is_empty() {
             reachable.into_iter().take(MENU_SIZE).collect()
         } else {
@@ -225,6 +236,21 @@ impl Registry {
         })
     }
 
+    /// Every format some file of `category` can be converted to, sorted like
+    /// [`targets`](Self::targets): what a menu for that kind may offer.
+    pub fn category_targets(&self, category: Category) -> Vec<&'static Format> {
+        let mut out: Vec<&'static Format> = Vec::new();
+        for from in crate::FORMATS.iter().filter(|f| f.category == category) {
+            for to in self.targets(from) {
+                if !out.contains(&to) {
+                    out.push(to);
+                }
+            }
+        }
+        out.sort_by_key(|f| (f.category as u8, f.name));
+        out
+    }
+
     /// Runs a job: routes it, runs every hop on every artifact the previous
     /// hop produced, and publishes the results without replacing any file.
     /// Returns the published paths, one per page for paged output. On error
@@ -239,40 +265,10 @@ impl Registry {
             .map_err(|e| self.missing_engine(from, job.to).unwrap_or(e))?;
         tracing::debug!(plan = plan.describe(), "converting {}", input.display());
 
-        let (dir, stem, ext) = match &job.output {
-            Output::Beside | Output::Dir(_) => {
-                let dir = match &job.output {
-                    Output::Dir(d) => d.clone(),
-                    _ => parent_dir(input),
-                };
-                let stem = input
-                    .file_stem()
-                    .ok_or_else(|| Error::UndetectedFormat(input.clone()))?;
-                (
-                    dir,
-                    stem.to_string_lossy().into_owned(),
-                    job.to.extension().to_string(),
-                )
-            }
-            // The caller's name wins, extension included (`photo.jpeg`, or
-            // none at all), so the first output lands exactly on `path`.
-            Output::Exact(path) => {
-                let stem = path
-                    .file_stem()
-                    .ok_or_else(|| Error::OutputExists(path.clone()))?;
-                let ext = path.extension().unwrap_or_default();
-                (
-                    parent_dir(path),
-                    stem.to_string_lossy().into_owned(),
-                    ext.to_string_lossy().into_owned(),
-                )
-            }
-        };
+        let destination = Destination::of(job)?;
         // Staging lives in the destination so publishing is a same-volume
         // rename. Dropping it removes everything on any early return.
-        let staging = tempfile::Builder::new()
-            .prefix(".convt-")
-            .tempdir_in(&dir)?;
+        let staging = destination.staging()?;
 
         let n = plan.hops.len() as f32;
         // Each file in flight carries the 0-based page it came from.
@@ -319,16 +315,83 @@ impl Registry {
             return Err(Error::Cancelled);
         }
         let (files, pages): (Vec<_>, Vec<_>) = current.into_iter().unzip();
-        let published = publish(
-            &files,
-            &pages,
-            &dir,
-            &stem,
-            &ext,
-            matches!(job.output, Output::Exact(_)),
-        )?;
+        let published = destination.publish(&files, &pages)?;
         progress(Some(1.0));
         Ok(published)
+    }
+}
+
+/// Where a job's results land, by the rules every conversion follows: next
+/// to the input or in a folder under the input's name with the target's
+/// extension, renamed on collision, or at an exact path. Conversions that
+/// don't run through [`Registry::run`] (the desktop app's cloud jobs) use it
+/// so their files are named the same way.
+#[derive(Debug, Clone)]
+pub struct Destination {
+    dir: PathBuf,
+    stem: String,
+    ext: String,
+    exact: bool,
+}
+
+impl Destination {
+    pub fn of(job: &Job) -> Result<Self> {
+        let input = &job.input;
+        let (dir, stem, ext) = match &job.output {
+            Output::Beside | Output::Dir(_) => {
+                let dir = match &job.output {
+                    Output::Dir(d) => d.clone(),
+                    _ => parent_dir(input),
+                };
+                let stem = input
+                    .file_stem()
+                    .ok_or_else(|| Error::UndetectedFormat(input.clone()))?;
+                (
+                    dir,
+                    stem.to_string_lossy().into_owned(),
+                    job.to.extension().to_string(),
+                )
+            }
+            // The caller's name wins, extension included (`photo.jpeg`, or
+            // none at all), so the first output lands exactly on `path`.
+            Output::Exact(path) => {
+                let stem = path
+                    .file_stem()
+                    .ok_or_else(|| Error::OutputExists(path.clone()))?;
+                let ext = path.extension().unwrap_or_default();
+                (
+                    parent_dir(path),
+                    stem.to_string_lossy().into_owned(),
+                    ext.to_string_lossy().into_owned(),
+                )
+            }
+        };
+        Ok(Self {
+            dir,
+            stem,
+            ext,
+            exact: matches!(job.output, Output::Exact(_)),
+        })
+    }
+
+    /// The folder the results go to.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// A hidden folder inside [`Self::dir`] to write results into before
+    /// [`Self::publish`], so publishing is a same-volume rename. It and
+    /// whatever is left in it are removed when it is dropped.
+    pub fn staging(&self) -> Result<tempfile::TempDir> {
+        Ok(tempfile::Builder::new()
+            .prefix(".convt-")
+            .tempdir_in(&self.dir)?)
+    }
+
+    /// Moves `files` from staging to their final names. `pages[i]` is the
+    /// 0-based page `files[i]` came from; a single result is page 0.
+    pub fn publish(&self, files: &[PathBuf], pages: &[usize]) -> Result<Vec<PathBuf>> {
+        publish(files, pages, &self.dir, &self.stem, &self.ext, self.exact)
     }
 }
 
@@ -717,6 +780,48 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.kind(), "no_route");
         assert_eq!(listing(dir.path()), ["doc.pdf"]);
+    }
+
+    #[test]
+    fn menus_follow_the_lists_people_pick() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "audio",
+            0,
+            vec![
+                ("mp3", "wav"),
+                ("wav", "mp3"),
+                ("wav", "flac"),
+                ("wav", "opus"),
+                ("wav", "m4a"),
+            ],
+        )));
+        let mut choices = MenuChoices::default();
+        let ids = |from, c: &MenuChoices| {
+            r.menu_targets_with(f(from), c)
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids("mp3", &choices), ["m4a", "wav"]);
+        choices.set(
+            Category::Audio,
+            vec![f("opus"), f("mp3"), f("flac"), f("aac")],
+        );
+        // In the picked order, without the input's own format or what it
+        // can't reach.
+        assert_eq!(ids("mp3", &choices), ["opus", "flac"]);
+        assert_eq!(ids("wav", &choices), ["opus", "mp3", "flac"]);
+        // Nothing picked is reachable: the default, not an empty menu.
+        choices.set(Category::Audio, vec![f("mp3")]);
+        assert_eq!(ids("mp3", &choices), ["m4a", "wav"]);
+        assert_eq!(
+            r.category_targets(Category::Audio)
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>(),
+            ["flac", "m4a", "mp3", "opus", "wav"]
+        );
     }
 
     #[test]

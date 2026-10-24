@@ -15,23 +15,33 @@ use ed25519_dalek::SigningKey;
 use gpui_kit::component::input::InputState;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, Bounds, ClipboardEntry, ElementId, Entity, ImageFormat,
-    Render, SharedString, TestAppContext, Window, WindowBounds, WindowOptions, point, px, size,
+    AnyWindowHandle, App, AppContext as _, Bounds, ClipboardEntry, Decorations, ElementId, Entity,
+    ImageFormat, Render, SharedString, TestAppContext, Tiling, Window, WindowBounds, WindowOptions,
+    point, px, size,
 };
 use tempfile::TempDir;
 
-use super::first_run::{FirstRunView, Step};
+use super::feedback::FeedbackView;
+use super::first_run::{FirstRunView, Question, Screen, Stage};
 use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
-use super::{Open, PopoverView, theme};
+use super::{AboutView, FinderGuideView, Open, PopoverView, menus, theme};
+use crate::account::{Access, Provider, Refresh, SignIn};
+use crate::cloud::CloudAccess;
+use crate::feedback::{SendError, Sender};
 use crate::history::Outcome;
 use crate::jobs::JobId;
 use crate::model::{AppState, PackPhase, Paths, Shared};
 use crate::pack::{self, Failure, FailureKind};
 use crate::request::{Request, Source};
 use crate::tray::{self, Indicator};
-use crate::update::{Fetch, FetchError, Update, UpdateConfig};
+use crate::update::download;
+use crate::update::install::Installer;
+use crate::update::{Fetch, FetchError, SelfInstall, Update, UpdateConfig};
+use convt_license::client::BUY_URL;
+
+mod background;
 
 struct Fixture {
     dir: TempDir,
@@ -40,6 +50,32 @@ struct Fixture {
     api: Arc<TestApi>,
     /// What the update check downloads; scripted, never the network.
     releases: Arc<TestReleases>,
+    /// Where the Feedback window sends; scripted, never the network.
+    feedback: Arc<TestFeedback>,
+}
+
+/// A scripted feedback endpoint that keeps every body it was sent.
+#[derive(Default)]
+struct TestFeedback {
+    sent: Mutex<Vec<serde_json::Value>>,
+    /// The answer to the next sends; `Ok` when unset.
+    answer: Mutex<Option<SendError>>,
+}
+
+impl TestFeedback {
+    fn sent(&self) -> Vec<serde_json::Value> {
+        self.sent.lock().unwrap().clone()
+    }
+}
+
+impl Sender for TestFeedback {
+    fn send(&self, body: &serde_json::Value) -> Result<(), SendError> {
+        self.sent.lock().unwrap().push(body.clone());
+        match self.answer.lock().unwrap().clone() {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
 }
 
 /// A scripted update server. It counts every fetch, so tests can prove a
@@ -86,10 +122,14 @@ struct TestApi {
     sign_outs: AtomicUsize,
     exchange: Mutex<Result<Session, ApiError>>,
     key: Mutex<Result<Option<String>, ApiError>>,
+    /// What `current_key` says the account allows; `None` by default.
+    access: Mutex<Option<convt_license::account::Access>>,
     /// The last code and verifier the app traded.
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
     hold_exchange: AtomicBool,
+    /// The same for `current_key`.
+    hold_key: AtomicBool,
 }
 
 impl Default for TestApi {
@@ -100,8 +140,10 @@ impl Default for TestApi {
             sign_outs: AtomicUsize::new(0),
             exchange: Mutex::new(Err(ApiError::Rejected)),
             key: Mutex::new(Err(ApiError::Offline)),
+            access: Mutex::new(None),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
+            hold_key: AtomicBool::new(false),
         }
     }
 }
@@ -117,6 +159,9 @@ impl TestApi {
     fn answer_key(&self, key: Result<Option<String>, ApiError>) {
         *self.key.lock().unwrap() = key;
     }
+    fn answer_access(&self, access: Option<convt_license::account::Access>) {
+        *self.access.lock().unwrap() = access;
+    }
 }
 
 impl Api for TestApi {
@@ -129,11 +174,22 @@ impl Api for TestApi {
         *self.traded.lock().unwrap() = Some((code.into(), verifier.into()));
         self.exchange.lock().unwrap().clone()
     }
-    fn current_key(&self, token: &str, version: &str) -> Result<Option<String>, ApiError> {
+    fn current_key(
+        &self,
+        token: &str,
+        version: &str,
+    ) -> Result<convt_license::account::LicenseReply, ApiError> {
         assert_eq!(version, crate::account::VERSION);
         assert!(!token.is_empty());
         self.renewals.fetch_add(1, Ordering::SeqCst);
-        self.key.lock().unwrap().clone()
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while self.hold_key.load(Ordering::SeqCst) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Ok(convt_license::account::LicenseReply {
+            key: self.key.lock().unwrap().clone()?,
+            access: self.access.lock().unwrap().clone(),
+        })
     }
     fn sign_out(&self, _: &str) -> Result<(), ApiError> {
         self.sign_outs.fetch_add(1, Ordering::SeqCst);
@@ -244,6 +300,11 @@ struct TestPacks {
     rejected: Mutex<Option<String>>,
     /// How the next install ends; `None` installs.
     next: Mutex<Option<Failure>>,
+    /// Every install ends as `next` says, not only the next one.
+    fail_always: AtomicBool,
+    /// Finishes as `next` says even after Cancel, like a failure that was
+    /// already on its way when the user clicked.
+    ignore_cancel: AtomicBool,
     /// Holds the download after its first step until cancelled or released.
     hold: AtomicBool,
     /// Holds a removal until released.
@@ -298,6 +359,8 @@ impl pack::Backend for TestPacks {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<PathBuf, Failure> {
         self.installs.fetch_add(1, Ordering::SeqCst);
+        let ignore = self.ignore_cancel.load(Ordering::SeqCst);
+        let cancelled = || cancelled() && !ignore;
         for step in 1..=15 {
             if cancelled() {
                 return Err(Failure {
@@ -313,7 +376,12 @@ impl pack::Backend for TestPacks {
                 std::thread::sleep(Duration::from_millis(5));
             }
         }
-        if let Some(failure) = self.next.lock().unwrap().take() {
+        let failure = if self.fail_always.load(Ordering::SeqCst) {
+            self.next.lock().unwrap().clone()
+        } else {
+            self.next.lock().unwrap().take()
+        };
+        if let Some(failure) = failure {
             return Err(failure);
         }
         progress(pack::Progress::Verifying);
@@ -426,6 +494,26 @@ impl Fixture {
         })
     }
 
+    /// A licensed build whose document pack is `packs`, with `key` stored.
+    fn licensed_with_packs(
+        cx: &mut TestAppContext,
+        packs: Arc<TestPacks>,
+        key: Option<&str>,
+    ) -> Self {
+        Self::build_with(cx, packs, |dir| {
+            if let Some(key) = key {
+                std::fs::write(dir.join("license.key"), key).unwrap();
+            }
+            client::Config {
+                enforce: true,
+                public_key: Some(test_key().verifying_key()),
+                build_date: BUILD_DATE.into(),
+                trial_file: Some(dir.join("trial")),
+                store: KeyStore::File(dir.join("license.key")),
+            }
+        })
+    }
+
     /// A build from source whose document pack is `packs`.
     fn with_packs(cx: &mut TestAppContext, packs: Arc<TestPacks>) -> Self {
         Self::build_with(cx, packs, |_| client::Config {
@@ -445,17 +533,21 @@ impl Fixture {
         let dir = tempfile::tempdir().unwrap();
         let api = Arc::new(TestApi::default());
         let releases = Arc::new(TestReleases::default());
+        let feedback = Arc::new(TestFeedback::default());
         let paths = Paths {
             settings: Some(dir.path().join("settings.toml")),
             history: Some(dir.path().join("history.db")),
             presets: Some(dir.path().join("presets")),
+            menu: Some(dir.path().join("menu.toml")),
             license: license(dir.path()),
             account_url: ACCOUNT_URL.into(),
             account_api: api.clone(),
+            feedback: feedback.clone(),
             update: UpdateConfig {
                 key: Some(update_key().verifying_key()),
                 fetch: releases.clone(),
                 target: ("linux-x86_64", "AppImage"),
+                install: None,
             },
         };
         // Conversions run on real job threads that wake the UI.
@@ -465,6 +557,12 @@ impl Fixture {
             gpui_kit::init(cx);
             theme::init(cx);
             let app = cx.new(|cx| AppState::new(packs, paths, cx));
+            // On macOS onboarding also asks about Finder unless the extension
+            // is on. Tests start with it on, so the same steps hold on every
+            // platform; the Finder tests turn it off themselves.
+            if cfg!(target_os = "macos") {
+                app.update(cx, |s, _| s.finder_on = Some(true));
+            }
             cx.set_global(Shared(app.clone()));
             app
         });
@@ -473,11 +571,20 @@ impl Fixture {
             app,
             api,
             releases,
+            feedback,
         }
     }
 
-    /// A 4x4 PNG in the fixture directory.
+    /// A 4x4 still in the fixture directory. The name's extension picks the format.
     fn png(&self, name: &str) -> PathBuf {
+        self.rgb(name)
+    }
+
+    fn bmp(&self, name: &str) -> PathBuf {
+        self.rgb(name)
+    }
+
+    fn rgb(&self, name: &str) -> PathBuf {
         let path = self.dir.path().join(name);
         image::RgbImage::from_pixel(4, 4, image::Rgb([200, 40, 40]))
             .save(&path)
@@ -552,11 +659,11 @@ fn open<V: Render>(
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds {
                 origin: point(px(0.), px(0.)),
-                size: size(px(1040.), px(760.)),
+                size: size(px(1040.), px(900.)),
             })),
             ..Default::default()
         };
-        let (handle, view) = gpui_kit::open_window(options, cx, build).expect("open a test window");
+        let (handle, view) = super::open_window(options, cx, build).expect("open a test window");
         (handle, view)
     })
 }
@@ -582,6 +689,26 @@ fn label(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Option
         window
             .try_find(id(name))
             .map(|e| e.label().unwrap_or_default().to_string())
+    })
+    .unwrap()
+}
+
+/// A switch's or checkbox's state, as screen readers get it.
+fn toggled(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Option<bool> {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.try_find(id(name)).and_then(|e| e.checked())
+    })
+    .unwrap()
+}
+
+/// Whether a menu item or tab is the selected one, as screen readers get it.
+fn selected(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Option<bool> {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.try_find(id(name)).and_then(|e| e.selected())
     })
     .unwrap()
 }
@@ -629,6 +756,10 @@ fn wait_until(cx: &mut TestAppContext, what: &str, done: impl Fn(&App) -> bool) 
 
 fn is_jpeg(path: &Path) -> bool {
     std::fs::read(path).is_ok_and(|bytes| bytes.starts_with(&[0xFF, 0xD8, 0xFF]))
+}
+
+fn is_png(path: &Path) -> bool {
+    std::fs::read(path).is_ok_and(|bytes| bytes.starts_with(b"\x89PNG"))
 }
 
 fn is_webp(path: &Path) -> bool {
@@ -789,6 +920,37 @@ fn links_and_requests_that_need_a_choice_open_quick_convert(cx: &mut TestAppCont
 }
 
 #[gpui_kit::test]
+fn quick_convert_sums_up_its_options_in_one_row(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (window, view) = f.quick(cli(vec![f.png("beach.png")], None, None), cx);
+    click(cx, window, "to-webp");
+    // Collapsed: one row that says what the options are.
+    assert_eq!(
+        label(cx, window, "options-summary").as_deref(),
+        Some("Balanced · Original size · Transparent")
+    );
+    assert!(!shown(cx, window, "quality-best"));
+    click(cx, window, "options-toggle");
+    click(cx, window, "quality-best");
+    click(cx, window, "options-toggle");
+    assert!(!shown(cx, window, "quality-best"));
+    assert_eq!(
+        label(cx, window, "options-summary").as_deref(),
+        Some("Best · Original size · Transparent")
+    );
+
+    // The name keeps the file's stem, as text, until it's clicked.
+    assert_eq!(
+        label(cx, window, "file-name-edit").as_deref(),
+        Some("beach.webp")
+    );
+    assert!(!shown(cx, window, "file-name"));
+    click(cx, window, "file-name-edit");
+    assert!(shown(cx, window, "file-name"));
+    cx.read(|cx| assert!(view.read(cx).editing_name));
+}
+
+#[gpui_kit::test]
 fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let png = f.png("a.png");
@@ -807,6 +969,7 @@ fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) 
 
     // Picking another target renames the output and offers its options.
     click(cx, window, "to-webp");
+    click(cx, window, "options-toggle");
     cx.read(|cx| {
         let view = view.read(cx);
         assert_eq!(view.to.map(|f| f.id), Some("webp"));
@@ -829,10 +992,116 @@ fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) 
         s.starts_with("Saved")
     });
     assert!(is_webp(&f.dir.path().join("renamed.webp")));
+    // The heading follows the job, as the footer does.
+    assert_eq!(
+        label(cx, window, "jobs-title").as_deref(),
+        Some("Converted")
+    );
     for done in ["show-in-folder", "open", "close"] {
         assert!(shown(cx, window, done), "{done} is missing");
     }
     assert!(!shown(cx, window, "convert"), "the picker should be gone");
+}
+
+#[test]
+fn a_typed_output_name_stays_one_file_in_the_folder() {
+    use super::quick::output_name;
+    for (typed, wanted) in [
+        ("renamed.webp", "renamed.webp"),
+        ("  renamed.webp  ", "renamed.webp"),
+        ("renamed.WEBP", "renamed.WEBP"),
+        // A missing or different extension gets the target's.
+        ("renamed", "renamed.webp"),
+        ("renamed.png", "renamed.png.webp"),
+        ("my holiday", "my holiday.webp"),
+        ("..hidden", "..hidden.webp"),
+    ] {
+        assert_eq!(output_name(typed, "webp").as_deref(), Ok(wanted), "{typed}");
+    }
+    for typed in [
+        "",
+        "   ",
+        ".",
+        "..",
+        "...",
+        "/tmp/x.webp",
+        "../x.webp",
+        "sub/x.webp",
+        "..\\x.webp",
+        "C:\\x.webp",
+        "x\0.webp",
+        "x\n.webp",
+    ] {
+        assert!(
+            output_name(typed, "webp").is_err(),
+            "{typed:?} was accepted"
+        );
+    }
+    assert_eq!(
+        output_name("/tmp/x.webp", "webp").unwrap_err(),
+        "Use a file name, not a folder path."
+    );
+    assert_eq!(
+        output_name("", "webp").unwrap_err(),
+        "Type a name for the file."
+    );
+    if cfg!(windows) {
+        assert!(output_name("C:x.webp", "webp").is_err());
+        assert!(output_name("a:b.webp", "webp").is_err());
+    }
+}
+
+#[gpui_kit::test]
+fn quick_convert_refuses_a_file_name_that_leaves_the_folder(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+    let (window, view) = f.quick(cli(vec![png], None, None), cx);
+    click(cx, window, "to-webp");
+    let outside = tempfile::tempdir().unwrap();
+    let escape = outside.path().join("x.webp");
+    let input = cx.read(|cx| view.read(cx).file_name.clone());
+    click(cx, window, "file-name-edit");
+    for typed in [
+        escape.to_string_lossy().to_string(),
+        "../x.webp".to_string(),
+        "sub/x.webp".to_string(),
+        "..".to_string(),
+        " ".to_string(),
+    ] {
+        set_input(cx, window, &input, &typed);
+        click(cx, window, "convert");
+        assert!(
+            shown(cx, window, "file-name-error"),
+            "{typed:?} wasn't refused"
+        );
+        assert_eq!(f.jobs(cx), 0, "{typed:?} started a conversion");
+        cx.read(|cx| assert!(view.read(cx).editing_name));
+    }
+    assert!(!escape.exists());
+    assert!(!f.dir.path().parent().unwrap().join("x.webp").exists());
+    assert_eq!(
+        label(cx, window, "file-name-error").as_deref(),
+        Some("Type a name for the file.")
+    );
+
+    // Typing a new name clears the error; one without its extension gets it.
+    set_input(cx, window, &input, "");
+    cx.update_window(window, |_, window, cx| {
+        use gpui_kit::Focusable as _;
+        let focus = input.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+    })
+    .unwrap();
+    cx.simulate_input(window, "renamed");
+    assert!(!shown(cx, window, "file-name-error"));
+    cx.read(|cx| assert_eq!(input.read(cx).value(), "renamed"));
+    click(cx, window, "convert");
+    assert!(!shown(cx, window, "file-name-error"));
+    let job = f.last_job(cx);
+    wait_for_label(cx, window, &format!("status-{job}"), |s| {
+        s.starts_with("Saved")
+    });
+    assert!(is_webp(&f.dir.path().join("renamed.webp")));
 }
 
 #[gpui_kit::test]
@@ -871,23 +1140,55 @@ fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
     );
 }
 
+/// The sidebar's nav switches pages in the main window; Settings opens its
+/// own window, so it is a gear beside the brand rather than a third page.
 #[gpui_kit::test]
-fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) {
+fn settings_is_a_gear_beside_the_brand_not_a_page(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let a = f.png("a.png");
-    let b = f.png("b.png");
+    let (main, view) = f.main(cx);
+    assert!(!shown(cx, main, "nav-settings"));
+    assert_eq!(selected(cx, main, "nav-activity"), Some(true));
+    click(cx, main, "nav-automations");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+
+    assert_eq!(
+        label(cx, main, "open-settings").as_deref(),
+        Some("Settings")
+    );
+    click(cx, main, "open-settings");
+    let (_, settings) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(settings.read(cx).tab, SettingsTab::General));
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+}
+
+#[gpui_kit::test]
+fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let a = f.bmp("a.bmp");
+    let b = f.bmp("b.bmp");
     let (window, view) = f.main(cx);
     assert!(shown(cx, window, "empty"));
     assert_eq!(
-        label(cx, window, "defaults").as_deref(),
-        Some("Images → WebP, Video → MP4, Audio → MP3, Documents → PDF")
+        label(cx, window, "empty-add-files").as_deref(),
+        Some("Choose files…")
     );
 
-    // The same file twice converts once.
-    view.update(cx, |v, cx| v.add(&[a.clone(), b, a], cx));
-    assert_eq!(f.jobs(cx), 2);
+    // Add files converts nothing by itself: Quick convert asks for the
+    // format, and the same file twice is listed once.
+    view.update(cx, |v, cx| v.add(&[a.clone(), b.clone(), a], cx));
+    assert_eq!(f.jobs(cx), 0);
+    let (quick, quick_view) = last_quick(cx);
+    cx.read(|cx| {
+        assert_eq!(
+            quick_view.read(cx).files,
+            [f.dir.path().join("a.bmp"), b.clone()]
+        )
+    });
+    cx.read(|cx| assert!(quick_view.read(cx).to.is_none()));
+    click(cx, quick, "to-png");
+    click(cx, quick, "convert");
     wait_until(cx, "both files", |cx| f.app.read(cx).recent.len() == 2);
-    assert!(is_webp(&f.dir.path().join("a.webp")) && is_webp(&f.dir.path().join("b.webp")));
+    assert!(is_png(&f.dir.path().join("a.png")) && is_png(&f.dir.path().join("b.png")));
     let records = cx.read(|cx| f.app.read(cx).recent.clone());
     for record in &records {
         let status = label(cx, window, &format!("record-status-{}", record.id)).unwrap();
@@ -896,23 +1197,9 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
     }
     assert!(!shown(cx, window, "empty"));
 
-    // Changing a default changes what Add files does.
-    click(cx, window, "change-defaults");
-    click(cx, window, "default-images-jpeg");
-    cx.read(|cx| assert_eq!(f.app.read(cx).settings.defaults.images, "jpeg"));
-    assert!(f.settings_file().contains("images = \"jpeg\""));
-    let c = f.png("c.png");
-    view.update(cx, |v, cx| v.add(&[c], cx));
-    wait_until(cx, "c.jpg", |cx| f.app.read(cx).recent.len() == 3);
-    assert!(is_jpeg(&f.dir.path().join("c.jpg")));
-
-    // A file with no usable default (a JPEG with JPEG as the default) asks.
-    let windows = cx.update(|cx| cx.windows().len());
-    let jpg = f.dir.path().join("c.jpg");
-    view.update(cx, |v, cx| v.add(&[jpg], cx));
-    assert_eq!(cx.update(|cx| cx.windows().len()), windows + 1);
-
-    click(cx, window, "clear-finished");
+    // Each day clears on its own.
+    assert!(!shown(cx, window, "clear-finished"));
+    click(cx, window, "clear-today");
     cx.read(|cx| {
         let state = f.app.read(cx);
         assert!(state.recent.is_empty() && state.queue.entries.is_empty());
@@ -921,13 +1208,113 @@ fn add_files_converts_right_away_and_lists_the_results(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
+fn cloud_says_why_it_is_off_and_asks_once_before_uploading(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+
+    // Not ready: Cloud is shown but does nothing.
+    let (window, view) = f.quick(cli(vec![png.clone()], Some("webp"), None), cx);
+    assert_eq!(
+        label(cx, window, "where-local").as_deref(),
+        Some(theme::this_machine_label())
+    );
+    assert_eq!(label(cx, window, "where-cloud").as_deref(), Some("Cloud"));
+    click(cx, window, "where-cloud");
+    cx.read(|cx| assert!(!view.read(cx).cloud));
+    assert!(!shown(cx, window, "cloud-consent"));
+
+    // Ready: picking Cloud asks first, and Convert waits for the answer.
+    cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+    click(cx, window, "where-cloud");
+    cx.read(|cx| assert!(view.read(cx).cloud));
+    assert!(shown(cx, window, "cloud-consent"));
+    click(cx, window, "convert");
+    cx.read(|cx| assert!(view.read(cx).jobs.is_empty() && view.read(cx).error.is_none()));
+    click(cx, window, "cloud-consent-cancel");
+    cx.read(|cx| assert!(!view.read(cx).cloud));
+    assert!(!shown(cx, window, "cloud-consent"));
+    cx.read(|cx| assert!(!f.app.read(cx).settings.cloud_consent));
+
+    click(cx, window, "where-cloud");
+    click(cx, window, "cloud-consent-agree");
+    cx.read(|cx| assert!(f.app.read(cx).settings.cloud_consent));
+    assert!(f.settings_file().contains("cloud_consent = true"));
+    assert!(!shown(cx, window, "cloud-consent"));
+    // The cloud takes no options, so it says so instead of offering them.
+    assert!(shown(cx, window, "cloud-options"));
+    click(cx, window, "where-local");
+    assert!(!shown(cx, window, "cloud-options"));
+    click(cx, window, "where-cloud");
+
+    // Convert goes to the cloud, not to a local job; what it can't do shows
+    // like any other error.
+    click(cx, window, "convert");
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(!v.jobs.is_empty() || v.error.is_some());
+    });
+    if let Some(error) = cx.read(|cx| view.read(cx).error.clone()) {
+        assert_eq!(label(cx, window, "error"), Some(error));
+    }
+
+    // Asked once: a new window doesn't ask again.
+    let (window, view) = f.quick(cli(vec![png], Some("webp"), None), cx);
+    click(cx, window, "where-cloud");
+    cx.read(|cx| assert!(view.read(cx).cloud));
+    assert!(!shown(cx, window, "cloud-consent"));
+}
+
+#[gpui_kit::test]
+fn activity_marks_jobs_that_ran_in_the_cloud(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+    let webp = format_by_id("webp").unwrap();
+    let (window, _) = f.main(cx);
+    let (local, cloud) = cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            // Waiting jobs that never start: no runner picks them up.
+            let local = s.queue.add(&convt_core::Job::new(&png, webp));
+            let cloud = s.queue.add_cloud(&convt_core::Job::new(&png, webp));
+            for (id, cloud) in [(1, false), (2, true)] {
+                s.recent.push(crate::history::Record {
+                    id,
+                    finished_at: 0,
+                    input: png.clone(),
+                    to: "webp".into(),
+                    outcome: Outcome::Done(vec![png.clone()]),
+                    setup: Some(crate::history::Setup {
+                        cloud,
+                        ..Default::default()
+                    }),
+                });
+            }
+            cx.notify();
+            (local, cloud)
+        })
+    });
+    assert!(shown(cx, window, &format!("status-{local}")));
+    assert!(!shown(cx, window, &format!("job-cloud-{local}")));
+    assert_eq!(
+        label(cx, window, &format!("job-cloud-{cloud}")).as_deref(),
+        Some("Cloud")
+    );
+    assert!(shown(cx, window, "record-status-1"));
+    assert!(!shown(cx, window, "record-cloud-1"));
+    assert!(shown(cx, window, "record-cloud-2"));
+}
+
+#[gpui_kit::test]
 fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let broken = f.dir.path().join("broken.png");
-    std::fs::write(&broken, "not a png").unwrap();
+    let broken = f.dir.path().join("broken.bmp");
+    std::fs::write(&broken, "not a bmp").unwrap();
     let (window, view) = f.main(cx);
     view.update(cx, |v, cx| v.add(std::slice::from_ref(&broken), cx));
+    let (quick, _) = last_quick(cx);
+    click(cx, quick, "to-png");
+    click(cx, quick, "convert");
     wait_until(cx, "the failure", |cx| f.app.read(cx).recent.len() == 1);
+    assert_eq!(label(cx, quick, "jobs-title").as_deref(), Some("Finished"));
     let record = cx.read(|cx| f.app.read(cx).recent[0].clone());
     assert!(matches!(record.outcome, Outcome::Failed(_)));
     assert_eq!(
@@ -938,6 +1325,117 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     click(cx, window, &format!("retry-{}", record.id));
     assert_eq!(f.jobs(cx), before + 1);
     wait_until(cx, "the retry", |cx| f.app.read(cx).recent.len() == 2);
+}
+
+#[gpui_kit::test]
+fn the_menu_tab_picks_what_right_click_menus_offer(cx: &mut TestAppContext) {
+    // Images that can't become a PDF here, so the default's PDF stays
+    // hidden whatever this machine has.
+    let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
+    let (window, _) = f.settings(SettingsTab::Menu, cx);
+    let file = f.dir.path().join("menu.toml");
+    let menu_for = |cx: &mut TestAppContext, input: &str| {
+        cx.read(|cx| {
+            let state = f.app.read(cx);
+            state
+                .registry
+                .menu_targets_with(format_by_id(input).unwrap(), &state.menu)
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        })
+    };
+
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers JPEG, PNG and WebP")
+    );
+    assert_eq!(selected(cx, window, "menu-image-png"), Some(true));
+    assert_eq!(selected(cx, window, "menu-image-tiff"), Some(false));
+    assert!(!shown(cx, window, "menu-reset-image"));
+    assert!(!file.exists(), "nothing is saved until something changes");
+
+    // Picking appends in click order; unpicking removes.
+    click(cx, window, "menu-image-tiff");
+    click(cx, window, "menu-image-jpeg");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers PNG, WebP and TIFF")
+    );
+    assert_eq!(selected(cx, window, "menu-image-tiff"), Some(true));
+    let saved = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        // The default's PDF, hidden here, keeps its place for where it works.
+        saved.contains(r#"image = ["png", "webp", "tiff", "pdf"]"#),
+        "{saved}"
+    );
+    // A PNG skips its own format; a JPEG gets the whole list.
+    assert_eq!(menu_for(cx, "png"), ["webp", "tiff"]);
+    assert_eq!(menu_for(cx, "jpeg"), ["png", "webp", "tiff"]);
+    // Other kinds keep their defaults.
+    let svg_default = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .registry
+            .menu_targets(format_by_id("svg").unwrap())
+    });
+    assert_eq!(
+        menu_for(cx, "svg"),
+        svg_default.iter().map(|t| t.id).collect::<Vec<_>>()
+    );
+
+    // The CLI reads the same file.
+    let loaded = convt_core::MenuChoices::load(&file).unwrap();
+    cx.read(|cx| assert_eq!(loaded, f.app.read(cx).menu));
+
+    click(cx, window, "menu-reset-image");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers JPEG, PNG and WebP")
+    );
+    assert!(!shown(cx, window, "menu-reset-image"));
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("image"));
+    assert_eq!(menu_for(cx, "png"), ["jpeg", "webp"]);
+
+    // The last pick stays: an empty menu is not an option.
+    click(cx, window, "menu-image-jpeg");
+    click(cx, window, "menu-image-png");
+    click(cx, window, "menu-image-webp");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers WebP")
+    );
+    assert_eq!(selected(cx, window, "menu-image-webp"), Some(true));
+
+    // A `convt menu` change made while the app runs is kept by the next
+    // click, even for the kind clicked, and shows when the tab opens again.
+    std::fs::write(&file, "image = [\"png\"]\nvector = [\"jpeg\"]\n").unwrap();
+    click(cx, window, "menu-image-tiff");
+    let saved = std::fs::read_to_string(&file).unwrap();
+    assert!(saved.contains(r#"vector = ["jpeg"]"#), "{saved}");
+    assert!(saved.contains(r#"image = ["png", "tiff"]"#), "{saved}");
+    std::fs::write(&file, "image = [\"tiff\"]\n").unwrap();
+    click(cx, window, "tab-general");
+    click(cx, window, "tab-menu");
+    assert_eq!(
+        label(cx, window, "menu-summary-image").as_deref(),
+        Some("Offers TIFF")
+    );
+
+    // A broken file is reported on this tab, not only under General.
+    std::fs::write(&file, "image = 3").unwrap();
+    click(cx, window, "tab-general");
+    click(cx, window, "tab-menu");
+    assert!(
+        label(cx, window, "menu-error").is_some_and(|e| e.contains("menu.toml")),
+        "{:?}",
+        label(cx, window, "menu-error")
+    );
+    // Fixing the file clears the error, even when it holds what the app has.
+    std::fs::write(&file, "image = [\"tiff\"]\n").unwrap();
+    click(cx, window, "tab-general");
+    click(cx, window, "tab-menu");
+    assert_eq!(label(cx, window, "menu-error"), None);
 }
 
 #[gpui_kit::test]
@@ -1032,15 +1530,32 @@ fn settings_change_and_persist(cx: &mut TestAppContext) {
     assert!(!f.settings_file().contains("concurrency"));
 
     assert!(cx.read(|cx| f.app.read(cx).settings.notifications));
+    // Screen readers hear each switch's setting, not just On or Off.
+    assert_eq!(
+        label(cx, window, "notifications").as_deref(),
+        Some("Show a notification")
+    );
+    assert_eq!(
+        label(cx, window, "reveal"),
+        Some(format!(
+            "Reveal it in {}",
+            super::theme::file_manager_name()
+        ))
+    );
+    assert_eq!(toggled(cx, window, "notifications"), Some(true));
     click(cx, window, "notifications");
+    assert_eq!(toggled(cx, window, "notifications"), Some(false));
     click(cx, window, "reveal");
+    assert_eq!(toggled(cx, window, "reveal"), Some(true));
+    // Every platform keeps running in the background with the tray icon.
+    assert_eq!(
+        label(cx, window, "menu-bar-icon").as_deref(),
+        Some("Keep running in the background")
+    );
     click(cx, window, "menu-bar-icon");
     let saved = f.settings_file();
-    for line in [
-        "notifications = false",
-        "reveal_when_done = true",
-        "menu_bar_icon = false",
-    ] {
+    assert!(saved.contains("menu_bar_icon = false"), "{saved}");
+    for line in ["notifications = false", "reveal_when_done = true"] {
         assert!(saved.contains(line), "{line} in {saved}");
     }
 
@@ -1171,7 +1686,7 @@ fn quick_convert_keeps_results_after_the_queue_is_cleared(cx: &mut TestAppContex
     });
 
     let app = f.app.clone();
-    cx.update(|cx| app.update(cx, |s, cx| s.clear_finished(cx)));
+    cx.update(|cx| app.update(cx, |s, cx| s.clear_records(&[], cx)));
     cx.read(|cx| assert!(f.app.read(cx).entry(job).is_none()));
     assert_eq!(
         label(cx, window, &format!("status-{job}")).as_deref(),
@@ -1205,6 +1720,47 @@ fn the_first_conversion_starts_the_trial(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_sidebar_sign_in_button_opens_the_license_tab(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    // Shipped builds have no local trial; only tests keep it on by default.
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.license = s.licensing.state();
+        cx.notify();
+    });
+    let (main, _) = f.main(cx);
+    assert_eq!(
+        label(cx, main, "trial-card").as_deref(),
+        Some("Sign in to start your free trial.")
+    );
+    click(cx, main, "trial-buy");
+    let (settings, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::License));
+    assert_eq!(
+        cx.opened_url(),
+        None,
+        "Sign in must not open the pricing page"
+    );
+    settings
+        .update(cx, |_, window, _| window.remove_window())
+        .unwrap();
+
+    // A refused conversion says to sign in, and offers it.
+    let png = f.png("a.png");
+    cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+    let (quick, _) = window_of::<QuickView>(cx);
+    assert_eq!(
+        label(cx, quick, "license-banner").as_deref(),
+        Some("Sign in to start your free trial.")
+    );
+    click(cx, quick, "sign-in-banner");
+    let (_, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::License));
+    assert_eq!(cx.opened_url(), None);
+    assert_eq!(f.jobs(cx), 0);
+}
+
+#[gpui_kit::test]
 fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-01-01"), None);
     let png = f.png("a.png");
@@ -1234,7 +1790,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     let forged = convt_license::sign(
         &License {
             id: "x".into(),
-            email: "a@example.com".into(),
+            email: "a-tester".into(),
             plan: Plan::Desktop,
             issued: "2026-09-01".into(),
             updates_until: "2027-10-01".into(),
@@ -1245,17 +1801,17 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
     click(cx, settings, "activate");
     assert!(shown(cx, settings, "error"), "a key from another signer");
 
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key("a-tester", "2027-10-01");
     type_key(cx, settings, &view, &format!("  {key}\n"));
     click(cx, settings, "activate");
     assert!(!shown(cx, settings, "error"));
     assert_eq!(
         label(cx, settings, "license-notice").as_deref(),
-        Some("License activated for a@example.com.")
+        Some("License activated for ***.")
     );
     assert_eq!(
         label(cx, settings, "license-status").as_deref(),
-        Some("Licensed to a@example.com (Desktop), with updates until 2027-10-01.")
+        Some("You have a convt license")
     );
     let stored = std::fs::read_to_string(f.dir.path().join("license.key")).unwrap();
     assert_eq!(stored.trim(), key);
@@ -1284,7 +1840,7 @@ fn an_ended_trial_stops_conversions_until_a_license_is_entered(cx: &mut TestAppC
 
 #[gpui_kit::test]
 fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
-    let key = license_key("a@example.com", "2026-06-30");
+    let key = pro_key("a-tester", "2026-06-30");
     let f = Fixture::licensed(cx, Some("2026-01-01"), Some(&key));
     let (main, view) = f.main(cx);
     let card = label(cx, main, "trial-card").unwrap();
@@ -1294,16 +1850,13 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
         "{card}"
     );
 
-    let png = f.png("a.png");
-    view.update(cx, |v, cx| v.add(std::slice::from_ref(&png), cx));
+    let bmp = f.bmp("a.bmp");
+    view.update(cx, |v, cx| v.add(std::slice::from_ref(&bmp), cx));
+    let (quick, _) = last_quick(cx);
+    assert!(shown(cx, quick, "download"));
     assert_eq!(f.jobs(cx), 0);
-    assert!(
-        label(cx, main, "error")
-            .unwrap()
-            .starts_with("This build is newer")
-    );
 
-    let (quick, _) = f.quick(cli(vec![png], Some("jpeg"), None), cx);
+    let (quick, _) = f.quick(cli(vec![bmp], Some("jpeg"), None), cx);
     assert!(shown(cx, quick, "download"));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     assert!(shown(cx, settings, "remove-license"));
@@ -1312,7 +1865,7 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn an_activate_link_fills_in_the_key_without_activating(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key("a-tester", "2027-10-01");
     let link = format!("convt://activate?key={key}");
     let request = crate::request::parse_url(&link).unwrap();
     cx.update(|cx| super::route(request, cx));
@@ -1327,6 +1880,14 @@ fn an_activate_link_fills_in_the_key_without_activating(cx: &mut TestAppContext)
     assert!(f.dir.path().join("license.key").exists());
 }
 
+/// Finishes onboarding's last moment: the main window opens after it.
+fn finish_onboarding(cx: &mut TestAppContext, view: &Entity<FirstRunView>) {
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    cx.executor()
+        .advance_clock(super::first_run::CALIBRATE + Duration::from_millis(50));
+    cx.run_until_parked();
+}
+
 #[gpui_kit::test]
 fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
@@ -1334,32 +1895,46 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
     let (window, view) = window_of::<FirstRunView>(cx);
     cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
     assert!(!f.settings_file().contains("first_run_done = true"));
-    let start = super::first_run::first_step();
-    // The first screen is step 1, whether or not this platform has the
-    // Finder step.
-    let total = if start == Step::Finder { 3 } else { 2 };
-    assert_eq!(
-        label(cx, window, "step"),
-        Some(format!("STEP 1 OF {total}"))
-    );
-    if start == Step::Finder {
-        click(cx, window, "first-run-back");
-    }
+    // Sign in, or a key. No local trial.
+    assert!(shown(cx, window, "onboarding-google"));
+    assert!(shown(cx, window, "onboarding-other"));
+    // No separate email step: email is on convt.app's sign-in page.
+    assert!(!shown(cx, window, "onboarding-email"));
+    assert!(!shown(cx, window, "plan-trial"));
 
-    // "I have a license" activates the key and moves on.
-    click(cx, window, "plan-key");
+    // "I have a license key" activates the key and shows it.
+    click(cx, window, "onboarding-key-link");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Key));
     let input = cx.read(|cx| view.read(cx).key.clone());
     set_input(cx, window, &input, "nonsense");
-    click(cx, window, "first-run-next");
+    click(cx, window, "onboarding-activate");
     assert!(shown(cx, window, "error"));
-    let key = license_key("a@example.com", "2027-10-01");
+    let key = license_key("a-tester", "2027-10-01");
     set_input(cx, window, &input, &key);
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done, "{:?}", view.read(cx).error));
+    click(cx, window, "onboarding-activate");
+    cx.read(|cx| {
+        assert_eq!(
+            view.read(cx).screen,
+            Screen::Account,
+            "{:?}",
+            view.read(cx).error
+        )
+    });
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have a convt license")
+    );
     assert!(f.dir.path().join("license.key").exists());
+    assert!(!f.dir.path().join("trial").exists(), "no trial started");
 
-    // "Start converting" finishes first run and opens the main window.
-    click(cx, window, "first-run-next");
+    // Continue, the last moment, then the main window.
+    click(cx, window, "onboarding-primary");
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Setting up convt")
+    );
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+    finish_onboarding(cx, &view);
     window_of::<MainView>(cx);
     cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
     assert!(f.settings_file().contains("first_run_done = true"));
@@ -1371,64 +1946,524 @@ fn first_run_shows_once_in_licensed_builds(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn closing_first_run_before_the_last_step_shows_it_again(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, None);
+fn closing_first_run_before_the_end_shows_it_again(cx: &mut TestAppContext) {
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed(cx, None, Some(&key));
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
-    if super::first_run::first_step() == Step::Finder {
-        click(cx, window, "first-run-back");
-    }
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
-    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
+    click(cx, window, "onboarding-primary");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
     window
         .update(cx, |_, window, _| window.remove_window())
         .unwrap();
+    cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
     cx.update(|cx| super::route(Request::default(), cx));
     window_of::<FirstRunView>(cx);
     cx.read(|cx| assert!(!f.app.read(cx).settings.first_run_done));
 }
 
 #[gpui_kit::test]
-fn the_finder_step_preview_is_not_a_switch(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, None);
-    let app = f.app.clone();
-    let (window, _) = open(cx, move |window, cx| {
-        cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
-    });
-    if cfg!(target_os = "macos") {
-        assert_eq!(label(cx, window, "step").as_deref(), Some("STEP 1 OF 3"));
+fn onboarding_opens_at_three_quarters_of_the_display(cx: &mut TestAppContext) {
+    let _f = Fixture::licensed(cx, None, None);
+    let (display, wanted) = cx.update(super::first_run_bounds);
+    let visible = cx.update(|cx| cx.primary_display().map(|d| d.visible_bounds().size));
+    if let Some(visible) = visible {
+        assert!(display.is_some());
+        assert_eq!(wanted, super::first_run_fit(visible));
     }
-    assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("Turn on the Finder menu")
+}
+
+#[test]
+fn the_glow_breathes_without_a_jump() {
+    use super::first_run::breath;
+    assert!(
+        (breath(0.) - breath(1.)).abs() < 1e-4,
+        "a breath ends where it starts"
     );
-    let body = label(cx, window, "first-run-body").expect("body");
-    assert!(body.contains("scroll"), "{body}");
-    assert!(body.contains("Extensions"), "{body}");
+    for i in 0..=100 {
+        let o = breath(i as f32 / 100.);
+        assert!((0.78..=1.).contains(&o), "{o}");
+    }
+    assert!((breath(0.5) - 1.).abs() < 1e-4);
+}
+
+#[test]
+fn onboarding_fits_small_normal_and_large_displays() {
+    use super::first_run_fit;
+    let fit = |w: f32, h: f32| {
+        let s = first_run_fit(size(px(w), px(h)));
+        (f32::from(s.width), f32::from(s.height))
+    };
+    // A normal laptop or desktop: three quarters.
+    assert_eq!(fit(1440., 900.), (1080., 675.));
+    assert_eq!(fit(1920., 1080.), (1440., 810.));
+    // 4K at 1x: three quarters, however large.
+    assert_eq!(fit(3840., 2160.), (2880., 1620.));
+    // Where three quarters is too small, the least size, while it fits.
+    assert_eq!(fit(1024., 768.), (900., 640.));
+    assert_eq!(fit(1180., 800.), (900., 640.));
+    // Smaller than that: 95%, never past the edges.
+    assert_eq!(fit(800., 600.), (760., 570.));
+    assert_eq!(fit(640., 480.), (608., 456.));
+    for (w, h) in [
+        (640., 480.),
+        (800., 600.),
+        (1024., 768.),
+        (1280., 720.),
+        (3840., 2160.),
+    ] {
+        let (fw, fh) = fit(w, h);
+        assert!(fw <= w * 0.95 + 0.5 && fh <= h * 0.95 + 0.5, "{w}x{h}");
+    }
+}
+
+#[gpui_kit::test]
+fn the_sign_in_buttons_ask_for_their_provider(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    for (button, provider, query) in [
+        (
+            "onboarding-google",
+            Some(Provider::Google),
+            Some("&provider=google"),
+        ),
+        // Other ways opens the full chooser, email included.
+        ("onboarding-other", None, None),
+    ] {
+        click(cx, window, button);
+        let page = cx.opened_url().expect("the device page opened");
+        assert!(
+            page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
+            "{page}"
+        );
+        match query {
+            Some(query) => assert!(page.ends_with(query), "{page}"),
+            None => assert!(!page.contains("provider="), "{page}"),
+        }
+        cx.read(|cx| {
+            assert_eq!(view.read(cx).stage(cx), Stage::Waiting);
+            assert_eq!(view.read(cx).provider, provider);
+        });
+        assert_eq!(
+            label(cx, window, "onboarding-title").as_deref(),
+            Some("Continue in your browser")
+        );
+        click(cx, window, "onboarding-reopen");
+        assert_eq!(cx.opened_url().as_deref(), Some(page.as_str()));
+        click(cx, window, "onboarding-cancel");
+        cx.read(|cx| assert_eq!(view.read(cx).stage(cx), Stage::SignIn));
+    }
+    // A failed sign-in says why and tries again with the same button.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.sign_in = SignIn::Failed("The link expired.".into());
+            cx.notify();
+        })
+    });
     assert_eq!(
-        label(cx, window, "finder-preview-badge").as_deref(),
-        Some("Preview")
+        label(cx, window, "error").as_deref(),
+        Some("The link expired.")
     );
+    click(cx, window, "onboarding-retry");
+    cx.read(|cx| assert_eq!(view.read(cx).stage(cx), Stage::Waiting));
+    assert_eq!(f.jobs(cx), 0);
+}
+
+#[gpui_kit::test]
+fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = false, cx)
+        })
+    });
+    let app = f.app.clone();
+    let (window, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    let set = |cx: &mut TestAppContext, access: Option<Access>| {
+        cx.update(|cx| {
+            f.app.update(cx, |s, cx| {
+                s.account.access = access;
+                s.account.awaiting_trial = false;
+                cx.notify();
+            })
+        })
+    };
+    // No answer from the account: onboarding asks, once.
+    set(cx, None);
+    wait_until(cx, "the account answered", |cx| {
+        f.app.read(cx).account.refresh != Refresh::Running
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
     assert_eq!(
-        label(cx, window, "finder-preview-caption").as_deref(),
-        Some("This picture isn't a switch.")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Couldn't reach convt.app")
     );
+    assert!(!shown(cx, window, "onboarding-primary"));
+    // And says so while it waits.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.refresh = Refresh::Running;
+            cx.notify();
+        })
+    });
     assert_eq!(
-        label(cx, window, "first-run-next").as_deref(),
-        Some("Open System Settings")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Checking your account…")
     );
-    click(cx, window, "finder-preview");
-    assert_eq!(cx.opened_url(), None);
-    click(cx, window, "first-run-next");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.refresh = Refresh::Failed("Offline.".into());
+            cx.notify();
+        })
+    });
+
+    let checkout = "https://checkout.example.com/trial";
+    for (access, title, primary) in [
+        (Access::Pro, "You have convt Pro", "Continue"),
+        (
+            Access::Trial {
+                ends_on: "2026-10-15".into(),
+            },
+            "Your free trial is on",
+            "Continue",
+        ),
+        (
+            Access::CanStartTrial {
+                checkout_url: checkout.into(),
+            },
+            "Start your 7-day free trial",
+            "Start free trial",
+        ),
+        (Access::Lapsed, "Your Pro plan has ended", "Get convt Pro"),
+    ] {
+        set(cx, Some(access.clone()));
+        assert_eq!(
+            label(cx, window, "onboarding-title").as_deref(),
+            Some(title)
+        );
+        assert_eq!(
+            label(cx, window, "onboarding-primary").as_deref(),
+            Some(primary)
+        );
+        assert_eq!(
+            label(cx, window, "account-status").as_deref(),
+            Some("Signed in as ***")
+        );
+    }
+
+    // The trial starts through checkout, and onboarding waits for it.
+    set(
+        cx,
+        Some(Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        }),
+    );
+    click(cx, window, "onboarding-primary");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    cx.read(|cx| assert_eq!(view.read(cx).stage(cx), Stage::AwaitingTrial));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Finish checkout in your browser")
+    );
+    // "Open checkout again" opens the same page; it doesn't start over.
+    cx.update(|cx| cx.open_url("about:blank"));
+    click(cx, window, "onboarding-reopen");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    cx.read(|cx| {
+        assert!(f.app.read(cx).account.awaiting_trial);
+        assert_eq!(view.read(cx).stage(cx), Stage::AwaitingTrial);
+    });
+    // One check from onboarding, one as checkout opens; reopening adds none.
+    // The second runs on a background task, so wait for it rather than race it.
+    wait_until(cx, "the check as checkout opens", |_| {
+        f.api.calls() == (0, 2, 0)
+    });
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 2, 0));
+    // Lapsed buys.
+    set(cx, Some(Access::Lapsed));
+    click(cx, window, "onboarding-primary");
+    assert_eq!(cx.opened_url().as_deref(), Some(BUY_URL));
+    // "Not now" goes on without a plan.
+    click(cx, window, "onboarding-not-now");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+#[gpui_kit::test]
+fn a_stored_key_beats_the_accounts_offers_in_onboarding(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    let app = f.app.clone();
+    let (window, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    for (key, stage) in [
+        (license_key("a@b.c", "2027-10-01"), Stage::Licensed),
+        (pro_key("pro-tester", "2027-10-01"), Stage::Pro),
+    ] {
+        for access in [
+            Access::CanStartTrial {
+                checkout_url: "https://checkout.example.com/trial".into(),
+            },
+            Access::Lapsed,
+        ] {
+            cx.update(|cx| {
+                f.app.update(cx, |s, cx| {
+                    s.activate(&key, cx).unwrap();
+                    s.account.access = Some(access.clone());
+                    cx.notify();
+                })
+            });
+            cx.read(|cx| assert_eq!(view.read(cx).stage(cx), stage, "{access:?}"));
+            assert_eq!(
+                label(cx, window, "onboarding-primary").as_deref(),
+                Some("Continue")
+            );
+        }
+    }
+}
+
+#[gpui_kit::test]
+fn the_trial_checkout_is_polled_fast_and_rechecked_on_focus(cx: &mut TestAppContext) {
+    use convt_license::account::Access as Remote;
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    let checkout = "https://checkout.example.com/trial";
+    f.api.answer_key(Ok(None));
+    f.api.answer_access(Some(Remote::CanStartTrial {
+        checkout_url: checkout.into(),
+    }));
+    let settled = |cx: &mut TestAppContext| {
+        wait_until(cx, "the account answered", |cx| {
+            f.app.read(cx).account.refresh != Refresh::Running
+        })
+    };
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    // Not waiting on a checkout: a focus asks nothing.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_trial_on_focus(cx)));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 1, 0));
+
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_trial(cx)));
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 2, 0), "one ask as the checkout opens");
+    // Every 2 s in the first minute.
+    cx.executor().advance_clock(Duration::from_millis(1900));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 2, 0));
+    cx.executor().advance_clock(Duration::from_millis(200));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 3, 0));
+    // A focus right after an ask doesn't pile on.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_trial_on_focus(cx)));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 3, 0));
+
+    // Back from the browser with the trial on: the focus finds it at once,
+    // and the polling stops.
+    f.api.answer_access(Some(Remote::Trial {
+        ends_on: "2026-10-16".into(),
+        ends_at: None,
+    }));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.age_trial_check(Duration::from_secs(3));
+            s.check_trial_on_focus(cx)
+        })
+    });
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 4, 0));
+    cx.read(|cx| {
+        let account = &f.app.read(cx).account;
+        assert!(matches!(account.access, Some(Access::Trial { .. })));
+    });
+    cx.executor().advance_clock(Duration::from_secs(300));
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 4, 0));
+}
+
+#[gpui_kit::test]
+fn a_signed_in_relaunch_never_waits_on_the_account_forever(cx: &mut TestAppContext) {
+    // Signed in, no key here, and the launch check already ran today. The
+    // launch renewal isn't run here (it would ask on its own thread and race
+    // this test's counts), so onboarding is the only thing that asks.
+    let f = Fixture::signed_in(cx, None, "pro-tester");
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(
+                |s| {
+                    s.first_run_done = false;
+                    s.license_checked = Some(today());
+                },
+                cx,
+            );
+        })
+    });
+    assert_eq!(f.api.calls(), (0, 0, 0));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    let settled = |cx: &mut TestAppContext| {
+        wait_until(cx, "the account answered", |cx| {
+            f.app.read(cx).account.refresh != Refresh::Running
+        })
+    };
+
+    // Offline: say so, with Retry and the key as ways on.
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 1, 0), "onboarding asked the account");
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Couldn't reach convt.app")
+    );
+    assert!(shown(cx, window, "onboarding-retry"));
+    assert!(shown(cx, window, "onboarding-key-link"));
+    assert_eq!(
+        label(cx, window, "account-status").as_deref(),
+        Some("Signed in as ***")
+    );
+    // Drawing again doesn't ask again.
+    cx.update(|cx| f.app.update(cx, |_, cx| cx.notify()));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 1, 0));
+
+    // An answer that doesn't say what the account allows is no dead end
+    // either.
+    f.api.answer_key(Ok(None));
+    click(cx, window, "onboarding-retry");
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 2, 0));
+    cx.read(|cx| assert!(matches!(view.read(cx).stage(cx), Stage::CheckFailed(_))));
+    assert!(shown(cx, window, "onboarding-retry"));
+    // "I have a license key" is the other way on.
+    click(cx, window, "onboarding-key-link");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Key));
+    click(cx, window, "onboarding-back");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Account));
+    assert_eq!(f.api.calls(), (0, 2, 0), "going back didn't ask again");
+
+    // Retry with convt.app back.
+    f.api
+        .answer_key(Ok(Some(pro_key("pro-tester", "2027-10-01"))));
+    click(cx, window, "onboarding-retry");
+    settled(cx);
+    assert_eq!(f.api.calls(), (0, 3, 0));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have convt Pro")
+    );
+}
+
+#[gpui_kit::test]
+fn yes_to_documents_installs_the_pack(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have convt Pro")
+    );
+    click(cx, window, "onboarding-primary");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Question(Question::Documents)));
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Convert PDFs and documents too?")
+    );
+    // The arrow keys move between the tiles; nothing downloads until a pick.
+    cx.simulate_keystrokes(window, "right");
+    cx.read(|cx| assert!(!view.read(cx).yes));
+    cx.simulate_keystrokes(window, "left");
+    cx.read(|cx| assert!(view.read(cx).yes));
+    assert_eq!(packs.installs(), 0);
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).documents_supported()
+    });
+    assert_eq!(packs.installs(), 1);
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    finish_onboarding(cx, &view);
+    window_of::<MainView>(cx);
+}
+
+#[gpui_kit::test]
+fn no_to_documents_downloads_nothing(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let key = pro_key("pro-tester", "2027-10-01");
+    let _f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-no");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 0);
+}
+
+#[gpui_kit::test]
+fn the_finder_question_opens_system_settings_on_yes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    let app = f.app.clone();
+    let (window, view) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Finder), window, cx))
+    });
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Add convt to Finder?")
+    );
+    click(cx, window, "question-yes");
     assert_eq!(
         cx.opened_url().as_deref(),
         Some(crate::finder::EXTENSION_SETTINGS)
     );
+    let (guide, _) = window_of::<FinderGuideView>(cx);
     assert_eq!(
-        label(cx, window, "first-run-next").as_deref(),
-        Some("Continue")
+        label(cx, guide, "finder-guide-title").as_deref(),
+        Some("Turn on convt in Finder")
     );
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+/// Onboarding ends while the user is still in System Settings: the main
+/// window waits for the guide, so it doesn't cover System Settings mid-step.
+#[gpui_kit::test]
+fn onboarding_opens_the_main_window_once_the_finder_guide_closes(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    let app = f.app.clone();
+    let (window, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Finder), window, cx))
+    });
+    click(cx, window, "question-yes");
+    cx.executor()
+        .advance_clock(super::first_run::CALIBRATE + Duration::from_millis(50));
+    cx.run_until_parked();
+    assert!(cx.read(|cx| Open::<MainView>::get(cx).is_none()));
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    click(cx, guide, "finder-guide-close");
+    cx.run_until_parked();
+    assert!(cx.read(|cx| Open::<MainView>::get(cx).is_some()));
+}
+
+/// The guide beside System Settings: it shows the steps, says so once the
+/// extension is on, then closes by itself.
+#[gpui_kit::test]
+fn the_finder_guide_closes_once_the_extension_is_on(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    cx.update(crate::finder::open_settings);
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    assert!(shown(cx, guide, "finder-guide-steps"));
+    assert!(!shown(cx, guide, "finder-guide-done"));
 
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
@@ -1437,9 +2472,45 @@ fn the_finder_step_preview_is_not_a_switch(cx: &mut TestAppContext) {
         })
     });
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("The Finder menu is on")
+        label(cx, guide, "finder-guide-done").as_deref(),
+        Some("You're all set")
     );
+    assert!(!shown(cx, guide, "finder-guide-steps"));
+    cx.executor().advance_clock(Duration::from_millis(2000));
+    cx.run_until_parked();
+    assert!(
+        cx.update_window(guide, |_, _, _| ()).is_ok(),
+        "closed too soon"
+    );
+    cx.executor().advance_clock(Duration::from_millis(700));
+    cx.run_until_parked();
+    assert!(cx.update_window(guide, |_, _, _| ()).is_err(), "still open");
+}
+
+#[gpui_kit::test]
+fn the_finder_guide_closes_from_its_button_and_skips_a_finder_menu_already_on(
+    cx: &mut TestAppContext,
+) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(false)));
+    cx.update(crate::finder::open_settings);
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    // Opening it again plays it from the start in one window.
+    cx.update(crate::finder::open_settings);
+    let (again, _) = window_of::<FinderGuideView>(cx);
+    assert!(cx.update_window(guide, |_, _, _| ()).is_err());
+    click(cx, again, "finder-guide-close");
+    assert!(cx.update_window(again, |_, _, _| ()).is_err());
+
+    // Managing a Finder menu that is already on needs no guide.
+    cx.update(|cx| f.app.update(cx, |s, _| s.finder_on = Some(true)));
+    let before = cx.update(|cx| cx.windows().len());
+    cx.update(crate::finder::open_settings);
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(crate::finder::EXTENSION_SETTINGS)
+    );
+    assert_eq!(cx.update(|cx| cx.windows().len()), before);
 }
 
 #[gpui_kit::test]
@@ -1463,6 +2534,8 @@ fn activity_offers_finder_setup_until_the_extension_is_on(cx: &mut TestAppContex
         cx.opened_url().as_deref(),
         Some(crate::finder::EXTENSION_SETTINGS)
     );
+    let (guide, _) = window_of::<FinderGuideView>(cx);
+    assert!(shown(cx, guide, "finder-guide-steps"));
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
             s.finder_on = Some(true);
@@ -1495,6 +2568,32 @@ fn activity_offers_finder_setup_until_the_extension_is_on(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
+fn empty_activity_scrolls_to_choose_files_in_a_short_window(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx);
+            s.finder_on = Some(false);
+        })
+    });
+    let (window, _) = f.main(cx);
+    gpui_kit::VisualTestContext::from_window(window, cx).simulate_resize(size(px(720.), px(380.)));
+    assert!(shown(cx, window, "finder-setup"));
+    assert!(!fits(cx, window, "empty-add-files"));
+    // The wheel over the Finder card scrolls the page it sits on.
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.scroll(
+            id("finder-setup"),
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(-2000.))),
+            cx,
+        );
+    })
+    .unwrap();
+    assert!(fits(cx, window, "empty-add-files"));
+}
+
+#[gpui_kit::test]
 fn a_build_from_source_never_shows_first_run(cx: &mut TestAppContext) {
     let _f = Fixture::new(cx);
     cx.update(|cx| super::route(Request::default(), cx));
@@ -1503,75 +2602,88 @@ fn a_build_from_source_never_shows_first_run(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn first_run_offers_sign_in_without_making_the_trial_need_it(cx: &mut TestAppContext) {
+fn signing_in_from_onboarding_brings_it_back_with_the_key(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
-    let app = f.app.clone();
-    let (window, view) = open(cx, move |window, cx| {
-        cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
-    });
-    cx.update(|cx| cx.set_global(Open(window, view.downgrade())));
-    // Starting the trial opens no browser and calls nothing.
-    click(cx, window, "first-run-next");
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Done));
-    assert_eq!(cx.opened_url(), None);
-    click(cx, window, "first-run-back");
-
-    // "Sign in with convt.app" opens the device page and waits.
-    assert_eq!(
-        label(cx, window, "sign-in").as_deref(),
-        Some("Sign in with convt.app")
-    );
-    click(cx, window, "sign-in");
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-google");
     let page = cx.opened_url().expect("the device page opened");
-    assert!(
-        page.starts_with(&format!("{ACCOUNT_URL}/device?state=")),
-        "{page}"
-    );
-    assert_eq!(
-        label(cx, window, "account-status").as_deref(),
-        Some("Waiting for your browser…")
-    );
-    cx.read(|cx| assert_eq!(view.read(cx).step, Step::Plan));
 
-    // The browser's answer brings first run back, signed in, with the key.
+    // The browser's answer brings onboarding back, signed in, with the key.
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: "pro-tester".into(),
         token: "cvd_new".into(),
     });
     f.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+        .answer_key(Ok(Some(pro_key("pro-tester", "2026-11-01"))));
     let link = format!("convt://auth?state={}&code=onetime", query(&page, "state"));
     cx.update(|cx| super::route(crate::request::parse_url(&link).unwrap(), cx));
     wait_until(cx, "the key arrived", |cx| {
         matches!(f.app.read(cx).license, client::State::Licensed(_))
     });
     assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have convt Pro")
+    );
+    assert_eq!(
         label(cx, window, "account-status").as_deref(),
-        Some("Signed in as pro@example.com · Pro until 2026-11-01")
+        Some("Signed in as ***")
     );
     cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
     assert_eq!(f.jobs(cx), 0);
+    click(cx, window, "onboarding-primary");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+}
+
+#[gpui_kit::test]
+fn first_run_shows_a_license_it_already_has(cx: &mut TestAppContext) {
+    for (key, title) in [
+        (pro_key("pro-tester", "2027-10-01"), "You have convt Pro"),
+        (
+            license_key("a-tester", "2027-10-01"),
+            "You have a convt license",
+        ),
+    ] {
+        let f = Fixture::licensed(cx, None, Some(&key));
+        cx.update(|cx| super::route(Request::default(), cx));
+        let (window, view) = window_of::<FirstRunView>(cx);
+        assert_eq!(
+            label(cx, window, "onboarding-title").as_deref(),
+            Some(title)
+        );
+        assert!(!shown(cx, window, "onboarding-google"));
+        // Return continues, without starting a trial or asking for a key.
+        cx.simulate_keystrokes(window, "enter");
+        assert!(!f.dir.path().join("trial").exists(), "no trial started");
+        finish_onboarding(cx, &view);
+        cx.read(|cx| assert!(f.app.read(cx).settings.first_run_done));
+        cx.update(|cx| {
+            cx.windows()
+                .iter()
+                .for_each(|w| drop(w.update(cx, |_, w, _| w.remove_window())))
+        });
+    }
 }
 
 #[gpui_kit::test]
 fn the_popover_converts_a_dropped_file_and_copies_it(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let png = f.png("Screenshot.png");
+    let bmp = f.bmp("Screenshot.bmp");
     let (window, view) = cx.update(super::open_popover).unwrap();
     assert!(shown(cx, window, "drop-bar"));
-    view.update(cx, |v, cx| v.drop_files(&[png], cx));
+    view.update(cx, |v, cx| v.drop_files(&[bmp], cx));
     let job = f.last_job(cx);
     wait_for_label(cx, window, &format!("copied-{job}"), |s| {
         s == "Copied to your clipboard"
     });
     let item = cx.read_from_clipboard().expect("something was copied");
-    let output = f.dir.path().join("Screenshot.webp");
-    assert!(is_webp(&output));
+    let output = f.dir.path().join("Screenshot.png");
+    assert!(is_png(&output));
     assert!(
         item.entries().iter().any(|e| matches!(
             e,
             ClipboardEntry::Image(image)
-                if image.format == ImageFormat::Webp
+                if image.format == ImageFormat::Png
                     && image.bytes == std::fs::read(&output).unwrap()
         )),
         "{item:?}"
@@ -1593,24 +2705,82 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
     assert!(!rules[2].enabled);
     assert_eq!(
         label(cx, popover, "popover-automation-2").as_deref(),
-        Some("Off")
+        Some("HEIC → JPEG"),
+        "a switch is named for its rule"
     );
+    assert_eq!(toggled(cx, popover, "popover-automation-2"), Some(false));
     click(cx, popover, "popover-automation-2");
-    assert_eq!(
-        label(cx, popover, "popover-automation-2").as_deref(),
-        Some("On")
-    );
+    assert_eq!(toggled(cx, popover, "popover-automation-2"), Some(true));
     cx.read(|cx| assert!(f.app.read(cx).settings.automations[2].enabled));
     let reloaded = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
     assert!(reloaded.automations[2].enabled);
 
     // The main window shows the same rules.
-    click(cx, popover, "new-rule");
+    click(cx, popover, "manage-rules");
     let (main, view) = window_of::<MainView>(cx);
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
-    assert_eq!(label(cx, main, "automation-2").as_deref(), Some("On"));
+    assert_eq!(
+        label(cx, main, "automation-2").as_deref(),
+        Some("HEIC → JPEG")
+    );
+    assert_eq!(toggled(cx, main, "automation-2"), Some(true));
+    let intro = label(cx, main, "automations-intro").expect("intro");
+    assert!(intro.contains("screenshot"), "{intro}");
+    assert_eq!(
+        label(cx, main, "automation-0-copy").as_deref(),
+        Some("Copy the converted file")
+    );
+    click(cx, main, "automation-0-copy");
+    cx.read(|cx| assert!(!f.app.read(cx).settings.automations[0].copies_to_clipboard()));
     click(cx, main, "automation-0");
     cx.read(|cx| assert!(!f.app.read(cx).settings.automations[0].enabled));
+}
+
+#[gpui_kit::test]
+fn a_screenshot_automation_converts_and_can_copy(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let shots = f.dir.path().join("Desktop");
+    std::fs::create_dir(&shots).unwrap();
+    f.app.update(cx, |s, cx| {
+        s.update_settings(
+            |set| {
+                set.automations[0].folder = Some(shots.clone());
+                set.automations[0].copy_to_clipboard = Some(true);
+                set.automations[1].enabled = false;
+            },
+            cx,
+        );
+        s.poll_automations(cx);
+    });
+
+    let input = shots.join("Screenshot 1.bmp");
+    image::RgbImage::from_pixel(4, 4, image::Rgb([200, 40, 40]))
+        .save(&input)
+        .unwrap();
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    wait_until(cx, "the screenshot", |cx| f.app.read(cx).recent.len() == 1);
+    let output = shots.join("Screenshot 1.png");
+    assert!(is_png(&output));
+    let item = cx.read_from_clipboard().expect("the result was copied");
+    assert!(
+        item.entries().iter().any(|e| matches!(
+            e,
+            ClipboardEntry::Image(image)
+                if image.format == ImageFormat::Png
+                    && image.bytes == std::fs::read(&output).unwrap()
+        )),
+        "{item:?}"
+    );
+
+    // Ordinary photos in the same Desktop-like folder are left alone.
+    image::RgbImage::from_pixel(4, 4, image::Rgb([20, 80, 200]))
+        .save(shots.join("IMG_2041.bmp"))
+        .unwrap();
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    f.app.update(cx, |s, cx| s.poll_automations(cx));
+    assert_eq!(cx.read(|cx| f.app.read(cx).recent.len()), 1);
+    assert!(!shots.join("IMG_2041.png").exists());
 }
 
 #[gpui_kit::test]
@@ -1626,6 +2796,7 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
         assert!(shown(cx, quick, "convert"));
         for tab in [
             SettingsTab::General,
+            SettingsTab::Menu,
             SettingsTab::Presets,
             SettingsTab::License,
         ] {
@@ -1634,20 +2805,114 @@ fn every_window_renders_in_both_themes(cx: &mut TestAppContext) {
         }
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
-            cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
+            cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
         });
-        assert!(shown(cx, first, "finder-preview"));
+        assert!(shown(cx, first, "onboarding-google"));
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
-            cx.new(|cx| FirstRunView::new(app, Step::Done, window, cx))
+            cx.new(|cx| FirstRunView::new(app, Screen::Question(Question::Documents), window, cx))
         });
-        assert!(shown(cx, first, "first-run-next"));
+        assert!(shown(cx, first, "question-yes"));
+        let app = f.app.clone();
+        let (first, _) = open(cx, move |window, cx| {
+            cx.new(|cx| FirstRunView::new(app, Screen::Calibrating, window, cx))
+        });
+        assert!(shown(cx, first, "onboarding-title"));
         let app = f.app.clone();
         let (popover, _) = open(cx, move |window, cx| {
             cx.new(|cx| PopoverView::new(app, window, cx))
         });
         assert!(shown(cx, popover, "drop-bar"));
+        let app = f.app.clone();
+        let (feedback, _) = open(cx, move |window, cx| {
+            cx.new(|cx| FeedbackView::new(app, window, cx))
+        });
+        assert!(shown(cx, feedback, "feedback-send"));
     }
+}
+
+fn set_textarea(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    input: &Entity<gpui_kit::component::input::TextareaState>,
+    value: &str,
+) {
+    let value = value.to_string();
+    let input = input.clone();
+    cx.update_window(window, |_, window, cx| {
+        input.update(cx, |s, cx| s.set_value(value, window, cx))
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn feedback_sends_the_message_with_the_version_and_platform(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (main, _) = f.main(cx);
+    click(cx, main, "nav-feedback");
+    let (window, view) = window_of::<FeedbackView>(cx);
+    assert!(fits(cx, window, "feedback-send"), "Feedback window");
+
+    // Nothing is sent for an empty message or a bad email.
+    click(cx, window, "feedback-send");
+    assert_eq!(
+        label(cx, window, "error").as_deref(),
+        Some("Write a message first.")
+    );
+    let (message, email) =
+        cx.read(|cx| (view.read(cx).message.clone(), view.read(cx).email.clone()));
+    set_textarea(
+        cx,
+        window,
+        &message,
+        "  WebP to GIF lost the animation.\nCan you look?  ",
+    );
+    set_input(cx, window, &email, "nope");
+    click(cx, window, "feedback-send");
+    assert_eq!(
+        label(cx, window, "error").as_deref(),
+        Some("That email address doesn't look right.")
+    );
+    assert!(f.feedback.sent().is_empty());
+
+    // A server that isn't set up yet keeps the message for another try.
+    *f.feedback.answer.lock().unwrap() = Some(SendError::Unavailable);
+    set_input(cx, window, &email, "ada@example.com");
+    click(cx, window, "feedback-send");
+    wait_for_label(cx, window, "error", |t| {
+        t.starts_with("Feedback isn't set up yet")
+    });
+    cx.read(|cx| {
+        assert!(
+            view.read(cx)
+                .message
+                .read(cx)
+                .value()
+                .contains("WebP to GIF")
+        )
+    });
+
+    *f.feedback.answer.lock().unwrap() = None;
+    click(cx, window, "feedback-send");
+    wait_for_label(cx, window, "feedback-sent", |t| {
+        t == "Thanks for the feedback"
+    });
+    let sent = f.feedback.sent();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(
+        sent[1],
+        serde_json::json!({
+            "source": "desktop",
+            "message": "WebP to GIF lost the animation.\nCan you look?",
+            "email": "ada@example.com",
+            "version": crate::account::VERSION,
+            "platform": crate::feedback::platform(),
+        })
+    );
+    // Done closes the window.
+    click(cx, window, "feedback-done");
+    cx.run_until_parked();
+    assert!(!cx.update(|cx| cx.windows()).contains(&window));
 }
 
 #[gpui_kit::test]
@@ -1682,7 +2947,7 @@ fn a_silent_convert_writes_beside_the_original_whatever_the_save_setting(cx: &mu
 }
 
 #[gpui_kit::test]
-fn silent_conversions_neither_notify_nor_reveal(cx: &mut TestAppContext) {
+fn silent_conversions_notify_but_never_reveal(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let app = f.app.clone();
     cx.update(|cx| {
@@ -1701,10 +2966,11 @@ fn silent_conversions_neither_notify_nor_reveal(cx: &mut TestAppContext) {
     wait_until(cx, "the silent conversion", |cx| {
         f.app.read(cx).recent.len() == 1
     });
-    assert!(cx.shown_system_notifications().is_empty());
+    // A right-click conversion tells you it finished, as one from a window does.
+    assert_eq!(cx.shown_system_notifications().len(), 1);
     cx.read(|cx| assert!(f.app.read(cx).revealed.is_empty()));
 
-    // The same conversion from a window, also in the background, does both.
+    // The same conversion from a window, also in the background, notifies and reveals.
     cx.update(|cx| {
         app.update(cx, |s, cx| {
             let to = convt_core::format_by_id("webp").unwrap();
@@ -1714,7 +2980,7 @@ fn silent_conversions_neither_notify_nor_reveal(cx: &mut TestAppContext) {
     wait_until(cx, "the window's conversion", |cx| {
         f.app.read(cx).recent.len() == 2
     });
-    assert_eq!(cx.shown_system_notifications().len(), 1);
+    assert_eq!(cx.shown_system_notifications().len(), 2);
     cx.read(|cx| assert_eq!(f.app.read(cx).revealed, [f.dir.path().join("a.webp")]));
 }
 
@@ -1742,6 +3008,7 @@ fn balanced_and_original_clear_what_a_preset_set(cx: &mut TestAppContext) {
         cx,
     );
     click(cx, window, "preset-web");
+    click(cx, window, "options-toggle");
     // The controls show the preset's values.
     cx.read(|cx| {
         let v = view.read(cx);
@@ -1790,7 +3057,7 @@ fn quick_convert_shows_errors_the_license_banner_does_not(cx: &mut TestAppContex
 #[gpui_kit::test]
 fn the_popover_copies_every_drop_even_past_the_listed_few(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
-    let files: Vec<PathBuf> = (0..5).map(|i| f.png(&format!("shot {i}.png"))).collect();
+    let files: Vec<PathBuf> = (0..5).map(|i| f.bmp(&format!("shot {i}.bmp"))).collect();
     let (window, view) = cx.update(super::open_popover).unwrap();
     view.update(cx, |v, cx| v.drop_files(&files, cx));
     let jobs: Vec<JobId> =
@@ -1839,13 +3106,21 @@ fn quick_convert_offers_a_background_for_images(cx: &mut TestAppContext) {
 
     // JPEG can't be transparent: White by default, and no Transparent choice.
     click(cx, window, "to-jpeg");
+    click(cx, window, "options-toggle");
     assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
     cx.read(|cx| assert_eq!(view.read(cx).conversion_options(), Options::default()));
     click(cx, window, "background");
     assert!(shown(cx, window, "background-white") && shown(cx, window, "background-black"));
     assert!(!shown(cx, window, "background-transparent"));
+    // The box shows the White it converts with, but the pick is Automatic.
+    assert_eq!(selected(cx, window, "background-automatic"), Some(true));
+    assert_eq!(selected(cx, window, "background-white"), Some(false));
     click(cx, window, "background-black");
     assert_eq!(label(cx, window, "background").as_deref(), Some("Black"));
+    click(cx, window, "background");
+    assert_eq!(selected(cx, window, "background-black"), Some(true));
+    assert_eq!(selected(cx, window, "background-automatic"), Some(false));
+    click(cx, window, "background");
     cx.read(|cx| {
         assert_eq!(
             view.read(cx).conversion_options().background,
@@ -1908,6 +3183,7 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
     if targets.iter().any(|t| t.id == "png") {
         // PDF pages render on white unless Transparent is picked.
         click(cx, window, "to-png");
+        click(cx, window, "options-toggle");
         assert_eq!(label(cx, window, "background").as_deref(), Some("White"));
         click(cx, window, "background");
         assert!(shown(cx, window, "background-transparent"));
@@ -1925,6 +3201,7 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
     }
     // GIF from video takes no background color; a still frame does.
     click(cx, window, "to-gif");
+    click(cx, window, "options-toggle");
     assert!(!shown(cx, window, "background"));
     if targets.iter().any(|t| t.id == "jpeg") {
         click(cx, window, "to-jpeg");
@@ -1958,6 +3235,7 @@ fn quick_convert_background_follows_the_source(cx: &mut TestAppContext) {
     let targets = cx.read(|cx| view.read(cx).targets.formats.clone());
     if targets.iter().any(|t| t.id == "webp") {
         click(cx, window, "to-webp");
+        click(cx, window, "options-toggle");
         assert_eq!(
             label(cx, window, "background").as_deref(),
             Some("Automatic")
@@ -1991,6 +3269,7 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
         return;
     }
     click(cx, window, "to-mp4");
+    click(cx, window, "options-toggle");
     // Defaults change nothing.
     assert_eq!(label(cx, window, "codec").as_deref(), Some("H.264"));
     assert_eq!(
@@ -2068,10 +3347,20 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-webp");
         assert!(fits(cx, quick, "convert"), "Quick convert");
+        // An image's Options row, where it runs and Save fit without scrolling.
+        assert!(fits(cx, quick, "change-folder"), "Quick convert, Save");
         cx.update(|cx| super::open_quick(cli(pngs.clone(), None, None), cx));
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-jpeg");
         assert!(fits(cx, quick, "convert"), "Quick convert, two files");
+        assert!(fits(cx, quick, "where-cloud"), "Quick convert, Cloud");
+        cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+        click(cx, quick, "where-cloud");
+        assert!(
+            fits(cx, quick, "cloud-consent-agree"),
+            "Quick convert, consent"
+        );
+        cx.update(|cx| cx.remove_global::<super::quick::TestCloud>());
 
         for tab in [SettingsTab::General, SettingsTab::License] {
             cx.update(|cx| super::show_settings(tab, cx));
@@ -2084,54 +3373,82 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
             assert!(fits(cx, settings, last), "{tab:?}");
         }
 
+        // Onboarding at its smallest size: sign in, waiting, a key with an
+        // error, and a question.
         let app = f.app.clone();
         cx.update(|cx| {
-            super::show(size(px(420.), px(420.)), "first run", cx, |window, cx| {
-                cx.new(|cx| FirstRunView::new(app, Step::Finder, window, cx))
-            })
-        });
-        let (first, _) = window_of::<FirstRunView>(cx);
-        assert!(
-            fits(cx, first, "finder-preview"),
-            "first run, Finder preview"
-        );
-        assert!(fits(cx, first, "first-run-next"), "first run, Finder");
-        first
-            .update(cx, |_, window, _| window.remove_window())
-            .unwrap();
-
-        let app = f.app.clone();
-        cx.update(|cx| {
-            super::show(size(px(420.), px(420.)), "first run", cx, |window, cx| {
-                cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
-            })
+            super::show(
+                size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
+                "first run",
+                cx,
+                |window, cx| cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx)),
+            )
         });
         let (first, view) = window_of::<FirstRunView>(cx);
-        assert!(fits(cx, first, "first-run-next"), "first run, trial");
-        // Waiting for the browser, then a link the app ignored.
-        click(cx, first, "sign-in");
-        assert!(fits(cx, first, "sign-in-cancel"), "first run, waiting");
+        for id in [
+            "onboarding-google",
+            "onboarding-other",
+            "onboarding-key-link",
+            "privacy",
+        ] {
+            assert!(fits(cx, first, id), "onboarding, {id}");
+        }
+        click(cx, first, "onboarding-google");
+        assert!(fits(cx, first, "onboarding-cancel"), "onboarding, waiting");
+        click(cx, first, "onboarding-cancel");
         cx.update(|cx| super::route(auth_link("not_ours", "code=x"), cx));
-        assert!(fits(cx, first, "account-notice"), "first run, notice");
-        assert!(fits(cx, first, "first-run-next"), "first run, notice");
-        click(cx, first, "sign-in-cancel");
-        click(cx, first, "plan-key");
-        click(cx, first, "first-run-next");
+        assert!(fits(cx, first, "privacy"), "onboarding, notice");
+        click(cx, first, "onboarding-key-link");
+        click(cx, first, "onboarding-activate");
         cx.read(|cx| assert!(view.read(cx).error.is_some()));
         assert!(
-            fits(cx, first, "first-run-next"),
-            "first run, key and error"
+            fits(cx, first, "onboarding-back"),
+            "onboarding, key and error"
         );
         first
             .update(cx, |_, window, _| window.remove_window())
             .unwrap();
+        let app = f.app.clone();
+        cx.update(|cx| {
+            super::show(
+                size(px(super::FIRST_RUN_SIZE.0), px(super::FIRST_RUN_SIZE.1)),
+                "first run",
+                cx,
+                |window, cx| {
+                    cx.new(|cx| {
+                        FirstRunView::new(app, Screen::Question(Question::Documents), window, cx)
+                    })
+                },
+            )
+        });
+        let (first, _) = window_of::<FirstRunView>(cx);
+        assert!(fits(cx, first, "question-no"), "onboarding, question");
+        first
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
 
+        let missing = f
+            .dir
+            .path()
+            .join("a folder with a long name that is not there yet");
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.automations[0].folder = Some(missing.clone()), cx)
+        });
         let (popover, _) = cx.update(super::open_popover).unwrap();
         assert!(fits(cx, popover, "open-settings"), "popover");
+        assert!(
+            fits(cx, popover, "popover-automation-0"),
+            "popover, long rule"
+        );
+
+        cx.update(super::show_about);
+        let (about, _) = window_of::<AboutView>(cx);
+        assert!(fits(cx, about, "about-source"), "About");
 
         cx.update(super::show_main);
         let (main, _) = window_of::<MainView>(cx);
         assert!(fits(cx, main, "trial-buy"), "main window");
+        assert!(fits(cx, main, "empty-add-files"), "main window, empty");
     }
 }
 
@@ -2168,16 +3485,146 @@ fn an_unreadable_folder_does_not_hide_the_others() {
 
 #[test]
 fn the_icons_the_windows_draw_are_bundled() {
+    use super::theme::IconName;
     use gpui_kit::AssetSource;
-    use gpui_kit::component::{IconName, IconNamed};
+    use gpui_kit::component::IconNamed;
     let assets = super::assets();
-    for icon in [IconName::Check, IconName::ChevronDown, IconName::ArrowDown] {
+    for icon in IconName::ALL {
         let path = icon.path();
+        let svg = assets.load(&path).unwrap();
+        let svg = svg.unwrap_or_else(|| panic!("{path} is missing, so it would draw empty"));
+        // Hugeicons, not a Lucide icon with the same name.
         assert!(
-            assets.load(&path).unwrap().is_some(),
-            "{path} is missing, so it would draw empty"
+            String::from_utf8_lossy(&svg).contains("stroke-width=\"1.5\""),
+            "{path} isn't a Hugeicon"
         );
     }
+    // The component library's own icons (the spinner, a field's clear
+    // button) answer with Hugeicons too.
+    for path in ["icons/loader.svg", "icons/close.svg", "icons/check.svg"] {
+        let svg = assets.load(path).unwrap().unwrap();
+        assert!(
+            String::from_utf8_lossy(&svg).contains("stroke-width=\"1.5\""),
+            "{path}"
+        );
+    }
+    assert!(assets.load("icons/google-g.svg").unwrap().is_some());
+    // Onboarding's setup spinner and the Finder guide's pointer.
+    for path in [
+        "onboarding/spinner-track.svg",
+        "onboarding/spinner-arc.svg",
+        "guide/pointer-edge.svg",
+        "guide/pointer.svg",
+    ] {
+        assert!(assets.load(path).unwrap().is_some(), "{path}");
+    }
+}
+
+#[test]
+fn only_linux_windows_left_undecorated_draw_a_title_bar() {
+    use super::chrome::draws_title_bar;
+    assert!(!draws_title_bar(Decorations::Server));
+    assert_eq!(
+        draws_title_bar(Decorations::Client {
+            tiling: Tiling::default()
+        }),
+        cfg!(target_os = "linux")
+    );
+}
+
+#[gpui_kit::test]
+fn a_drawn_title_bar_sits_above_the_window_and_closes_it(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    // Without client-side decorations, which the test platform never
+    // reports, the window draws no bar.
+    let (main, _) = f.main(cx);
+    assert!(!shown(cx, main, "window-close"));
+    assert!(shown(cx, main, "add-files"));
+
+    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
+    let app = f.app.clone();
+    let (main, _) = cx.update(|cx| {
+        let options = super::window_options(size(px(1040.), px(640.)), "convt", cx);
+        super::open_window(options, cx, |window, cx| {
+            cx.new(|cx| MainView::new(app, window, cx))
+        })
+        .unwrap()
+    });
+    assert_eq!(label(cx, main, "window-title").as_deref(), Some("convt"));
+    assert_eq!(
+        label(cx, main, "window-minimize").as_deref(),
+        Some("Minimize")
+    );
+    assert_eq!(
+        label(cx, main, "window-maximize").as_deref(),
+        Some("Maximize")
+    );
+    assert_eq!(label(cx, main, "window-close").as_deref(), Some("Close"));
+    assert!(
+        shown(cx, main, "add-files"),
+        "the window's own view still shows"
+    );
+    let bounds = |cx: &mut TestAppContext, name: &str| {
+        cx.update_window(main, |_, window, cx| {
+            window.render_frame(cx);
+            window.find(id(name)).bounds()
+        })
+        .unwrap()
+    };
+    let bar = bounds(cx, "title-bar");
+    assert_eq!(bar.size.height, px(super::chrome::TITLE_BAR_HEIGHT));
+    assert!(
+        bounds(cx, "add-files").top() >= bar.bottom(),
+        "the view starts below the bar"
+    );
+
+    click(cx, main, "window-close");
+    assert!(
+        cx.update_window(main, |_, _, _| ()).is_err(),
+        "Close removes the window"
+    );
+}
+
+#[gpui_kit::test]
+fn the_title_bar_moves_the_window_only_for_a_held_drag(cx: &mut TestAppContext) {
+    use gpui_kit::{Modifiers, MouseButton, VisualTestContext};
+    let f = Fixture::new(cx);
+    cx.update(|cx| cx.set_global(super::chrome::ForceTitleBar::default()));
+    let (main, _) = f.main(cx);
+    let bounds = |cx: &mut TestAppContext, name: &str| {
+        cx.update_window(main, |_, window, cx| {
+            window.render_frame(cx);
+            window.find(id(name)).bounds()
+        })
+        .unwrap()
+    };
+    let moves =
+        |cx: &mut TestAppContext| cx.read(|cx| cx.global::<super::chrome::ForceTitleBar>().moves);
+    let bar = bounds(cx, "title-bar");
+    let on_bar = point(bar.left() + px(200.), bar.center().y);
+    let below = point(on_bar.x, bar.bottom() + px(120.));
+    let close = bounds(cx, "window-close").center();
+    let mut w = VisualTestContext::from_window(main, cx);
+    let none = Modifiers::default();
+
+    // A fast drag whose first motion already left the bar still moves.
+    w.simulate_mouse_down(on_bar, MouseButton::Left, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    w.simulate_mouse_up(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
+
+    // A press whose release the bar never saw doesn't move on a later hover.
+    let mut w = VisualTestContext::from_window(main, cx);
+    w.simulate_mouse_down(on_bar, MouseButton::Left, none);
+    w.simulate_mouse_move(on_bar, None, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
+
+    // A press on a window button never starts a drag.
+    let mut w = VisualTestContext::from_window(main, cx);
+    w.simulate_mouse_down(close, MouseButton::Left, none);
+    w.simulate_mouse_move(below, MouseButton::Left, none);
+    assert_eq!(moves(cx), 1);
 }
 
 #[test]
@@ -2194,7 +3641,13 @@ fn text_fields_have_room_for_a_whole_line(cx: &mut TestAppContext) {
     let (settings, _) = f.settings(SettingsTab::Presets, cx);
     let (quick, _) = f.quick(cli(vec![f.png("a.png")], None, None), cx);
     click(cx, quick, "to-webp");
+    click(cx, quick, "file-name-edit");
+    let app = f.app.clone();
+    let (feedback, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FeedbackView::new(app, window, cx))
+    });
     let fields = [
+        (feedback, "feedback-email", theme::FIELD_HEIGHT),
         (settings, "preset-name", theme::FIELD_HEIGHT),
         (settings, "preset-quality", theme::FIELD_HEIGHT),
         (settings, "preset-max-size", theme::FIELD_HEIGHT),
@@ -2284,30 +3737,20 @@ fn a_key_that_does_not_cover_this_build_is_saved_not_celebrated(cx: &mut TestApp
     let f = Fixture::licensed(cx, Some("2026-01-01"), None);
     let (window, view) = f.settings(SettingsTab::License, cx);
     let input = cx.read(|cx| view.read(cx).license_key.clone());
-    set_input(
-        cx,
-        window,
-        &input,
-        &license_key("old@example.com", "2025-01-01"),
-    );
+    set_input(cx, window, &input, &pro_key("old-tester", "2025-01-01"));
     click(cx, window, "activate");
     assert!(f.dir.path().join("license.key").exists());
     assert_eq!(
         label(cx, window, "license-notice").as_deref(),
-        Some("Saved the license for old@example.com.")
+        Some("Saved the license for ***.")
     );
     assert_eq!(label(cx, window, "settings-buy").as_deref(), Some("Renew"));
 
-    set_input(
-        cx,
-        window,
-        &input,
-        &license_key("new@example.com", "2027-10-01"),
-    );
+    set_input(cx, window, &input, &license_key("new-tester", "2027-10-01"));
     click(cx, window, "activate");
     assert_eq!(
         label(cx, window, "license-notice").as_deref(),
-        Some("License activated for new@example.com.")
+        Some("License activated for ***.")
     );
     assert!(!shown(cx, window, "settings-buy"));
 }
@@ -2317,54 +3760,34 @@ fn first_run_does_not_call_a_key_that_misses_this_build_ready(cx: &mut TestAppCo
     let f = Fixture::licensed(cx, None, None);
     cx.update(|cx| super::route(Request::default(), cx));
     let (window, view) = window_of::<FirstRunView>(cx);
-    if super::first_run::first_step() == Step::Finder {
-        click(cx, window, "first-run-back");
-    }
-    click(cx, window, "plan-key");
+    click(cx, window, "onboarding-key-link");
     let input = cx.read(|cx| view.read(cx).key.clone());
-    set_input(
-        cx,
-        window,
-        &input,
-        &license_key("old@example.com", "2025-01-01"),
-    );
-    click(cx, window, "first-run-next");
+    set_input(cx, window, &input, &pro_key("old-tester", "2025-01-01"));
+    click(cx, window, "onboarding-activate");
     assert!(f.dir.path().join("license.key").exists(), "the key is kept");
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("License saved")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Your license is saved")
     );
     assert_eq!(
-        label(cx, window, "first-run-next").as_deref(),
-        Some("Open convt")
-    );
-    assert_eq!(
-        label(cx, window, "first-run-renew").as_deref(),
+        label(cx, window, "onboarding-primary").as_deref(),
         Some("Renew")
     );
-    click(cx, window, "first-run-renew");
+    click(cx, window, "onboarding-primary");
     assert_eq!(
         cx.opened_url().as_deref(),
         Some(convt_license::client::BUY_URL)
     );
-    for name in ["first-run-next", "first-run-renew"] {
-        assert!(fits(cx, window, name), "{name}");
-    }
+    assert!(fits(cx, window, "onboarding-not-now"));
 
     // A key that covers this build is ready.
-    click(cx, window, "first-run-back");
-    set_input(
-        cx,
-        window,
-        &input,
-        &license_key("new@example.com", "2027-10-01"),
-    );
-    click(cx, window, "first-run-next");
+    click(cx, window, "onboarding-key-link");
+    set_input(cx, window, &input, &license_key("new-tester", "2027-10-01"));
+    click(cx, window, "onboarding-activate");
     assert_eq!(
-        label(cx, window, "first-run-title").as_deref(),
-        Some("You're set")
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("You have a convt license")
     );
-    assert!(!shown(cx, window, "first-run-renew"));
 }
 
 #[gpui_kit::test]
@@ -2556,20 +3979,17 @@ fn documents_added_dropped_or_in_folders_reach_the_offer(cx: &mut TestAppContext
     let f = Fixture::with_packs(cx, packs.clone());
     let docx = f.docx("Plan.docx");
     let png = f.png("a.png");
+    let bmp = f.bmp("a.bmp");
     let folder = f.dir.path().join("folder");
     std::fs::create_dir(&folder).unwrap();
     std::fs::write(folder.join("Budget.xlsx"), b"PK").unwrap();
 
-    // Add files: the PNG converts, the document opens the offer.
+    // Add files: Quick convert offers the pack beside the BMP's formats.
     let (_, main) = f.main(cx);
-    main.update(cx, |v, cx| v.add(&[png.clone(), docx.clone()], cx));
+    main.update(cx, |v, cx| v.add(&[bmp.clone(), docx.clone()], cx));
     let (window, view) = last_quick(cx);
-    cx.read(|cx| assert_eq!(view.read(cx).files, std::slice::from_ref(&docx)));
-    assert!(shown(cx, window, "pack-card"));
-    assert_eq!(
-        label(cx, window, "convert").as_deref(),
-        Some("Install & Convert")
-    );
+    cx.read(|cx| assert_eq!(view.read(cx).files, [bmp, docx.clone()]));
+    assert!(shown(cx, window, "pack-download"));
 
     // A folder's documents aren't dropped on the floor.
     main.update(cx, |v, cx| v.add(std::slice::from_ref(&folder), cx));
@@ -2787,7 +4207,7 @@ fn a_build_without_a_pinned_pack_offers_no_download(cx: &mut TestAppContext) {
     assert!(!shown(cx, window, "pack-download"));
     // Even a direct call does nothing without a pinned pack.
     let app = f.app.clone();
-    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(cx)));
+    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(0, cx)));
     assert_eq!(packs.installs(), 0);
 }
 
@@ -2819,16 +4239,35 @@ fn only_the_download_button_reaches_the_installer() {
     };
     assert_eq!(uses("install_documents"), ["pack.rs"]);
     assert_eq!(uses("ureq"), Vec::<&str>::new());
-    // The definition, and the one call in the button's click handler.
-    assert_eq!(uses("download_pack("), ["model.rs", "ui/pack.rs"]);
+    // The definition and its retry, which only follows a download already
+    // asked for, and the calls in `start_install` and
+    // `start_background_install`.
+    assert_eq!(
+        uses("download_pack("),
+        ["model.rs", "model.rs", "ui/pack.rs", "ui/pack.rs"]
+    );
+    let model = include_str!("../model.rs").replace("\r\n", "\n");
+    let retry = model.split("fn retry_pack").nth(1).unwrap();
+    assert!(retry[..retry.find("\n    }\n").unwrap()].contains("self.download_pack("));
+    // Which only the Download button's click and onboarding's Yes call.
+    assert_eq!(uses("start_install("), ["ui/pack.rs", "ui/pack.rs"]);
+    assert_eq!(
+        uses("start_background_install("),
+        ["ui/first_run.rs", "ui/pack.rs"]
+    );
     // A Windows checkout may have CRLF line endings.
-    let button = include_str!("pack.rs").replace("\r\n", "\n");
-    let button = button.split("fn download_button").nth(1).unwrap();
+    let pack = include_str!("pack.rs").replace("\r\n", "\n");
+    let button = pack.split("fn download_button").nth(1).unwrap();
     let button = &button[..button.find("\n}\n").unwrap()];
-    assert!(button.contains(".on_click(") && button.contains("download_pack(cx)"));
+    assert!(button.contains(".on_click(") && button.contains("start_install(&app, cx)"));
+    let first_run = include_str!("first_run.rs").replace("\r\n", "\n");
+    let answer = first_run.split("fn answer").nth(1).unwrap();
+    let answer = &answer[..answer.find("\n    }\n").unwrap()];
+    assert!(
+        answer.contains("if yes") && answer.contains("start_background_install(&self.app, cx)")
+    );
     // `backend.install(` runs inside download_pack's worker thread only.
     assert_eq!(uses("backend.install("), ["model.rs"]);
-    let model = include_str!("../model.rs").replace("\r\n", "\n");
     let body = &model[model.find("pub fn download_pack").unwrap()..];
     let body = &body[..body.find("\n    }\n").unwrap()];
     assert!(body.contains("backend.install("));
@@ -2958,7 +4397,7 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
         app.update(cx, |s, cx| {
             s.convert(std::slice::from_ref(&docx), pdf, &Options::default(), cx)
                 .unwrap();
-            s.download_pack(cx);
+            s.download_pack(0, cx);
         })
     });
     assert_eq!(packs.installs(), 0, "not while a document converts");
@@ -2974,7 +4413,7 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
 
     // Once nothing converts, it reinstalls, and documents wait for it.
     packs.hold.store(true, Ordering::SeqCst);
-    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(cx)));
+    cx.update(|cx| app.update(cx, |s, cx| s.download_pack(0, cx)));
     wait_until(cx, "the download", |_| packs.installs() == 1);
     cx.update(|cx| {
         app.update(cx, |s, cx| {
@@ -3040,7 +4479,7 @@ fn the_picker_shows_what_the_pack_would_unlock(cx: &mut TestAppContext) {
             Some("Install & Convert")
         );
         // A name for the output can be set before installing.
-        assert!(shown(cx, window, "file-name"));
+        assert!(shown(cx, window, "file-name-edit"));
     }
     // Several documents: what they all could become.
     let (_, view) = f.quick(cli(vec![docx.clone(), xlsx], None, None), cx);
@@ -3198,7 +4637,7 @@ fn a_failed_or_stopped_install_forgets_the_conversion(cx: &mut TestAppContext) {
     wait_until(cx, "the install", |cx| {
         f.app.read(cx).pack.phase == PackPhase::Done
     });
-    wait_for_label(cx, window, "convert", |s| s == "Convert");
+    wait_for_label(cx, window, "convert", |s| s == "Convert to PDF");
     assert_eq!(f.jobs(cx), 0);
     cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
     click(cx, window, "convert");
@@ -3221,7 +4660,7 @@ fn picking_another_target_drops_install_and_convert(cx: &mut TestAppContext) {
     wait_until(cx, "the install", |cx| {
         f.app.read(cx).pack.phase == PackPhase::Done
     });
-    wait_for_label(cx, window, "convert", |s| s == "Convert");
+    wait_for_label(cx, window, "convert", |s| s == "Convert to Plain text");
     assert_eq!(f.jobs(cx), 0);
 }
 
@@ -3231,7 +4670,7 @@ fn menus_offer_documents_only_when_the_pack_can_be_downloaded(cx: &mut TestAppCo
     let f = Fixture::with_packs(cx, packs.clone());
     cx.read(|cx| {
         let state = f.app.read(cx);
-        let list = crate::finder::target_list(state.menu_registry());
+        let list = crate::finder::target_list(state.menu_registry(), &state.menu);
         for ext in ["docx", "odt", "xlsx"] {
             let id = list.extensions[ext];
             let menu: Vec<_> = list.targets[id].iter().map(|t| t.id).collect();
@@ -3253,7 +4692,8 @@ fn menus_offer_documents_only_when_the_pack_can_be_downloaded(cx: &mut TestAppCo
     });
     let g = Fixture::with_packs(cx, unconfigured);
     cx.read(|cx| {
-        let list = crate::finder::target_list(g.app.read(cx).menu_registry());
+        let state = g.app.read(cx);
+        let list = crate::finder::target_list(state.menu_registry(), &state.menu);
         for ext in ["docx", "odt", "xlsx"] {
             assert!(!list.extensions.contains_key(ext), "{ext}");
         }
@@ -3355,12 +4795,12 @@ fn activity_offers_the_pack_until_it_is_installed_or_dismissed(cx: &mut TestAppC
 }
 
 #[gpui_kit::test]
-fn add_files_opens_documents_with_their_default_picked(cx: &mut TestAppContext) {
+fn dropped_documents_open_with_their_default_picked(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks::default());
     let f = Fixture::with_packs(cx, packs.clone());
     let (docx, xlsx) = (f.docx("Report.docx"), f.docx("Budget.xlsx"));
-    let (_, main) = f.main(cx);
-    main.update(cx, |v, cx| v.add(&[docx, xlsx], cx));
+    let (_, popover) = cx.update(super::open_popover).unwrap();
+    popover.update(cx, |v, cx| v.drop_files(&[docx, xlsx], cx));
     let (window, view) = last_quick(cx);
     // Documents → PDF is the default, so PDF is picked.
     cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
@@ -3455,11 +4895,11 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     assert_eq!(f.api.calls(), (0, 0, 0));
 
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: "pro-tester".into(),
         token: "cvd_issued".into(),
     });
     f.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+        .answer_key(Ok(Some(pro_key("pro-tester", "2026-11-01"))));
     cx.update(|cx| super::route(auth_link(&state, "code=c0de"), cx));
     wait_until(cx, "the refresh finished", |cx| {
         matches!(
@@ -3486,7 +4926,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
     });
     assert_eq!(
         label(cx, settings, "account-status").as_deref(),
-        Some("Signed in to convt.app as pro@example.com.")
+        Some("Signed in to convt.app as ***.")
     );
     assert_eq!(
         label(cx, settings, "refresh-status").as_deref(),
@@ -3499,7 +4939,7 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
 fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: "pro-tester".into(),
         token: "cvd_issued".into(),
     });
     f.api.answer_key(Ok(None));
@@ -3549,7 +4989,7 @@ fn unsolicited_replayed_and_stale_links_never_sign_in(cx: &mut TestAppContext) {
             .unwrap()
             .contains("didn't start")
     );
-    cx.read(|cx| assert_eq!(f.app.read(cx).account.email(), Some("pro@example.com")));
+    cx.read(|cx| assert_eq!(f.app.read(cx).account.email(), Some("pro-tester")));
 
     // After a cancel, the cancelled flow's link is dropped too.
     click(cx, settings, "sign-out");
@@ -3615,10 +5055,10 @@ fn a_sign_in_cancelled_or_refused_in_the_browser_fails(cx: &mut TestAppContext) 
 
 #[gpui_kit::test]
 fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
-    let current = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&current), "pro@example.com");
+    let current = pro_key("pro-tester", "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&current), "pro-tester");
     // Offline at launch: one try, the key stays, the failure shows in Settings.
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     wait_until(cx, "the refresh failed", |cx| {
         matches!(
             f.app.read(cx).account.refresh,
@@ -3641,7 +5081,7 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
     cx.read(|cx| assert!(f.app.read(cx).account.session.is_some()));
 
     // A second launch the same day asks nothing.
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     cx.run_until_parked();
     assert_eq!(f.api.calls(), (0, 1, 0));
     // A launch on a later day asks again.
@@ -3650,11 +5090,11 @@ fn launch_renews_once_a_day_and_offline_keeps_the_key(cx: &mut TestAppContext) {
             s.update_settings(|s| s.license_checked = Some("2026-01-01".into()), cx)
         })
     });
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     wait_until(cx, "the second launch's refresh", |_| f.api.calls().1 == 2);
 
     // Refresh license asks whenever clicked, and stores the next period's key.
-    let next = pro_key("pro@example.com", "2026-11-15");
+    let next = pro_key("pro-tester", "2026-11-15");
     f.api.answer_key(Ok(Some(next.clone())));
     wait_until(cx, "idle", |cx| {
         f.app.read(cx).account.refresh != crate::account::Refresh::Running
@@ -3712,9 +5152,9 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
     let f = Fixture::licensed(
         cx,
         Some("2026-09-30"),
-        Some(&license_key("a@b.c", "2027-10-01")),
+        Some(&license_key("a-tester", "2027-10-01")),
     );
-    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
     cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     assert!(!shown(cx, settings, "refresh-license"));
@@ -3737,8 +5177,8 @@ fn signed_out_the_app_never_calls_convt_app(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut TestAppContext) {
-    let key = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let key = pro_key("pro-tester", "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), "pro-tester");
     f.api.answer_key(Err(ApiError::SignedOut));
     let (settings, _) = f.settings(SettingsTab::License, cx);
     click(cx, settings, "refresh-license");
@@ -3760,7 +5200,7 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
     cx.update(|cx| {
         f.app.update(cx, |s, cx| {
             s.update_settings(|s| s.license_checked = None, cx);
-            s.renew_on_launch(cx)
+            s.renew_if_due(cx)
         })
     });
     cx.run_until_parked();
@@ -3768,9 +5208,35 @@ fn a_device_revoked_on_the_dashboard_signs_out_here_and_keeps_the_key(cx: &mut T
 }
 
 #[gpui_kit::test]
+fn a_refresh_answering_after_a_revocation_is_dropped(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::CanStartTrial {
+            checkout_url: "https://convt.test/checkout".into(),
+        }));
+    f.api.hold_key.store(true, Ordering::SeqCst);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    wait_until(cx, "the refresh asked", |_| f.api.calls().1 == 1);
+    // A cloud job finds the sign-in revoked while the refresh waits.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.forget_revoked_session(cx)));
+    cx.read(|cx| assert_eq!(f.app.read(cx).account.refresh, Refresh::Idle));
+    f.api.hold_key.store(false, Ordering::SeqCst);
+    for _ in 0..5 {
+        std::thread::sleep(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    cx.read(|cx| {
+        let s = f.app.read(cx);
+        assert!(s.account.session.is_none());
+        assert_eq!(s.account.access, None, "the old account's offer stays gone");
+    });
+}
+
+#[gpui_kit::test]
 fn sign_out_forgets_the_token_and_revokes_it(cx: &mut TestAppContext) {
-    let key = pro_key("pro@example.com", "2026-10-15");
-    let f = Fixture::signed_in(cx, Some(&key), "pro@example.com");
+    let key = pro_key("pro-tester", "2026-10-15");
+    let f = Fixture::signed_in(cx, Some(&key), "pro-tester");
     let (settings, _) = f.settings(SettingsTab::License, cx);
     click(cx, settings, "sign-out");
     assert!(!f.dir.path().join("account.json").exists());
@@ -3783,6 +5249,124 @@ fn sign_out_forgets_the_token_and_revokes_it(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn signing_out_ends_the_account_trial_on_screen(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    // No local trial was ever started on this computer.
+    std::fs::remove_file(f.dir.path().join("trial")).unwrap();
+    let ends_on = convt_license::date::from_days(client::today() + 5);
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.licensing
+            .set_account_trial_exact(Some(ends_on.clone()), Some(format!("{ends_on}T12:00:00Z")));
+        s.license = s.licensing.state();
+        cx.notify();
+    });
+    let (main, _) = f.main(cx);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    let status = label(cx, settings, "license-status").unwrap();
+    assert!(status.starts_with("Pro trial"), "{status}");
+
+    click(cx, settings, "sign-out");
+    let signed_out = Some("Sign in to start your free trial.".to_string());
+    assert_eq!(label(cx, settings, "license-status"), signed_out);
+    assert_eq!(label(cx, main, "trial-card"), signed_out);
+    cx.read(|cx| assert!(!f.app.read(cx).license.allows_conversion()));
+}
+
+#[gpui_kit::test]
+fn a_trial_skipped_in_onboarding_can_start_later(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    std::fs::remove_file(f.dir.path().join("trial")).unwrap();
+    let checkout = "https://checkout.example.com/trial";
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        }));
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.license = s.licensing.state();
+        s.account.access = Some(Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        });
+        cx.notify();
+    });
+    let (main, _) = f.main(cx);
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    let offer = Some("Start your 7-day Pro trial.".to_string());
+    assert_eq!(label(cx, main, "trial-card"), offer);
+    assert_eq!(label(cx, settings, "license-status"), offer);
+    assert_eq!(
+        label(cx, main, "trial-buy").as_deref(),
+        Some("Start free trial")
+    );
+    assert!(fits(cx, main, "trial-buy"));
+
+    // The sidebar starts it, as onboarding would.
+    click(cx, main, "trial-buy");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+    cx.read(|cx| assert!(f.app.read(cx).account.awaiting_trial));
+
+    // So does the License tab.
+    cx.update(|cx| cx.open_url("about:blank"));
+    click(cx, settings, "start-trial");
+    assert_eq!(cx.opened_url().as_deref(), Some(checkout));
+
+    // Nothing to start for a lapsed account, or with a key that converts.
+    // Starting the trial asks convt.app again, so it answers the same.
+    f.api
+        .answer_access(Some(convt_license::account::Access::Lapsed));
+    wait_until(cx, "the trial check", |cx| {
+        f.app.read(cx).account.refresh != Refresh::Running
+    });
+    f.app.update(cx, |s, cx| {
+        s.account.access = Some(Access::Lapsed);
+        cx.notify();
+    });
+    assert!(!shown(cx, settings, "start-trial"));
+    assert_ne!(
+        label(cx, main, "trial-buy").as_deref(),
+        Some("Start free trial")
+    );
+    f.app.update(cx, |s, cx| {
+        s.account.access = Some(Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        });
+        s.activate(&license_key("a@b.c", "2027-10-01"), cx).unwrap();
+    });
+    assert!(!shown(cx, settings, "start-trial"));
+    assert!(!shown(cx, main, "trial-card"));
+}
+
+#[gpui_kit::test]
+fn a_relaunch_the_same_day_asks_what_a_blocked_account_offers(cx: &mut TestAppContext) {
+    let f = Fixture::signed_in(cx, None, "trial-tester");
+    std::fs::remove_file(f.dir.path().join("trial")).unwrap();
+    let checkout = "https://checkout.example.com/trial";
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::CanStartTrial {
+            checkout_url: checkout.into(),
+        }));
+    let today = convt_license::date::from_days(client::today());
+    f.app.update(cx, |s, cx| {
+        s.licensing.disable_local_trial();
+        s.license = s.licensing.state();
+        // Asked earlier today, before "Not now" and a restart.
+        s.update_settings(|s| s.license_checked = Some(today), cx);
+    });
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
+    wait_until(cx, "the offer", |cx| {
+        f.app.read(cx).account.can_start_trial()
+    });
+    assert_eq!(f.api.calls(), (0, 1, 0));
+    // Once known, the day's schedule asks no more.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.renew_if_due(cx)));
+    cx.run_until_parked();
+    assert_eq!(f.api.calls(), (0, 1, 0));
+}
+
+#[gpui_kit::test]
 fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     for dark in [false, true] {
@@ -3790,18 +5374,19 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
         let (settings, _) = f.settings(SettingsTab::License, cx);
         let app = f.app.clone();
         let (first, _) = open(cx, move |window, cx| {
-            cx.new(|cx| FirstRunView::new(app, Step::Plan, window, cx))
+            cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
         });
-        // Signed out.
-        assert!(shown(cx, settings, "sign-in") && shown(cx, first, "sign-in"));
+        // Signed out (the second pass starts where the first failed).
+        assert!(shown(cx, settings, "sign-in"));
+        assert!(shown(cx, first, "onboarding-google") || shown(cx, first, "onboarding-retry"));
         assert!(shown(cx, settings, "refresh-note"));
         // Waiting.
         click(cx, settings, "sign-in");
-        assert!(shown(cx, settings, "sign-in-cancel") && shown(cx, first, "sign-in-cancel"));
+        assert!(shown(cx, settings, "sign-in-cancel") && shown(cx, first, "onboarding-cancel"));
         // Failed.
         let state = query(&cx.opened_url().unwrap(), "state");
         cx.update(|cx| super::route(auth_link(&state, "error=denied"), cx));
-        assert!(shown(cx, first, "sign-in"));
+        assert!(shown(cx, first, "onboarding-retry"));
         assert_eq!(label(cx, settings, "sign-in").as_deref(), Some("Try again"));
         cx.update(|cx| {
             cx.windows()
@@ -3815,7 +5400,7 @@ fn every_sign_in_state_renders_in_both_themes(cx: &mut TestAppContext) {
 fn a_second_sign_in_cannot_start_while_the_first_is_finishing(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, None);
     *f.api.exchange.lock().unwrap() = Ok(Session {
-        email: "pro@example.com".into(),
+        email: "pro-tester".into(),
         token: "cvd_first".into(),
     });
     f.api.answer_key(Ok(None));
@@ -3856,9 +5441,28 @@ fn update_key() -> SigningKey {
 }
 
 /// A signed manifest issued an hour ago, listing `builds` as (version, date).
+///
+/// The app compares builds against its own crate version, which Changesets
+/// bumps on every release. Builds meant to be newer use 9.x so a version bump
+/// never turns them into downgrades; 0.1.0 stays older than any real version.
 fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8> {
+    manifest_for(sequence, builds, key, b"x")
+}
+
+/// [`manifest`] whose AppImage is `installer`: its size and SHA-256.
+fn manifest_for(
+    sequence: u64,
+    builds: &[(&str, &str)],
+    key: &SigningKey,
+    installer: &[u8],
+) -> Vec<u8> {
     use base64::Engine as _;
     use ed25519_dalek::Signer as _;
+    use sha2::Digest as _;
+    let sha256: String = sha2::Sha256::digest(installer)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -3867,9 +5471,9 @@ fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8>
     let artifact = |platform: &str, kind: &str| convt_update::Artifact {
         platform: platform.into(),
         kind: kind.into(),
-        url: "https://downloads.convt.test/convt".into(),
-        size: 1,
-        sha256: "a".repeat(64),
+        url: "https://downloads.convt.test/convt-linux-x86_64.AppImage".into(),
+        size: installer.len() as u64,
+        sha256: sha256.clone(),
     };
     let m = convt_update::Manifest {
         schema_version: 1,
@@ -3885,6 +5489,7 @@ fn manifest(sequence: u64, builds: &[(&str, &str)], key: &SigningKey) -> Vec<u8>
                 build_date: (*d).into(),
                 artifacts: vec![artifact("linux-x86_64", "AppImage")],
                 source: artifact("source", "tar.gz"),
+                source_closure: None,
             })
             .collect(),
     };
@@ -3904,7 +5509,7 @@ fn wait_for_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 }
 
 fn launch_check(f: &Fixture, cx: &mut TestAppContext) {
-    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates_on_launch(cx)));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
 }
 
 fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
@@ -3915,66 +5520,122 @@ fn manual_check(f: &Fixture, cx: &mut TestAppContext) -> Update {
 #[gpui_kit::test]
 fn a_covered_update_shows_and_opens_the_download_page(cx: &mut TestAppContext) {
     // The license covers builds through 2026-10-03.
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-03")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-10-03")));
     let builds = [
         ("0.1.0", "2026-10-01"),
-        ("0.2.0", "2026-10-03"),
-        ("0.3.0", "2026-10-04"),
+        ("9.2.0", "2026-10-03"),
+        ("9.3.0", "2026-10-04"),
     ];
     f.releases.serve(Ok(manifest(7, &builds, &update_key())));
     launch_check(&f, cx);
     assert_eq!(
         wait_for_check(&f, cx),
         Update::Available {
-            version: "0.2.0".into(),
+            version: "9.2.0".into(),
             date: "2026-10-03".into(),
-            uncovered: Some("0.3.0".into()),
+            uncovered: Some("9.3.0".into()),
         }
     );
     cx.read(|cx| {
         let s = &f.app.read(cx).settings;
         assert_eq!(s.update_sequence, 7);
-        assert_eq!(s.update_checked.as_deref(), Some(today().as_str()));
+        assert!(s.update_checked_at.is_some());
     });
     assert!(f.settings_file().contains("update_sequence = 7"));
 
     let (main, _) = f.main(cx);
     assert_eq!(
         label(cx, main, "update-card").as_deref(),
-        Some("Update available: convt 0.2.0")
+        Some("Update available: convt 9.2.0")
     );
     click(cx, main, "update-download");
     assert_eq!(
         cx.opened_url().as_deref(),
         Some(convt_license::client::DOWNLOAD_URL)
     );
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
     let status = label(cx, settings, "update-status").unwrap();
-    assert!(status.contains("0.2.0 is out") && status.contains("0.3.0 needs a renewed license"));
+    assert!(
+        status.starts_with("convt 9.2.0 is available Built Oct 3, 2026.")
+            && status.contains("9.3.0 is out too and needs a renewed license"),
+        "{status}"
+    );
+    assert_eq!(
+        label(cx, settings, "update-version").as_deref(),
+        Some(format!("convt {}", crate::account::VERSION).as_str())
+    );
+    let last = label(cx, settings, "update-last-checked").unwrap();
+    assert!(
+        last.starts_with("Built ") && last.contains(" · Last checked today at "),
+        "{last}"
+    );
+    click(cx, settings, "update-notes");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some("https://github.com/opencoredev/convt/releases/tag/v9.2.0")
+    );
+    click(cx, settings, "update-download");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(convt_license::client::DOWNLOAD_URL)
+    );
 
-    // A second launch the same day asks nothing.
+    // Every launch checks, even the same day.
     launch_check(&f, cx);
+    wait_for_check(&f, cx);
+    assert_eq!(f.releases.fetches(), 2);
+    // Nothing was downloaded or installed: the only fetches were the list.
+}
+
+#[gpui_kit::test]
+fn a_running_app_checks_again_every_few_hours(cx: &mut TestAppContext) {
+    use crate::update::{CHECK_INTERVAL, SCHEDULE_TICK};
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    f.releases
+        .serve(Ok(manifest(1, &[("0.1.0", "2026-10-01")], &update_key())));
+    launch_check(&f, cx);
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert_eq!(f.releases.fetches(), 1);
+    assert!(CHECK_INTERVAL >= Duration::from_secs(4 * 3600));
+    assert!(CHECK_INTERVAL <= Duration::from_secs(6 * 3600));
+
+    // The schedule looks again soon, but the last check is recent.
+    cx.executor().advance_clock(SCHEDULE_TICK);
     cx.run_until_parked();
     assert_eq!(f.releases.fetches(), 1);
-    // Nothing was downloaded or installed: the only fetch was the list.
+
+    // Once the interval has passed, the next tick checks.
+    let long_ago = crate::update::now_unix() - CHECK_INTERVAL.as_secs();
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_attempted = Some(long_ago)));
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    wait_for_check(&f, cx);
+    assert_eq!(f.releases.fetches(), 2);
+
+    // With automatic checks off, a due tick asks nothing.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.set_update_checks(false, cx)));
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_attempted = Some(long_ago)));
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 2);
 }
 
 #[gpui_kit::test]
 fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(
         manual_check(&f, cx),
-        Update::NotCovered { version, .. } if version == "0.2.0"
+        Update::NotCovered { version, .. } if version == "9.2.0"
     ));
     let (main, _) = f.main(cx);
     assert_eq!(
         label(cx, main, "update-card").as_deref(),
-        Some("New version: convt 0.2.0 needs a renewed license")
+        Some("New version: convt 9.2.0 needs a renewed license")
     );
     click(cx, main, "update-renew");
     assert_eq!(
@@ -3996,13 +5657,70 @@ fn a_newer_build_the_license_does_not_cover_offers_renewal(cx: &mut TestAppConte
         .serve(Ok(manifest(4, &[("0.1.0", "2026-10-01")], &update_key())));
     assert_eq!(manual_check(&f, cx), Update::UpToDate);
     assert!(!shown(cx, main, "update-card"));
+    // Only builds with a package for this install count, so it claims no more.
+    let status = label(cx, settings, "update-status").unwrap();
+    assert!(
+        status.starts_with("You're up to date.") && status.ends_with("for this install."),
+        "{status}"
+    );
+    assert!(!shown(cx, settings, "update-notes"));
+}
+
+#[gpui_kit::test]
+fn check_now_shows_that_it_is_checking(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
+    let built = cx.read(|cx| f.app.read(cx).licensing.build_date().to_string());
+    assert_eq!(
+        label(cx, settings, "update-last-checked"),
+        Some(format!("Built {}", super::update::long_date(&built)))
+    );
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .contains("at launch and every 5 hours")
+    );
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update = Update::Checking;
+            cx.notify();
+        })
+    });
+    assert_eq!(
+        label(cx, settings, "check-updates").as_deref(),
+        Some("Checking…")
+    );
+    // A click while it checks starts nothing more.
+    click(cx, settings, "check-updates");
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 0);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update = Update::Idle;
+            cx.notify();
+        })
+    });
+    assert_eq!(
+        label(cx, settings, "check-updates").as_deref(),
+        Some("Check now")
+    );
+}
+
+#[test]
+fn update_dates_read_as_words() {
+    use super::update::long_date;
+    assert_eq!(long_date("2026-10-03"), "Oct 3, 2026");
+    assert_eq!(long_date("2026-01-31"), "Jan 31, 2026");
+    assert_eq!(long_date("2026-13-01"), "2026-13-01");
+    assert_eq!(long_date("unknown"), "unknown");
 }
 
 #[gpui_kit::test]
 fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppContext) {
     use base64::Engine as _;
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
-    let newer = [("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")];
+    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2027-10-01")));
+    let newer = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
     // Accept sequence 10 first.
     f.releases.serve(Ok(manifest(10, &newer, &update_key())));
     assert!(matches!(manual_check(&f, cx), Update::Available { .. }));
@@ -4064,30 +5782,36 @@ fn bad_manifests_and_failures_are_quiet_and_change_nothing(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
-fn update_checks_off_make_no_request(cx: &mut TestAppContext) {
+fn update_checks_off_ask_only_when_the_user_does(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
     f.releases
-        .serve(Ok(manifest(1, &[("0.2.0", "2026-10-03")], &update_key())));
-    let (settings, _) = f.settings(SettingsTab::General, cx);
-    assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("On"));
+        .serve(Ok(manifest(1, &[("9.2.0", "2026-10-03")], &update_key())));
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
+    assert_eq!(
+        label(cx, settings, "update-checks").as_deref(),
+        Some("Check automatically")
+    );
+    assert_eq!(toggled(cx, settings, "update-checks"), Some(true));
     click(cx, settings, "update-checks");
-    assert_eq!(label(cx, settings, "update-checks").as_deref(), Some("Off"));
+    assert_eq!(toggled(cx, settings, "update-checks"), Some(false));
     assert!(f.settings_file().contains("update_checks = false"));
     assert!(
         label(cx, settings, "update-status")
             .unwrap()
-            .starts_with("Off.")
+            .starts_with("Automatic checks are off.")
     );
     launch_check(&f, cx);
-    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
     cx.run_until_parked();
     assert_eq!(f.releases.fetches(), 0);
-    assert!(!shown(cx, settings, "check-updates"));
-    // Switching it back on is a click, so it checks right away. A trial
-    // covers every build.
-    click(cx, settings, "update-checks");
+    // Check now still works: the user asked. A trial covers every build.
+    click(cx, settings, "check-updates");
     assert!(matches!(wait_for_check(&f, cx), Update::Available { .. }));
     assert_eq!(f.releases.fetches(), 1);
+    // Switching it back on is a click, so it checks right away.
+    click(cx, settings, "update-checks");
+    wait_for_check(&f, cx);
+    assert_eq!(f.releases.fetches(), 2);
     assert!(
         label(cx, settings, "network-updates")
             .unwrap()
@@ -4109,22 +5833,37 @@ fn a_build_without_an_update_key_never_fetches(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2026-10-02")));
     let states = [
         Update::Idle,
         Update::Checking,
         Update::UpToDate,
         Update::Available {
-            version: "0.2.0".into(),
+            version: "9.2.0".into(),
             date: "2026-10-03".into(),
-            uncovered: Some("0.3.0".into()),
+            uncovered: Some("9.3.0".into()),
         },
         Update::NotCovered {
-            version: "0.2.0".into(),
+            version: "9.2.0".into(),
             date: "2026-10-03".into(),
             purchase_url: "https://convt.test/pricing".into(),
         },
         Update::Failed("convt.app couldn't be reached.".into()),
+        Update::Downloading {
+            version: "9.2.0".into(),
+            percent: 42,
+        },
+        Update::Ready {
+            version: "9.2.0".into(),
+            path: "/tmp/convt.AppImage".into(),
+        },
+        Update::Installing {
+            version: "9.2.0".into(),
+        },
+        Update::InstallFailed {
+            version: "9.2.0".into(),
+            why: download::Error::Checksum.plain(),
+        },
     ];
     for dark in [false, true] {
         cx.update(|cx| theme::set_dark(dark, cx));
@@ -4138,7 +5877,10 @@ fn every_update_state_renders_in_both_themes(cx: &mut TestAppContext) {
                 })
             });
             assert!(shown(cx, settings, "update-status"), "{state:?}");
-            let card = matches!(state, Update::Available { .. } | Update::NotCovered { .. });
+            let card = !matches!(
+                state,
+                Update::Idle | Update::Checking | Update::UpToDate | Update::Failed(_)
+            );
             assert_eq!(shown(cx, main, "update-card"), card, "{state:?}");
             if card {
                 assert!(fits(cx, main, "update-card"), "{state:?}");
@@ -4156,8 +5898,8 @@ fn break_settings(dir: &Path) {
 
 #[gpui_kit::test]
 fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
-    let newer = [("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")];
+    let f = Fixture::licensed(cx, None, Some(&license_key("a-tester", "2027-10-01")));
+    let newer = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
     f.releases.serve(Ok(manifest(8, &newer, &update_key())));
     // The sequence can't be saved: the result is not shown or remembered.
     let dir = f.dir.path().to_path_buf();
@@ -4170,24 +5912,27 @@ fn nothing_is_accepted_unless_the_guard_reaches_the_disk(cx: &mut TestAppContext
     cx.read(|cx| assert_eq!(f.app.read(cx).settings.update_sequence, 0));
     let (main, _) = f.main(cx);
     assert!(!shown(cx, main, "update-card"));
-    // The day can't be recorded: no request at all.
-    cx.update(|cx| f.app.update(cx, |s, _| s.settings.update_checked = None));
+    // A launch check with settings still unsaveable is refused the same way.
     launch_check(&f, cx);
-    cx.run_until_parked();
-    assert_eq!(f.releases.fetches(), 1);
+    let update = wait_for_check(&f, cx);
+    assert!(
+        matches!(&update, Update::Failed(m) if m.contains("couldn't be saved")),
+        "{update:?}"
+    );
+    assert_eq!(f.releases.fetches(), 2);
     cx.read(|cx| {
-        assert!(
-            matches!(&f.app.read(cx).update, Update::Failed(m) if m.contains("couldn't be saved"))
-        )
+        let s = &f.app.read(cx).settings;
+        assert_eq!(s.update_sequence, 0);
+        assert_eq!(s.update_checked_at, None);
     });
 }
 
 #[gpui_kit::test]
 fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppContext) {
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-10-02")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-10-02")));
     f.releases.serve(Ok(manifest(
         3,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
@@ -4195,27 +5940,23 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
     cx.update(|cx| {
         f.app
             .update(cx, |s, cx| {
-                s.activate(&license_key("a@b.c", "2027-10-01"), cx)
+                s.activate(&pro_key("a-tester", "2027-10-01"), cx)
             })
             .unwrap();
     });
     cx.read(|cx| {
-        assert!(matches!(&f.app.read(cx).update, Update::Available { version, .. } if version == "0.2.0"))
+        assert!(matches!(&f.app.read(cx).update, Update::Available { version, .. } if version == "9.2.0"))
     });
     // And a renewal through convt.app does the same.
-    let f2 = Fixture::signed_in(
-        cx,
-        Some(&pro_key("pro@example.com", "2026-10-02")),
-        "pro@example.com",
-    );
+    let f2 = Fixture::signed_in(cx, Some(&pro_key("pro-tester", "2026-10-02")), "pro-tester");
     f2.releases.serve(Ok(manifest(
         3,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(manual_check(&f2, cx), Update::NotCovered { .. }));
     f2.api
-        .answer_key(Ok(Some(pro_key("pro@example.com", "2026-11-01"))));
+        .answer_key(Ok(Some(pro_key("pro-tester", "2026-11-01"))));
     cx.update(|cx| f2.app.update(cx, |s, cx| s.refresh_license(cx)));
     wait_until(cx, "renewed", |cx| {
         matches!(
@@ -4230,10 +5971,10 @@ fn a_new_license_reselects_the_update_without_another_request(cx: &mut TestAppCo
 #[gpui_kit::test]
 fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppContext) {
     // The license ended before this build (2026-10-01) too.
-    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2026-09-15")));
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a-tester", "2026-09-15")));
     f.releases.serve(Ok(manifest(
         2,
-        &[("0.1.0", "2026-10-01"), ("0.2.0", "2026-10-03")],
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
         &update_key(),
     )));
     assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
@@ -4243,4 +5984,1328 @@ fn an_uncovered_running_build_is_not_promised_to_keep_working(cx: &mut TestAppCo
         !status.contains("keeps working") && status.contains("renew to convert again"),
         "{status}"
     );
+}
+
+/// The menu bar as macOS shows it: each menu with its item names, "-" for
+/// a separator.
+fn menu_bar(cx: &mut TestAppContext) -> Vec<(String, Vec<String>)> {
+    use gpui_kit::OwnedMenuItem;
+    cx.update(|cx| {
+        cx.set_menus(menus::menus());
+        cx.get_menus().unwrap()
+    })
+    .into_iter()
+    .map(|menu| {
+        let items = menu
+            .items
+            .iter()
+            .map(|item| match item {
+                OwnedMenuItem::Separator => "-".to_string(),
+                OwnedMenuItem::Action { name, .. } => name.clone(),
+                OwnedMenuItem::Submenu(m) => m.name.to_string(),
+                OwnedMenuItem::SystemMenu(m) => m.name.to_string(),
+            })
+            .collect();
+        (menu.name.to_string(), items)
+    })
+    .collect()
+}
+
+#[gpui_kit::test]
+fn the_menu_bar_has_the_menus_mac_apps_have(cx: &mut TestAppContext) {
+    let bar = menu_bar(cx);
+    let names: Vec<&str> = bar.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["convt", "File", "Edit", "Window", "Help"]);
+    let items = |menu: &str| -> Vec<String> {
+        bar.iter()
+            .find(|(n, _)| n == menu)
+            .map(|(_, items)| items.clone())
+            .unwrap()
+    };
+    assert_eq!(
+        items("convt"),
+        [
+            "About convt",
+            "-",
+            "Check for Updates…",
+            "Settings…",
+            "-",
+            "Services",
+            "-",
+            "Hide convt",
+            "Hide Others",
+            "Show All",
+            "-",
+            "Quit convt",
+        ]
+    );
+    assert_eq!(items("File"), ["Add Files…", "-", "Close Window"]);
+    assert_eq!(
+        items("Edit"),
+        ["Undo", "Redo", "-", "Cut", "Copy", "Paste", "Select All"]
+    );
+    assert_eq!(items("Window"), ["Minimize", "Zoom", "-", "Activity"]);
+    assert_eq!(
+        items("Help"),
+        ["convt Help", "Release Notes", "-", "Contact Support"]
+    );
+}
+
+#[gpui_kit::test]
+fn the_menu_shortcuts_are_the_usual_ones(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        menus::init(cx);
+        cx.bind_keys(menus::mac_key_bindings());
+    });
+    let (main, _) = f.main(cx);
+    cx.simulate_keystrokes(main, "cmd-,");
+    cx.run_until_parked();
+    let (settings, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::General));
+    let windows = cx.update(|cx| cx.windows().len());
+    // Close Window closes the key window, as macOS makes the one typed in.
+    settings
+        .update(cx, |_, window, _| window.activate_window())
+        .unwrap();
+    cx.run_until_parked();
+    cx.simulate_keystrokes(settings, "secondary-w");
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows - 1);
+}
+
+#[gpui_kit::test]
+fn quit_and_close_window_shortcuts_work_on_every_platform(cx: &mut TestAppContext) {
+    use gpui_kit::Focusable as _;
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    let quits = std::rc::Rc::new(std::cell::Cell::new(0));
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        menus::init(cx);
+        // Registered after the app's handler, so it hears Quit first; it
+        // counts it and passes it on.
+        let quits = quits.clone();
+        cx.on_action(move |_: &menus::Quit, cx| {
+            quits.set(quits.get() + 1);
+            cx.propagate();
+        });
+    });
+    // ⌘Q and ⌘W on macOS, Ctrl+Q and Ctrl+W on Linux and Windows. On macOS
+    // the menu bar also shows each item's shortcut from these bindings.
+    let (quit, close) = if cfg!(target_os = "macos") {
+        ("cmd-q", "cmd-w")
+    } else {
+        ("ctrl-q", "ctrl-w")
+    };
+    for (keys, action) in [
+        (quit, &menus::Quit as &dyn gpui_kit::Action),
+        (close, &menus::CloseWindow),
+    ] {
+        let keystroke = gpui_kit::Keystroke::parse(keys).unwrap();
+        let bindings = cx.update(|cx| cx.all_bindings_for_input(&[keystroke]));
+        assert_eq!(bindings.len(), 1, "{keys}");
+        assert!(bindings[0].action().partial_eq(action), "{keys}");
+    }
+    // With the menu bar icon on, the app runs with no window; Quit is still
+    // enabled in the menu and still quits.
+    assert!(cx.update(|cx| cx.windows()).is_empty());
+    assert!(cx.update(|cx| cx.is_action_available(&menus::Quit)));
+    cx.update(|cx| cx.dispatch_action(&menus::Quit));
+    cx.run_until_parked();
+    assert_eq!(quits.get(), 1);
+
+    let (main, _) = f.main(cx);
+    let (settings, view) = f.settings(SettingsTab::License, cx);
+    let field = cx.read(|cx| view.read(cx).license_key.clone());
+    let activate = |window: AnyWindowHandle, cx: &mut TestAppContext| {
+        window
+            .update(cx, |_, window, _| window.activate_window())
+            .unwrap();
+        cx.run_until_parked();
+    };
+
+    activate(main, cx);
+    cx.simulate_keystrokes(main, quit);
+    cx.run_until_parked();
+    assert_eq!(quits.get(), 2);
+
+    // A focused text field doesn't keep either shortcut for itself.
+    activate(settings, cx);
+    cx.update_window(settings, |_, window, cx| {
+        window.focus(&field.read(cx).focus_handle(cx), cx)
+    })
+    .unwrap();
+    cx.simulate_keystrokes(settings, quit);
+    cx.run_until_parked();
+    assert_eq!(quits.get(), 3);
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.simulate_keystrokes(settings, close);
+    cx.run_until_parked();
+    let open = cx.update(|cx| cx.windows());
+    assert_eq!(open.len(), windows - 1);
+    assert!(!open.contains(&settings), "Settings closed");
+    assert!(open.contains(&main), "only the window typed in closes");
+
+    activate(main, cx);
+    cx.simulate_keystrokes(main, close);
+    cx.run_until_parked();
+    assert!(!cx.update(|cx| cx.windows()).contains(&main));
+}
+
+#[gpui_kit::test]
+fn check_for_updates_checks_now_and_shows_the_result(cx: &mut TestAppContext) {
+    // Automatic checks are off: the menu item checks anyway, as Check now does.
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.update_checks = false, cx)
+        });
+        menus::init(cx);
+    });
+    f.releases
+        .serve(Ok(manifest(2, &[("9.4.0", "2026-10-03")], &update_key())));
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.update(|cx| cx.dispatch_action(&menus::CheckForUpdates));
+    let (settings, view) = window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(view.read(cx).tab, SettingsTab::General));
+    assert!(
+        matches!(wait_for_check(&f, cx), Update::Available { version, .. } if version == "9.4.0")
+    );
+    assert_eq!(f.releases.fetches(), 1);
+    // Settings opens scrolled to the Updates card, so Download is in view.
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("convt 9.4.0 is available")
+    );
+    assert!(fits(cx, settings, "update-download"));
+    assert!(fits(cx, settings, "update-checks"));
+
+    // Up to date, and an error, show in the same place.
+    f.releases
+        .serve(Ok(manifest(3, &[("0.1.0", "2026-10-01")], &update_key())));
+    cx.update(|cx| cx.dispatch_action(&menus::CheckForUpdates));
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("You're up to date.")
+    );
+    f.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| cx.dispatch_action(&menus::CheckForUpdates));
+    assert!(matches!(wait_for_check(&f, cx), Update::Failed(_)));
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("Couldn't check for updates. convt.app couldn't be reached.")
+    );
+    assert_eq!(f.releases.fetches(), 3);
+    // Still only one Settings window.
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows + 1);
+}
+
+#[gpui_kit::test]
+fn about_and_help_open_what_they_say(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        });
+        menus::init(cx);
+    });
+    cx.update(|cx| cx.dispatch_action(&menus::About));
+    let (about, _) = window_of::<AboutView>(cx);
+    let version = label(cx, about, "about-version").unwrap();
+    assert!(
+        version.starts_with(&format!("Version {} · built ", crate::account::VERSION)),
+        "{version}"
+    );
+    click(cx, about, "about-source");
+    // The source of this build, not the default branch.
+    assert_eq!(
+        cx.opened_url(),
+        Some(format!(
+            "{}/tree/v{}",
+            menus::SOURCE_URL,
+            crate::account::VERSION
+        ))
+    );
+    click(cx, about, "about-notes");
+    assert_eq!(
+        cx.opened_url(),
+        Some(format!(
+            "https://github.com/opencoredev/convt/releases/tag/v{}",
+            crate::account::VERSION
+        ))
+    );
+    // A second About brings the same window forward.
+    let windows = cx.update(|cx| cx.windows().len());
+    cx.update(|cx| cx.dispatch_action(&menus::About));
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows);
+
+    for (action, url) in [
+        (
+            Box::new(menus::OpenHelp) as Box<dyn gpui_kit::Action>,
+            "https://convt.app/docs",
+        ),
+        (
+            Box::new(menus::OpenReleaseNotes),
+            "https://convt.app/changelog",
+        ),
+        (Box::new(menus::ContactSupport), "https://convt.app/contact"),
+    ] {
+        cx.update(|cx| cx.dispatch_action(&*action));
+        assert_eq!(cx.opened_url().as_deref(), Some(url));
+    }
+
+    cx.update(|cx| cx.dispatch_action(&menus::ShowActivity));
+    let (_, main) = window_of::<MainView>(cx);
+    cx.read(|cx| assert_eq!(main.read(cx).page, Page::Activity));
+    cx.update(|cx| cx.dispatch_action(&menus::OpenSettings));
+    window_of::<SettingsView>(cx);
+}
+
+#[gpui_kit::test]
+fn the_edit_menu_reaches_the_text_fields(cx: &mut TestAppContext) {
+    use gpui_kit::{Focusable as _, OwnedMenuItem};
+    let f = Fixture::licensed(cx, Some("2026-09-30"), None);
+    let (settings, view) = f.settings(SettingsTab::License, cx);
+    let field = cx.read(|cx| view.read(cx).license_key.clone());
+    set_input(cx, settings, &field, "CONVT-1234");
+    cx.update_window(settings, |_, window, cx| {
+        window.focus(&field.read(cx).focus_handle(cx), cx)
+    })
+    .unwrap();
+    let edit = cx.update(|cx| {
+        cx.set_menus(menus::menus());
+        cx.get_menus().unwrap()
+    });
+    let edit = edit.into_iter().find(|m| m.name == "Edit").unwrap();
+    let action = |name: &str| {
+        edit.items
+            .iter()
+            .find_map(|item| match item {
+                OwnedMenuItem::Action {
+                    name: n, action, ..
+                } if n == name => Some(action.boxed_clone()),
+                _ => None,
+            })
+            .unwrap()
+    };
+    for name in ["Select All", "Copy"] {
+        let action = action(name);
+        cx.update_window(settings, |_, window, cx| window.dispatch_action(action, cx))
+            .unwrap();
+    }
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
+        Some("CONVT-1234")
+    );
+    let cut = action("Cut");
+    cx.update_window(settings, |_, window, cx| window.dispatch_action(cut, cx))
+        .unwrap();
+    cx.run_until_parked();
+    cx.read(|cx| assert_eq!(field.read(cx).value().as_ref(), ""));
+    let undo = action("Undo");
+    cx.update_window(settings, |_, window, cx| window.dispatch_action(undo, cx))
+        .unwrap();
+    cx.run_until_parked();
+    cx.read(|cx| assert_eq!(field.read(cx).value().as_ref(), "CONVT-1234"));
+}
+
+/// The signed-in address and a key's address show masked everywhere, as
+/// convt.app masks them: the first letter and the domain.
+#[gpui_kit::test]
+fn addresses_show_masked(cx: &mut TestAppContext) {
+    let address = ["pro.tester", "example.com"].join("@");
+    let key = pro_key(&address, "2026-11-01");
+    let f = Fixture::signed_in(cx, Some(&key), &address);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.account.access = Some(Access::Trial {
+                ends_on: "2026-10-15".into(),
+            });
+            cx.notify();
+        })
+    });
+    let app = f.app.clone();
+    let (window, _) = open(cx, move |window, cx| {
+        cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+    });
+    assert_eq!(
+        label(cx, window, "account-status").as_deref(),
+        Some("Signed in as p***@example.com")
+    );
+    let (settings, _) = f.settings(SettingsTab::License, cx);
+    assert_eq!(
+        label(cx, settings, "account-status").as_deref(),
+        Some("Signed in to convt.app as p***@example.com.")
+    );
+    for (window, id) in [(window, "account-status"), (settings, "account-status")] {
+        assert!(!label(cx, window, id).unwrap().contains(&address));
+    }
+}
+
+/// Yes to documents starts the download, but the setup step shows only its
+/// spinner and line, never holds onboarding for the download, and hands it
+/// to Activity in the main window.
+#[gpui_kit::test]
+fn the_setup_step_leaves_the_document_download_to_the_background(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.hold.store(true, Ordering::SeqCst);
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Calibrating));
+    wait_until(cx, "the download started", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Working(_))
+    });
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Setting up convt")
+    );
+    for id in ["pack-progress", "setup-step-documents", "setup-step-plan"] {
+        assert!(!shown(cx, window, id), "{id}");
+    }
+    // The download is still going when the moment ends; the main window
+    // opens anyway and shows it.
+    finish_onboarding(cx, &view);
+    let (main, _) = window_of::<MainView>(cx);
+    assert_eq!(
+        label(cx, main, "activity-pack").as_deref(),
+        Some("Adding document support")
+    );
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).documents_supported()
+    });
+    cx.run_until_parked();
+    assert!(!shown(cx, main, "activity-pack"));
+    assert_eq!(packs.installs(), 1);
+}
+
+/// Waits for the background download's `n`th try to finish, then lets the
+/// wait before the next one pass.
+fn pass_pack_retry(cx: &mut TestAppContext, app: &Entity<AppState>, n: usize) {
+    wait_until(cx, "the retry is scheduled", |cx| {
+        app.read(cx).pack_retry_pending()
+    });
+    cx.executor()
+        .advance_clock(crate::model::PACK_RETRY_DELAYS[n - 1] + Duration::from_millis(50));
+}
+
+/// A download that fails during onboarding, and again on both of its own
+/// retries, doesn't stop it, and Activity says so plainly, with Settings as
+/// the way to try again.
+#[gpui_kit::test]
+fn a_failed_onboarding_download_says_so_and_points_to_settings(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "offline");
+    packs.fail_always.store(true, Ordering::SeqCst);
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    wait_until(cx, "the first try failed", |_| packs.installs() == 1);
+    // Onboarding carries on; the failure waits in Activity.
+    assert_eq!(
+        label(cx, window, "onboarding-title").as_deref(),
+        Some("Setting up convt")
+    );
+    finish_onboarding(cx, &view);
+    let (main, _) = window_of::<MainView>(cx);
+    pass_pack_retry(cx, &f.app, 1);
+    wait_until(cx, "the second try", |_| packs.installs() == 2);
+    pass_pack_retry(cx, &f.app, 2);
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        packs.installs(),
+        3,
+        "two retries, then it waits for a click"
+    );
+    assert_eq!(
+        label(cx, main, "activity-pack").as_deref(),
+        Some("Couldn't download document support")
+    );
+    click(cx, main, "activity-pack-settings");
+    window_of::<SettingsView>(cx);
+}
+
+/// Onboarding's download gets past a dropped connection or a server error
+/// by itself: it waits, resumes, and installs, without a click.
+#[gpui_kit::test]
+fn an_onboarding_download_retries_a_network_failure_by_itself(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "connection reset");
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, view) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    wait_until(cx, "the first try failed", |cx| {
+        f.app.read(cx).pack_retry_pending()
+    });
+    // Waiting to try again still reads as the download going on.
+    cx.read(|cx| assert!(matches!(f.app.read(cx).pack.phase, PackPhase::Working(_))));
+    finish_onboarding(cx, &view);
+    let (main, _) = window_of::<MainView>(cx);
+    assert_eq!(
+        label(cx, main, "activity-pack").as_deref(),
+        Some("Adding document support")
+    );
+    cx.executor()
+        .advance_clock(crate::model::PACK_RETRY_DELAYS[0] + Duration::from_millis(50));
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).documents_supported()
+    });
+    assert_eq!(packs.installs(), 2);
+    cx.run_until_parked();
+    assert!(!shown(cx, main, "activity-pack"));
+}
+
+/// What another try can't fix (a checksum mismatch, a full disk) fails
+/// straight away, and Cancel during the wait stops the retry.
+#[gpui_kit::test]
+fn an_onboarding_download_only_retries_what_retrying_can_fix(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Checksum, "mismatch");
+    let key = pro_key("pro-tester", "2027-10-01");
+    let f = Fixture::licensed_with_packs(cx, packs.clone(), Some(&key));
+    cx.update(|cx| super::route(Request::default(), cx));
+    let (window, _) = window_of::<FirstRunView>(cx);
+    click(cx, window, "onboarding-primary");
+    click(cx, window, "question-yes");
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.executor().advance_clock(Duration::from_secs(120));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 1);
+
+    // A network failure waits to retry; Cancel ends it there.
+    packs.fail_next(FailureKind::Network, "offline");
+    cx.update(|cx| super::pack::start_background_install(&f.app, cx));
+    wait_until(cx, "the second download failed once", |cx| {
+        f.app.read(cx).pack_retry_pending()
+    });
+    f.app.update(cx, |s, cx| s.cancel_pack_download(cx));
+    cx.executor().advance_clock(Duration::from_secs(120));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 2);
+    cx.read(|cx| {
+        assert!(matches!(
+            &f.app.read(cx).pack.phase,
+            PackPhase::Failed(failure) if failure.kind == FailureKind::Cancelled
+        ))
+    });
+
+    // Cancel while a network failure is already on its way: no retry.
+    packs.fail_next(FailureKind::Network, "offline");
+    packs.ignore_cancel.store(true, Ordering::SeqCst);
+    packs.hold.store(true, Ordering::SeqCst);
+    cx.update(|cx| super::pack::start_background_install(&f.app, cx));
+    wait_until(cx, "the third download started", |_| packs.installs() == 3);
+    f.app.update(cx, |s, cx| s.cancel_pack_download(cx));
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the third download failed", |cx| {
+        matches!(f.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.executor().advance_clock(Duration::from_secs(120));
+    cx.run_until_parked();
+    assert_eq!(packs.installs(), 3, "Cancel stops the retry");
+}
+
+/// A scripted installer host: serves `body` for any URL, counts requests,
+/// and can hold a download part-way so tests can see it in progress.
+#[derive(Default)]
+struct TestDownloads {
+    opened: AtomicUsize,
+    body: Mutex<Vec<u8>>,
+    hold: Arc<AtomicBool>,
+}
+
+impl TestDownloads {
+    fn opened(&self) -> usize {
+        self.opened.load(Ordering::SeqCst)
+    }
+}
+
+/// Hands out half the bytes, then waits while held.
+struct HeldReader {
+    body: std::io::Cursor<Vec<u8>>,
+    hold: Arc<AtomicBool>,
+}
+
+impl std::io::Read for HeldReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = self.body.get_ref().len() as u64;
+        if self.body.position() >= len / 2 {
+            while self.hold.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        let end = if self.body.position() < len / 2 {
+            (len / 2 - self.body.position()) as usize
+        } else {
+            buf.len()
+        };
+        let end = end.clamp(1, buf.len());
+        self.body.read(&mut buf[..end])
+    }
+}
+
+impl download::Source for TestDownloads {
+    fn open(&self, url: &str) -> Result<Box<dyn std::io::Read + Send>, download::Error> {
+        assert!(url.starts_with("https://"), "{url}");
+        self.opened.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(HeldReader {
+            body: std::io::Cursor::new(self.body.lock().unwrap().clone()),
+            hold: self.hold.clone(),
+        }))
+    }
+}
+
+/// Records what it would have installed, fails when told to, and can be
+/// held mid-install.
+#[derive(Default)]
+struct TestInstaller {
+    installed: Mutex<Vec<PathBuf>>,
+    fail: Mutex<Option<String>>,
+    hold: Arc<AtomicBool>,
+    started: AtomicUsize,
+}
+
+impl Installer for TestInstaller {
+    fn install(&self, file: &Path) -> Result<(), String> {
+        self.started.fetch_add(1, Ordering::SeqCst);
+        while self.hold.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        if let Some(why) = self.fail.lock().unwrap().take() {
+            return Err(why);
+        }
+        self.installed.lock().unwrap().push(file.to_path_buf());
+        Ok(())
+    }
+}
+
+/// The installer bytes the self-update tests serve.
+const NEW_APPIMAGE: &[u8] = b"\x7fELF a newer convt, as an AppImage";
+
+impl Fixture {
+    /// Makes this install one that updates itself, downloading into the
+    /// fixture directory from a scripted host.
+    fn self_installing(&self, cx: &mut TestAppContext) -> (Arc<TestDownloads>, Arc<TestInstaller>) {
+        let downloads = Arc::new(TestDownloads::default());
+        *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+        let installer = Arc::new(TestInstaller::default());
+        let dir = self.dir.path().join("updates");
+        cx.update(|cx| {
+            self.app.update(cx, |s, _| {
+                s.update_config.install = Some(SelfInstall {
+                    source: downloads.clone(),
+                    dir,
+                    installer: installer.clone(),
+                })
+            })
+        });
+        (downloads, installer)
+    }
+
+    fn update(&self, cx: &mut TestAppContext) -> Update {
+        cx.read(|cx| self.app.read(cx).update.clone())
+    }
+}
+
+#[gpui_kit::test]
+fn a_covered_update_downloads_then_restarts_to_update(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    let builds = [("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")];
+    f.releases
+        .serve(Ok(manifest_for(5, &builds, &update_key(), NEW_APPIMAGE)));
+    downloads.hold.store(true, Ordering::SeqCst);
+    launch_check(&f, cx);
+    wait_until(
+        cx,
+        "half downloaded",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(
+        card.starts_with("Update available: Downloading convt 9.2.0… 5"),
+        "{card}"
+    );
+    assert!(!shown(cx, main, "update-restart"));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(
+        label(cx, settings, "update-status")
+            .unwrap()
+            .starts_with("Downloading convt 9.2.0…")
+    );
+    // No second check while downloading.
+    assert!(!shown(cx, settings, "check-updates"));
+
+    downloads.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { version, path } = f.update(cx) else {
+        unreachable!()
+    };
+    assert_eq!(version, "9.2.0");
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    assert!(path.starts_with(f.dir.path().join("updates/9.2.0")));
+    assert_eq!(
+        label(cx, main, "update-card").as_deref(),
+        Some("convt 9.2.0 is ready: Restarting takes a few seconds.")
+    );
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("convt 9.2.0 is ready to install.")
+    );
+    assert!(fits(cx, main, "update-card"));
+    assert!(shown(cx, settings, "update-restart"));
+    // Restart to update is the thing to do; Check now would only hide it.
+    assert!(!shown(cx, settings, "check-updates"));
+
+    // Checking again finds the same version: the verified file is reused.
+    assert!(matches!(
+        manual_check(&f, cx),
+        Update::Downloading { .. } | Update::Ready { .. }
+    ));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+
+    click(cx, main, "update-restart");
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    assert_eq!(*installer.installed.lock().unwrap(), [path]);
+    cx.run_until_parked();
+    // The app quits for the helper; it stays Installing until it does.
+    assert_eq!(
+        f.update(cx),
+        Update::Installing {
+            version: "9.2.0".into()
+        }
+    );
+    assert_eq!(f.releases.fetches(), 2);
+}
+
+#[gpui_kit::test]
+fn a_bad_download_or_install_falls_back_to_the_download_page(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    // The host serves something other than the signed bytes.
+    *downloads.body.lock().unwrap() = b"\x7fELF something else".to_vec();
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    wait_until(cx, "the download failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("didn't match the signed list"), "{card}");
+    assert!(fits(cx, main, "update-card"));
+    // Nothing unverified stays on disk.
+    let leftovers: Vec<_> = std::fs::read_dir(f.dir.path().join("updates/9.2.0"))
+        .unwrap()
+        .collect();
+    assert!(leftovers.is_empty());
+    click(cx, main, "update-download");
+    assert_eq!(
+        cx.opened_url().as_deref(),
+        Some(convt_license::client::DOWNLOAD_URL)
+    );
+
+    // Try again with the right bytes.
+    *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+
+    // The install itself can fail too, and says why.
+    *installer.fail.lock().unwrap() = Some("convt can't write to /opt/apps.".into());
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install failed", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert_eq!(
+        label(cx, settings, "update-status").as_deref(),
+        Some("convt 9.2.0 didn't install. convt can't write to /opt/apps.")
+    );
+    assert!(shown(cx, settings, "update-download"));
+    assert!(installer.installed.lock().unwrap().is_empty());
+}
+
+#[gpui_kit::test]
+fn update_checks_off_stop_the_download(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    downloads.hold.store(true, Ordering::SeqCst);
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    assert!(matches!(f.update(cx), Update::Downloading { .. }));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "update-checks");
+    assert_eq!(f.update(cx), Update::Idle);
+    downloads.hold.store(false, Ordering::SeqCst);
+    // The cancelled download leaves nothing, and nothing turns Ready.
+    wait_until(cx, "the partial file is gone", |_| {
+        std::fs::read_dir(f.dir.path().join("updates/9.2.0"))
+            .map_or(true, |mut d| d.next().is_none())
+    });
+    cx.run_until_parked();
+    assert_eq!(f.update(cx), Update::Idle);
+}
+
+#[gpui_kit::test]
+fn a_license_change_that_still_covers_keeps_the_download(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+    manual_check(&f, cx);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2028-10-01"), cx)
+            })
+            .unwrap();
+    });
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+    // A key whose updates ended before 9.2.0 turns it into a renewal.
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| s.activate(&pro_key("a@b.c", "2026-10-02"), cx))
+            .unwrap();
+    });
+    assert!(matches!(f.update(cx), Update::NotCovered { .. }));
+    assert_eq!(downloads.opened(), 1);
+}
+
+/// Serves `manifest_for(5, …)` with 9.2.0 newer than this build.
+fn serve_9_2(f: &Fixture) {
+    f.releases.serve(Ok(manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &update_key(),
+        NEW_APPIMAGE,
+    )));
+}
+
+/// Checks and waits for the download to be Ready; returns its path.
+fn ready(f: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    serve_9_2(f);
+    manual_check(f, cx);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { path, .. } = f.update(cx) else {
+        unreachable!()
+    };
+    path
+}
+
+#[gpui_kit::test]
+fn a_stopped_download_never_touches_the_next_one(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    // The first attempt reads other bytes of the same size, so anything it
+    // wrote into the second attempt's file would break the checksum.
+    let mut other = NEW_APPIMAGE.to_vec();
+    other.reverse();
+    *downloads.body.lock().unwrap() = other;
+    downloads.hold.store(true, Ordering::SeqCst);
+    serve_9_2(&f);
+    manual_check(&f, cx);
+    wait_until(
+        cx,
+        "the first attempt is half way",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    // Off and on again while the first attempt is still held mid-read.
+    click(cx, settings, "update-checks");
+    assert_eq!(f.update(cx), Update::Idle);
+    *downloads.body.lock().unwrap() = NEW_APPIMAGE.to_vec();
+    click(cx, settings, "update-checks");
+    wait_until(
+        cx,
+        "the second attempt is half way",
+        |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
+    );
+    assert_eq!(downloads.opened(), 2);
+    // Both readers go on at once.
+    downloads.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    let Update::Ready { path, .. } = f.update(cx) else {
+        unreachable!()
+    };
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    // The stopped attempt removes its own part file and nothing else.
+    let folder = f.dir.path().join("updates/9.2.0");
+    wait_until(cx, "only the verified file is left", |_| {
+        std::fs::read_dir(&folder)
+            .unwrap()
+            .all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".part"))
+    });
+    cx.run_until_parked();
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+}
+
+#[gpui_kit::test]
+fn a_ready_file_changed_on_disk_is_not_installed(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (_, installer) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    let mut tampered = NEW_APPIMAGE.to_vec();
+    tampered[1] ^= 1;
+    std::fs::write(&path, tampered).unwrap();
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install was refused", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    assert!(installer.installed.lock().unwrap().is_empty());
+    assert!(!path.exists(), "the changed file is deleted");
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("didn't match the signed list"), "{card}");
+    // Try again downloads it afresh.
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(std::fs::read(&path).unwrap(), NEW_APPIMAGE);
+}
+
+#[gpui_kit::test]
+fn a_failed_check_keeps_restart_to_update(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    let path = ready(&f, cx);
+    // The periodic check runs while an update waits, and convt.app is down.
+    f.releases.serve(Err(FetchError::Offline));
+    assert_eq!(
+        manual_check(&f, cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path
+        }
+    );
+    let (main, _) = f.main(cx);
+    assert!(shown(cx, main, "update-restart"));
+}
+
+#[gpui_kit::test]
+fn the_schedule_renews_daily_and_checks_for_updates_every_few_hours(cx: &mut TestAppContext) {
+    use crate::update::{CHECK_INTERVAL, SCHEDULE_TICK};
+    let f = Fixture::signed_in(
+        cx,
+        Some(&pro_key("pro@example.com", "2027-10-01")),
+        "pro@example.com",
+    );
+    f.releases
+        .serve(Ok(manifest(1, &[("0.1.0", "2026-10-01")], &update_key())));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    wait_until(cx, "the launch renewal", |_| f.api.calls().1 == 1);
+    assert_eq!(f.releases.fetches(), 1);
+
+    // A tick later: neither is due.
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    cx.run_until_parked();
+    assert_eq!(f.releases.fetches(), 1);
+    assert_eq!(f.api.calls().1, 1);
+
+    // Hours later the same day: the update check runs, the renewal doesn't.
+    let long_ago = crate::update::now_unix() - CHECK_INTERVAL.as_secs();
+    cx.update(|cx| f.app.update(cx, |s, _| s.update_attempted = Some(long_ago)));
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    wait_until(cx, "the second check", |_| f.releases.fetches() == 2);
+    assert_eq!(wait_for_check(&f, cx), Update::UpToDate);
+    assert_eq!(f.api.calls().1, 1);
+
+    // The next day (as the settings record it): the renewal asks once more,
+    // on the next tick, without a restart.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.license_checked = Some("2026-01-01".into()), cx)
+        })
+    });
+    cx.executor().advance_clock(SCHEDULE_TICK);
+    wait_until(cx, "the second renewal", |_| f.api.calls().1 == 2);
+    assert_eq!(f.releases.fetches(), 2);
+}
+
+/// Holds the next update check's fetch until the returned flag is cleared.
+fn hold_check(f: &Fixture) -> Arc<AtomicBool> {
+    let hold = Arc::new(AtomicBool::new(true));
+    let h = hold.clone();
+    *f.releases.during.lock().unwrap() = Some(Box::new(move || {
+        while h.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }));
+    hold
+}
+
+#[gpui_kit::test]
+fn a_check_result_never_replaces_what_came_after_it(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    ready(&f, cx);
+    // A check runs while the update waits, and something takes over
+    // before it answers, as an install would.
+    let hold = hold_check(&f);
+    f.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
+    assert_eq!(f.update(cx), Update::Checking);
+    let installing = Update::Installing {
+        version: "9.2.0".into(),
+    };
+    cx.update(|cx| f.app.update(cx, |s, _| s.update = installing.clone()));
+    wait_until(cx, "the fetch started", |_| f.releases.fetches() == 2);
+    hold.store(false, Ordering::SeqCst);
+    // The answer comes from the check's thread; give it time to land.
+    for _ in 0..5 {
+        std::thread::sleep(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    assert_eq!(f.update(cx), installing, "the stale result was dropped");
+    assert!(cx.read(|cx| f.app.read(cx).installing()));
+}
+
+#[gpui_kit::test]
+fn a_license_change_during_a_check_is_not_undone_by_it(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    ready(&f, cx);
+    let hold = hold_check(&f);
+    f.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.check_updates(cx)));
+    // A key whose updates ended before 9.2.0, while the check runs: the
+    // check keeps the state and picks for the new license when it ends.
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| s.activate(&pro_key("a@b.c", "2026-10-02"), cx))
+            .unwrap();
+    });
+    assert_eq!(f.update(cx), Update::Checking);
+    hold.store(false, Ordering::SeqCst);
+    // The failed check doesn't bring back a Ready the license no longer covers.
+    assert!(
+        matches!(wait_for_check(&f, cx), Update::NotCovered { .. }),
+        "{:?}",
+        f.update(cx)
+    );
+    assert_eq!(downloads.opened(), 1);
+}
+
+#[gpui_kit::test]
+fn a_renewal_that_covers_an_update_downloads_it(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&pro_key("a@b.c", "2026-10-02")));
+    let (downloads, _) = f.self_installing(cx);
+    serve_9_2(&f);
+    assert!(matches!(manual_check(&f, cx), Update::NotCovered { .. }));
+    assert_eq!(downloads.opened(), 0);
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| {
+                s.activate(&license_key("a@b.c", "2027-10-01"), cx)
+            })
+            .unwrap();
+    });
+    // No Update click needed: it downloads as a check's selection would.
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+    assert_eq!(f.releases.fetches(), 1);
+
+    // With update checks off, the license change downloads nothing.
+    let g = Fixture::licensed(cx, None, Some(&pro_key("a@b.c", "2026-10-02")));
+    let (downloads, _) = g.self_installing(cx);
+    serve_9_2(&g);
+    assert!(matches!(manual_check(&g, cx), Update::NotCovered { .. }));
+    cx.update(|cx| {
+        g.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.update_checks = false, cx);
+            s.activate(&license_key("a@b.c", "2027-10-01"), cx).unwrap();
+        })
+    });
+    cx.run_until_parked();
+    assert!(matches!(g.update(cx), Update::Available { .. }));
+    assert_eq!(downloads.opened(), 0);
+}
+
+/// What a relaunch loses: everything the app keeps in memory about updates.
+fn forget_updates(f: &Fixture, cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        f.app.update(cx, |s, _| {
+            s.update = Update::Idle;
+            s.update_manifest = None;
+            s.updater = Default::default();
+        })
+    });
+}
+
+#[gpui_kit::test]
+fn a_relaunch_offers_restart_to_update_without_a_request(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, installer) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    let saved = path.parent().unwrap().join(".manifest.json");
+    assert!(saved.is_file());
+    forget_updates(&f, cx);
+    // Same UTC day: no check is due, so nothing reaches the network.
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(
+        f.update(cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path: path.clone()
+        }
+    );
+    assert_eq!(f.releases.fetches(), 1);
+    assert_eq!(downloads.opened(), 1);
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
+    assert_eq!(
+        *installer.installed.lock().unwrap(),
+        std::slice::from_ref(&path)
+    );
+
+    // A changed file is not offered, and is deleted.
+    let g = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    g.self_installing(cx);
+    let path = ready(&g, cx);
+    std::fs::write(&path, b"\x7fELF something else").unwrap();
+    forget_updates(&g, cx);
+    // Offline this time, so only the restore could offer it.
+    g.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| g.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the changed file is deleted", |_| !path.exists());
+    wait_until(cx, "the launch check failed", |cx| {
+        matches!(g.app.read(cx).update, Update::Failed(_))
+    });
+
+    // A saved manifest that doesn't verify is not trusted either.
+    let h = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    h.self_installing(cx);
+    let path = ready(&h, cx);
+    let saved = path.parent().unwrap().join(".manifest.json");
+    let forged = manifest_for(
+        5,
+        &[("0.1.0", "2026-10-01"), ("9.2.0", "2026-10-03")],
+        &SigningKey::from_bytes(&[99; 32]),
+        NEW_APPIMAGE,
+    );
+    std::fs::write(&saved, forged).unwrap();
+    forget_updates(&h, cx);
+    h.releases.serve(Err(FetchError::Offline));
+    cx.update(|cx| h.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the launch check failed", |cx| {
+        matches!(h.app.read(cx).update, Update::Failed(_))
+    });
+    assert!(path.is_file(), "an unverified manifest deletes nothing");
+}
+
+#[gpui_kit::test]
+fn a_restored_update_follows_settings_changed_meanwhile(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (_, installer) = f.self_installing(cx);
+    ready(&f, cx);
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    // Update checks went off after the launch looked at the saved download
+    // (the settings file changed, or the switch raced the restore): Restart
+    // to update no longer installs it.
+    cx.update(|cx| f.app.update(cx, |s, _| s.settings.update_checks = false));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.restart_to_update(cx)));
+    cx.run_until_parked();
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+}
+
+#[gpui_kit::test]
+fn try_again_without_a_saved_download_checks_again(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    std::fs::write(
+        f.dir.path().join("updates/install-result.json"),
+        "{\"version\":\"9.2.0\",\"exit_code\":1603}",
+    )
+    .unwrap();
+    // The installer is gone by the next launch, so nothing can be restored.
+    std::fs::remove_file(&path).unwrap();
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the failure shows", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready again", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(f.releases.fetches(), 2);
+    assert_eq!(downloads.opened(), 2);
+}
+
+#[gpui_kit::test]
+fn a_relaunch_after_a_failed_windows_install_says_so(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    let (downloads, _) = f.self_installing(cx);
+    let path = ready(&f, cx);
+    // What the helper writes after msiexec fails, before starting the old convt.
+    let result = f.dir.path().join("updates/install-result.json");
+    std::fs::write(
+        &result,
+        "\u{feff}{\"version\":\"9.2.0\",\"exit_code\":1603}\r\n",
+    )
+    .unwrap();
+    forget_updates(&f, cx);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.start_update_checks(cx)));
+    wait_until(cx, "the failure shows", |cx| {
+        matches!(f.app.read(cx).update, Update::InstallFailed { .. })
+    });
+    assert_eq!(
+        f.update(cx),
+        Update::InstallFailed {
+            version: "9.2.0".into(),
+            why: "Windows Installer stopped with error 1603.".into()
+        }
+    );
+    assert!(!result.exists(), "read once");
+    let (main, _) = f.main(cx);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.starts_with("convt 9.2.0 didn't install"), "{card}");
+    // Try again reuses the verified download.
+    click(cx, main, "update-retry");
+    wait_until(cx, "ready", |cx| {
+        matches!(f.app.read(cx).update, Update::Ready { .. })
+    });
+    assert_eq!(downloads.opened(), 1);
+    assert_eq!(
+        f.update(cx),
+        Update::Ready {
+            version: "9.2.0".into(),
+            path
+        }
+    );
+    assert_eq!(f.releases.fetches(), 1);
+}
+
+#[gpui_kit::test]
+fn a_failed_install_offers_only_the_download_page_with_updates_off(cx: &mut TestAppContext) {
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    f.self_installing(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.update_checks = false, cx);
+            s.update = Update::InstallFailed {
+                version: "9.2.0".into(),
+                why: "Windows Installer stopped with error 1603.".into(),
+            };
+        })
+    });
+    let (main, _) = f.main(cx);
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    for window in [main, settings] {
+        assert!(!shown(cx, window, "update-retry"));
+        assert!(shown(cx, window, "update-download"));
+    }
+}
+
+#[gpui_kit::test]
+fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let (_, installer) = f.self_installing(cx);
+    ready(&f, cx);
+    packs.hold.store(true, Ordering::SeqCst);
+    cx.update(|cx| f.app.update(cx, |s, cx| s.download_pack(0, cx)));
+    wait_until(cx, "the pack download", |_| packs.installs() == 1);
+    let (main, _) = f.main(cx);
+    click(cx, main, "update-restart");
+    assert!(matches!(f.update(cx), Update::Ready { .. }));
+    assert_eq!(installer.started.load(Ordering::SeqCst), 0);
+    let card = label(cx, main, "update-card").unwrap();
+    assert!(card.contains("Wait for document support"), "{card}");
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the pack installed", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+
+    // While the update installs, the pack can't start downloading or be removed.
+    installer.hold.store(true, Ordering::SeqCst);
+    click(cx, main, "update-restart");
+    wait_until(cx, "the install started", |_| {
+        installer.started.load(Ordering::SeqCst) == 1
+    });
+    let removed = cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.download_pack(0, cx);
+            s.remove_pack(cx)
+        })
+    });
+    assert_eq!(removed, Err(crate::model::INSTALLING_PACK.to_string()));
+    assert_eq!(packs.installs(), 1);
+    assert_eq!(packs.removes.load(Ordering::SeqCst), 0);
+    assert!(!cx.read(|cx| f.app.read(cx).pack.removing));
+    installer.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "installed", |_| {
+        !installer.installed.lock().unwrap().is_empty()
+    });
 }

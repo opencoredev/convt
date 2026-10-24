@@ -10,7 +10,8 @@
     "./testing": "./src/testing.ts",
     "./seed": "./src/seed.ts",
     "./migrations": "./src/migrations.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./guard": "./src/guard.ts"
   },
   "scripts": {
     "test": "bun test test/unit",

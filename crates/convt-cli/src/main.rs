@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use anyhow::{Context, bail};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use convt_core::{
     Background, Cancel, Category, Event, FORMATS, Job, Options, Output, PageRange, Preset,
     VideoCodec, expand_inputs, format_by_extension, format_by_id, run_batch,
@@ -11,17 +11,23 @@ use convt_core::{
 use convt_license::client::{Config, Licensing};
 use serde_json::json;
 
+mod skill;
+
 #[derive(Parser)]
 #[command(
     name = "convt",
     bin_name = "convt",
     version,
     about = "Convert files locally",
+    after_help = "AI coding agents: run `convt --skill` (or `convt skill`) to print a SKILL.md.",
     args_conflicts_with_subcommands = true
 )]
 struct Cli {
     #[command(subcommand)]
     command: Option<Cmd>,
+    /// Print a SKILL.md for AI coding agents and exit
+    #[arg(long, exclusive = true)]
+    skill: bool,
     /// Files or folders to convert
     files: Vec<PathBuf>,
     /// Target format, e.g. png, mp4, pdf
@@ -82,13 +88,18 @@ enum Cmd {
     /// List the formats a file can be converted to
     Targets {
         file: PathBuf,
-        /// Only the few popular targets right-click menus offer
+        /// Only the few targets right-click menus offer (see `convt menu`)
         #[arg(long)]
         menu: bool,
         /// Include targets the document pack would add when this build can
         /// download it, for menus that open the app (which offers the install)
         #[arg(long)]
         with_pack: bool,
+    },
+    /// Show or change which formats right-click menus offer, by kind of file
+    Menu {
+        #[command(subcommand)]
+        action: Option<MenuCmd>,
     },
     /// Show the engines available on this machine
     Engines,
@@ -104,6 +115,86 @@ enum Cmd {
         #[command(subcommand)]
         action: Option<LicenseCmd>,
     },
+    /// Print a SKILL.md for AI coding agents
+    Skill,
+}
+
+#[derive(Subcommand)]
+enum MenuCmd {
+    /// List each kind of file and the formats its menu offers
+    Show,
+    /// Offer these formats, in this order, for one kind of file
+    Set {
+        /// image, vector, video, audio, pdf, document, spreadsheet or presentation
+        kind: String,
+        /// Format ids, e.g. flac mp3
+        #[arg(required = true)]
+        formats: Vec<String>,
+    },
+    /// Go back to the default formats for one kind of file, or every kind
+    Reset {
+        /// A kind of file; leave out to reset them all
+        kind: Option<String>,
+    },
+}
+
+fn menu_kind(kind: &str) -> anyhow::Result<Category> {
+    convt_core::category_by_key(kind).with_context(|| {
+        let kinds: Vec<_> = convt_core::MENU_KINDS
+            .iter()
+            .map(|c| convt_core::category_key(*c))
+            .collect();
+        format!("unknown kind of file: {kind} (one of {})", kinds.join(", "))
+    })
+}
+
+fn menu(action: MenuCmd, registry: &convt_core::Registry) -> anyhow::Result<()> {
+    use convt_core::MenuChoices;
+    let path = convt_engines::paths::menu_file().context("no config directory on this system")?;
+    // Resetting everything doesn't read the file, so it can repair a broken one.
+    let mut choices = match action {
+        MenuCmd::Reset { kind: None } => MenuChoices::default(),
+        _ => MenuChoices::load(&path)?,
+    };
+    match action {
+        MenuCmd::Show => {
+            for kind in convt_core::MENU_KINDS {
+                let ids: Vec<_> = choices.effective(kind).iter().map(|f| f.id).collect();
+                let note = if choices.get(kind).is_some() {
+                    ""
+                } else {
+                    " (default)"
+                };
+                println!(
+                    "{:<13} {}{note}",
+                    convt_core::category_key(kind),
+                    ids.join(" ")
+                );
+            }
+            return Ok(());
+        }
+        MenuCmd::Set { kind, formats } => {
+            let kind = menu_kind(&kind)?;
+            let offered = registry.category_targets(kind);
+            let mut picked = Vec::new();
+            for id in &formats {
+                let f = format_by_id(id).with_context(|| format!("unknown format: {id}"))?;
+                if !offered.contains(&f) {
+                    bail!(
+                        "no {} file converts to {} on this machine",
+                        convt_core::category_key(kind),
+                        f.id
+                    );
+                }
+                picked.push(f);
+            }
+            choices.set(kind, picked);
+        }
+        MenuCmd::Reset { kind: Some(kind) } => choices.reset(menu_kind(&kind)?),
+        MenuCmd::Reset { kind: None } => {}
+    }
+    choices.save(&path)?;
+    Ok(())
 }
 
 #[derive(Subcommand)]
@@ -120,6 +211,7 @@ enum PackCmd {
         /// Explicit local/test source; requires --sha256 (released builds have a pinned source)
         #[arg(long, requires = "sha256")]
         source: Option<String>,
+        /// SHA-256 of that source archive; required with --source
         #[arg(long, requires = "source")]
         sha256: Option<String>,
     },
@@ -259,6 +351,10 @@ fn load_preset(name: &str) -> anyhow::Result<Preset> {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    if cli.skill || matches!(cli.command, Some(Cmd::Skill)) {
+        skill::print(&Cli::command())?;
+        return Ok(());
+    }
     let registry = convt_engines::default_registry();
     match cli.command {
         Some(Cmd::Formats { json: true }) => {
@@ -296,7 +392,7 @@ fn main() -> anyhow::Result<()> {
                 &registry
             };
             let targets = if menu {
-                registry.menu_targets(from)
+                registry.menu_targets_with(from, &convt_engines::paths::menu_choices())
             } else {
                 registry.targets(from)
             };
@@ -326,8 +422,10 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Some(Cmd::Menu { action }) => menu(action.unwrap_or(MenuCmd::Show), &registry)?,
         Some(Cmd::Pack { action }) => pack(action)?,
         Some(Cmd::License { action }) => license(action.unwrap_or(LicenseCmd::Status))?,
+        Some(Cmd::Skill) => unreachable!("printed before the registry loads"),
         None => return convert(cli, &registry),
     }
     Ok(())
@@ -533,4 +631,50 @@ fn emit(value: serde_json::Value) {
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
+}
+
+#[cfg(test)]
+mod skill_sync_tests {
+    use super::*;
+    use convt_core::FORMATS;
+
+    fn rendered() -> String {
+        skill::render(&Cli::command())
+    }
+
+    #[test]
+    fn skill_frontmatter_and_no_emails() {
+        let text = rendered();
+        assert!(text.starts_with("---\nname: convt\n"));
+        assert!(text.contains("\ndescription:"));
+        assert!(text.contains("\n---\n"));
+        assert!(
+            !text.contains('@'),
+            "skill must not contain email addresses"
+        );
+    }
+
+    #[test]
+    fn documented_subcommands_and_flags_exist() {
+        let cmd = Cli::command();
+        skill::assert_documented_cli_exists(&cmd, &skill::render(&cmd));
+    }
+
+    #[test]
+    fn every_cli_flag_and_subcommand_is_documented() {
+        let cmd = Cli::command();
+        skill::assert_cli_is_documented(&cmd, &skill::render(&cmd));
+    }
+
+    #[test]
+    fn every_format_id_is_listed() {
+        let text = rendered();
+        for format in FORMATS {
+            assert!(
+                text.contains(&format!("`{}`", format.id)),
+                "format {} missing from skill",
+                format.id
+            );
+        }
+    }
 }
