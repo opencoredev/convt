@@ -47,6 +47,9 @@ const LOSSLESS_HOPS: &[&str] = &[
     "png", "tiff", "wav", "flac", "mkv", "pdf", "odt", "ods", "odp",
 ];
 
+/// What a subtitle track pulled out of a video may become.
+const SUBTITLE_TEXT: &[&str] = &["srt", "vtt", "txt"];
+
 impl Registry {
     pub fn new() -> Self {
         Self::default()
@@ -115,6 +118,21 @@ impl Registry {
                 // so an SVG never offers MP4 by way of an animated GIF.
                 let media = |f: &Format| matches!(f.category, Category::Video | Category::Audio);
                 if d > 0 && media(edge.1.to) && !media(from) {
+                    continue;
+                }
+                // Text comes out of a video only as its own subtitle track, so
+                // extraction must be the first hop (a GIF made into an MP4 has
+                // none), and the text may only become other subtitle or plain
+                // text formats, never a PDF or Word file.
+                let video_to_text = edge.1.from.category == Category::Video
+                    && edge.1.to.category == Category::Document;
+                if video_to_text && d > 0 {
+                    continue;
+                }
+                if from.category == Category::Video
+                    && edge.1.from.category == Category::Document
+                    && !SUBTITLE_TEXT.contains(&edge.1.to.id)
+                {
                     continue;
                 }
                 if !depth.contains_key(target) {
@@ -607,6 +625,43 @@ mod tests {
         assert!(r.plan(f("svg"), f("mp4")).is_err());
         assert!(r.plan(f("gif"), f("mp4")).is_ok());
         assert!(r.plan(f("gif"), f("webm")).is_err());
+    }
+
+    #[test]
+    fn video_text_is_its_own_subtitles() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "ffmpeg",
+            0,
+            vec![
+                ("gif", "mp4"),
+                ("avi", "mkv"),
+                ("mp4", "srt"),
+                ("mkv", "srt"),
+            ],
+        )));
+        r.register(Arc::new(Fake(
+            "subtitle",
+            0,
+            vec![("srt", "vtt"), ("srt", "txt"), ("txt", "srt")],
+        )));
+        r.register(Arc::new(Fake(
+            "office",
+            0,
+            vec![("txt", "docx"), ("txt", "pdf")],
+        )));
+        assert!(r.plan(f("mp4"), f("srt")).is_ok());
+        assert!(r.plan(f("mp4"), f("vtt")).is_ok());
+        assert!(r.plan(f("mkv"), f("txt")).is_ok());
+        // A GIF or AVI made into a container has no subtitle track.
+        assert!(r.plan(f("gif"), f("srt")).is_err());
+        assert!(r.plan(f("avi"), f("vtt")).is_err());
+        // Subtitles don't turn a video into a document.
+        assert!(r.plan(f("mp4"), f("docx")).is_err());
+        assert!(r.plan(f("mp4"), f("pdf")).is_err());
+        // Text that didn't come from a video routes as before.
+        assert!(r.plan(f("srt"), f("docx")).is_ok());
+        assert!(r.plan(f("txt"), f("vtt")).is_ok());
     }
 
     #[test]
