@@ -76,13 +76,23 @@ def menu_command(target=None):
     return [APP, "open", *(["--to", target] if target is not None else []), "--"]
 
 
+def menu_targets(name):
+    """The menu's targets for a file called `name`, with what the document
+    pack would add when this convt knows about it."""
+    try:
+        return run("targets", "--menu", "--with-pack", name)
+    except subprocess.CalledProcessError:
+        # A convt older than --with-pack.
+        return run("targets", "--menu", name)
+
+
 def groups():
     """Groups source formats that share the same target list, so each group
     becomes one menu with one MIME list."""
     formats = json.loads(run("formats", "--json"))
     by_targets = defaultdict(list)
     for f in formats:
-        targets = tuple(run("targets", "--menu", "--with-pack", f"x.{f['extensions'][0]}").split())
+        targets = tuple(menu_targets(f"x.{f['extensions'][0]}").split())
         by_targets[targets].append(f)
     return [(sources, targets) for targets, sources in by_targets.items()]
 

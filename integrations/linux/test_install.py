@@ -93,6 +93,19 @@ class DesktopExec(unittest.TestCase):
 
 
 @unittest.skipUnless(GLib and shutil.which("gio"), "needs GLib and gio")
+class MenuTargets(unittest.TestCase):
+    def test_an_older_convt_is_asked_without_with_pack(self):
+        def run(*args):
+            if "--with-pack" in args:
+                raise subprocess.CalledProcessError(2, "convt")
+            return "jpeg webp\n"
+
+        with mock.patch.object(install, "run", side_effect=run) as calls:
+            self.assertEqual(install.menu_targets("x.png"), "jpeg webp\n")
+        self.assertEqual([c.args for c in calls.call_args_list],
+                         [("targets", "--menu", "--with-pack", "x.png"), ("targets", "--menu", "x.png")])
+
+
 class DesktopEntries(Fixture):
     def launch(self, exec_line, args):
         entry = self.tmp / "t.desktop"
@@ -354,6 +367,14 @@ class Nautilus(unittest.TestCase):
         with mock.patch.object(self.ext, 'targets_for', return_value=()):
             root, = self.ext.ConvtMenu().get_file_items([self.file('/tmp/x.wav')])
         self.assertEqual([item.kw['label'] for item in root.submenu.items], ['More options…'])
+
+    def test_an_older_convt_is_asked_without_with_pack(self):
+        older = subprocess.CalledProcessError(2, 'convt')
+        with mock.patch.object(self.ext.subprocess, 'run',
+                               side_effect=[older, types.SimpleNamespace(stdout='jpeg webp')]) as run:
+            self.assertEqual(self.ext.targets_for('png'), ('jpeg', 'webp'))
+        self.assertIn('--with-pack', run.call_args_list[0].args[0])
+        self.assertNotIn('--with-pack', run.call_args_list[1].args[0])
 
     def test_targets_retry_after_ttl_including_failed_queries(self):
         for first in [types.SimpleNamespace(stdout=''), subprocess.TimeoutExpired('convt', 2)]:

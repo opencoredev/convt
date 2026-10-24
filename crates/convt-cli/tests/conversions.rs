@@ -376,3 +376,26 @@ fn missing_engines_are_named_instead_of_no_route() {
         .unwrap();
     assert_eq!(failed["kind"], "no_route", "{failed}");
 }
+
+#[test]
+fn targets_with_pack_adds_nothing_when_the_build_has_no_pack() {
+    let root = tempfile::tempdir().unwrap();
+    let targets = |args: &[&str]| {
+        let args: Vec<&std::ffi::OsStr> = args.iter().map(|a| a.as_ref()).collect();
+        let out = cli(root.path(), &args);
+        ok(&out);
+        String::from_utf8(out.stdout).unwrap()
+    };
+    // Release CI pins the pack at build time; a build without one ignores
+    // the flag, so menus never offer what nothing could download.
+    let configured = option_env!("CONVT_DOCUMENT_PACK_URL").is_some();
+    for file in ["x.png", "x.pdf", "x.docx", "x.xlsx"] {
+        for menu in [&[][..], &["--menu"][..]] {
+            let plain = targets(&[&["targets"][..], menu, &[file]].concat());
+            let with_pack = targets(&[&["targets", "--with-pack"][..], menu, &[file]].concat());
+            if !configured {
+                assert_eq!(plain, with_pack, "{file} {menu:?}");
+            }
+        }
+    }
+}
