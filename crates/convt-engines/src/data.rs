@@ -95,6 +95,17 @@ pub enum Value {
 }
 
 impl Value {
+    fn kind(&self) -> &'static str {
+        match self {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "text",
+            Value::Array(_) => "list",
+            Value::Object(_) => "mapping",
+        }
+    }
+
     /// The text a table cell shows: scalars as written, nesting as compact JSON.
     fn into_cell(self) -> String {
         match self {
@@ -108,23 +119,36 @@ impl Value {
 }
 
 /// An object's members in the order they are read. A repeated key keeps its
-/// first place and its last value.
+/// first place and its last value, as `JSON.parse` and PyYAML do. Two
+/// different keys that make the same text, like YAML's `1` and `"1"`, are
+/// an error instead, since one would silently replace the other.
 #[derive(Default)]
 struct Members {
     entries: Vec<(String, Value)>,
-    /// Each key's place in `entries`.
-    index: HashMap<String, usize>,
+    /// Each key's place in `entries`, and the kind of value it was written as.
+    index: HashMap<String, (usize, &'static str)>,
 }
 
 impl Members {
-    fn insert(&mut self, key: String, value: Value) {
-        match self.index.entry(key) {
-            Entry::Occupied(slot) => self.entries[*slot.get()].1 = value,
+    fn insert(&mut self, key: Value, value: Value) -> std::result::Result<(), String> {
+        let kind = key.kind();
+        match self.index.entry(key.into_cell()) {
+            Entry::Occupied(slot) => {
+                let (i, first) = *slot.get();
+                if first != kind {
+                    return Err(format!(
+                        "a {first} key and a {kind} key both read as {:?}; rename one so neither is lost",
+                        slot.key()
+                    ));
+                }
+                self.entries[i].1 = value;
+            }
             Entry::Vacant(slot) => {
                 self.entries.push((slot.key().clone(), value));
-                slot.insert(self.entries.len() - 1);
+                slot.insert((self.entries.len() - 1, kind));
             }
         }
+        Ok(())
     }
 }
 
@@ -192,7 +216,7 @@ impl<'de> Deserialize<'de> for Value {
             ) -> std::result::Result<Value, A::Error> {
                 let mut members = Members::default();
                 while let Some((key, value)) = map.next_entry::<Value, Value>()? {
-                    members.insert(key.into_cell(), value);
+                    members.insert(key, value).map_err(de::Error::custom)?;
                 }
                 Ok(Value::Object(members.entries))
             }
@@ -279,7 +303,9 @@ fn json_value(raw: &RawValue, depth: usize) -> serde_json::Result<Value> {
             let mut members = Members::default();
             for (key, raw) in raw_entries {
                 let value = json_value(raw, depth + 1)?;
-                members.insert(key, value);
+                members
+                    .insert(Value::String(key), value)
+                    .map_err(serde_json::Error::custom)?;
             }
             Ok(Value::Object(members.entries))
         }
@@ -925,6 +951,50 @@ mod tests {
         assert_eq!(
             (names[1].as_str(), names[n - 1].as_str()),
             ("a 2", "a 100000")
+        );
+    }
+
+    #[test]
+    fn keys_that_read_the_same_are_an_error_not_a_loss() {
+        for (yaml, kinds, key) in [
+            (
+                "1: numeric\n\"1\": text\n",
+                "a number key and a text key",
+                "\"1\"",
+            ),
+            (
+                "\"true\": a\ntrue: b\n",
+                "a text key and a boolean key",
+                "\"true\"",
+            ),
+            ("~: a\n\"\": b\n", "a null key and a text key", "\"\""),
+            (
+                "[1, 2]: a\n\"[1,2]\": b\n",
+                "a list key and a text key",
+                "\"[1,2]\"",
+            ),
+        ] {
+            let error = read_tree("yaml", yaml).unwrap_err().to_string();
+            assert!(error.contains("invalid YAML"), "{error}");
+            assert!(error.contains(kinds) && error.contains(key), "{error}");
+        }
+        // The same key twice keeps its first place and its last value.
+        for (format, source) in [
+            ("yaml", "1: a\nb: x\n1: c\n"),
+            ("json", r#"{"1":"a","b":"x","1":"c"}"#),
+        ] {
+            let value = read_tree(format, source).unwrap();
+            assert_eq!(
+                serde_json::to_string(&value).unwrap(),
+                r#"{"1":"c","b":"x"}"#,
+                "{format}"
+            );
+        }
+        // Keys that only look alike stay apart.
+        let value = read_tree("yaml", "1: a\n1.0: b\n\"01\": c\n").unwrap();
+        assert_eq!(
+            serde_json::to_string(&value).unwrap(),
+            r#"{"1":"a","1.0":"b","01":"c"}"#
         );
     }
 
