@@ -31,6 +31,176 @@ pub struct Options {
     /// Leave the audio out of video output.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub strip_audio: bool,
+    /// Largest output file in bytes. Engines lower quality (and for images,
+    /// dimensions) until the output fits. Presets may write `"10MB"`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "size_from_toml"
+    )]
+    pub target_size: Option<u64>,
+    /// Leave EXIF, XMP, GPS and container metadata out of the output. Color
+    /// profiles stay, since dropping one changes the colors. Images are
+    /// rotated to their EXIF orientation first.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub strip_metadata: bool,
+    /// Where video and audio output starts in the input.
+    pub trim_start: Option<Timestamp>,
+    /// Where video and audio output ends in the input.
+    pub trim_end: Option<Timestamp>,
+    /// Frames per second for video and animated GIF output.
+    pub fps: Option<u32>,
+}
+
+/// The smallest `target_size` engines accept: below this, container
+/// overhead alone can exceed the budget.
+pub const MIN_TARGET_SIZE: u64 = 10_000;
+
+/// Parses a file size: `10MB`, `8M`, `500KB`, `1.5 GB`, `2MiB` or plain
+/// bytes. `K`, `M` and `G` are decimal (1000), so a "10 MB" upload limit is
+/// met whichever way the site counts; `KiB`, `MiB` and `GiB` are binary.
+pub fn parse_size(s: &str) -> Result<u64> {
+    let bad = || Error::InvalidOption(format!("size {s:?}; use bytes or e.g. 500KB, 8MB, 1.5GB"));
+    let t = s.trim();
+    let split = t
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(t.len());
+    let (num, unit) = t.split_at(split);
+    let num: f64 = num.parse().map_err(|_| bad())?;
+    let scale: f64 = match unit.trim().to_ascii_lowercase().as_str() {
+        "" | "b" => 1.0,
+        "k" | "kb" => 1e3,
+        "m" | "mb" => 1e6,
+        "g" | "gb" => 1e9,
+        "kib" => 1024.0,
+        "mib" => 1024.0 * 1024.0,
+        "gib" => 1024.0 * 1024.0 * 1024.0,
+        _ => return Err(bad()),
+    };
+    let bytes = (num * scale).floor();
+    if !bytes.is_finite() || bytes < 1.0 || bytes > u64::MAX as f64 {
+        return Err(bad());
+    }
+    Ok(bytes as u64)
+}
+
+/// Formats bytes the way [`parse_size`] reads them: `10MB`, `500KB`, `1234B`.
+pub fn format_size(bytes: u64) -> String {
+    for (unit, scale) in [("GB", 1_000_000_000), ("MB", 1_000_000), ("KB", 1000)] {
+        if bytes >= scale && bytes.is_multiple_of(scale) {
+            return format!("{}{unit}", bytes / scale);
+        }
+    }
+    format!("{bytes}B")
+}
+
+fn size_from_toml<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<Option<u64>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Size {
+        Bytes(u64),
+        Text(String),
+    }
+    match Size::deserialize(d)? {
+        Size::Bytes(b) => Ok(Some(b)),
+        Size::Text(s) => parse_size(&s).map(Some).map_err(serde::de::Error::custom),
+    }
+}
+
+/// A point in a video or audio file, to the millisecond. Written as seconds
+/// (`90`, `12.5`) or a timestamp (`1:30`, `01:02:03.250`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp {
+    pub millis: u64,
+}
+
+impl Timestamp {
+    pub fn from_secs_f64(secs: f64) -> Option<Self> {
+        (0.0..1e12).contains(&secs).then(|| Timestamp {
+            millis: (secs * 1000.0).round() as u64,
+        })
+    }
+
+    pub fn as_secs_f64(self) -> f64 {
+        self.millis as f64 / 1000.0
+    }
+}
+
+impl std::str::FromStr for Timestamp {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let bad = || {
+            Error::InvalidOption(format!(
+                "time {s:?}; use seconds like 12.5 or a timestamp like 1:30 or 01:02:03.250"
+            ))
+        };
+        let parts: Vec<&str> = s.trim().split(':').collect();
+        if parts.len() > 3 || parts.iter().any(|p| p.is_empty()) {
+            return Err(bad());
+        }
+        let (last, whole) = parts.split_last().ok_or_else(bad)?;
+        let mut secs = 0.0;
+        for (i, p) in whole.iter().enumerate() {
+            if !p.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(bad());
+            }
+            let n = p.parse::<f64>().map_err(|_| bad())?;
+            // In h:mm:ss the minutes field stops at 59, as seconds do.
+            if i > 0 && n >= 60.0 {
+                return Err(bad());
+            }
+            secs = secs * 60.0 + n;
+        }
+        if !last.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
+            return Err(bad());
+        }
+        let tail: f64 = last.parse().map_err(|_| bad())?;
+        if !whole.is_empty() && tail >= 60.0 {
+            return Err(bad());
+        }
+        Timestamp::from_secs_f64(secs * 60.0 + tail).ok_or_else(bad)
+    }
+}
+
+impl std::fmt::Display for Timestamp {
+    /// Seconds with up to three decimals, which FFmpeg reads as-is.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (s, ms) = (self.millis / 1000, self.millis % 1000);
+        if ms == 0 {
+            write!(f, "{s}")
+        } else {
+            let frac = format!("{ms:03}");
+            write!(f, "{s}.{}", frac.trim_end_matches('0'))
+        }
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        s.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Time {
+            Int(u64),
+            Float(f64),
+            Text(String),
+        }
+        let bad =
+            |what: String| serde::de::Error::custom(format!("time {what}; use seconds or 1:30"));
+        match Time::deserialize(d)? {
+            Time::Int(n) => Timestamp::from_secs_f64(n as f64).ok_or_else(|| bad(n.to_string())),
+            Time::Float(x) => Timestamp::from_secs_f64(x).ok_or_else(|| bad(x.to_string())),
+            Time::Text(s) => s.parse().map_err(serde::de::Error::custom),
+        }
+    }
 }
 
 /// A video encoder the user can pick for MP4, MOV and MKV output.
@@ -101,6 +271,20 @@ impl Options {
         if self.dpi.is_some_and(|d| !(18..=1200).contains(&d)) {
             return bad("dpi must be between 18 and 1200");
         }
+        if self.target_size.is_some_and(|b| b < MIN_TARGET_SIZE) {
+            return bad("target size must be at least 10KB");
+        }
+        if self.fps.is_some_and(|f| !(1..=120).contains(&f)) {
+            return bad("fps must be between 1 and 120");
+        }
+        if self.trim_end.is_some_and(|end| end.millis == 0) {
+            return bad("trim end must be after the start of the file");
+        }
+        if let (Some(start), Some(end)) = (self.trim_start, self.trim_end)
+            && end <= start
+        {
+            return bad("trim end must come after trim start");
+        }
         Ok(())
     }
 
@@ -116,6 +300,11 @@ impl Options {
             video_codec: self.video_codec.or(base.video_codec),
             background: self.background.or(base.background),
             strip_audio: self.strip_audio || base.strip_audio,
+            target_size: self.target_size.or(base.target_size),
+            strip_metadata: self.strip_metadata || base.strip_metadata,
+            trim_start: self.trim_start.or(base.trim_start),
+            trim_end: self.trim_end.or(base.trim_end),
+            fps: self.fps.or(base.fps),
         }
     }
 }
@@ -466,6 +655,87 @@ mod tests {
         );
         let merged = Options::default().or(&p.options);
         assert_eq!(merged.background, Some(Background::BLACK));
+    }
+
+    #[test]
+    fn sizes() {
+        for (text, want) in [
+            ("10MB", 10_000_000),
+            ("8M", 8_000_000),
+            ("500KB", 500_000),
+            ("500 kb", 500_000),
+            ("1.5GB", 1_500_000_000),
+            ("2MiB", 2 * 1024 * 1024),
+            ("12345", 12_345),
+            ("100B", 100),
+        ] {
+            assert_eq!(parse_size(text).unwrap(), want, "{text}");
+        }
+        for bad in ["", "MB", "-1MB", "10 XB", "1.2.3MB", "0", "0.1"] {
+            assert!(parse_size(bad).is_err(), "{bad}");
+        }
+        for bytes in [10_000_000, 500_000, 2_000_000_000, 12_345] {
+            assert_eq!(parse_size(&format_size(bytes)).unwrap(), bytes);
+        }
+        assert_eq!(format_size(25_000_000), "25MB");
+
+        let p = Preset::parse("to = \"mp4\"\ntarget_size = \"10MB\"").unwrap();
+        assert_eq!(p.options.target_size, Some(10_000_000));
+        assert_eq!(Preset::parse(&p.to_toml()).unwrap(), p);
+        let p = Preset::parse("target_size = 25000000").unwrap();
+        assert_eq!(p.options.target_size, Some(25_000_000));
+        assert!(Preset::parse("target_size = \"big\"").is_err());
+        assert!(
+            Preset::parse("target_size = 100").is_err(),
+            "below the minimum"
+        );
+        assert!(!Preset::default().to_toml().contains("target_size"));
+    }
+
+    #[test]
+    fn timestamps() {
+        for (text, millis) in [
+            ("90", 90_000),
+            ("12.5", 12_500),
+            ("1:30", 90_000),
+            ("01:02:03.250", 3_723_250),
+            ("0:00.001", 1),
+        ] {
+            let t: Timestamp = text.parse().unwrap();
+            assert_eq!(t.millis, millis, "{text}");
+            assert_eq!(t.to_string().parse::<Timestamp>().unwrap(), t);
+        }
+        for bad in [
+            "", "-1", "1:", ":30", "1:60", "1:75:00", "1:2:3:4", "abc", "1e3", "1:-5",
+        ] {
+            assert!(bad.parse::<Timestamp>().is_err(), "{bad}");
+        }
+        assert_eq!("12.5".parse::<Timestamp>().unwrap().to_string(), "12.5");
+        assert_eq!("1:30".parse::<Timestamp>().unwrap().to_string(), "90");
+
+        let p = Preset::parse("trim_start = \"0:05\"\ntrim_end = 12.5\nfps = 24").unwrap();
+        assert_eq!(p.options.trim_start.unwrap().millis, 5_000);
+        assert_eq!(p.options.trim_end.unwrap().millis, 12_500);
+        assert_eq!(p.options.fps, Some(24));
+        assert_eq!(Preset::parse(&p.to_toml()).unwrap(), p);
+        assert!(Preset::parse("trim_start = 10\ntrim_end = 5").is_err());
+        assert!(Preset::parse("trim_end = 0").is_err());
+        assert!(Preset::parse("fps = 0").is_err());
+        assert!(Preset::parse("fps = 500").is_err());
+    }
+
+    #[test]
+    fn strip_metadata_round_trips_and_merges() {
+        assert!(
+            !Preset::parse("quality = 50")
+                .unwrap()
+                .to_toml()
+                .contains("strip_metadata")
+        );
+        let p = Preset::parse("strip_metadata = true").unwrap();
+        assert!(p.options.strip_metadata);
+        assert_eq!(Preset::parse(&p.to_toml()).unwrap(), p);
+        assert!(Options::default().or(&p.options).strip_metadata);
     }
 
     #[test]

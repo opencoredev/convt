@@ -33,6 +33,7 @@ const COLORSPACE_RGB: c_int = 1;
 const CHROMA_INTERLEAVED_RGB: c_int = 10;
 const CHROMA_INTERLEAVED_RGBA: c_int = 11;
 const CHANNEL_INTERLEAVED: c_int = 10;
+const CHROMA_INTERLEAVED_RGB_16LE: c_int = 14;
 const CHROMA_INTERLEAVED_RGBA_16LE: c_int = 15;
 const UNSUPPORTED_BIT_DEPTH: c_int = 4000;
 
@@ -295,6 +296,17 @@ unsafe fn sym<'l, T>(lib: &'l Library, name: &[u8]) -> Result<Symbol<'l, T>> {
 }
 
 fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
+    decode_with_profile(lib, input, false).map(|(img, _)| img)
+}
+
+/// Decodes the primary image, with its embedded ICC profile if it has one.
+/// With `deep`, an image of more than 8 bits decodes to 16-bit pixels, so
+/// re-encoding a 10-bit HEIC or AVIF keeps its precision.
+fn decode_with_profile(
+    lib: &Library,
+    input: &Path,
+    deep: bool,
+) -> Result<(image::DynamicImage, Option<Vec<u8>>)> {
     // Orientation tags are read first so the source file is not held in
     // memory together with the decoded pixel buffer.
     let (heif_ori, file_exif) = {
@@ -331,13 +343,36 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
         };
         primary(ctx.ptr, &mut handle.ptr).check()?;
 
+        let profile_size: Symbol<unsafe extern "C" fn(*const Opaque) -> usize> =
+            sym(lib, b"heif_image_handle_get_raw_color_profile_size\0")?;
+        let size = profile_size(handle.ptr);
+        let profile = if size == 0 {
+            None
+        } else {
+            let read_profile: Symbol<
+                unsafe extern "C" fn(*const Opaque, *mut c_void) -> HeifError,
+            > = sym(lib, b"heif_image_handle_get_raw_color_profile\0")?;
+            let mut bytes = vec![0u8; size];
+            read_profile(handle.ptr, bytes.as_mut_ptr().cast()).check()?;
+            Some(bytes)
+        };
+
         let has_alpha: Symbol<unsafe extern "C" fn(*const Opaque) -> c_int> =
             sym(lib, b"heif_image_handle_has_alpha_channel\0")?;
         let alpha = has_alpha(handle.ptr) != 0;
-        let chroma = if alpha {
-            CHROMA_INTERLEAVED_RGBA
+        let bits = if deep {
+            let luma: Symbol<unsafe extern "C" fn(*const Opaque) -> c_int> =
+                sym(lib, b"heif_image_handle_get_luma_bits_per_pixel\0")?;
+            luma(handle.ptr).clamp(8, 16) as u32
         } else {
-            CHROMA_INTERLEAVED_RGB
+            8
+        };
+        let wide = bits > 8;
+        let chroma = match (alpha, wide) {
+            (true, false) => CHROMA_INTERLEAVED_RGBA,
+            (false, false) => CHROMA_INTERLEAVED_RGB,
+            (true, true) => CHROMA_INTERLEAVED_RGBA_16LE,
+            (false, true) => CHROMA_INTERLEAVED_RGB_16LE,
         };
         // Default decoding options apply the rotation and mirroring stored in
         // the file, so photos come out upright.
@@ -374,19 +409,38 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
         let mut stride: c_int = 0;
         let data = plane(img.ptr, CHANNEL_INTERLEAVED, &mut stride);
         let channels = if alpha { 4 } else { 3 };
-        if data.is_null() || width <= 0 || height <= 0 || (stride as i64) < width as i64 * channels
+        let sample = if wide { 2 } else { 1 };
+        if data.is_null()
+            || width <= 0
+            || height <= 0
+            || (stride as i64) < width as i64 * channels * sample
         {
             return Err(failed("decoded image has no pixel data"));
         }
         let (w, h, stride) = (width as usize, height as usize, stride as usize);
-        let row = w * channels as usize;
+        let row = w * (channels * sample) as usize;
         let mut pixels = Vec::with_capacity(row * h);
         for y in 0..h {
             // SAFETY: libheif guarantees `height` rows of `stride` bytes.
             pixels.extend_from_slice(std::slice::from_raw_parts(data.add(y * stride), row));
         }
         let (w, h) = (w as u32, h as u32);
-        let mut img = if alpha {
+        let mut img = if wide {
+            // Samples run 0..2^bits-1 in little-endian u16; stretch to 16 bits.
+            let max = f64::from((1u32 << bits) - 1);
+            let deep: Vec<u16> = pixels
+                .chunks_exact(2)
+                .map(|b| {
+                    let v = f64::from(u16::from_le_bytes([b[0], b[1]]));
+                    (v * 65535.0 / max).round().min(65535.0) as u16
+                })
+                .collect();
+            if alpha {
+                image::ImageBuffer::from_raw(w, h, deep).map(image::DynamicImage::ImageRgba16)
+            } else {
+                image::ImageBuffer::from_raw(w, h, deep).map(image::DynamicImage::ImageRgb16)
+            }
+        } else if alpha {
             image::RgbaImage::from_raw(w, h, pixels).map(image::DynamicImage::ImageRgba8)
         } else {
             image::RgbImage::from_raw(w, h, pixels).map(image::DynamicImage::ImageRgb8)
@@ -401,7 +455,7 @@ fn decode(lib: &Library, input: &Path) -> Result<image::DynamicImage> {
         {
             img.apply_orientation(exif);
         }
-        Ok(img)
+        Ok((img, profile))
     }
 }
 
@@ -736,12 +790,47 @@ fn convert_colour(pixels: image::DynamicImage, colour: &mut Colour) -> image::Dy
 }
 
 fn encode(lib: &Library, input: &Path, ctx: &Ctx, output: &Path) -> Result<()> {
-    match encode_depth(lib, input, ctx, output, false)? {
+    let tune = Tune {
+        quality: ctx.options.quality.unwrap_or(90),
+        max_size: ctx.options.max_size,
+    };
+    let Some(target) = ctx.options.target_size else {
+        return encode_tuned(lib, input, ctx, output, tune);
+    };
+    // Each attempt decodes the input again; the encoder dominates the time.
+    let (w, h) = image::ImageReader::open(input)?
+        .with_guessed_format()?
+        .into_dimensions()
+        .map_err(failed)?;
+    let longest = tune.max_size.map_or(w.max(h), |m| m.min(w.max(h)));
+    crate::image::fit_target(
+        target,
+        ctx.step.to.id,
+        Some(ctx.options.quality.unwrap_or(90)),
+        longest,
+        |quality, edge| {
+            ctx.check()?;
+            let max_size = edge.or(tune.max_size);
+            encode_tuned(lib, input, ctx, output, Tune { quality, max_size })?;
+            Ok(std::fs::metadata(output)?.len())
+        },
+    )
+}
+
+/// The settings a size search varies between attempts.
+#[derive(Clone, Copy)]
+struct Tune {
+    quality: u8,
+    max_size: Option<u32>,
+}
+
+fn encode_tuned(lib: &Library, input: &Path, ctx: &Ctx, output: &Path, tune: Tune) -> Result<()> {
+    match encode_depth(lib, input, ctx, output, tune, false)? {
         EncodeAttempt::Written => Ok(()),
         EncodeAttempt::UnsupportedBitDepth => {
             // Retry HEIC only for the encoder's explicit unsupported-depth error.
             // The first attempt has released every object before the retry.
-            encode_depth(lib, input, ctx, output, true).map(|_| ())
+            encode_depth(lib, input, ctx, output, tune, true).map(|_| ())
         }
     }
 }
@@ -751,6 +840,7 @@ fn encode_depth(
     input: &Path,
     ctx: &Ctx,
     output: &Path,
+    tune: Tune,
     fallback: bool,
 ) -> Result<EncodeAttempt> {
     let mut decoder = image::ImageReader::open(input)?
@@ -788,7 +878,7 @@ fn encode_depth(
                 | image::ColorType::Rgb32F
                 | image::ColorType::Rgba32F
         );
-    let pixels = crate::image::fit(pixels, ctx.options.max_size);
+    let pixels = crate::image::fit(pixels, tune.max_size);
     // HEIC and AVIF keep transparency, so only a chosen color changes anything.
     let pixels = crate::image::apply_background(pixels, ctx.step.to.id, ctx.options)?;
     let (width, height) = (pixels.width(), pixels.height());
@@ -808,7 +898,7 @@ fn encode_depth(
     unsafe {
         let quality: Symbol<unsafe extern "C" fn(*mut Opaque, c_int) -> HeifError> =
             sym(lib, b"heif_encoder_set_lossy_quality\0")?;
-        quality(enc.ptr, ctx.options.quality.unwrap_or(90).into()).check()?;
+        quality(enc.ptr, tune.quality.into()).check()?;
         let param: Symbol<
             unsafe extern "C" fn(*mut Opaque, *const c_char, *const c_char) -> HeifError,
         > = sym(lib, b"heif_encoder_set_parameter_string\0")?;
@@ -957,6 +1047,30 @@ fn encode_depth(
     Ok(EncodeAttempt::Written)
 }
 
+/// Writes `img` as PNG with `profile` in its iCCP chunk.
+fn write_png_with_profile(
+    img: &image::DynamicImage,
+    profile: Option<Vec<u8>>,
+    path: &Path,
+) -> Result<()> {
+    use image::ImageEncoder;
+    let mut out = std::io::BufWriter::new(std::fs::File::create(path)?);
+    let mut encoder = image::codecs::png::PngEncoder::new(&mut out);
+    if let Some(profile) = profile {
+        encoder.set_icc_profile(profile).map_err(failed)?;
+    }
+    encoder
+        .write_image(
+            img.as_bytes(),
+            img.width(),
+            img.height(),
+            img.color().into(),
+        )
+        .map_err(failed)?;
+    out.into_inner().map_err(|e| Error::Io(e.into_error()))?;
+    Ok(())
+}
+
 fn decoder_steps(hevc: bool, av1: bool) -> Vec<Step> {
     let inputs: Vec<_> = [("heic", hevc), ("avif", av1)]
         .into_iter()
@@ -989,6 +1103,11 @@ impl Engine for LibheifEngine {
         for target in ["heic", "avif"] {
             if self.supports_output(target) {
                 steps.extend(crate::steps(crate::image::INPUTS, &[target]));
+                // Re-encoding to the same format compresses or resizes it.
+                if self.supports_input(target) {
+                    let f = convt_core::format_by_id(target).expect("known format");
+                    steps.push(Step { from: f, to: f });
+                }
             }
         }
         steps
@@ -1005,7 +1124,21 @@ impl Engine for LibheifEngine {
         ctx.check()?;
         if ctx.step.to.id != "png" {
             let output = ctx.artifact(out_dir, 0);
-            encode(lib, input, ctx, &output)?;
+            if ctx.step.from == ctx.step.to {
+                // The encoder reads its input with the `image` crate, which
+                // can't open HEIC, so decode to a lossless PNG first.
+                // The encoder reads the PNG's ICC profile, so the colours
+                // (Display P3 on iPhone photos) survive the round trip.
+                let decoded = out_dir.join("decoded.png");
+                let (img, profile) = decode_with_profile(lib, input, true)?;
+                write_png_with_profile(&img, profile, &decoded)?;
+                ctx.check()?;
+                let encoded = encode(lib, &decoded, ctx, &output);
+                let _ = std::fs::remove_file(&decoded);
+                encoded?;
+            } else {
+                encode(lib, input, ctx, &output)?;
+            }
             return Ok(vec![output]);
         }
         let img = decode(lib, input)?;
@@ -1085,22 +1218,44 @@ impl Engine for ImageIoEngine {
                 Some(convt_core::Background::Color(_))
             ) {
             std::fs::copy(input, &flattened)?;
-            crate::image::background_png(&flattened, ctx.options)?;
+            // Only the background: the size applies to the HEIC, below.
+            let flatten = convt_core::Options {
+                target_size: None,
+                strip_metadata: false,
+                ..ctx.options.clone()
+            };
+            crate::image::background_png(&flattened, &flatten)?;
             &flattened
         } else {
             input
         };
-        let mut cmd = std::process::Command::new(sips);
-        cmd.args(["-s", "format", format]);
-        if matches!(format, "jpeg" | "heic") {
-            let q = ctx.options.quality.unwrap_or(90).to_string();
-            cmd.args(["-s", "formatOptions", &q]);
-        }
-        if let Some(max) = ctx.options.max_size {
-            cmd.args(["-Z", &max.to_string()]);
-        }
-        cmd.arg(input).arg("--out").arg(&output);
-        let ran = crate::run_tool("imageio", cmd, ctx, |_| {});
+        let sips_at = |quality: u8, max: Option<u32>| -> Result<u64> {
+            ctx.check()?;
+            let mut cmd = std::process::Command::new(sips);
+            cmd.args(["-s", "format", format]);
+            if matches!(format, "jpeg" | "heic") {
+                cmd.args(["-s", "formatOptions", &quality.to_string()]);
+            }
+            if let Some(max) = max {
+                cmd.args(["-Z", &max.to_string()]);
+            }
+            cmd.arg(input).arg("--out").arg(&output);
+            crate::run_tool("imageio", cmd, ctx, |_| {})?;
+            Ok(std::fs::metadata(&output)?.len())
+        };
+        let quality = ctx.options.quality.unwrap_or(90);
+        let ran = match ctx.options.target_size.filter(|_| format == "heic") {
+            // PNG output meets the size in background_png, below.
+            None => sips_at(quality, ctx.options.max_size).map(|_| ()),
+            Some(target) => image::image_dimensions(input)
+                .map_err(failed)
+                .and_then(|(w, h)| {
+                    let longest = ctx.options.max_size.map_or(w.max(h), |m| m.min(w.max(h)));
+                    crate::image::fit_target(target, "heic", Some(quality), longest, |q, edge| {
+                        sips_at(q, edge.or(ctx.options.max_size))
+                    })
+                }),
+        };
         let _ = std::fs::remove_file(&flattened);
         ran?;
         if format == "png" {
@@ -1259,8 +1414,19 @@ mod tests {
         let cancel = Cancel::new();
         let ctx = Ctx::new(step, &options, &|_| {}, &cancel);
         let probe = dir.path().join("probe.heic");
-        let attempt =
-            encode_depth(engine.lib.as_ref().unwrap(), &input, &ctx, &probe, false).unwrap();
+        let tune = Tune {
+            quality: 100,
+            max_size: None,
+        };
+        let attempt = encode_depth(
+            engine.lib.as_ref().unwrap(),
+            &input,
+            &ctx,
+            &probe,
+            tune,
+            false,
+        )
+        .unwrap();
         let expected = match attempt {
             EncodeAttempt::Written => {
                 assert_eq!(colour_pixi(&std::fs::read(&probe).unwrap()), &[10, 10, 10]);
@@ -1804,6 +1970,121 @@ int test_loaded(void) { return loaded; }
                 engine.supports_input(id)
             );
         }
+    }
+
+    #[test]
+    fn reencoding_keeps_ten_bit_depth() {
+        let engine = LibheifEngine::new();
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("deep.png");
+        image::ImageBuffer::from_fn(64, 48, |x, y| {
+            image::Rgb([(x * 1000) as u16, (y * 1300) as u16, 30000u16])
+        })
+        .save(&png)
+        .unwrap();
+        let cancel = Cancel::new();
+        let options = Options {
+            quality: Some(100),
+            ..Options::default()
+        };
+        let mut checked = Vec::new();
+        for id in ["avif", "heic"] {
+            if !(engine.supports_input(id) && engine.supports_output(id)) {
+                eprintln!("skipping {id}: encoder or decoder unavailable");
+                continue;
+            }
+            let lib = engine.lib.as_ref().unwrap();
+            let to = format_by_id(id).unwrap();
+            let run = |from, input: &Path, name: &str| {
+                let out = dir.path().join(format!("{id}-{name}"));
+                std::fs::create_dir(&out).unwrap();
+                let ctx = Ctx::new(Step { from, to }, &options, &|_| {}, &cancel);
+                engine.convert(&ctx, input, &out).unwrap().remove(0)
+            };
+            let first = run(format_by_id("png").unwrap(), &png, "first");
+            if colour_pixi(&std::fs::read(&first).unwrap()) != [10, 10, 10] {
+                eprintln!("skipping {id}: this encoder wrote 8 bits");
+                continue;
+            }
+            let (img, _) = decode_with_profile(lib, &first, true).unwrap();
+            assert!(
+                matches!(
+                    img.color(),
+                    image::ColorType::Rgb16 | image::ColorType::Rgba16
+                ),
+                "{id} decodes deep: {:?}",
+                img.color()
+            );
+            let again = run(to, &first, "again");
+            assert_eq!(
+                colour_pixi(&std::fs::read(&again).unwrap()),
+                [10, 10, 10],
+                "{id} kept 10 bits"
+            );
+            checked.push(id);
+        }
+        eprintln!("ten-bit round trips checked: {checked:?}");
+    }
+
+    #[test]
+    fn reencodes_its_own_formats_under_a_target_size() {
+        let engine = LibheifEngine::new();
+        let steps = engine.steps();
+        for id in ["heic", "avif"] {
+            let own = steps.iter().any(|s| s.from.id == id && s.to.id == id);
+            assert_eq!(
+                own,
+                engine.supports_input(id) && engine.supports_output(id),
+                "{id}"
+            );
+        }
+        if !(engine.supports_input("avif") && engine.supports_output("avif")) {
+            eprintln!("skipping: AV1 encoder or decoder unavailable");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("photo.png");
+        let mut seed = 7u32;
+        image::RgbImage::from_fn(256, 192, |x, y| {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            let n = (seed >> 24) % 64;
+            image::Rgb([(x + n) as u8, (y + n) as u8, ((x ^ y) + n) as u8])
+        })
+        .save(&png)
+        .unwrap();
+        let avif = format_by_id("avif").unwrap();
+        let cancel = Cancel::new();
+        let run = |from, input: &Path, options: &Options, name: &str| {
+            let out = dir.path().join(name);
+            std::fs::create_dir(&out).unwrap();
+            let ctx = Ctx::new(Step { from, to: avif }, options, &|_| {}, &cancel);
+            engine.convert(&ctx, input, &out).unwrap().remove(0)
+        };
+        let original = run(
+            format_by_id("png").unwrap(),
+            &png,
+            &Options {
+                quality: Some(95),
+                ..Options::default()
+            },
+            "original",
+        );
+        let big = std::fs::metadata(&original).unwrap().len();
+        let target = big / 3;
+        assert!(
+            target >= convt_core::MIN_TARGET_SIZE,
+            "fixture too small: {big}"
+        );
+        let options = Options {
+            target_size: Some(target),
+            ..Options::default()
+        };
+        let smaller = run(avif, &original, &options, "smaller");
+        let len = std::fs::metadata(&smaller).unwrap().len();
+        assert!(len <= target, "{len} > {target} (from {big})");
+        let pixels = decoded(&engine, &smaller).unwrap();
+        assert_eq!((pixels.width(), pixels.height()), (256, 192));
+        assert!(!dir.path().join("smaller/decoded.png").exists());
     }
 
     #[test]

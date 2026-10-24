@@ -55,6 +55,9 @@ impl Engine for SvgEngine {
         );
         let output = ctx.artifact(out_dir, 0);
         pixmap.save_png(&output).map_err(failed)?;
+        if ctx.options.target_size.is_some() {
+            crate::image::background_png(&output, ctx.options)?;
+        }
         Ok(vec![output])
     }
 }
