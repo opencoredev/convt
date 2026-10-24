@@ -5,10 +5,12 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
       "import": "./dist/index.js"
     },
     "./formats": {
       "types": "./dist/formats.d.ts",
+      "bun": "./src/formats.ts",
       "import": "./dist/formats.js"
     }
   },
