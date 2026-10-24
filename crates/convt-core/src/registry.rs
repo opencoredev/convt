@@ -50,6 +50,12 @@ const LOSSLESS_HOPS: &[&str] = &[
 /// What a subtitle track pulled out of a video may become.
 const SUBTITLE_TEXT: &[&str] = &["srt", "vtt", "txt"];
 
+/// Spreadsheets with sheets and formatting, which CSV and TSV flatten.
+const WORKBOOKS: &[&str] = &["xlsx", "xls", "ods"];
+
+/// Plain tables: a workbook made into one keeps only its first sheet's values.
+const TABLE_TEXT: &[&str] = &["csv", "tsv"];
+
 impl Registry {
     pub fn new() -> Self {
         Self::default()
@@ -105,6 +111,11 @@ impl Registry {
             // Plain text keeps only the words, so it ends a route: a
             // subtitle file reaches TXT but not a PDF or Word file made from it.
             if d == MAX_HOPS || (d > 0 && node == "txt") {
+                continue;
+            }
+            // A workbook reaches CSV, but a Word file, Markdown or JSON made
+            // from that CSV would be its first sheet without formatting.
+            if d > 0 && TABLE_TEXT.contains(&node) && WORKBOOKS.contains(&from.id) {
                 continue;
             }
             // HashMap order changes between runs, so equal-length routes would be
@@ -604,6 +615,39 @@ mod tests {
         assert!(r.plan(f("txt"), f("html")).is_ok());
         assert!(r.plan(f("txt"), f("md")).is_err());
         assert!(r.plan(f("html"), f("md")).is_ok());
+    }
+
+    #[test]
+    fn a_workbook_flattened_to_csv_goes_no_further() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "office",
+            0,
+            vec![
+                ("xlsx", "csv"),
+                ("xlsx", "pdf"),
+                ("csv", "xlsx"),
+                ("html", "docx"),
+            ],
+        )));
+        r.register(Arc::new(Fake(
+            "data",
+            10,
+            vec![
+                ("csv", "html"),
+                ("csv", "json"),
+                ("csv", "tsv"),
+                ("json", "yaml"),
+            ],
+        )));
+        for to in ["html", "docx", "json", "yaml", "tsv"] {
+            assert!(r.plan(f("xlsx"), f(to)).is_err(), "xlsx -> {to}");
+        }
+        assert!(r.plan(f("xlsx"), f("csv")).is_ok());
+        assert!(r.plan(f("xlsx"), f("pdf")).is_ok());
+        // A CSV file is already a plain table, so it routes on.
+        assert!(r.plan(f("csv"), f("docx")).is_ok());
+        assert!(r.plan(f("csv"), f("yaml")).is_ok());
     }
 
     #[test]
