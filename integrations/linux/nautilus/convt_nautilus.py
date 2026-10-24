@@ -29,7 +29,7 @@ def cached_targets(extension, generation):
         return ()
     try:
         out = subprocess.run(
-            [CONVT, "targets", "--menu", f"file.{extension}"],
+            [CONVT, "targets", "--menu", "--with-pack", f"file.{extension}"],
             capture_output=True, text=True, timeout=2, check=True,
         ).stdout
     except (OSError, subprocess.SubprocessError):

@@ -85,6 +85,10 @@ enum Cmd {
         /// Only the few popular targets right-click menus offer
         #[arg(long)]
         menu: bool,
+        /// Include targets the document pack would add when this build can
+        /// download it, for menus that open the app (which offers the install)
+        #[arg(long)]
+        with_pack: bool,
     },
     /// Show the engines available on this machine
     Engines,
@@ -277,9 +281,20 @@ fn main() -> anyhow::Result<()> {
                 println!("{:<6} {:<13} {}", f.id, format!("{:?}", f.category), f.name);
             }
         }
-        Some(Cmd::Targets { file, menu }) => {
+        Some(Cmd::Targets {
+            file,
+            menu,
+            with_pack,
+        }) => {
             let from = format_by_extension(&file)
                 .with_context(|| format!("unknown format: {}", file.display()))?;
+            let planned;
+            let registry = if with_pack && convt_engines::packs::documents_configured() {
+                planned = convt_engines::registry_with_planned_documents();
+                &planned
+            } else {
+                &registry
+            };
             let targets = if menu {
                 registry.menu_targets(from)
             } else {

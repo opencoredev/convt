@@ -82,7 +82,7 @@ def groups():
     formats = json.loads(run("formats", "--json"))
     by_targets = defaultdict(list)
     for f in formats:
-        targets = tuple(run("targets", "--menu", f"x.{f['extensions'][0]}").split())
+        targets = tuple(run("targets", "--menu", "--with-pack", f"x.{f['extensions'][0]}").split())
         by_targets[targets].append(f)
     return [(sources, targets) for targets, sources in by_targets.items()]
 
