@@ -101,6 +101,55 @@ fn images_become_one_page_pdfs_at_their_own_size() {
     assert!(near(page.get_pixel(200, 75).0, [0, 0, 0, 255]), "flattened");
 }
 
+/// Converts `img` to a PDF at 72 DPI and renders it back, so each pixel of
+/// the page is one pixel of the source.
+fn round_trip(r: &Registry, dir: &Path, name: &str, img: image::DynamicImage) -> image::RgbaImage {
+    let src = dir.join(name);
+    img.save(&src).unwrap();
+    let options = Options {
+        dpi: Some(72),
+        ..Options::default()
+    };
+    let pdf = convert(r, &src, "pdf", options).unwrap();
+    render(r, &pdf[0], None)
+}
+
+#[test]
+fn opaque_images_keep_every_pixel_in_place() {
+    let Some(r) = registry() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    // 301 pixels of RGB is 903 bytes a row, so PDFium pads each row. A row
+    // read at the wrong stride shears the white column sideways.
+    let rgb = image::RgbImage::from_fn(301, 40, |x, _| match x {
+        150 => image::Rgb([255, 255, 255]),
+        0..150 => image::Rgb([255, 0, 0]),
+        _ => image::Rgb([0, 0, 255]),
+    });
+    let page = round_trip(&r, dir.path(), "rgb.png", rgb.into());
+    assert_eq!(page.dimensions(), (301, 40));
+    for y in [0, 20, 39] {
+        assert!(
+            near(page.get_pixel(150, y).0, [255, 255, 255, 255]),
+            "y {y}"
+        );
+        assert!(near(page.get_pixel(148, y).0, [255, 0, 0, 255]), "y {y}");
+        assert!(near(page.get_pixel(152, y).0, [0, 0, 255, 255]), "y {y}");
+        assert!(near(page.get_pixel(300, y).0, [0, 0, 255, 255]), "y {y}");
+    }
+
+    // Gray rows of 37 bytes are padded to 40.
+    let gray =
+        image::GrayImage::from_fn(37, 30, |x, _| image::Luma([if x == 20 { 255 } else { 40 }]));
+    let page = round_trip(&r, dir.path(), "gray.png", gray.into());
+    assert_eq!(page.dimensions(), (37, 30));
+    for y in [0, 15, 29] {
+        assert!(near(page.get_pixel(20, y).0, [255, 255, 255, 255]), "y {y}");
+        assert!(near(page.get_pixel(18, y).0, [40, 40, 40, 255]), "y {y}");
+        assert!(near(page.get_pixel(22, y).0, [40, 40, 40, 255]), "y {y}");
+        assert!(near(page.get_pixel(36, y).0, [40, 40, 40, 255]), "y {y}");
+    }
+}
+
 /// A 64x32 JPEG, red on the left and blue on the right.
 fn jpeg(dir: &Path, name: &str) -> PathBuf {
     let img = image::RgbImage::from_fn(64, 32, |x, _| {
