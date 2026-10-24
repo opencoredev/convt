@@ -591,4 +591,5 @@ async fn options_are_stored_returned_and_claimed() {
         .await
         .unwrap();
     assert_eq!(plain.options.0, convt_core::Options::default());
+    db.drop().await;
 }
