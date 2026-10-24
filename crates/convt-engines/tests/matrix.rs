@@ -218,6 +218,43 @@ fn required_routes_remain_offered() {
 }
 
 #[test]
+fn markdown_images_are_embedded_through_office_hops() {
+    let registry = convt_engines::default_registry();
+    if let Some((_, reason)) = registry
+        .unavailable()
+        .iter()
+        .find(|(id, _)| *id == "libreoffice")
+    {
+        eprintln!("SKIP libreoffice: {reason}");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    image::RgbImage::from_pixel(40, 40, image::Rgb([255, 0, 0]))
+        .save(dir.path().join("red.png"))
+        .unwrap();
+    let input = dir.path().join("p.md");
+    std::fs::write(&input, "# Pic\n\n![red](red.png)\n").unwrap();
+    // File names in a ZIP's directory and PDF object dictionaries are stored
+    // uncompressed, so the bytes show whether a picture went in.
+    let contains = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    for (to, needle) in [
+        ("pdf", &b"/Subtype/Image"[..]),
+        ("docx", b"word/media/"),
+        ("odt", b"Pictures/"),
+    ] {
+        let out = dir.path().join(to);
+        std::fs::create_dir(&out).unwrap();
+        let mut job = Job::new(&input, format_by_id(to).unwrap());
+        job.output = Output::Dir(out);
+        let files = registry
+            .run(&job, &|_| {}, &Cancel::new())
+            .unwrap_or_else(|e| panic!("md->{to}: {e}"));
+        let bytes = std::fs::read(&files[0]).unwrap();
+        assert!(contains(&bytes, needle), "md->{to} has no embedded image");
+    }
+}
+
+#[test]
 fn unsupported_avif_inputs_and_outputs_skip_cleanly() {
     let missing = serde_json::json!({"pdfium":true,"libheif":false,"hevc":true});
     assert_eq!(

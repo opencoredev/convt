@@ -43,6 +43,13 @@ impl Engine for MarkdownEngine {
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
         let source = text::read("markdown", input)?;
         let output = match (ctx.step.from.id, ctx.step.to.id) {
+            // A middle hop's page sits in a temporary folder, so relative
+            // images would not resolve there; they go inline for LibreOffice
+            // to embed. The final page lands where the user keeps the
+            // Markdown, so its paths stay relative.
+            ("md", "html") if !ctx.is_last_hop() => {
+                to_html_with_images_from(&source, &text::stem(input), &input_dir(input)?)
+            }
             ("md", "html") => to_html(&source, &text::stem(input)),
             ("md", "txt") => to_plain(&source),
             ("html", "md") => from_html(&source)?,
@@ -54,12 +61,85 @@ impl Engine for MarkdownEngine {
     }
 }
 
+/// The absolute folder holding `input`.
+fn input_dir(input: &Path) -> Result<PathBuf> {
+    let dir = input.parent().unwrap_or(Path::new("."));
+    let dir = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    Ok(std::path::absolute(dir)?)
+}
+
 /// A standalone page titled by the first heading, or else the file name.
 pub fn to_html(markdown: &str, fallback_title: &str) -> String {
+    page(markdown, fallback_title, None)
+}
+
+/// [`to_html`], with each relative image that is a file in `dir` inlined
+/// as a data URI. Other images keep their paths.
+pub fn to_html_with_images_from(markdown: &str, fallback_title: &str, dir: &Path) -> String {
+    page(
+        markdown,
+        fallback_title,
+        url::Url::from_directory_path(dir).ok(),
+    )
+}
+
+fn page(markdown: &str, fallback_title: &str, images_base: Option<url::Url>) -> String {
+    let events = Parser::new_ext(markdown, options()).map(|event| match (event, &images_base) {
+        (
+            Event::Start(Tag::Image {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }),
+            Some(base),
+        ) => {
+            let dest_url = inline_image(base, &dest_url).map_or(dest_url, Into::into);
+            Event::Start(Tag::Image {
+                link_type,
+                dest_url,
+                title,
+                id,
+            })
+        }
+        (event, _) => event,
+    });
     let mut body = String::new();
-    pulldown_cmark::html::push_html(&mut body, Parser::new_ext(markdown, options()));
+    pulldown_cmark::html::push_html(&mut body, events);
     let title = first_heading(markdown).unwrap_or_else(|| fallback_title.to_owned());
     text::html_document(&title, &body)
+}
+
+/// A data URI of the image `dest` names relative to `base`. `None` for a URL
+/// with a scheme, a fragment, or a file that is missing or not an image, so
+/// only pictures are read and never a text file a link happens to name.
+fn inline_image(base: &url::Url, dest: &str) -> Option<String> {
+    use base64::Engine as _;
+    if dest.is_empty() || dest.starts_with('#') {
+        return None;
+    }
+    if url::Url::parse(dest) != Err(url::ParseError::RelativeUrlWithoutBase) {
+        return None;
+    }
+    let path = base.join(dest).ok()?.to_file_path().ok()?;
+    let bytes = std::fs::read(&path).ok()?;
+    let mime = match image::guess_format(&bytes) {
+        Ok(format) => format.to_mime_type(),
+        Err(_)
+            if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("svg")) =>
+        {
+            "image/svg+xml"
+        }
+        Err(_) => return None,
+    };
+    let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some(format!("data:{mime};base64,{data}"))
 }
 
 fn first_heading(markdown: &str) -> Option<String> {
@@ -305,6 +385,30 @@ mod tests {
         assert!(html.contains("<del>old</del>"), "{html}");
         assert!(html.contains(r#"type="checkbox""#), "{html}");
         assert!(html.contains("<style>") && html.trim_end().ends_with("</html>"));
+    }
+
+    #[test]
+    fn middle_hop_images_are_inlined_from_the_input_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbImage::new(2, 2)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        std::fs::create_dir(dir.path().join("my img")).unwrap();
+        std::fs::write(dir.path().join("my img/red.png"), png.get_ref()).unwrap();
+        std::fs::write(dir.path().join("notes.png"), "not a picture").unwrap();
+        let md =
+            "![a](my%20img/red.png) ![b](notes.png) ![c](gone.png) ![d](https://x.test/d.png)\n";
+        let html = to_html_with_images_from(md, "x", dir.path());
+        assert!(
+            html.contains(r#"<img src="data:image/png;base64,iVBOR"#),
+            "{html}"
+        );
+        assert!(html.contains(r#"src="notes.png""#), "{html}");
+        assert!(html.contains(r#"src="gone.png""#), "{html}");
+        assert!(html.contains(r#"src="https://x.test/d.png""#), "{html}");
+        // A page the user keeps next to the Markdown stays relative.
+        assert!(to_html(md, "x").contains(r#"src="my%20img/red.png""#));
     }
 
     #[test]

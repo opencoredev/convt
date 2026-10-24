@@ -266,7 +266,8 @@ impl Registry {
                 let scaled = |p: Option<f32>| {
                     progress(p.map(|p| (base + p.clamp(0.0, 1.0) / k) / n));
                 };
-                let ctx = Ctx::new(*step, &job.options, &scaled, cancel);
+                let ctx = Ctx::new(*step, &job.options, &scaled, cancel)
+                    .with_last_hop(i + 1 == plan.hops.len());
                 let produced = match engine.convert(&ctx, file, &out_dir) {
                     Err(_) if cancel.is_cancelled() => return Err(Error::Cancelled),
                     r => r?,
@@ -730,6 +731,41 @@ mod tests {
         // text is never a middle hop.
         assert!(r.plan(f("srt"), f("docx")).is_err());
         assert!(r.plan(f("txt"), f("vtt")).is_ok());
+    }
+
+    #[test]
+    fn only_the_final_hop_is_marked_last() {
+        struct Record(&'static str, &'static str, Arc<std::sync::Mutex<Vec<bool>>>);
+        impl Engine for Record {
+            fn id(&self) -> &'static str {
+                "record"
+            }
+            fn steps(&self) -> Vec<Step> {
+                vec![Step {
+                    from: f(self.0),
+                    to: f(self.1),
+                }]
+            }
+            fn convert(&self, ctx: &Ctx, _: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
+                self.2.lock().unwrap().push(ctx.is_last_hop());
+                let path = ctx.artifact(out_dir, 0);
+                std::fs::write(&path, "x")?;
+                Ok(vec![path])
+            }
+        }
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut r = Registry::new();
+        r.register(Arc::new(Record("md", "html", seen.clone())))
+            .register(Arc::new(Record("html", "pdf", seen.clone())));
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("a.md");
+        std::fs::write(&input, "x").unwrap();
+        r.run(&Job::new(&input, f("pdf")), &no_progress, &Cancel::new())
+            .unwrap();
+        assert_eq!(*seen.lock().unwrap(), [false, true]);
+        r.run(&Job::new(&input, f("html")), &no_progress, &Cancel::new())
+            .unwrap();
+        assert_eq!(*seen.lock().unwrap(), [false, true, true]);
     }
 
     #[test]
