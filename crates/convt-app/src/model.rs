@@ -832,10 +832,13 @@ impl AppState {
         }
     }
 
-    /// Whether a document is converting or waiting to.
+    /// Whether a document is converting or waiting to: a job from or to a
+    /// document format, since a PDF becomes Word through LibreOffice too.
     fn documents_converting(&self) -> bool {
         self.queue.entries.iter().any(|e| {
-            !e.status.is_finished() && format_by_extension(&e.input).is_some_and(pack::is_document)
+            !e.status.is_finished()
+                && (pack::is_document(e.to)
+                    || format_by_extension(&e.input).is_some_and(pack::is_document))
         })
     }
 
