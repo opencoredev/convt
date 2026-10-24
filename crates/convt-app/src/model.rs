@@ -266,6 +266,15 @@ enum PackEvent {
     Removed(Result<(), String>),
 }
 
+/// What the registries say about documents and the pack, worked out when
+/// they change rather than on every frame.
+#[derive(Default)]
+struct DocumentSummary {
+    supported: bool,
+    worth_offering: bool,
+    adds: String,
+}
+
 pub struct AppState {
     pub registry: Arc<Registry>,
     /// [`Self::registry`] as it would be with the document pack, rebuilt
@@ -273,6 +282,9 @@ pub struct AppState {
     pub planned: Arc<Registry>,
     /// Counts registry rebuilds, so windows know to recompute targets.
     pub registry_generation: u64,
+    /// What the registries say about documents, kept with them because
+    /// working it out sweeps every format's targets.
+    documents: DocumentSummary,
     packs: Arc<dyn pack::Backend>,
     pub pack: PackState,
     pack_cancel: Option<Arc<AtomicBool>>,
@@ -367,6 +379,7 @@ impl AppState {
             registry,
             planned,
             registry_generation: 0,
+            documents: DocumentSummary::default(),
             packs,
             pack,
             pack_cancel: None,
@@ -401,6 +414,7 @@ impl AppState {
             },
             _drain: drain,
         };
+        state.summarize_documents();
         state.reload_presets();
         state.refresh_history();
         state
@@ -599,9 +613,7 @@ impl AppState {
     /// Whether some conversion this registry offers reads documents: the
     /// document pack or a LibreOffice on this computer is in use.
     pub fn documents_supported(&self) -> bool {
-        convt_core::FORMATS
-            .iter()
-            .any(|f| pack::is_document(f) && !self.registry.targets(f).is_empty())
+        self.documents.supported
     }
 
     /// Why documents can't convert right now, if the pack they use is
@@ -690,8 +702,7 @@ impl AppState {
         // Nothing may start LibreOffice from the folder being deleted.
         self.registry = Arc::new(self.packs.registry_without_documents());
         self.planned = Arc::new(self.packs.planned_registry());
-        self.runner.set_registry(self.registry.clone());
-        self.registry_generation += 1;
+        self.registries_changed();
         let backend = self.packs.clone();
         let (tx, rx) = unbounded();
         std::thread::Builder::new()
@@ -760,8 +771,35 @@ impl AppState {
         self.pack.status = self.packs.status();
         self.registry = Arc::new(self.packs.registry());
         self.planned = Arc::new(self.packs.planned_registry());
+        self.registries_changed();
+    }
+
+    /// Hands the new registry to the jobs and tells windows and cards.
+    fn registries_changed(&mut self) {
         self.runner.set_registry(self.registry.clone());
         self.registry_generation += 1;
+        self.summarize_documents();
+    }
+
+    fn summarize_documents(&mut self) {
+        let supported = convt_core::FORMATS
+            .iter()
+            .any(|f| pack::is_document(f) && !self.registry.targets(f).is_empty());
+        let worth_offering = self.pack.offer.configured
+            && !matches!(self.pack.status, pack::Status::Installed(_))
+            && !supported;
+        self.documents = DocumentSummary {
+            supported,
+            worth_offering,
+            adds: String::new(),
+        };
+        self.documents.adds = self.what_the_pack_adds();
+    }
+
+    /// What the pack adds and what works without it, for the Activity card
+    /// and Settings.
+    pub fn pack_adds(&self) -> &str {
+        &self.documents.adds
     }
 
     /// The registry with the document pack, when this build has a pack to
@@ -796,12 +834,39 @@ impl AppState {
         self.planned_registry().unwrap_or(&self.registry)
     }
 
+    /// What the pack adds and what works without it, from the registries, so
+    /// the words never promise a conversion this build doesn't have.
+    fn what_the_pack_adds(&self) -> String {
+        let f = |id| convt_core::format_by_id(id).expect("a known format");
+        let (pdf, png, txt, docx) = (f("pdf"), f("png"), f("txt"), f("docx"));
+        let mut adds = "Adds Word, Excel, PowerPoint and OpenDocument files".to_string();
+        if self.pack_targets(pdf).contains(&docx) {
+            adds.push_str(", and PDF to Word");
+        }
+        adds.push('.');
+        let now = |from, to| self.registry.targets(from).contains(&to);
+        let free: Vec<&str> = [
+            (now(png, pdf), "images to PDF"),
+            (now(pdf, png), "PDF to images"),
+            (now(pdf, txt), "PDF to text"),
+        ]
+        .into_iter()
+        .filter_map(|(works, what)| works.then_some(what))
+        .collect();
+        let free = match free.as_slice() {
+            [] => return adds,
+            [one] => one.to_string(),
+            [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        };
+        let mut free = free;
+        free[..1].make_ascii_uppercase();
+        format!("{adds} {free} already work without it.")
+    }
+
     /// Whether to point people at the document pack: this build can download
     /// it and nothing on this computer converts documents yet.
     pub fn pack_worth_offering(&self) -> bool {
-        self.pack.offer.configured
-            && !matches!(self.pack.status, pack::Status::Installed(_))
-            && !self.documents_supported()
+        self.documents.worth_offering
     }
 
     /// Switches an automation rule on or off. Only the setting changes: no

@@ -9,8 +9,6 @@
 
 use std::rc::Rc;
 
-use convt_core::format_by_id;
-
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -86,35 +84,6 @@ pub(super) fn tag(id: SharedString, on: bool, p: &Palette) -> impl IntoElement +
                         .child("Document pack"),
                 ),
         )
-}
-
-/// What the pack adds and what works without it, from the registries, so
-/// the words never promise a conversion this build doesn't have.
-pub(super) fn what_it_adds(state: &AppState) -> String {
-    let f = |id| format_by_id(id).expect("a known format");
-    let (pdf, png, txt, docx) = (f("pdf"), f("png"), f("txt"), f("docx"));
-    let mut adds = "Adds Word, Excel, PowerPoint and OpenDocument files".to_string();
-    if state.pack_targets(pdf).contains(&docx) {
-        adds.push_str(", and PDF to Word");
-    }
-    adds.push('.');
-    let now = |from, to| state.registry.targets(from).contains(&to);
-    let free: Vec<&str> = [
-        (now(png, pdf), "images to PDF"),
-        (now(pdf, png), "PDF to images"),
-        (now(pdf, txt), "PDF to text"),
-    ]
-    .into_iter()
-    .filter_map(|(works, what)| works.then_some(what))
-    .collect();
-    let free = match free.as_slice() {
-        [] => return adds,
-        [one] => one.to_string(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
-    };
-    let mut free = free;
-    free[..1].make_ascii_uppercase();
-    format!("{adds} {free} already work without it.")
 }
 
 fn cancel_button(app: &Entity<AppState>, p: &Palette) -> theme::Clickable {
@@ -515,7 +484,7 @@ pub(super) fn settings_row(
     };
     // What the pack is for, while it would still add something.
     let about = (pack.offer.configured && !system && !installed_status(&pack.status)).then(|| {
-        let adds = what_it_adds(state);
+        let adds = state.pack_adds().to_string();
         div()
             .id("pack-about")
             .test_support()
@@ -586,7 +555,7 @@ pub(super) fn activity_card(
             "Convert Word, Excel and PowerPoint files".to_string(),
             format!(
                 "{} It's a one-time download; after that, documents convert offline.",
-                what_it_adds(state)
+                state.pack_adds()
             ),
             None,
         )
