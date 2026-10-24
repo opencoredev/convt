@@ -4673,6 +4673,60 @@ fn picking_another_target_drops_install_and_convert(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_preset_for_another_target_drops_install_and_convert(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    packs.hold.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    save_preset(
+        &f,
+        cx,
+        "pictures",
+        Preset {
+            to: Some("png".into()),
+            options: Options::default(),
+        },
+    );
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    let (window, view) = f.quick(cli(vec![pdf], Some("docx"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    click(cx, window, "preset-pictures");
+    assert!(!intent(&view, cx), "the preset picked another target");
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the install", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+    cx.run_until_parked();
+    assert_eq!(f.jobs(cx), 0, "PNG waits for its own click");
+}
+
+#[gpui_kit::test]
+fn the_pack_stays_while_a_pdf_becomes_word(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    packs.installed.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    let app = f.app.clone();
+    cx.update(|cx| {
+        app.update(cx, |s, cx| {
+            let docx = format_by_id("docx").unwrap();
+            s.convert(std::slice::from_ref(&pdf), docx, &Options::default(), cx)
+                .unwrap();
+            assert!(s.remove_pack(cx).unwrap_err().contains("Wait"));
+        })
+    });
+    assert_eq!(packs.removes.load(Ordering::SeqCst), 0);
+}
+
+#[gpui_kit::test]
 fn menus_offer_documents_only_when_the_pack_can_be_downloaded(cx: &mut TestAppContext) {
     let packs = Arc::new(TestPacks::default());
     let f = Fixture::with_packs(cx, packs.clone());
