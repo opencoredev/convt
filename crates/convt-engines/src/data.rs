@@ -238,32 +238,84 @@ pub fn write_tree(value: &Value, format: &str) -> Result<String> {
     }
 }
 
-/// Every row of a CSV or TSV file, quoted fields unquoted. Rows may differ
-/// in length.
+/// Every row of a CSV or TSV file. Rows may differ in length. CSV fields may
+/// be quoted. TSV (a tab `delimiter`) has no quoting: a quote is text, and
+/// `\t`, `\n`, `\r` and `\\` stand for a tab, line breaks and a backslash.
+/// Any other backslash stays as written.
 pub fn read_table(source: &str, delimiter: u8) -> Result<Vec<Vec<String>>> {
+    let tsv = delimiter == b'\t';
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
+        .quoting(!tsv)
         .delimiter(delimiter)
         .from_reader(source.as_bytes());
     let mut rows = Vec::new();
     for record in reader.records() {
         let record = record.map_err(|e| failed(format!("invalid table: {e}")))?;
-        rows.push(record.iter().map(str::to_owned).collect());
+        let cell = |s: &str| if tsv { tsv_unescape(s) } else { s.to_owned() };
+        rows.push(record.iter().map(cell).collect());
     }
     Ok(rows)
 }
 
+/// CSV with fields quoted where needed, or TSV with tabs, line breaks and
+/// backslashes inside cells escaped, as [`read_table`] reads them.
 pub fn write_table(rows: &[Vec<String>], delimiter: u8) -> Result<String> {
+    let tsv = delimiter == b'\t';
     let mut writer = csv::WriterBuilder::new()
         .flexible(true)
+        .quote_style(if tsv {
+            csv::QuoteStyle::Never
+        } else {
+            csv::QuoteStyle::Necessary
+        })
         .delimiter(delimiter)
         .from_writer(Vec::new());
     for row in rows {
-        writer.write_record(row).map_err(failed)?;
+        if tsv {
+            writer.write_record(row.iter().map(|c| tsv_escape(c)))
+        } else {
+            writer.write_record(row)
+        }
+        .map_err(failed)?;
     }
     let bytes = writer.into_inner().map_err(failed)?;
     String::from_utf8(bytes).map_err(failed)
+}
+
+fn tsv_escape(cell: &str) -> String {
+    let mut out = String::with_capacity(cell.len());
+    for c in cell.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn tsv_unescape(cell: &str) -> String {
+    let mut out = String::with_capacity(cell.len());
+    let mut chars = cell.chars().peekable();
+    while let Some(c) = chars.next() {
+        let escaped = match (c, chars.peek()) {
+            ('\\', Some('\\')) => '\\',
+            ('\\', Some('t')) => '\t',
+            ('\\', Some('n')) => '\n',
+            ('\\', Some('r')) => '\r',
+            _ => {
+                out.push(c);
+                continue;
+            }
+        };
+        chars.next();
+        out.push(escaped);
+    }
+    out
 }
 
 /// The header row, padded so every column has a distinct, non-empty name.
@@ -448,6 +500,23 @@ mod tests {
         assert_eq!(back, csv);
         let tsv = write_table(&rows, b'\t').unwrap();
         assert_eq!(read_table(&tsv, b'\t').unwrap(), rows);
+    }
+
+    #[test]
+    fn tsv_keeps_quotes_and_escapes_tabs_and_breaks() {
+        let tsv = "note\tpath\n\"Hello\" she said\tC:\\data\n";
+        let rows = read_table(tsv, b'\t').unwrap();
+        assert_eq!(rows[1], ["\"Hello\" she said", "C:\\data"]);
+        let cells = vec![
+            vec!["a\tb".to_owned(), "line\nbreak\r".into()],
+            vec![r"back\slash \t not a tab".into(), "\"".into()],
+        ];
+        let written = write_table(&cells, b'\t').unwrap();
+        assert_eq!(
+            written,
+            "a\\tb\tline\\nbreak\\r\nback\\\\slash \\\\t not a tab\t\"\n"
+        );
+        assert_eq!(read_table(&written, b'\t').unwrap(), cells);
     }
 
     #[test]
