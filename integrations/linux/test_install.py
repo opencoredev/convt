@@ -204,6 +204,17 @@ class Dolphin(Fixture):
         self.assertEqual(actions, sorted(actions))
 
 
+    def test_formats_sharing_a_mime_type_get_one_menu_without_unusable_targets(self):
+        # MP4 and MPG4 are both video/mp4; Dolphin cannot tell them apart.
+        mp4 = ([{"mime": "video/mp4", "extensions": ["mp4"]}], ("mov", "webm", "gif"))
+        mpg4 = ([{"mime": "video/mp4", "extensions": ["mpg4"]}], ("mp4", "mov", "gif"))
+        menus = install.dolphin_menus([mp4, mpg4])
+        self.assertEqual(len(menus), 1)
+        text = menus["convt-0.desktop"]
+        self.assertIn("MimeType=video/mp4;", text)
+        actions = re.search(r"Actions=(.*);", text).group(1).split(";")
+        self.assertEqual(actions, ["convert_00_mov", "convert_01_gif", "options"])
+
 class Thunar(Fixture):
     def test_commands_survive_thunar_and_sh(self):
         actions = install.thunar_actions(GROUPS)

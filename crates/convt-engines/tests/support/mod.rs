@@ -257,6 +257,32 @@ impl Fixture {
                         "avi" => {
                             cmd.args(["-c:v", "mpeg4", "-c:a", "libmp3lame"]);
                         }
+                        // A DVD-style program stream. MPEG-2 only allows broadcast frame rates.
+                        "mpeg" => {
+                            cmd.args([
+                                "-r",
+                                "24",
+                                "-c:v",
+                                "mpeg2video",
+                                "-c:a",
+                                "mp2",
+                                "-f",
+                                "mpeg",
+                            ]);
+                        }
+                        // FFmpeg cannot pick a muxer from the .mpg4 extension.
+                        "mpg4" => {
+                            cmd.args([
+                                "-c:v",
+                                "libx264",
+                                "-preset",
+                                "ultrafast",
+                                "-c:a",
+                                "aac",
+                                "-f",
+                                "mp4",
+                            ]);
+                        }
                         _ => {
                             cmd.args(["-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac"]);
                         }
