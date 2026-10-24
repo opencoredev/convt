@@ -338,13 +338,12 @@ function commonTargetIds(lists: string[][]): Set<string> {
   return common;
 }
 
-// Every named file must reach a target. Convt skips folder files that can't, so folders
-// only need one file, in any of them, that does.
+// Every named file must reach a target. Convt skips folder files that can't, so with named
+// files the folders don't narrow the list; folders alone need one file, in any of them, that does.
 function selectionTargetIds(selection: Selection, list: (source: Source) => string[]): Set<string> {
-  const lists = selection.sources.map(list);
+  if (selection.sources.length) return commonTargetIds(selection.sources.map(list));
   const folderSources = selection.folders.flatMap((folder) => folder.sources).filter((source) => source.format);
-  if (selection.folders.length) lists.push([...new Set(folderSources.flatMap(list))]);
-  return commonTargetIds(lists);
+  return new Set(folderSources.flatMap(list));
 }
 
 function sortedFormats(formats: Format[], ids: Set<string>): Format[] {

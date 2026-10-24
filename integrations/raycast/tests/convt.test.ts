@@ -531,6 +531,14 @@ test("folder targets combine every file inside, and named files still limit them
     ),
     ["png", "webp"],
   );
+  // Convt skips folder files that can't convert, so a folder never removes a named file's targets.
+  const empty = path.join(directory, "empty");
+  await mkdir(empty);
+  assert.deepEqual(
+    (await getTargets(binary, [empty, path.join(directory, "named.jpg")])).map((format) => format.id),
+    ["png", "webp"],
+  );
+  assert.deepEqual(await getTargets(binary, [empty]), []);
 });
 
 test("converts folders with events keyed by their input and a job-based total", async (t) => {
