@@ -114,7 +114,7 @@ impl Registry {
             let mut next: Vec<_> = self.edges.get(node).into_iter().flatten().collect();
             next.sort_by_key(|(target, edge)| {
                 (
-                    -edge.0.priority(),
+                    std::cmp::Reverse(edge.0.priority()),
                     !LOSSLESS_HOPS.contains(target),
                     **target,
                 )
@@ -507,6 +507,14 @@ mod tests {
                 "exr -[img]-> tiff -[heif]-> heic"
             );
         }
+    }
+
+    #[test]
+    fn extreme_priorities_route_without_overflow() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake("lowest", i32::MIN, vec![("png", "jpeg")])));
+        r.register(Arc::new(Fake("highest", i32::MAX, vec![("jpeg", "webp")])));
+        assert_eq!(r.plan(f("png"), f("webp")).unwrap().hops.len(), 2);
     }
 
     #[test]
