@@ -258,7 +258,7 @@ fn rlimit(resource: libc::__rlimit_resource_t, limit: u64) -> anyhow::Result<()>
 
 /// A fresh exec reaches this before any Tokio runtime or worker credentials.
 pub fn child_main(args: &[String]) -> anyhow::Result<()> {
-    ensure!(args.len() == 10, "invalid sandbox child arguments");
+    ensure!(args.len() == 11, "invalid sandbox child arguments");
     ensure!(
         std::env::vars_os().next().is_none(),
         "child environment must be empty"
@@ -268,6 +268,9 @@ pub fn child_main(args: &[String]) -> anyhow::Result<()> {
     ensure!(uid >= 10000, "unprivileged job uid required");
     let input = Path::new(&args[2]);
     let target = &args[3];
+    // Parsed before confinement so a malformed value never reaches an engine.
+    let options: convt_core::Options = serde_json::from_str(&args[10])?;
+    options.validate()?;
     let limits = Limits {
         cpu: args[5].parse()?,
         memory: args[6].parse()?,
@@ -375,6 +378,7 @@ pub fn child_main(args: &[String]) -> anyhow::Result<()> {
     let to = convt_core::format_by_id(target).ok_or_else(|| anyhow::anyhow!("invalid target"))?;
     let job = convt_core::Job {
         output: convt_core::Output::Dir(PathBuf::from("/output/files")),
+        options,
         ..convt_core::Job::new(input.to_path_buf(), to)
     };
     let results =
@@ -708,6 +712,7 @@ impl ProcessSandbox {
             uid,
             input: format!("/input.{extension}"),
             resources,
+            options: convt_core::Options::default(),
         };
         for name in [
             "output",
@@ -767,6 +772,7 @@ impl ProcessSandbox {
                 root.resources
                     .as_ref()
                     .map_or("", |resource| resource.cgroup_procs.to_str().unwrap()),
+                &serde_json::to_string(&root.options)?,
             ])
             .env_clear()
             .stdin(std::process::Stdio::null())
@@ -989,6 +995,8 @@ pub struct JobRoot {
     pub resources: Option<crate::resource_domain::JobResources>,
     pub uid: u32,
     pub input: String,
+    /// The conversion settings, passed to the child as one JSON argument.
+    pub options: convt_core::Options,
 }
 impl JobRoot {
     pub fn cleanup(&self) -> anyhow::Result<()> {

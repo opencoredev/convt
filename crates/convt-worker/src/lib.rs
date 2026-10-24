@@ -146,7 +146,70 @@ pub async fn convert(
     );
     let checkout = std::env::current_dir()?;
     let label = format!("convt.checkout={}", checkout.display());
-    docker(&["create","--runtime",&runtime,"--name",name,"--label",&label,"--label","convt.role=conversion","--network","none","--read-only","--user","10001:10001","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","128","--memory","4g","--memory-swap","4g","--cpus","2","--ulimit","cpu=600:600","--ulimit","fsize=2000000000:2000000000","--tmpfs","/work:rw,nosuid,nodev,size=4g,uid=10001,gid=10001","--tmpfs","/tmp:rw,nosuid,nodev,size=256m,mode=1777","--log-driver","none","--env","HOME=/work","--env","XDG_CONFIG_HOME=/work/config","--env","XDG_CACHE_HOME=/work/cache","--env","CONVT_LICENSE_STORE=file","--mount",&mount,"--entrypoint","/usr/bin/timeout",image,"--signal=KILL","600","/bin/sh","-c",r#"/opt/convt/convt "$1" --to "$2" --out-dir /work/output --json; code=$?; printf '%s' "$code" > /work/exit; exec sleep 86400"#,"--",&format!("/input.{}",job.input_format),&job.target_format]).await?;
+    let options = cli_args(&job.options);
+    let input_arg = format!("/input.{}", job.input_format);
+    let mut args = vec![
+        "create",
+        "--runtime",
+        &runtime,
+        "--name",
+        name,
+        "--label",
+        &label,
+        "--label",
+        "convt.role=conversion",
+        "--network",
+        "none",
+        "--read-only",
+        "--user",
+        "10001:10001",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--pids-limit",
+        "128",
+        "--memory",
+        "4g",
+        "--memory-swap",
+        "4g",
+        "--cpus",
+        "2",
+        "--ulimit",
+        "cpu=600:600",
+        "--ulimit",
+        "fsize=2000000000:2000000000",
+        "--tmpfs",
+        "/work:rw,nosuid,nodev,size=4g,uid=10001,gid=10001",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,size=256m,mode=1777",
+        "--log-driver",
+        "none",
+        "--env",
+        "HOME=/work",
+        "--env",
+        "XDG_CONFIG_HOME=/work/config",
+        "--env",
+        "XDG_CACHE_HOME=/work/cache",
+        "--env",
+        "CONVT_LICENSE_STORE=file",
+        "--mount",
+        &mount,
+        "--entrypoint",
+        "/usr/bin/timeout",
+        image,
+        "--signal=KILL",
+        "600",
+        "/bin/sh",
+        "-c",
+        r#"input=$1; to=$2; shift 2; /opt/convt/convt "$input" --to "$to" --out-dir /work/output --json "$@"; code=$?; printf '%s' "$code" > /work/exit; exec sleep 86400"#,
+        "--",
+        &input_arg,
+        &job.target_format,
+    ];
+    // Options follow as separate arguments; the script passes them on with "$@".
+    args.extend(options.iter().map(String::as_str));
+    docker(&args).await?;
     docker(&["start", name]).await?;
     loop {
         let state = docker(&[
@@ -245,6 +308,31 @@ archive.close()
         keys.push(key);
     }
     Ok(keys)
+}
+/// The `convt` flags for `options`, one argument each, for the Docker
+/// sandbox's CLI. The values are already typed and validated.
+pub fn cli_args(options: &convt_core::Options) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut flag = |name: &str, value: Option<String>| {
+        if let Some(value) = value {
+            args.push(format!("--{name}={value}"));
+        }
+    };
+    flag("quality", options.quality.map(|v| v.to_string()));
+    flag("max-size", options.max_size.map(|v| v.to_string()));
+    flag("video-height", options.video_height.map(|v| v.to_string()));
+    flag(
+        "audio-bitrate",
+        options.audio_bitrate.map(|v| v.to_string()),
+    );
+    flag("pages", options.pages.map(|v| v.to_string()));
+    flag("dpi", options.dpi.map(|v| v.to_string()));
+    flag("video-codec", options.video_codec.map(|v| v.id().into()));
+    flag("background", options.background.map(|v| v.id()));
+    if options.strip_audio {
+        args.push("--no-audio".into());
+    }
+    args
 }
 pub async fn run_job_backend(
     pool: &PgPool,
@@ -371,7 +459,8 @@ async fn convert_process(
         tokio::fs::metadata(&input).await?.len() == job.input_bytes.unwrap_or(0) as u64,
         "input size changed"
     );
-    let root = sandbox.prepare(&input, &job.input_format)?;
+    let mut root = sandbox.prepare(&input, &job.input_format)?;
+    root.options = job.options.0.clone();
     let active = sandbox.start(name, root, &job.target_format).await?;
     let mut active = active.lock().await;
     let (status, _, error) = active.process.wait_report(Duration::from_secs(600)).await?;
@@ -431,6 +520,30 @@ mod tests {
         tokio::time::timeout(Duration::from_millis(20), wait_for_shutdown(&mut receiver))
             .await
             .unwrap();
+    }
+    #[test]
+    fn options_become_one_cli_argument_each() {
+        assert!(cli_args(&convt_core::Options::default()).is_empty());
+        let options: convt_core::Options = serde_json::from_value(serde_json::json!({
+            "quality": 40, "max_size": 512, "video_height": 720, "audio_bitrate": 128,
+            "pages": "2-3", "dpi": 150, "video_codec": "hevc", "background": "#ff8800",
+            "strip_audio": true
+        }))
+        .unwrap();
+        assert_eq!(
+            cli_args(&options),
+            [
+                "--quality=40",
+                "--max-size=512",
+                "--video-height=720",
+                "--audio-bitrate=128",
+                "--pages=2-3",
+                "--dpi=150",
+                "--video-codec=hevc",
+                "--background=#ff8800",
+                "--no-audio",
+            ]
+        );
     }
     #[test]
     fn output_collection_refuses_links_and_traversal() {
