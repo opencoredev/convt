@@ -579,12 +579,14 @@ impl AppState {
         if self.installing() {
             return Err(INSTALLING.into());
         }
-        if let Some(reason) = self.documents_locked()
-            && files
-                .iter()
-                .any(|f| format_by_extension(f).is_some_and(pack::is_document))
-        {
-            return Err(reason.into());
+        if let Some(reason) = self.documents_locked() {
+            let native = self.packs.registry_without_documents();
+            if files.iter().any(|f| {
+                format_by_extension(f)
+                    .is_some_and(|from| pack::uses_pack(&self.registry, &native, from, to))
+            }) {
+                return Err(reason.into());
+            }
         }
         let allowed = self.licensing.begin_conversion();
         self.license = self.licensing.state();
@@ -745,10 +747,22 @@ impl AppState {
         }
     }
 
-    /// Whether a document is converting or waiting to.
+    /// Whether a conversion that runs the document pack is converting or
+    /// waiting to.
     fn documents_converting(&self) -> bool {
-        self.queue.entries.iter().any(|e| {
-            !e.status.is_finished() && format_by_extension(&e.input).is_some_and(pack::is_document)
+        let mut waiting = self
+            .queue
+            .entries
+            .iter()
+            .filter(|e| !e.status.is_finished())
+            .peekable();
+        if waiting.peek().is_none() {
+            return false;
+        }
+        let native = self.packs.registry_without_documents();
+        waiting.any(|e| {
+            format_by_extension(&e.input)
+                .is_some_and(|from| pack::uses_pack(&self.registry, &native, from, e.to))
         })
     }
 
