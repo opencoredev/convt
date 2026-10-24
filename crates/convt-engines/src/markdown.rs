@@ -111,12 +111,12 @@ pub fn to_html_with_images_from(markdown: &str, fallback_title: &str, dir: &Path
     page(
         markdown,
         fallback_title,
-        url::Url::from_directory_path(dir).ok(),
+        Images::new(dir, MAX_INLINE_IMAGE, MAX_INLINE_TOTAL),
     )
 }
 
-fn page(markdown: &str, fallback_title: &str, images_base: Option<url::Url>) -> String {
-    let events = Parser::new_ext(markdown, options()).map(|event| match (event, &images_base) {
+fn page(markdown: &str, fallback_title: &str, mut images: Option<Images>) -> String {
+    let events = Parser::new_ext(markdown, options()).map(|event| match (event, &mut images) {
         (
             Event::Start(Tag::Image {
                 link_type,
@@ -124,9 +124,9 @@ fn page(markdown: &str, fallback_title: &str, images_base: Option<url::Url>) -> 
                 title,
                 id,
             }),
-            Some(base),
+            Some(images),
         ) => {
-            let dest_url = inline_image(base, &dest_url).map_or(dest_url, Into::into);
+            let dest_url = images.inline(&dest_url).map_or(dest_url, Into::into);
             Event::Start(Tag::Image {
                 link_type,
                 dest_url,
@@ -145,6 +145,71 @@ fn page(markdown: &str, fallback_title: &str, images_base: Option<url::Url>) -> 
 /// The largest image a page inlines. Bigger ones keep their links.
 const MAX_INLINE_IMAGE: u64 = 25 * 1024 * 1024;
 
+/// The most image bytes one page inlines, counting each reference, so a
+/// picture named a thousand times cannot make a page of gigabytes.
+const MAX_INLINE_TOTAL: u64 = 100 * 1024 * 1024;
+
+/// The images one page inlines from the Markdown's folder.
+struct Images {
+    base: url::Url,
+    /// The Markdown's folder, links resolved.
+    dir: PathBuf,
+    max_image: u64,
+    /// Bytes the page may still inline.
+    budget: u64,
+    /// Each picture read so far by resolved path, with its size; `None` for
+    /// a file that is not one.
+    read: std::collections::HashMap<PathBuf, Option<(String, u64)>>,
+}
+
+impl Images {
+    fn new(dir: &Path, max_image: u64, budget: u64) -> Option<Self> {
+        Some(Self {
+            base: url::Url::from_directory_path(dir).ok()?,
+            dir: std::fs::canonicalize(dir).ok()?,
+            max_image,
+            budget,
+            read: Default::default(),
+        })
+    }
+
+    /// A data URI of the image `dest` names. `None` for a URL with a scheme,
+    /// a fragment, a file outside the Markdown's folder (after resolving
+    /// links), a file that is missing, too big or not an image, or once the
+    /// page has inlined its fill. Only pictures are read, never a text file
+    /// or key a link happens to name, and each one only once.
+    fn inline(&mut self, dest: &str) -> Option<String> {
+        if dest.is_empty() || dest.starts_with('#') {
+            return None;
+        }
+        if url::Url::parse(dest) != Err(url::ParseError::RelativeUrlWithoutBase) {
+            return None;
+        }
+        let path = std::fs::canonicalize(self.base.join(dest).ok()?.to_file_path().ok()?).ok()?;
+        if !path.starts_with(&self.dir) {
+            return None;
+        }
+        let max_image = self.max_image;
+        let (uri, len) = self
+            .read
+            .entry(path)
+            .or_insert_with_key(|path| data_uri(path, max_image))
+            .as_ref()?;
+        self.budget = self.budget.checked_sub(*len)?;
+        Some(uri.clone())
+    }
+}
+
+/// A data URI of the picture at `path`, if it is one of at most `cap` bytes,
+/// with its size.
+fn data_uri(path: &Path, cap: u64) -> Option<(String, u64)> {
+    use base64::Engine as _;
+    let bytes = read_capped(path, cap)?;
+    let mime = image_mime(&bytes)?;
+    let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some((format!("data:{mime};base64,{data}"), bytes.len() as u64))
+}
+
 /// The bytes of `path` if it is a regular file of at most `cap` bytes.
 /// Devices, FIFOs and folders are never opened, and a file that grows
 /// while it is read stops counting at `cap`.
@@ -162,29 +227,6 @@ fn read_capped(path: &Path, cap: u64) -> Option<Vec<u8>> {
     let mut bytes = Vec::new();
     file.take(cap + 1).read_to_end(&mut bytes).ok()?;
     (bytes.len() as u64 <= cap).then_some(bytes)
-}
-
-/// A data URI of the image `dest` names relative to `base`. `None` for a URL
-/// with a scheme, a fragment, a file outside the Markdown's folder (after
-/// resolving links), or a file that is missing or not an image, so only
-/// pictures are read and never a text file or key a link happens to name.
-fn inline_image(base: &url::Url, dest: &str) -> Option<String> {
-    use base64::Engine as _;
-    if dest.is_empty() || dest.starts_with('#') {
-        return None;
-    }
-    if url::Url::parse(dest) != Err(url::ParseError::RelativeUrlWithoutBase) {
-        return None;
-    }
-    let dir = std::fs::canonicalize(base.to_file_path().ok()?).ok()?;
-    let path = std::fs::canonicalize(base.join(dest).ok()?.to_file_path().ok()?).ok()?;
-    if !path.starts_with(&dir) {
-        return None;
-    }
-    let bytes = read_capped(&path, MAX_INLINE_IMAGE)?;
-    let mime = image_mime(&bytes)?;
-    let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Some(format!("data:{mime};base64,{data}"))
 }
 
 /// The MIME type of `bytes` if they are a picture, judged by content and
@@ -569,6 +611,29 @@ mod tests {
         for kept in ["leak.svg", "../outside.svg", "notes.svg", "fake.svg"] {
             assert!(html.contains(&format!(r#"src="{kept}""#)), "{kept}: {html}");
         }
+    }
+
+    #[test]
+    fn a_page_inlines_each_picture_once_and_within_its_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbImage::new(2, 2)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        let len = png.get_ref().len() as u64;
+        std::fs::write(dir.path().join("red.png"), png.get_ref()).unwrap();
+        // Room for two copies, and the same file through another spelling
+        // still counts against it.
+        let images = Images::new(dir.path(), len, 2 * len);
+        let html = page("![a](red.png) ![b](./red.png) ![c](red.png)\n", "x", images);
+        assert_eq!(html.matches("data:image/png;base64,").count(), 2, "{html}");
+        assert!(html.contains(r#"src="red.png""#), "{html}");
+        // Read once: gone from the disk, it still inlines from memory.
+        let mut images = Images::new(dir.path(), len, u64::MAX).unwrap();
+        assert!(images.inline("red.png").is_some());
+        std::fs::remove_file(dir.path().join("red.png")).unwrap();
+        std::fs::write(dir.path().join("red.png"), "changed").unwrap();
+        assert!(images.inline("red.png").is_some());
     }
 
     #[test]
