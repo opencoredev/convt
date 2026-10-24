@@ -10,12 +10,12 @@ Right-click a file in Finder or your Linux file manager, pick a format, and conv
 
 ## Formats
 
-40 formats in one menu:
+49 formats in one menu:
 
 - **Images (14):** JPG, PNG, WebP, HEIC, AVIF, GIF, TIFF, BMP, ICO, TGA, PPM, QOI, EXR, SVG
 - **Video (5):** MP4, MOV, WebM, MKV, AVI
-- **Audio (7):** MP3, WAV, FLAC, AAC, M4A, OGG, Opus
-- **Documents (14):** PDF, DOCX, DOC, ODT, RTF, TXT, HTML, PPTX, PPT, ODP, XLSX, XLS, ODS, CSV
+- **Audio (10):** MP3, WAV, FLAC, AAC, M4A, OGG, Opus, AIFF, CAF, M4R
+- **Documents (20):** PDF, DOCX, DOC, ODT, RTF, TXT, HTML, PPTX, PPT, ODP, XLSX, XLS, ODS, CSV, TSV, Markdown, JSON, YAML, SRT, VTT
 
 ## Engines
 
@@ -25,6 +25,7 @@ convt drives established open source tools from Rust, on your machine:
 - **LibreOffice** for Word, Excel and PowerPoint files and their open formats, and for saving any of them as PDF.
 - **PDFium**, the PDF renderer inside Chrome, to turn PDF pages into images.
 - **image and resvg**, pure Rust decoders for photos and a Rust SVG renderer.
+- **Built-in Rust converters** for Markdown, CSV, TSV, JSON, YAML and SRT and VTT subtitles, which need no document pack.
 
 ## Pricing
 

@@ -7,7 +7,7 @@
 
 Local file conversion for your own machine. Right-click a file, pick a format, and convt writes the result next to the original. Images, video, audio, PDFs and documents stay on disk: nothing is uploaded.
 
-- 40 formats, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
+- 49 formats, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
 - A desktop app built with [GPUI](https://www.gpui.rs), with a Finder menu on macOS and file manager menus on Linux. The Windows Explorer menu is built (`crates/convt-shell`) but not yet in the release installer
 - The `convt` CLI, shipped in the same install
 - Multi-hop routes of at most three steps when no engine can convert directly

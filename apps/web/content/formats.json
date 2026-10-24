@@ -2,6 +2,9 @@
   "engines": [
     "image",
     "svg",
+    "markdown",
+    "data",
+    "subtitle",
     "libheif",
     "ffmpeg",
     "pdfium",
@@ -356,12 +359,18 @@
         "mov",
         "webm",
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
-        "wav"
+        "wav",
+        "txt",
+        "srt",
+        "vtt"
       ]
     },
     {
@@ -390,12 +399,18 @@
         "mp4",
         "webm",
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
-        "wav"
+        "wav",
+        "txt",
+        "srt",
+        "vtt"
       ]
     },
     {
@@ -424,12 +439,18 @@
         "mov",
         "mp4",
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
-        "wav"
+        "wav",
+        "txt",
+        "srt",
+        "vtt"
       ]
     },
     {
@@ -458,12 +479,18 @@
         "mp4",
         "webm",
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
-        "wav"
+        "wav",
+        "txt",
+        "srt",
+        "vtt"
       ]
     },
     {
@@ -492,8 +519,11 @@
         "mp4",
         "webm",
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
@@ -509,8 +539,11 @@
       ],
       "targets": [
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "ogg",
         "opus",
         "wav"
@@ -525,8 +558,11 @@
       ],
       "targets": [
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus"
@@ -541,7 +577,10 @@
       ],
       "targets": [
         "aac",
+        "aiff",
+        "caf",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
@@ -556,8 +595,11 @@
         "aac"
       ],
       "targets": [
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
@@ -573,7 +615,10 @@
       ],
       "targets": [
         "aac",
+        "aiff",
+        "caf",
         "flac",
+        "m4r",
         "mp3",
         "ogg",
         "opus",
@@ -590,8 +635,11 @@
       ],
       "targets": [
         "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
+        "m4r",
         "mp3",
         "opus",
         "wav"
@@ -606,10 +654,71 @@
       ],
       "targets": [
         "aac",
+        "aiff",
+        "caf",
+        "flac",
+        "m4a",
+        "m4r",
+        "mp3",
+        "ogg",
+        "wav"
+      ]
+    },
+    {
+      "id": "aiff",
+      "name": "AIFF",
+      "category": "audio",
+      "extensions": [
+        "aiff",
+        "aif"
+      ],
+      "targets": [
+        "aac",
+        "caf",
+        "flac",
+        "m4a",
+        "m4r",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "caf",
+      "name": "CAF",
+      "category": "audio",
+      "extensions": [
+        "caf"
+      ],
+      "targets": [
+        "aac",
+        "aiff",
+        "flac",
+        "m4a",
+        "m4r",
+        "mp3",
+        "ogg",
+        "opus",
+        "wav"
+      ]
+    },
+    {
+      "id": "m4r",
+      "name": "M4R ringtone",
+      "category": "audio",
+      "extensions": [
+        "m4r"
+      ],
+      "targets": [
+        "aac",
+        "aiff",
+        "caf",
         "flac",
         "m4a",
         "mp3",
         "ogg",
+        "opus",
         "wav"
       ]
     },
@@ -660,6 +769,7 @@
         "pdf",
         "doc",
         "html",
+        "md",
         "odt",
         "txt",
         "rtf"
@@ -689,6 +799,7 @@
         "pdf",
         "docx",
         "html",
+        "md",
         "odt",
         "txt",
         "rtf"
@@ -719,6 +830,7 @@
         "doc",
         "docx",
         "html",
+        "md",
         "txt",
         "rtf"
       ]
@@ -748,6 +860,7 @@
         "doc",
         "docx",
         "html",
+        "md",
         "odt",
         "txt"
       ]
@@ -806,9 +919,107 @@
         "pdf",
         "doc",
         "docx",
+        "md",
         "odt",
         "txt",
         "rtf"
+      ]
+    },
+    {
+      "id": "md",
+      "name": "Markdown",
+      "category": "document",
+      "extensions": [
+        "md",
+        "markdown"
+      ],
+      "targets": [
+        "jpeg",
+        "png",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "odt",
+        "txt",
+        "rtf"
+      ]
+    },
+    {
+      "id": "json",
+      "name": "JSON",
+      "category": "document",
+      "extensions": [
+        "json"
+      ],
+      "targets": [
+        "jpeg",
+        "png",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "yaml",
+        "csv",
+        "ods",
+        "tsv",
+        "xls",
+        "xlsx"
+      ]
+    },
+    {
+      "id": "yaml",
+      "name": "YAML",
+      "category": "document",
+      "extensions": [
+        "yaml",
+        "yml"
+      ],
+      "targets": [
+        "jpeg",
+        "png",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "json",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "csv",
+        "ods",
+        "tsv",
+        "xls",
+        "xlsx"
+      ]
+    },
+    {
+      "id": "srt",
+      "name": "SRT subtitles",
+      "category": "document",
+      "extensions": [
+        "srt"
+      ],
+      "targets": [
+        "txt",
+        "vtt"
+      ]
+    },
+    {
+      "id": "vtt",
+      "name": "WebVTT subtitles",
+      "category": "document",
+      "extensions": [
+        "vtt"
+      ],
+      "targets": [
+        "txt",
+        "srt"
       ]
     },
     {
@@ -911,8 +1122,18 @@
         "tiff",
         "webp",
         "pdf",
+        "doc",
+        "docx",
+        "html",
+        "json",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "yaml",
         "csv",
         "ods",
+        "tsv",
         "xls"
       ]
     },
@@ -938,8 +1159,18 @@
         "tiff",
         "webp",
         "pdf",
+        "doc",
+        "docx",
+        "html",
+        "json",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "yaml",
         "csv",
         "ods",
+        "tsv",
         "xlsx"
       ]
     },
@@ -965,7 +1196,17 @@
         "tiff",
         "webp",
         "pdf",
+        "doc",
+        "docx",
+        "html",
+        "json",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "yaml",
         "csv",
+        "tsv",
         "xls",
         "xlsx"
       ]
@@ -992,6 +1233,43 @@
         "tiff",
         "webp",
         "pdf",
+        "doc",
+        "docx",
+        "html",
+        "json",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "yaml",
+        "ods",
+        "tsv",
+        "xls",
+        "xlsx"
+      ]
+    },
+    {
+      "id": "tsv",
+      "name": "TSV",
+      "category": "spreadsheet",
+      "extensions": [
+        "tsv",
+        "tab"
+      ],
+      "targets": [
+        "jpeg",
+        "png",
+        "pdf",
+        "doc",
+        "docx",
+        "html",
+        "json",
+        "md",
+        "odt",
+        "txt",
+        "rtf",
+        "yaml",
+        "csv",
         "ods",
         "xls",
         "xlsx"
