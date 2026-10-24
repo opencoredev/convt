@@ -45,18 +45,86 @@ impl Engine for ImageEngine {
     }
 
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
+        // This engine keeps one frame. Converting to another format says
+        // so by the format, but a "compressed" copy must not lose frames.
+        if ctx.step.from == ctx.step.to && has_more_frames(input, ctx.step.from.id) {
+            return Err(Error::InvalidOption(format!(
+                "this {} has more than one frame or page, and compressing it would keep only the first",
+                ctx.step.from.name
+            )));
+        }
         let img = crate::orientation::open_oriented(input)?;
         ctx.check()?;
         ctx.progress(0.5);
         let output = ctx.artifact(out_dir, 0);
-        encode(
+        encode_with_pixel_aspect(
             fit(img, ctx.options.max_size),
             ctx.step.to.id,
             ctx.options,
             &output,
+            None,
+            &|| ctx.check(),
         )?;
         Ok(vec![output])
     }
+}
+
+/// Whether `input` holds more than one frame (APNG, animated WebP) or page
+/// (TIFF). Unreadable files say no and fail later with a decode error.
+fn has_more_frames(input: &Path, format: &str) -> bool {
+    let Ok(file) = File::open(input) else {
+        return false;
+    };
+    let reader = std::io::BufReader::new(file);
+    match format {
+        "png" => png::Decoder::new(reader).read_info().is_ok_and(|r| {
+            r.info()
+                .animation_control()
+                .is_some_and(|a| a.num_frames > 1)
+        }),
+        "webp" => image::codecs::webp::WebPDecoder::new(reader).is_ok_and(|d| d.has_animation()),
+        "tiff" => tiff_pages(reader).is_some_and(|n| n > 1),
+        _ => false,
+    }
+}
+
+/// Counts a TIFF's pages (IFDs), stopping at the second.
+fn tiff_pages(mut r: impl std::io::Read + std::io::Seek) -> Option<u32> {
+    use std::io::SeekFrom;
+    let mut head = [0u8; 8];
+    r.read_exact(&mut head).ok()?;
+    let big = match &head[..2] {
+        b"II" => false,
+        b"MM" => true,
+        _ => return None,
+    };
+    let u16_at = |b: [u8; 2]| {
+        if big {
+            u16::from_be_bytes(b)
+        } else {
+            u16::from_le_bytes(b)
+        }
+    };
+    let u32_at = |b: [u8; 4]| {
+        if big {
+            u32::from_be_bytes(b)
+        } else {
+            u32::from_le_bytes(b)
+        }
+    };
+    // Classic TIFF only; BigTIFF (43) is rare enough to treat as one page.
+    if u16_at([head[2], head[3]]) != 42 {
+        return None;
+    }
+    let first = u32_at([head[4], head[5], head[6], head[7]]);
+    r.seek(SeekFrom::Start(u64::from(first))).ok()?;
+    let mut count = [0u8; 2];
+    r.read_exact(&mut count).ok()?;
+    let entries = u64::from(u16_at(count));
+    r.seek(SeekFrom::Current((entries * 12) as i64)).ok()?;
+    let mut next = [0u8; 4];
+    r.read_exact(&mut next).ok()?;
+    Some(if u32_at(next) == 0 { 1 } else { 2 })
 }
 
 /// Scales `img` down so its longest edge is at most `max`. Never scales up.
@@ -88,31 +156,47 @@ pub(crate) fn apply_background(
 /// Applies the options to the PNG at `path` in place, for engines that get
 /// PNG from an outside tool (FFmpeg, macOS `sips`, resvg): a chosen
 /// background color, `strip_metadata` (the rewrite keeps only the color
-/// tags, dropping EXIF and text chunks) and `target_size`. With none of
+/// tags, dropping EXIF and text chunks) and `target_size` (the image shrinks
+/// until the file fits, color tags and pixel ratio included). With none of
 /// them the file is left alone.
 pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
-    if let Some(target) = options.target_size
-        && std::fs::metadata(path)?.len() > target
+    let target = options
+        .target_size
+        .filter(|&t| std::fs::metadata(path).is_ok_and(|m| m.len() > t));
+    if !matches!(options.background, Some(Background::Color(_)))
+        && !options.strip_metadata
+        && target.is_none()
     {
-        // Only dimensions can make a PNG smaller; encode() searches them.
-        let img = image::open(path).map_err(failed)?;
-        return encode(img, "png", options, path);
-    }
-    if !matches!(options.background, Some(Background::Color(_))) && !options.strip_metadata {
         return Ok(());
     }
     let reader = png::Decoder::new(std::io::BufReader::new(File::open(path)?))
         .read_info()
         .map_err(failed)?;
-    let source = reader.info();
+    let source = reader.info().clone();
+    drop(reader);
     let img = apply_background(crate::orientation::open_oriented(path)?, "png", options)?;
+    let Some(target) = target else {
+        return write_png(&img, &source, path);
+    };
+    let longest = img.width().max(img.height());
+    fit_target(target, "png", None, longest, |_, edge| {
+        match edge {
+            Some(edge) => write_png(&img.resize(edge, edge, FilterType::Lanczos3), &source, path)?,
+            None => write_png(&img, &source, path)?,
+        }
+        Ok(std::fs::metadata(path)?.len())
+    })
+}
+
+/// Writes `img` to `path` as PNG with `source`'s color tags and pixel ratio.
+fn write_png(img: &DynamicImage, source: &png::Info<'static>, path: &Path) -> Result<()> {
     let mut info = png::Info::with_size(img.width(), img.height());
     info.pixel_dims = source.pixel_dims;
     info.source_gamma = source.gamma();
     info.source_chromaticities = source.chromaticities();
     info.srgb = source.srgb;
     info.icc_profile = source.icc_profile.clone();
-    let bytes = match img {
+    let bytes = match img.clone() {
         DynamicImage::ImageLuma16(gray) => {
             info.color_type = png::ColorType::Grayscale;
             info.bit_depth = png::BitDepth::Sixteen;
@@ -251,43 +335,55 @@ pub(crate) fn flatten(img: DynamicImage, color: [u8; 3]) -> DynamicImage {
 /// `options.target_size` set, quality and then dimensions come down until
 /// the file fits.
 pub(crate) fn encode(img: DynamicImage, to: &str, options: &Options, output: &Path) -> Result<()> {
-    encode_with_pixel_aspect(img, to, options, output, None)
+    encode_with_pixel_aspect(img, to, options, output, None, &|| Ok(()))
 }
 
+/// [`encode`] with a JPEG pixel aspect ratio, and `check` run before each
+/// attempt of a size search so a cancelled job stops searching.
 pub(crate) fn encode_with_pixel_aspect(
     img: DynamicImage,
     to: &str,
     options: &Options,
     output: &Path,
     pixel_aspect: Option<(u16, u16)>,
+    check: &dyn Fn() -> Result<()>,
 ) -> Result<()> {
     let img = prepare(apply_background(img, to, options)?, to);
-    let bytes = match options.target_size {
-        None => encode_bytes(&img, to, options.quality, pixel_aspect)?,
+    let mut w = BufWriter::new(File::create(output)?);
+    match options.target_size {
+        // Without a size, stream straight to the file.
+        None => encode_into(&img, to, options.quality, pixel_aspect, &mut w)?,
         Some(target) => {
-            let (w, h) = (img.width(), img.height());
-            let mut best = None;
+            let longest = img.width().max(img.height());
             let cap = options.quality.unwrap_or(default_quality(to));
-            fit_target(target, to, Some(cap), w.max(h), |quality, edge| {
+            let mut best = Vec::new();
+            fit_target(target, to, Some(cap), longest, |quality, edge| {
+                check()?;
+                // libwebp refuses anything larger, so the search starts there.
+                let edge = match edge {
+                    None if to == "webp" && longest > WEBP_MAX => Some(WEBP_MAX),
+                    edge => edge,
+                };
                 let scaled = match edge {
                     Some(edge) => &img.resize(edge, edge, FilterType::Lanczos3),
                     None => &img,
                 };
-                let bytes = encode_bytes(scaled, to, Some(quality), pixel_aspect)?;
-                let len = bytes.len() as u64;
-                best = Some(bytes);
-                Ok(len)
+                let mut buf = std::io::Cursor::new(Vec::new());
+                encode_into(scaled, to, Some(quality), pixel_aspect, &mut buf)?;
+                best = buf.into_inner();
+                Ok(best.len() as u64)
             })?;
-            best.expect("fit_target returns only after a fitting attempt")
+            w.write_all(&best)?;
         }
-    };
-    // Write and flush explicitly: dropping a `BufWriter` swallows write
-    // errors, which would let a truncated file through to publishing.
-    let mut w = BufWriter::new(File::create(output)?);
-    std::io::Write::write_all(&mut w, &bytes)?;
+    }
+    // Flush explicitly: dropping a `BufWriter` swallows write errors, which
+    // would let a truncated file through to publishing.
     w.into_inner().map_err(|e| Error::Io(e.into_error()))?;
     Ok(())
 }
+
+/// The largest width or height libwebp encodes.
+const WEBP_MAX: u32 = libwebp_sys::WEBP_MAX_DIMENSION;
 
 /// Converts pixels to what `to`'s encoder accepts. These encoders take only
 /// 8-bit pixels, and ICO requires RGBA PNG data even from an RGB source.
@@ -336,12 +432,9 @@ pub(crate) fn fit_target(
     mut attempt: impl FnMut(u8, Option<u32>) -> Result<u64>,
 ) -> Result<()> {
     let lossy = is_lossy(to);
-    // Lossless formats ignore quality; 100 also asks WebP for lossless.
-    let cap = if lossy {
-        cap.unwrap_or(90).min(99)
-    } else {
-        100
-    };
+    // Lossless formats ignore quality. 100 stays the first try, so WebP
+    // that fits losslessly stays lossless.
+    let cap = if lossy { cap.unwrap_or(90) } else { 100 };
     let floor = cap.min(MIN_QUALITY);
     let mut edge = None;
     for _ in 0..12 {
@@ -399,15 +492,15 @@ fn default_quality(to: &str) -> u8 {
     }
 }
 
-/// Encodes prepared pixels as `to`. `quality` is the user's lossy quality,
-/// or the format's default when unset.
-fn encode_bytes(
+/// Encodes prepared pixels as `to` into `w`. `quality` is the user's lossy
+/// quality, or the format's default when unset.
+fn encode_into<W: Write + std::io::Seek>(
     img: &DynamicImage,
     to: &str,
     quality: Option<u8>,
     pixel_aspect: Option<(u16, u16)>,
-) -> Result<Vec<u8>> {
-    let mut w = std::io::Cursor::new(Vec::new());
+    mut w: &mut W,
+) -> Result<()> {
     match to {
         "jpeg" => {
             let quality = quality.unwrap_or(default_quality(to));
@@ -420,7 +513,10 @@ fn encode_bytes(
             }
             DynamicImage::ImageRgb8(img.to_rgb8()).write_with_encoder(encoder)
         }
-        "webp" => return webp(img, quality.unwrap_or(default_quality(to))),
+        "webp" => {
+            let bytes = webp(img, quality.unwrap_or(default_quality(to)))?;
+            return Ok(w.write_all(&bytes)?);
+        }
         "avif" => img.write_with_encoder(AvifEncoder::new_with_speed_quality(
             &mut w,
             4,
@@ -445,7 +541,7 @@ fn encode_bytes(
         }
     }
     .map_err(failed)?;
-    Ok(w.into_inner())
+    Ok(())
 }
 
 /// Encodes WebP with libwebp: lossy at `quality`, lossless at 100, the way
@@ -454,10 +550,9 @@ fn encode_bytes(
 fn webp(img: &DynamicImage, quality: u8) -> Result<Vec<u8>> {
     use libwebp_sys as webp;
     let (width, height) = (img.width(), img.height());
-    if width > webp::WEBP_MAX_DIMENSION || height > webp::WEBP_MAX_DIMENSION {
+    if width > WEBP_MAX || height > WEBP_MAX {
         return Err(Error::InvalidOption(format!(
-            "WebP images can be at most {0}x{0} pixels; set a smaller max size",
-            webp::WEBP_MAX_DIMENSION
+            "WebP images can be at most {WEBP_MAX}x{WEBP_MAX} pixels; set a smaller max size"
         )));
     }
     let (pixels, channels): (&[u8], u32) = match img {
@@ -944,6 +1039,100 @@ mod tests {
                 "{to}"
             );
         }
+    }
+
+    #[test]
+    fn compressing_never_drops_frames_or_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        // A two-frame APNG.
+        let apng = dir.path().join("anim.png");
+        {
+            let mut enc = png::Encoder::new(File::create(&apng).unwrap(), 2, 2);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_animated(2, 0).unwrap();
+            let mut w = enc.write_header().unwrap();
+            w.write_image_data(&[0; 12]).unwrap();
+            w.write_image_data(&[255; 12]).unwrap();
+            w.finish().unwrap();
+        }
+        let still = dir.path().join("still.png");
+        image::RgbImage::new(2, 2).save(&still).unwrap();
+        assert!(has_more_frames(&apng, "png") && !has_more_frames(&still, "png"));
+        let png = format_by_id("png").unwrap();
+        let cancel = Cancel::new();
+        let options = Options::default();
+        let ctx = Ctx::new(Step { from: png, to: png }, &options, &|_| {}, &cancel);
+        let out = tempfile::tempdir().unwrap();
+        let err = ImageEngine.convert(&ctx, &apng, out.path()).unwrap_err();
+        assert!(err.to_string().contains("more than one frame"), "{err}");
+        assert!(ImageEngine.convert(&ctx, &still, out.path()).is_ok());
+
+        // TIFF: a little-endian header, then one or two empty IFDs.
+        let tiff = |two: bool| {
+            let mut b = b"II*\0\x08\0\0\0".to_vec();
+            b.extend_from_slice(&[0, 0]);
+            b.extend_from_slice(&if two { 14u32 } else { 0 }.to_le_bytes());
+            b.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+            std::io::Cursor::new(b)
+        };
+        assert_eq!(tiff_pages(tiff(false)), Some(1));
+        assert_eq!(tiff_pages(tiff(true)), Some(2));
+        assert_eq!(tiff_pages(std::io::Cursor::new(b"nope".to_vec())), None);
+    }
+
+    #[test]
+    fn size_search_keeps_lossless_webp_and_fits_huge_widths() {
+        let img = photo(64, 48);
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("a.webp");
+        let lossless_roomy = Options {
+            quality: Some(100),
+            target_size: Some(10_000_000),
+            ..Options::default()
+        };
+        encode(img.clone(), "webp", &lossless_roomy, &out).unwrap();
+        assert_eq!(image::open(&out).unwrap().to_rgb8(), img.to_rgb8());
+
+        // Wider than libwebp allows: the search starts at its limit.
+        let wide = DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            WEBP_MAX + 500,
+            4,
+            image::Rgb([1, 2, 3]),
+        ));
+        let sized = Options {
+            target_size: Some(1_000_000),
+            ..Options::default()
+        };
+        encode(wide, "webp", &sized, &out).unwrap();
+        assert!(image::open(&out).unwrap().width() <= WEBP_MAX);
+    }
+
+    #[test]
+    fn a_cancelled_size_search_stops() {
+        let dir = tempfile::tempdir().unwrap();
+        let options = Options {
+            target_size: Some(10_000),
+            ..Options::default()
+        };
+        let tries = std::cell::Cell::new(0);
+        let err = encode_with_pixel_aspect(
+            photo(256, 256),
+            "jpeg",
+            &options,
+            &dir.path().join("a.jpg"),
+            None,
+            &|| {
+                tries.set(tries.get() + 1);
+                if tries.get() > 1 {
+                    Err(Error::Cancelled)
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Cancelled), "{err}");
+        assert_eq!(tries.get(), 2);
     }
 
     #[test]

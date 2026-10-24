@@ -95,6 +95,36 @@ impl FfmpegEngine {
             Ok(()) => Ok(secs.map(|s| s * 1_000_000.0)),
         }
     }
+
+    /// Whether the input has an audio stream. Without ffprobe, or when it
+    /// can't tell, assume it does, which only costs a target size some
+    /// video bitrate.
+    fn has_audio(&self, ctx: &Ctx, input: &Path) -> Result<bool> {
+        let Some(ffprobe) = &self.ffprobe else {
+            return Ok(true);
+        };
+        let mut cmd = Command::new(ffprobe);
+        cmd.args(LOCAL_INPUT_ARGS)
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_entries",
+                "stream=index",
+                "-of",
+                "csv=p=0",
+            ])
+            .arg(local_path(input));
+        let mut found = false;
+        match crate::run_tool("ffprobe", cmd, ctx, |line| {
+            found |= !line.trim().is_empty();
+        }) {
+            Err(Error::Cancelled) => Err(Error::Cancelled),
+            Err(_) => Ok(true),
+            Ok(()) => Ok(found),
+        }
+    }
 }
 
 /// Targets are offered per format, so a silent video still lists audio ones.
@@ -202,9 +232,22 @@ fn audio_range(to: &str) -> Option<(f64, f64)> {
     }
 }
 
+/// The highest video bitrate a budget asks for, in kbit/s. Far above what
+/// any encoder here produces, and small enough that doubling it for the
+/// buffer size can't overflow.
+const MAX_VIDEO_KBPS: f64 = 1_000_000.0;
+
 /// Splits `total_kbps` between video and audio for `to`, or says why a
-/// `target` of bytes can't hold `secs` of it.
-fn budget(to: &str, o: &Options, total_kbps: f64, target: u64, secs: f64) -> Result<Budget> {
+/// `target` of bytes can't hold `secs` of it. `audio` is whether the output
+/// carries an audio track; a silent input or `strip_audio` reserves none.
+fn budget(
+    to: &str,
+    o: &Options,
+    audio: bool,
+    total_kbps: f64,
+    target: u64,
+    secs: f64,
+) -> Result<Budget> {
     let too_small = |kind: &str| {
         Error::InvalidOption(format!(
             "{} is too small for {secs:.1} s of {kind}; pick a larger size or trim it",
@@ -215,7 +258,7 @@ fn budget(to: &str, o: &Options, total_kbps: f64, target: u64, secs: f64) -> Res
         return Ok(Budget::default());
     }
     if VIDEO_OUT.contains(&to) {
-        let audio = if o.strip_audio {
+        let audio = if o.strip_audio || !audio {
             None
         } else {
             Some(
@@ -228,7 +271,7 @@ fn budget(to: &str, o: &Options, total_kbps: f64, target: u64, secs: f64) -> Res
             return Err(too_small("video"));
         }
         return Ok(Budget {
-            video_kbps: Some(video as u32),
+            video_kbps: Some(video.min(MAX_VIDEO_KBPS) as u32),
             audio_kbps: audio,
             gif_scale: None,
         });
@@ -488,6 +531,7 @@ impl Engine for FfmpegEngine {
         // Still frames leave target_size to the image engine's encoder.
         let target = o.target_size.filter(|_| !still);
         let mut total_kbps = 0.0;
+        let mut audio = false;
         let mut plan = Budget::default();
         let target = match target {
             Some(target) => {
@@ -495,7 +539,11 @@ impl Engine for FfmpegEngine {
                     Error::InvalidOption("a target size needs ffprobe to read the duration".into())
                 })?;
                 total_kbps = target as f64 * 8.0 * 0.95 / secs / 1000.0;
-                plan = budget(to, o, total_kbps, target, secs)?;
+                audio = VIDEO_OUT.contains(&to)
+                    && !o.strip_audio
+                    && to != "gif"
+                    && self.has_audio(ctx, input)?;
+                plan = budget(to, o, audio, total_kbps, target, secs)?;
                 Some((target, secs))
             }
             None => None,
@@ -556,7 +604,7 @@ impl Engine for FfmpegEngine {
                         plan.gif_scale = Some(plan.gif_scale.unwrap_or(1.0) * ratio.sqrt() * 0.9);
                     } else {
                         total_kbps *= ratio * 0.95;
-                        plan = budget(to, o, total_kbps, target, target_secs)?;
+                        plan = budget(to, o, audio, total_kbps, target, target_secs)?;
                     }
                 }
                 if size > target {
@@ -582,7 +630,14 @@ impl Engine for FfmpegEngine {
             })?;
             let pixel_aspect = png_pixel_aspect(&frame);
             let _ = std::fs::remove_file(&frame);
-            crate::image::encode_with_pixel_aspect(img, to, ctx.options, &output, pixel_aspect)?;
+            crate::image::encode_with_pixel_aspect(
+                img,
+                to,
+                ctx.options,
+                &output,
+                pixel_aspect,
+                &|| ctx.check(),
+            )?;
         } else if to == "png" {
             crate::image::background_png(&output, ctx.options)?;
         }
@@ -784,15 +839,26 @@ mod tests {
     fn budget_splits_or_refuses_a_target() {
         let o = Options::default();
         // 1MB over 10 s: 760 kbit/s, 95 of them audio.
-        let video = budget("mp4", &o, 760.0, 1_000_000, 10.0).unwrap();
+        let video = budget("mp4", &o, true, 760.0, 1_000_000, 10.0).unwrap();
         assert_eq!((video.video_kbps, video.audio_kbps), (Some(665), Some(95)));
         let silent = Options {
             strip_audio: true,
             ..Options::default()
         };
-        let video = budget("mp4", &silent, 760.0, 1_000_000, 10.0).unwrap();
+        let video = budget("mp4", &silent, true, 760.0, 1_000_000, 10.0).unwrap();
         assert_eq!((video.video_kbps, video.audio_kbps), (Some(760), None));
-        let err = budget("mp4", &o, 60.0, 10_000, 1.3)
+        // An input without audio gets the whole budget for video too.
+        let video = budget("mp4", &o, false, 760.0, 1_000_000, 10.0).unwrap();
+        assert_eq!((video.video_kbps, video.audio_kbps), (Some(760), None));
+        // A huge target stays a bitrate the buffer size can double.
+        let huge = budget("mp4", &o, false, 1e12, u64::MAX, 1.0).unwrap();
+        assert_eq!(huge.video_kbps, Some(MAX_VIDEO_KBPS as u32));
+        assert!(
+            output_args("mp4", &o, &huge)
+                .join(" ")
+                .contains("-bufsize 2000000k")
+        );
+        let err = budget("mp4", &o, true, 60.0, 10_000, 1.3)
             .unwrap_err()
             .to_string();
         assert!(
@@ -801,18 +867,23 @@ mod tests {
         );
         // Audio stays within what each encoder accepts.
         assert_eq!(
-            budget("opus", &o, 900.0, 1, 1.0).unwrap().audio_kbps,
+            budget("opus", &o, true, 900.0, 1, 1.0).unwrap().audio_kbps,
             Some(256)
         );
         assert_eq!(
-            budget("mp3", &o, 64.5, 1, 1.0).unwrap().audio_kbps,
+            budget("mp3", &o, true, 64.5, 1, 1.0).unwrap().audio_kbps,
             Some(64)
         );
-        assert!(budget("ogg", &o, 40.0, 10_000, 2.0).is_err());
-        let err = budget("flac", &o, 900.0, 1, 1.0).unwrap_err().to_string();
+        assert!(budget("ogg", &o, true, 40.0, 10_000, 2.0).is_err());
+        let err = budget("flac", &o, true, 900.0, 1, 1.0)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("FLAC") && err.contains("MP3 or M4A"), "{err}");
-        assert!(budget("wav", &o, 900.0, 1, 1.0).is_err());
-        assert_eq!(budget("gif", &o, 1.0, 1, 1.0).unwrap(), Budget::default());
+        assert!(budget("wav", &o, true, 900.0, 1, 1.0).is_err());
+        assert_eq!(
+            budget("gif", &o, true, 1.0, 1, 1.0).unwrap(),
+            Budget::default()
+        );
     }
 
     /// Converts a generated clip with FFmpeg, if it is installed.
@@ -1162,6 +1233,9 @@ mod tests {
                     "title=secret",
                     "-metadata",
                     "location=+40.0-074.0",
+                    // Stream-scoped tags, which global stripping must reach.
+                    "-metadata:s:a:0",
+                    "title=streamsecret",
                 ],
             ]
             .concat();
@@ -1179,6 +1253,18 @@ mod tests {
                 !tags.contains("secret") && !tags.contains("+40.0"),
                 "{from}->{to}: {tags}"
             );
+            if from != "mp3" {
+                let video_tag = [
+                    &["-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=1"][..],
+                    &["-metadata:s:v:0", "title=videosecret"],
+                ]
+                .concat();
+                let tagged = dir.path().join(format!("stream-{to}.{from}"));
+                generate(&engine, &tagged, &video_tag);
+                let (stripped, _) = run_step(&engine, &tagged, to, &strip).unwrap();
+                let tags = probe(&engine, &stripped, "format_tags:stream_tags");
+                assert!(!tags.contains("videosecret"), "{from}->{to}: {tags}");
+            }
         }
     }
 

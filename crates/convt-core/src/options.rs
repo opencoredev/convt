@@ -143,11 +143,16 @@ impl std::str::FromStr for Timestamp {
         }
         let (last, whole) = parts.split_last().ok_or_else(bad)?;
         let mut secs = 0.0;
-        for p in whole {
+        for (i, p) in whole.iter().enumerate() {
             if !p.bytes().all(|b| b.is_ascii_digit()) {
                 return Err(bad());
             }
-            secs = secs * 60.0 + p.parse::<f64>().map_err(|_| bad())?;
+            let n = p.parse::<f64>().map_err(|_| bad())?;
+            // In h:mm:ss the minutes field stops at 59, as seconds do.
+            if i > 0 && n >= 60.0 {
+                return Err(bad());
+            }
+            secs = secs * 60.0 + n;
         }
         if !last.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
             return Err(bad());
@@ -701,7 +706,7 @@ mod tests {
             assert_eq!(t.to_string().parse::<Timestamp>().unwrap(), t);
         }
         for bad in [
-            "", "-1", "1:", ":30", "1:60", "1:2:3:4", "abc", "1e3", "1:-5",
+            "", "-1", "1:", ":30", "1:60", "1:75:00", "1:2:3:4", "abc", "1e3", "1:-5",
         ] {
             assert!(bad.parse::<Timestamp>().is_err(), "{bad}");
         }
