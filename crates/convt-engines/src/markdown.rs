@@ -142,6 +142,28 @@ fn page(markdown: &str, fallback_title: &str, images_base: Option<url::Url>) -> 
     text::html_document(&title, &body)
 }
 
+/// The largest image a page inlines. Bigger ones keep their links.
+const MAX_INLINE_IMAGE: u64 = 25 * 1024 * 1024;
+
+/// The bytes of `path` if it is a regular file of at most `cap` bytes.
+/// Devices, FIFOs and folders are never opened, and a file that grows
+/// while it is read stops counting at `cap`.
+fn read_capped(path: &Path, cap: u64) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() || meta.len() > cap {
+        return None;
+    }
+    let file = std::fs::File::open(path).ok()?;
+    // Checked again on the opened file, in case the path changed.
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(cap + 1).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 <= cap).then_some(bytes)
+}
+
 /// A data URI of the image `dest` names relative to `base`. `None` for a URL
 /// with a scheme, a fragment, or a file that is missing or not an image, so
 /// only pictures are read and never a text file a link happens to name.
@@ -154,7 +176,7 @@ fn inline_image(base: &url::Url, dest: &str) -> Option<String> {
         return None;
     }
     let path = base.join(dest).ok()?.to_file_path().ok()?;
-    let bytes = std::fs::read(&path).ok()?;
+    let bytes = read_capped(&path, MAX_INLINE_IMAGE)?;
     let mime = match image::guess_format(&bytes) {
         Ok(format) => format.to_mime_type(),
         Err(_)
@@ -477,6 +499,34 @@ mod tests {
         let elsewhere = dir.path().join("elsewhere");
         let html = convert(&elsewhere);
         assert!(html.contains(r#"src="data:image/png;base64,"#), "{html}");
+    }
+
+    #[test]
+    fn only_regular_files_up_to_the_cap_are_inlined() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbImage::new(2, 2)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        let path = dir.path().join("red.png");
+        std::fs::write(&path, png.get_ref()).unwrap();
+        let len = png.get_ref().len() as u64;
+        assert!(read_capped(&path, len).is_some());
+        assert!(read_capped(&path, len - 1).is_none());
+        assert!(read_capped(dir.path(), u64::MAX).is_none());
+        #[cfg(unix)]
+        {
+            // Neither would ever finish: /dev/zero never ends and a FIFO
+            // with no writer blocks on open.
+            let fifo = dir.path().join("pipe.png");
+            let made = std::process::Command::new("mkfifo").arg(&fifo).status();
+            if made.is_ok_and(|s| s.success()) {
+                let md = "![p](pipe.png) ![z](../../../../../../../../dev/zero)\n";
+                let html = to_html_with_images_from(md, "x", dir.path());
+                assert!(html.contains(r#"src="pipe.png""#), "{html}");
+                assert!(html.contains("dev/zero"), "{html}");
+            }
+        }
     }
 
     #[test]
