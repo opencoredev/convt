@@ -383,14 +383,22 @@ pub fn write_vtt(cues: &[Cue]) -> String {
     out
 }
 
-/// The dialogue, one line per subtitle line, with a line repeated by the
-/// next subtitle written once.
+/// The dialogue, one line per subtitle line. Lines a subtitle carries over
+/// from the one before, as rolling captions repeat their last line, are
+/// written once; a line repeated within one subtitle stays.
 pub fn transcript(cues: &[Cue]) -> String {
     let mut out: Vec<String> = Vec::new();
-    for line in cues.iter().flat_map(Cue::text_lines) {
-        if out.last() != Some(&line) {
-            out.push(line);
+    let mut previous: Vec<String> = Vec::new();
+    for lines in cues.iter().map(Cue::text_lines) {
+        if lines.is_empty() {
+            continue;
         }
+        let carried = (1..=lines.len().min(previous.len()))
+            .rev()
+            .find(|&k| previous[previous.len() - k..] == lines[..k])
+            .unwrap_or(0);
+        out.extend_from_slice(&lines[carried..]);
+        previous = lines;
     }
     let mut text = out.join("\n");
     if !text.is_empty() {
@@ -454,6 +462,26 @@ mod tests {
         assert_eq!(transcript(&parse_srt(srt).unwrap()), "Run!\nNow.\nRun!\n");
         let vtt = "WEBVTT\n\n00:01.000 --> 00:02.000\n<v Ann>Tom &amp; Jerry&nbsp;too</v>\n";
         assert_eq!(transcript(&parse_vtt(vtt).unwrap()), "Tom & Jerry too\n");
+    }
+
+    #[test]
+    fn transcripts_keep_repeats_within_a_subtitle() {
+        let cue =
+            |t: &str, text: &str| format!("{t}\n00:00:0{t},000 --> 00:00:0{t},900\n{text}\n\n");
+        let srt = [
+            cue("1", "No!\nNo!"),
+            cue("2", "Wait.\nNo!"),
+            // Rolling captions: each one repeats the last line of the one before.
+            cue("3", "one\ntwo"),
+            cue("4", "two\nthree"),
+            cue("5", "two\nthree"),
+            cue("6", "three\nthree"),
+        ]
+        .concat();
+        assert_eq!(
+            transcript(&parse_srt(&srt).unwrap()),
+            "No!\nNo!\nWait.\nNo!\none\ntwo\nthree\nthree\n"
+        );
     }
 
     #[test]
