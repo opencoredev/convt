@@ -46,31 +46,39 @@ function categoryOf(target: Format) {
   return formats.find((f) => f.id === target)?.category;
 }
 
+/** WebP is left out: the image engine writes it lossless and ignores quality. */
 export function qualityApplies(target: Format): boolean {
   return (
-    categoryOf(target) === "video" ||
-    target === "jpeg" ||
-    target === "webp" ||
-    target === "avif" ||
-    target === "heic"
+    categoryOf(target) === "video" || target === "jpeg" || target === "avif" || target === "heic"
   );
 }
 
-export function sizeControl(target: Format): SizeControl | null {
-  const category = categoryOf(target);
+/** The formats a conversion goes between; `from` is unknown until a file is chosen. */
+export type Pair = { from: Format | undefined; to: Format };
+
+export function sizeControl({ from, to }: Pair): SizeControl | null {
+  const category = categoryOf(to);
   if (category === "video") return VIDEO_SIZES;
-  if (category === "image" && target !== "ico") return IMAGE_SIZES;
+  // FFmpeg makes a GIF from video and scales it by height only.
+  if (to === "gif" && from !== undefined && categoryOf(from) === "video") return VIDEO_SIZES;
+  if (category === "image" && to !== "ico") return IMAGE_SIZES;
   return null;
 }
 
-/** The options to send: only what applies to `target`, or nothing when every control is at its default. */
+/**
+ * The options to send: only what applies to the conversion, or nothing when every
+ * control is at its default. A size the conversion's control doesn't offer, left
+ * from another file or target, is dropped.
+ */
 export function jobOptions(
-  target: Format,
+  pair: Pair,
   picked: { quality: number | null; size: number | null },
 ): JobOptions | undefined {
   const options: JobOptions = {};
-  if (picked.quality !== null && qualityApplies(target)) options.quality = picked.quality;
-  const size = sizeControl(target);
-  if (picked.size !== null && size) options[size.field] = picked.size;
+  if (picked.quality !== null && qualityApplies(pair.to)) options.quality = picked.quality;
+  const size = sizeControl(pair);
+  if (picked.size !== null && size?.choices.some((c) => c.value === picked.size)) {
+    options[size.field] = picked.size;
+  }
   return Object.keys(options).length > 0 ? options : undefined;
 }

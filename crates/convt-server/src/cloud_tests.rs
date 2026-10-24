@@ -102,6 +102,23 @@ async fn call(state: &CloudState, path: &str, method: &str) -> (StatusCode, serd
     let body = to_bytes(r.into_body(), 1_000_000).await.unwrap();
     (status, serde_json::from_slice(&body).unwrap())
 }
+async fn create_call(state: &CloudState, body: &str) -> (StatusCode, serde_json::Value) {
+    let r = routes::router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/v1/jobs")
+                .method("POST")
+                .header("authorization", format!("Bearer {KEY}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_owned()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = r.status();
+    let body = to_bytes(r.into_body(), 1_000_000).await.unwrap();
+    (status, serde_json::from_slice(&body).unwrap())
+}
 #[tokio::test]
 async fn cross_account_read_download_cancel_and_start_are_denied() {
     let Some(db) = test_db().await else { return };
@@ -521,6 +538,64 @@ async fn api_and_pro_share_a_serialized_storage_budget() {
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
     db.drop().await;
 }
+#[tokio::test]
+async fn malformed_job_requests_get_json_errors() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = CloudState {
+        pool: db.server.clone(),
+        storage: Arc::new(MemoryStorage::default()),
+        web_secret: "s".repeat(32),
+    };
+    let with = |options: &str| {
+        format!(
+            r#"{{"input_format":"png","target_format":"jpeg","input_bytes":10,"options":{options}}}"#
+        )
+    };
+    // Values serde refuses get the same code as values the range checks refuse.
+    for options in [
+        r#"{"quality":256}"#,
+        r#"{"quality":150}"#,
+        r#"{"pages":"3-1"}"#,
+        r#"{"background":"plaid"}"#,
+        r#"{"qualty":40}"#,
+        r#""fast""#,
+    ] {
+        let (status, body) = create_call(&state, &with(options)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{options}: {body}");
+        assert_eq!(
+            body["error"]["code"], "invalid_options",
+            "{options}: {body}"
+        );
+    }
+    let (_, body) = create_call(&state, &with(r#"{"quality":256}"#)).await;
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("quality"),
+        "{body}"
+    );
+    for request in [
+        r#"{"input_format":"png","target_format":"jpeg"}"#,
+        r#"{"input_format":"png","target_format":"jpeg","input_bytes":"ten"}"#,
+        r#"{"input_format":"png","target_format":"jpeg","input_bytes":10,"extra":1}"#,
+        r#"["png"]"#,
+        "not json",
+    ] {
+        let (status, body) = create_call(&state, request).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{request}: {body}");
+        assert_eq!(
+            body["error"]["code"], "invalid_request",
+            "{request}: {body}"
+        );
+    }
+    let (status, body) = create_call(&state, &with(r#"{"quality":40}"#)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["job"]["options"]["quality"], 40);
+    db.drop().await;
+}
 #[test]
 fn create_requests_take_optional_validated_options() {
     let plain: CreateJob = serde_json::from_value(
@@ -591,4 +666,5 @@ async fn options_are_stored_returned_and_claimed() {
         .await
         .unwrap();
     assert_eq!(plain.options.0, convt_core::Options::default());
+    db.drop().await;
 }

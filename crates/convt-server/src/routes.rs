@@ -6,7 +6,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -143,12 +143,29 @@ impl From<jobs::Job> for JobView {
         }
     }
 }
+/// Reads a job request so every malformed body gets the JSON error shape:
+/// `invalid_options` when only `options` is wrong, the same code an
+/// out-of-range value gets, and `invalid_request` for anything else.
+fn parse_create(
+    body: Result<Json<serde_json::Value>, JsonRejection>,
+) -> Result<CreateJob, ApiError> {
+    let Json(mut body) = body.map_err(|e| ApiError::bad("invalid_request", &e.body_text()))?;
+    let options = body.as_object_mut().and_then(|o| o.remove("options"));
+    let mut data: CreateJob = serde_path_to_error::deserialize(body)
+        .map_err(|e| ApiError::bad("invalid_request", &e.to_string()))?;
+    if let Some(options) = options {
+        data.options = serde_path_to_error::deserialize(options)
+            .map_err(|e| ApiError::bad("invalid_options", &format!("options: {e}")))?;
+    }
+    Ok(data)
+}
 async fn create(
     State(s): State<CloudState>,
     h: HeaderMap,
-    Json(data): Json<CreateJob>,
+    body: Result<Json<serde_json::Value>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let who = authenticate(&s, &h).await?;
+    let data = parse_create(body)?;
     let job = jobs::create(&s.pool, &who, &data).await?;
     let url = match s
         .storage

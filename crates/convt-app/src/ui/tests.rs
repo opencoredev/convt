@@ -3221,6 +3221,8 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
     }
     click(cx, window, "to-mp4");
     click(cx, window, "options-toggle");
+    // Video reaches enough formats that the options sit below the fold.
+    scroll_quick(cx, window, -2000.);
     // Defaults change nothing.
     assert_eq!(label(cx, window, "codec").as_deref(), Some("H.264"));
     assert_eq!(
@@ -3244,6 +3246,7 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
     cx.read(|cx| assert!(!view.read(cx).conversion_options().strip_audio));
 
     // WebM has no codec choice but can drop audio; GIF has neither.
+    scroll_quick(cx, window, 2000.);
     click(cx, window, "to-webm");
     assert!(!shown(cx, window, "codec") && shown(cx, window, "keep-audio"));
     click(cx, window, "to-gif");
@@ -3258,6 +3261,7 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
             (Some(VideoCodec::Hevc), true)
         );
     });
+    scroll_quick(cx, window, -2000.);
     click(cx, window, "codec");
     click(cx, window, "codec-h264");
     click(cx, window, "keep-audio");
@@ -3268,6 +3272,21 @@ fn quick_convert_offers_codec_and_keep_audio_for_video(cx: &mut TestAppContext) 
             (Some(VideoCodec::H264), false)
         );
     });
+}
+
+/// Turns the wheel over Quick convert's Options toggle, which scrolls the
+/// window's body. A negative `dy` scrolls down.
+fn scroll_quick(cx: &mut TestAppContext, handle: AnyWindowHandle, dy: f32) {
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.scroll(
+            id("options-toggle"),
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(dy))),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.run_until_parked();
 }
 
 /// Whether the element is drawn inside the window, not cut off below it.
@@ -4311,12 +4330,50 @@ fn documents_wait_while_the_pack_is_removed(cx: &mut TestAppContext) {
     );
     assert!(!shown(cx, window, "pack-download"));
     assert_eq!(f.jobs(cx), 0);
+    // Markdown to HTML never used the pack, so it still converts.
+    let md = f.dir.path().join("notes.md");
+    std::fs::write(&md, "# Notes").unwrap();
+    let html = format_by_id("html").unwrap();
+    cx.update(|cx| {
+        app.update(cx, |s, cx| {
+            s.convert(std::slice::from_ref(&md), html, &Options::default(), cx)
+                .unwrap();
+        })
+    });
+    wait_until(cx, "the Markdown job", |cx| {
+        app.read(cx).queue.active() == 0
+    });
+    cx.read(|cx| {
+        let status = &app.read(cx).queue.entries.last().unwrap().status;
+        assert!(matches!(status, crate::jobs::Status::Done(_)), "{status:?}");
+    });
 
     packs.hold_remove.store(false, Ordering::SeqCst);
     wait_until(cx, "the removal", |cx| !app.read(cx).pack.removing);
     wait_for_label(cx, window, "pack-card", |s| {
         s == "Document support isn't installed"
     });
+}
+
+#[gpui_kit::test]
+fn a_text_conversion_does_not_hold_up_a_pack_change(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.installed.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    let md = f.dir.path().join("notes.md");
+    std::fs::write(&md, "# Notes").unwrap();
+    let html = format_by_id("html").unwrap();
+    let app = f.app.clone();
+    cx.update(|cx| {
+        app.update(cx, |s, cx| {
+            s.convert(std::slice::from_ref(&md), html, &Options::default(), cx)
+                .unwrap();
+            assert_eq!(s.queue.active(), 1);
+            s.remove_pack(cx).unwrap();
+        })
+    });
+    wait_until(cx, "the removal", |cx| !app.read(cx).pack.removing);
+    assert_eq!(packs.removes.load(Ordering::SeqCst), 1);
 }
 
 #[gpui_kit::test]
@@ -4355,10 +4412,15 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
                 .convert(std::slice::from_ref(&docx), pdf, &Options::default(), cx)
                 .unwrap_err();
             assert!(error.contains("being reinstalled"), "{error}");
-            // Other files still convert.
+            // Other files still convert, text formats included when their
+            // own engines write the target.
             let png = f.png("a.png");
             let jpeg = format_by_id("jpeg").unwrap();
             s.convert(&[png], jpeg, &Options::default(), cx).unwrap();
+            let csv = f.dir.path().join("table.csv");
+            std::fs::write(&csv, "a,b\n1,2\n").unwrap();
+            let json = format_by_id("json").unwrap();
+            s.convert(&[csv], json, &Options::default(), cx).unwrap();
         })
     });
     packs.hold.store(false, Ordering::SeqCst);

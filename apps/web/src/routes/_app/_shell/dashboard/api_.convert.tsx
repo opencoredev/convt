@@ -20,6 +20,7 @@ import capabilities from "#/generated/cloud-formats.json";
 import {
   QUALITY_CHOICES,
   type Choice,
+  type Pair,
   jobOptions,
   qualityApplies,
   sizeControl,
@@ -49,11 +50,11 @@ function Converter() {
     (f.extensions as readonly string[]).includes(file?.name.split(".").pop()?.toLowerCase() ?? ""),
   );
   const busy = stage === "uploading" || stage === "queued" || stage === "running";
-  const sizes = sizeControl(target);
-  function pickTarget(next: Format) {
+  const sizes = sizeControl({ from: inputFormat?.id, to: target });
+  function pick(next: Pair) {
     // A size means pixels on one control and lines on the other, so it doesn't carry over.
     if (sizeControl(next)?.field !== sizes?.field) setSize(null);
-    setTarget(next);
+    setTarget(next.to);
   }
   async function convert() {
     if (!file || !inputFormat) return;
@@ -86,7 +87,7 @@ function Converter() {
       });
       const converted = await client.convert(file, {
         to: target,
-        options: jobOptions(target, { quality, size }),
+        options: jobOptions({ from: inputFormat.id, to: target }, { quality, size }),
         signal: controller.current.signal,
         onProgress: (j) => {
           setJob(j);
@@ -179,7 +180,10 @@ function Converter() {
                 );
                 const reachable =
                   capabilities.formats.find((f) => f.id === source?.id)?.targets ?? [];
-                if (!reachable.includes(target)) pickTarget((reachable[0] ?? "pdf") as Format);
+                pick({
+                  from: source?.id,
+                  to: reachable.includes(target) ? target : ((reachable[0] ?? "pdf") as Format),
+                });
                 setResult(null);
                 setError("");
                 setStage("idle");
@@ -200,7 +204,7 @@ function Converter() {
               id="cloud-target"
               value={target}
               disabled={busy}
-              onChange={(e) => pickTarget(e.target.value as Format)}
+              onChange={(e) => pick({ from: inputFormat?.id, to: e.target.value as Format })}
               className={`w-full rounded-lg border border-line bg-page px-3 py-2.5 text-sm ${focusRing}`}
             >
               {formats
