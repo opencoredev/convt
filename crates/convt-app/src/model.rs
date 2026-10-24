@@ -498,8 +498,7 @@ impl AppState {
 
     /// Like [`Self::convert_to`], but runs on convt's cloud. The caller has
     /// checked [`Self::cloud_access`] and the user's consent; this checks
-    /// both again. The cloud takes no conversion options, so a request with
-    /// any is refused rather than converted without them.
+    /// both again.
     pub fn convert_in_cloud(
         &mut self,
         files: &[PathBuf],
@@ -518,12 +517,6 @@ impl AppState {
         if !self.settings.cloud_consent {
             return Err("Agree to upload files to convt's cloud before converting there.".into());
         }
-        if *options != Options::default() {
-            return Err(
-                "Cloud conversion doesn't take options yet. Convert on this computer to use them."
-                    .into(),
-            );
-        }
         let Some(session) = self.account.session.clone() else {
             return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
         };
@@ -541,7 +534,7 @@ impl AppState {
                 let job = Job {
                     input: file.clone(),
                     to,
-                    options: Options::default(),
+                    options: options.clone(),
                     output: output.clone(),
                 };
                 let id = self.queue.add_cloud(&job);

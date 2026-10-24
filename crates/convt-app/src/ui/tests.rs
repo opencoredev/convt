@@ -1188,10 +1188,13 @@ fn cloud_says_why_it_is_off_and_asks_once_before_uploading(cx: &mut TestAppConte
     cx.read(|cx| assert!(f.app.read(cx).settings.cloud_consent));
     assert!(f.settings_file().contains("cloud_consent = true"));
     assert!(!shown(cx, window, "cloud-consent"));
-    // The cloud takes no options, so it says so instead of offering them.
-    assert!(shown(cx, window, "cloud-options"));
+    // The cloud takes the same options as this computer, and converts with them.
+    assert!(shown(cx, window, "options-toggle"));
+    click(cx, window, "options-toggle");
+    click(cx, window, "quality-best");
+    cx.read(|cx| assert_eq!(view.read(cx).conversion_options().quality, Some(95)));
     click(cx, window, "where-local");
-    assert!(!shown(cx, window, "cloud-options"));
+    assert!(shown(cx, window, "quality-best"));
     click(cx, window, "where-cloud");
 
     // Convert goes to the cloud, not to a local job; what it can't do shows
