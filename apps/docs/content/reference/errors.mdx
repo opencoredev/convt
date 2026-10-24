@@ -15,6 +15,8 @@ Branch on `code`. `message` may change. See [Errors and retries](/guides/errors-
 
 | Status | `code`                  | Returned by                  | Meaning and fix                                                                                                                        |
 | ------ | ----------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `invalid_request`       | Create                       | The body is not `application/json`, is not valid JSON, misses a field, or has an unknown field.                                        |
+| `400`  | `invalid_options`       | Create                       | An option is unknown, has the wrong type, or is out of range. The message names it. See `Options` in the API reference.                |
 | `400`  | `unsupported_format`    | Create                       | A format id is unknown, the two formats are the same, or the input cannot reach the target. Check [Formats](/reference/formats).       |
 | `400`  | `file_too_large`        | Create                       | `input_bytes` is below 1 or above 2,000,000,000.                                                                                       |
 | `400`  | `size_mismatch`         | Start                        | The upload's size differs from `input_bytes`. The job is cancelled. Reserve a new one.                                                 |
@@ -25,8 +27,6 @@ Branch on `code`. `message` may change. See [Errors and retries](/guides/errors-
 | `403`  | `limit_reached`         | Create                       | Used plus reserved spend has reached your spend cap. Raise the cap or wait for the next billing period.                                |
 | `403`  | `storage_limit_reached` | Create                       | Your unexpired uploads hit 100 jobs or 50 GB. Wait for older jobs to expire.                                                           |
 | `404`  | `not_found`             | Get, start, cancel, download | The job does not exist, belongs to another account, or has expired.                                                                    |
-| `415`  | plain text              | Create                       | The body was not sent as `application/json`.                                                                                           |
-| `422`  | plain text              | Create                       | The JSON is malformed, misses a field, or has an unknown field.                                                                        |
 | `429`  | `rate_limited`          | Any job route                | More than 120 requests in a minute for this key. Back off.                                                                             |
 | `500`  | `internal`              | Any job route                | An unexpected server error. Retry with backoff.                                                                                        |
 | `502`  | `storage_unavailable`   | Any job route                | Object storage did not answer. Retry with backoff. From start, it also means nothing was uploaded for the job: check your `PUT` first. |
