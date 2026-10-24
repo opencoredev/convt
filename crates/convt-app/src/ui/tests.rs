@@ -645,9 +645,42 @@ fn id(name: &str) -> ElementId {
 }
 
 fn click(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) {
+    reveal(cx, handle, name);
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         window.click(id(name), cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
+
+/// Scrolls Quick convert's body until `name` is inside the window, as a
+/// person scrolls to a control below the fold. Other windows, and controls
+/// already in view, are left alone.
+fn reveal(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) {
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        // The body scrolls under a fixed footer, so its own bounds are what
+        // a person can see and click.
+        let (Some(target), Some(body)) = (
+            window.try_find(id(name)).map(|e| e.bounds()),
+            window.try_find(id("quick-body")).map(|e| e.bounds()),
+        ) else {
+            return;
+        };
+        let bottom = body.bottom().min(window.viewport_size().height);
+        let dy = if target.bottom() > bottom {
+            bottom - target.bottom() - px(16.)
+        } else if target.top() < body.top() {
+            body.top() - target.top() + px(16.)
+        } else {
+            return;
+        };
+        window.scroll(
+            id("quick-body"),
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), dy)),
+            cx,
+        );
     })
     .unwrap();
     cx.run_until_parked();

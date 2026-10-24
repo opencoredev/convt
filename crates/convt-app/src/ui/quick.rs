@@ -1891,6 +1891,7 @@ impl Render for QuickView {
             .child(
                 div()
                     .id("quick-body")
+                    .test_support()
                     .flex()
                     .flex_col()
                     .flex_1()
