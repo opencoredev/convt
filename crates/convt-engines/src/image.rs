@@ -37,10 +37,9 @@ impl Engine for ImageEngine {
     }
 
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
-        let img = ImageReader::open(input)?
-            .with_guessed_format()?
-            .decode()
-            .map_err(failed)?;
+        // The output has no EXIF to rotate it, so a phone photo would come
+        // out sideways unless its orientation is applied here.
+        let img = open_upright(input)?;
         ctx.check()?;
         ctx.progress(0.5);
         let output = ctx.artifact(out_dir, 0);
@@ -301,6 +300,35 @@ mod tests {
         let files = ImageEngine.convert(&ctx, src, out.path()).unwrap();
         assert_eq!(files.len(), 1);
         image::open(&files[0]).unwrap()
+    }
+
+    #[test]
+    fn exif_orientation_is_applied_to_the_pixels() {
+        let dir = tempfile::tempdir().unwrap();
+        // Red left half, blue right half.
+        let img = image::RgbImage::from_fn(64, 32, |x, _| {
+            image::Rgb(if x < 32 { [255, 0, 0] } else { [0, 0, 255] })
+        });
+        let mut source = Vec::new();
+        JpegEncoder::new_with_quality(&mut source, 95)
+            .encode_image(&img)
+            .unwrap();
+        // Exif big-endian TIFF with one orientation entry: 6, rotate 90
+        // degrees clockwise to display, so red ends up on top.
+        let exif = b"Exif\0\0MM\0\x2a\0\0\0\x08\0\x01\x01\x12\0\x03\0\0\0\x01\0\x06\0\0\0\0\0\0";
+        let mut oriented = source[..2].to_vec();
+        oriented.extend_from_slice(&[0xff, 0xe1]);
+        oriented.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+        oriented.extend_from_slice(exif);
+        oriented.extend_from_slice(&source[2..]);
+        let path = dir.path().join("rotated.jpg");
+        std::fs::write(&path, oriented).unwrap();
+        let out = run(&path, "png", &Options::default()).to_rgb8();
+        assert_eq!(out.dimensions(), (32, 64));
+        let [r, _, b] = out.get_pixel(16, 10).0;
+        assert!(r > 200 && b < 60, "top is red");
+        let [r, _, b] = out.get_pixel(16, 54).0;
+        assert!(b > 200 && r < 60, "bottom is blue");
     }
 
     #[test]
