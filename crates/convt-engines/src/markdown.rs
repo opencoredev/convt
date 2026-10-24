@@ -43,14 +43,19 @@ impl Engine for MarkdownEngine {
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
         let source = text::read("markdown", input)?;
         let output = match (ctx.step.from.id, ctx.step.to.id) {
-            // A middle hop's page sits in a temporary folder, so relative
-            // images would not resolve there; they go inline for LibreOffice
-            // to embed. The final page lands where the user keeps the
-            // Markdown, so its paths stay relative.
-            ("md", "html") if !ctx.is_last_hop() => {
-                to_html_with_images_from(&source, &text::stem(input), &input_dir(input)?)
+            // Relative images resolve only next to the Markdown. A middle
+            // hop's page sits in a temporary folder and a final page may go
+            // to another folder, so those pages carry their images inline
+            // (LibreOffice embeds them from there). A final page next to the
+            // Markdown keeps its paths relative.
+            ("md", "html") => {
+                let dir = input_dir(input)?;
+                if ctx.is_last_hop() && same_dir(&dir, &result_dir(out_dir)) {
+                    to_html(&source, &text::stem(input))
+                } else {
+                    to_html_with_images_from(&source, &text::stem(input), &dir)
+                }
             }
-            ("md", "html") => to_html(&source, &text::stem(input)),
             ("md", "txt") => to_plain(&source),
             ("html", "md") => from_html(&source)?,
             (from, to) => return Err(failed(format!("unsupported step {from} -> {to}"))),
@@ -70,6 +75,29 @@ fn input_dir(input: &Path) -> Result<PathBuf> {
         dir
     };
     Ok(std::path::absolute(dir)?)
+}
+
+/// The folder a step writing into `out_dir` publishes to: the parent of the
+/// registry's hidden `.convt-*` staging folder, or `out_dir` itself.
+fn result_dir(out_dir: &Path) -> PathBuf {
+    out_dir
+        .ancestors()
+        .find(|dir| {
+            dir.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".convt-"))
+        })
+        .and_then(Path::parent)
+        .unwrap_or(out_dir)
+        .to_path_buf()
+}
+
+/// Whether `a` and `b` are the same folder, after resolving links.
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
 }
 
 /// A standalone page titled by the first heading, or else the file name.
@@ -412,6 +440,43 @@ mod tests {
         assert!(html.contains(r#"src="https://x.test/d.png""#), "{html}");
         // A page the user keeps next to the Markdown stays relative.
         assert!(to_html(md, "x").contains(r#"src="my%20img/red.png""#));
+    }
+
+    #[test]
+    fn a_final_page_in_another_folder_inlines_its_images() {
+        use convt_core::{Cancel, Options, format_by_id};
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbImage::new(2, 2)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        std::fs::write(src.join("red.png"), png.get_ref()).unwrap();
+        let input = src.join("notes.md");
+        std::fs::write(&input, "![a](red.png)\n").unwrap();
+        let convert = |dest: &Path| {
+            let out = dest.join(".convt-test/0-0");
+            std::fs::create_dir_all(&out).unwrap();
+            let step = Step {
+                from: format_by_id("md").unwrap(),
+                to: format_by_id("html").unwrap(),
+            };
+            let (options, cancel) = (Options::default(), Cancel::new());
+            let ctx = Ctx::new(step, &options, &|_| {}, &cancel);
+            let files = MarkdownEngine.convert(&ctx, &input, &out).unwrap();
+            std::fs::read_to_string(&files[0]).unwrap()
+        };
+        // Next to the Markdown, the path still resolves.
+        let html = convert(&src);
+        assert!(html.contains(r#"src="red.png""#), "{html}");
+        // Through a differently spelled path to the same folder, too.
+        let html = convert(&src.join("."));
+        assert!(html.contains(r#"src="red.png""#), "{html}");
+        // Anywhere else it would break, so the image goes inline.
+        let elsewhere = dir.path().join("elsewhere");
+        let html = convert(&elsewhere);
+        assert!(html.contains(r#"src="data:image/png;base64,"#), "{html}");
     }
 
     #[test]
