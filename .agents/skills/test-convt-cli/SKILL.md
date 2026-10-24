@@ -16,7 +16,7 @@ cargo locate-project --workspace --message-format plain   # must be this checkou
 cargo build -p convt-cli && ./target/debug/convt engines
 ```
 
-`convt engines` prints each ready engine (`image`, `svg`, `libheif`, `ffmpeg`, `pdfium`, `libreoffice`) and each unavailable one with its reason. A conversion that fails with "no route" usually means an engine is missing here, not a routing bug. Fix the environment first:
+`convt engines` prints each ready engine (`image`, `svg`, `markdown`, `data`, `subtitle`, `libheif`, `ffmpeg`, `pdfium`, `libreoffice`) and each unavailable one with its reason. A conversion that fails with "no route" usually means an engine is missing here, not a routing bug. Fix the environment first:
 
 - `pdfium` unavailable: `bash scripts/fetch-pdfium.sh` (writes `vendor/pdfium`, gitignored).
 - `ffmpeg` or `libreoffice` unavailable: install the package, or point `CONVT_FFMPEG` / `CONVT_SOFFICE` at a binary. See `crates/convt-engines/src/lib.rs` for discovery order.
@@ -32,7 +32,7 @@ work=$(mktemp -d /tmp/convt-test.XXXXXX)
 bash .agents/skills/test-convt-cli/scripts/fixtures.sh "$work/in"
 ```
 
-This writes `sample.png`, `sample.mp4` (3 s, video and audio), `sample.wav`, `sample.svg`, `sample.txt`, and `sample.pdf` when LibreOffice is present. Add new fixtures to that script rather than committing binaries.
+This writes `sample.png`, `sample.mp4` (3 s, video and audio), `sample.wav`, `sample.svg`, `sample.txt`, the text formats the native `markdown`, `data` and `subtitle` engines read (`sample.md`, `.csv`, `.tsv`, `.json`, `.yaml`, `.srt`, `.vtt`), and `sample.pdf` when LibreOffice is present. Add new fixtures to that script rather than committing binaries.
 
 ## Drive
 
