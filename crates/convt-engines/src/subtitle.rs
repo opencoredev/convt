@@ -183,6 +183,13 @@ pub fn parse_vtt(source: &str) -> Result<Vec<Cue>> {
     Ok(cues)
 }
 
+/// Whether a `<` followed by `after` starts a tag.
+fn opens_tag(after: &str) -> bool {
+    after
+        .trim_start_matches('/')
+        .starts_with(|c: char| c.is_ascii_alphanumeric())
+}
+
 /// Rewrites `s`, passing each `<tag>` (without its brackets) to `tag` and
 /// the text between tags to `text`. A `<` that doesn't open a tag is text.
 fn rewrite(s: &str, tag: &dyn Fn(&str) -> String, text: &dyn Fn(&str) -> String) -> String {
@@ -191,10 +198,7 @@ fn rewrite(s: &str, tag: &dyn Fn(&str) -> String, text: &dyn Fn(&str) -> String)
     let mut literal = String::new();
     while let Some(lt) = rest.find('<') {
         let after = &rest[lt + 1..];
-        let opens_tag = after
-            .trim_start_matches('/')
-            .starts_with(|c: char| c.is_ascii_alphanumeric());
-        if !opens_tag {
+        if !opens_tag(after) {
             literal.push_str(&rest[..=lt]);
             rest = after;
             continue;
@@ -296,13 +300,58 @@ fn escape_vtt(s: &str) -> String {
         .replace("-->", "--&gt;")
 }
 
+/// The entities SRT text may carry. SRT has no escaping of its own, so a
+/// literal `<b>` would read as bold everywhere. As `&lt;b>` it stays text
+/// for any reader that decodes entities and through convt's own SRT steps;
+/// FFmpeg's SRT reader, and so mpv, shows the entity as written instead.
+const SRT_ENTITIES: [(&str, char); 3] = [("&lt;", '<'), ("&gt;", '>'), ("&amp;", '&')];
+
+/// Literal text for SRT: a `<` that would open a tag as `&lt;`, and an `&`
+/// that would start an entity as `&amp;`. Any other `<`, `>` or `&` stays as
+/// people write it.
+fn escape_srt(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for (i, c) in s.char_indices() {
+        match c {
+            '<' if opens_tag(&s[i + 1..]) => out.push_str("&lt;"),
+            '&' if SRT_ENTITIES.iter().any(|(e, _)| s[i..].starts_with(e)) => {
+                out.push_str("&amp;");
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// SRT text with the entities [`escape_srt`] writes decoded.
+fn decode_srt(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(amp) = rest.find('&') {
+        out.push_str(&rest[..amp]);
+        rest = &rest[amp..];
+        match SRT_ENTITIES.iter().find(|(e, _)| rest.starts_with(e)) {
+            Some((e, c)) => {
+                out.push(*c);
+                rest = &rest[e.len()..];
+            }
+            None => {
+                out.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 impl Cue {
     /// The lines as SRT text: italics, bold and underline kept, the rest of
-    /// the markup dropped.
+    /// the markup dropped, and literal angle brackets kept as entities.
     fn srt_lines(&self) -> Vec<String> {
         self.clean(|line| {
             if self.vtt {
-                rewrite(line, &shared_style, &decode_entities)
+                rewrite(line, &shared_style, &|t| escape_srt(&decode_entities(t)))
             } else {
                 rewrite(line, &shared_style, &str::to_owned)
             }
@@ -315,7 +364,9 @@ impl Cue {
             if self.vtt {
                 rewrite(line, &shared_style, &|t| escape_vtt(&decode_entities(t)))
             } else {
-                rewrite(&strip_overrides(line), &shared_style, &escape_vtt)
+                rewrite(&strip_overrides(line), &shared_style, &|t| {
+                    escape_vtt(&decode_srt(t))
+                })
             }
         })
     }
@@ -327,7 +378,7 @@ impl Cue {
             let plain = if self.vtt {
                 rewrite(line, &none, &decode_entities)
             } else {
-                rewrite(&strip_overrides(line), &none, &str::to_owned)
+                rewrite(&strip_overrides(line), &none, &decode_srt)
             };
             plain.replace('\u{a0}', " ")
         })
@@ -428,8 +479,34 @@ mod tests {
         let srt = write_srt(&parse_vtt(vtt).unwrap());
         assert_eq!(
             srt,
-            "1\n00:01:02,500 --> 00:01:04,000\nHi there & <you>\n\n2\n00:01:05,000 --> 00:01:06,000\n<i>Loud</i> later\n\n"
+            "1\n00:01:02,500 --> 00:01:04,000\nHi there & &lt;you>\n\n2\n00:01:05,000 --> 00:01:06,000\n<i>Loud</i> later\n\n"
         );
+    }
+
+    #[test]
+    fn literal_angle_brackets_stay_text_through_srt() {
+        let vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n&lt;b&gt;Hello&lt;/b&gt; <b>bold</b> &amp;lt; Tom &amp; Jerry 1 &lt; 2\n\n";
+        let srt = write_srt(&parse_vtt(vtt).unwrap());
+        assert_eq!(
+            srt,
+            "1\n00:00:01,000 --> 00:00:02,000\n&lt;b>Hello&lt;/b> <b>bold</b> &amp;lt; Tom & Jerry 1 < 2\n\n"
+        );
+        let cues = parse_srt(&srt).unwrap();
+        assert_eq!(
+            write_vtt(&cues),
+            vtt.replace("&gt;", ">"),
+            "the same text, with the > a VTT reader needs no entity for"
+        );
+        assert_eq!(write_srt(&parse_vtt(&write_vtt(&cues)).unwrap()), srt);
+        assert_eq!(
+            transcript(&cues),
+            "<b>Hello</b> bold &lt; Tom & Jerry 1 < 2\n"
+        );
+        assert_eq!(transcript(&parse_vtt(vtt).unwrap()), transcript(&cues));
+        // SRT that writes its own entities reads the same way.
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\n1 &lt; 2 &gt; 0 &amp;&amp; <i>yes</i>\n";
+        assert_eq!(transcript(&parse_srt(srt).unwrap()), "1 < 2 > 0 && yes\n");
+        assert!(write_vtt(&parse_srt(srt).unwrap()).contains("1 &lt; 2 > 0 &amp;&amp; <i>yes</i>"));
     }
 
     #[test]
@@ -514,11 +591,11 @@ mod tests {
         let start = std::time::Instant::now();
         let cues = parse_srt(&srt).unwrap();
         let vtt = write_vtt(&cues);
-        assert!(vtt.ends_with("x <i>end</i> &amp;amp;\n\n"));
+        assert!(vtt.ends_with("x <i>end</i> &amp;\n\n"));
         let back = parse_vtt(&vtt).unwrap();
         assert_eq!(back[0].lines[1].len(), "&lt;a".len() * n);
         assert_eq!(transcript(&back), transcript(&cues));
-        assert!(transcript(&back).ends_with("\nx end &amp;\n"));
+        assert!(transcript(&back).ends_with("\nx end &\n"));
         // Generous for a debug build; the quadratic scans took minutes.
         assert!(start.elapsed() < std::time::Duration::from_secs(20));
         assert_eq!(
