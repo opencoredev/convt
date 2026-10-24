@@ -181,7 +181,9 @@ impl Registry {
         let preferred: &[&str] = match (from.id, from.category) {
             ("gif", _) => &["mp4", "webp", "png"],
             (_, Category::Image) => &["jpeg", "png", "webp", "pdf"],
-            (_, Category::Vector) => &["png", "jpeg", "pdf"],
+            // A PDF made from an SVG holds a picture of it, not its paths,
+            // so it stays in Quick convert.
+            (_, Category::Vector) => &["png", "jpeg"],
             (_, Category::Video) => &["mp4", "mov", "gif", "mp3"],
             (_, Category::Audio) => &["mp3", "m4a", "wav"],
             (_, Category::Pdf) => &["png", "jpeg", "docx", "txt"],
@@ -559,6 +561,9 @@ mod tests {
         )));
         assert_eq!(ids(&r, "heic"), ["jpeg", "png", "webp", "pdf"]);
         assert_eq!(ids(&r, "png"), ["jpeg", "webp", "pdf"]);
+        r.register(Arc::new(Fake("svg", 0, vec![("svg", "png")])));
+        assert!(r.targets(f("svg")).contains(&f("pdf")));
+        assert_eq!(ids(&r, "svg"), ["png", "jpeg"]);
         // DOCX appears only once something can write it.
         assert_eq!(ids(&r, "pdf"), ["png", "jpeg", "txt"]);
         r.register(Arc::new(Fake("office", 0, vec![("html", "docx")])));
