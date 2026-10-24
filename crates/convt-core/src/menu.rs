@@ -35,11 +35,13 @@ pub const MENU_KINDS: [Category; 8] = [
 /// [`crate::Registry::menu_targets`]).
 pub fn default_menu(category: Category) -> &'static [&'static str] {
     match category {
-        Category::Image => &["jpeg", "png", "webp"],
-        Category::Vector => &["png", "jpeg", "pdf"],
+        Category::Image => &["jpeg", "png", "webp", "pdf"],
+        // A PDF made from an SVG holds a picture of it, not its paths, so it
+        // stays in Quick convert.
+        Category::Vector => &["png", "jpeg"],
         Category::Video => &["mp4", "mov", "gif", "mp3"],
         Category::Audio => &["mp3", "m4a", "wav"],
-        Category::Pdf => &["png", "jpeg", "docx"],
+        Category::Pdf => &["png", "jpeg", "docx", "txt"],
         Category::Document => &["pdf", "docx", "txt"],
         Category::Spreadsheet => &["pdf", "xlsx", "csv"],
         Category::Presentation => &["pdf", "pptx"],

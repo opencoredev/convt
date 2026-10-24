@@ -665,6 +665,9 @@ mod app_support {
         fn registry_without_documents(&self) -> Registry {
             Registry::new()
         }
+        fn planned_registry(&self) -> Registry {
+            Registry::new()
+        }
     }
 
     pub struct NoUpdates;

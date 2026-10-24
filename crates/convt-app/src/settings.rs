@@ -41,6 +41,8 @@ pub struct Settings {
     /// The highest update manifest `sequence` accepted, so an older signed
     /// manifest can't be replayed to hide a newer release.
     pub update_sequence: u64,
+    /// The Activity card that offers the document pack was dismissed.
+    pub pack_hint_dismissed: bool,
     /// What files dropped on the menu bar popover convert to, by kind.
     pub defaults: Defaults,
     /// Automation rules. Each enabled rule watches one folder.
@@ -64,6 +66,7 @@ impl Default for Settings {
             update_checks: true,
             update_checked_at: None,
             update_sequence: 0,
+            pack_hint_dismissed: false,
             defaults: Defaults::default(),
             automations: crate::placeholder::example_automations(),
             cloud_consent: false,
