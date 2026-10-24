@@ -8,7 +8,7 @@
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 
-use convt_core::{Ctx, Engine, Error, Result, Step};
+use convt_core::{Ctx, Engine, Error, Options, Result, Step};
 use image::ImageDecoder;
 use libloading::{Library, Symbol};
 
@@ -736,12 +736,47 @@ fn convert_colour(pixels: image::DynamicImage, colour: &mut Colour) -> image::Dy
 }
 
 fn encode(lib: &Library, input: &Path, ctx: &Ctx, output: &Path) -> Result<()> {
-    match encode_depth(lib, input, ctx, output, false)? {
+    let tune = Tune {
+        quality: ctx.options.quality.unwrap_or(90),
+        max_size: ctx.options.max_size,
+    };
+    let Some(target) = ctx.options.target_size else {
+        return encode_tuned(lib, input, ctx, output, tune);
+    };
+    // Each attempt decodes the input again; the encoder dominates the time.
+    let (w, h) = image::ImageReader::open(input)?
+        .with_guessed_format()?
+        .into_dimensions()
+        .map_err(failed)?;
+    let longest = tune.max_size.map_or(w.max(h), |m| m.min(w.max(h)));
+    crate::image::fit_target(
+        target,
+        ctx.step.to.id,
+        ctx.options.quality,
+        longest,
+        |quality, edge| {
+            ctx.check()?;
+            let max_size = edge.or(tune.max_size);
+            encode_tuned(lib, input, ctx, output, Tune { quality, max_size })?;
+            Ok(std::fs::metadata(output)?.len())
+        },
+    )
+}
+
+/// The settings a size search varies between attempts.
+#[derive(Clone, Copy)]
+struct Tune {
+    quality: u8,
+    max_size: Option<u32>,
+}
+
+fn encode_tuned(lib: &Library, input: &Path, ctx: &Ctx, output: &Path, tune: Tune) -> Result<()> {
+    match encode_depth(lib, input, ctx, output, tune, false)? {
         EncodeAttempt::Written => Ok(()),
         EncodeAttempt::UnsupportedBitDepth => {
             // Retry HEIC only for the encoder's explicit unsupported-depth error.
             // The first attempt has released every object before the retry.
-            encode_depth(lib, input, ctx, output, true).map(|_| ())
+            encode_depth(lib, input, ctx, output, tune, true).map(|_| ())
         }
     }
 }
@@ -751,6 +786,7 @@ fn encode_depth(
     input: &Path,
     ctx: &Ctx,
     output: &Path,
+    tune: Tune,
     fallback: bool,
 ) -> Result<EncodeAttempt> {
     let mut decoder = image::ImageReader::open(input)?
@@ -788,7 +824,7 @@ fn encode_depth(
                 | image::ColorType::Rgb32F
                 | image::ColorType::Rgba32F
         );
-    let pixels = crate::image::fit(pixels, ctx.options.max_size);
+    let pixels = crate::image::fit(pixels, tune.max_size);
     // HEIC and AVIF keep transparency, so only a chosen color changes anything.
     let pixels = crate::image::apply_background(pixels, ctx.step.to.id, ctx.options)?;
     let (width, height) = (pixels.width(), pixels.height());
@@ -808,7 +844,7 @@ fn encode_depth(
     unsafe {
         let quality: Symbol<unsafe extern "C" fn(*mut Opaque, c_int) -> HeifError> =
             sym(lib, b"heif_encoder_set_lossy_quality\0")?;
-        quality(enc.ptr, ctx.options.quality.unwrap_or(90).into()).check()?;
+        quality(enc.ptr, tune.quality.into()).check()?;
         let param: Symbol<
             unsafe extern "C" fn(*mut Opaque, *const c_char, *const c_char) -> HeifError,
         > = sym(lib, b"heif_encoder_set_parameter_string\0")?;
@@ -989,6 +1025,11 @@ impl Engine for LibheifEngine {
         for target in ["heic", "avif"] {
             if self.supports_output(target) {
                 steps.extend(crate::steps(crate::image::INPUTS, &[target]));
+                // Re-encoding to the same format compresses or resizes it.
+                if self.supports_input(target) {
+                    let f = convt_core::format_by_id(target).expect("known format");
+                    steps.push(Step { from: f, to: f });
+                }
             }
         }
         steps
@@ -1005,7 +1046,18 @@ impl Engine for LibheifEngine {
         ctx.check()?;
         if ctx.step.to.id != "png" {
             let output = ctx.artifact(out_dir, 0);
-            encode(lib, input, ctx, &output)?;
+            if ctx.step.from == ctx.step.to {
+                // The encoder reads its input with the `image` crate, which
+                // can't open HEIC, so decode to a lossless PNG first.
+                let decoded = out_dir.join("decoded.png");
+                crate::image::encode(decode(lib, input)?, "png", &Options::default(), &decoded)?;
+                ctx.check()?;
+                let encoded = encode(lib, &decoded, ctx, &output);
+                let _ = std::fs::remove_file(&decoded);
+                encoded?;
+            } else {
+                encode(lib, input, ctx, &output)?;
+            }
             return Ok(vec![output]);
         }
         let img = decode(lib, input)?;
@@ -1259,8 +1311,19 @@ mod tests {
         let cancel = Cancel::new();
         let ctx = Ctx::new(step, &options, &|_| {}, &cancel);
         let probe = dir.path().join("probe.heic");
-        let attempt =
-            encode_depth(engine.lib.as_ref().unwrap(), &input, &ctx, &probe, false).unwrap();
+        let tune = Tune {
+            quality: 100,
+            max_size: None,
+        };
+        let attempt = encode_depth(
+            engine.lib.as_ref().unwrap(),
+            &input,
+            &ctx,
+            &probe,
+            tune,
+            false,
+        )
+        .unwrap();
         let expected = match attempt {
             EncodeAttempt::Written => {
                 assert_eq!(colour_pixi(&std::fs::read(&probe).unwrap()), &[10, 10, 10]);
@@ -1804,6 +1867,67 @@ int test_loaded(void) { return loaded; }
                 engine.supports_input(id)
             );
         }
+    }
+
+    #[test]
+    fn reencodes_its_own_formats_under_a_target_size() {
+        let engine = LibheifEngine::new();
+        let steps = engine.steps();
+        for id in ["heic", "avif"] {
+            let own = steps.iter().any(|s| s.from.id == id && s.to.id == id);
+            assert_eq!(
+                own,
+                engine.supports_input(id) && engine.supports_output(id),
+                "{id}"
+            );
+        }
+        if !(engine.supports_input("avif") && engine.supports_output("avif")) {
+            eprintln!("skipping: AV1 encoder or decoder unavailable");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("photo.png");
+        let mut seed = 7u32;
+        image::RgbImage::from_fn(256, 192, |x, y| {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            let n = (seed >> 24) % 64;
+            image::Rgb([(x + n) as u8, (y + n) as u8, ((x ^ y) + n) as u8])
+        })
+        .save(&png)
+        .unwrap();
+        let avif = format_by_id("avif").unwrap();
+        let cancel = Cancel::new();
+        let run = |from, input: &Path, options: &Options, name: &str| {
+            let out = dir.path().join(name);
+            std::fs::create_dir(&out).unwrap();
+            let ctx = Ctx::new(Step { from, to: avif }, options, &|_| {}, &cancel);
+            engine.convert(&ctx, input, &out).unwrap().remove(0)
+        };
+        let original = run(
+            format_by_id("png").unwrap(),
+            &png,
+            &Options {
+                quality: Some(95),
+                ..Options::default()
+            },
+            "original",
+        );
+        let big = std::fs::metadata(&original).unwrap().len();
+        let target = big / 3;
+        assert!(
+            target >= convt_core::MIN_TARGET_SIZE,
+            "fixture too small: {big}"
+        );
+        let options = Options {
+            target_size: Some(target),
+            ..Options::default()
+        };
+        let smaller = run(avif, &original, &options, "smaller");
+        let len = std::fs::metadata(&smaller).unwrap().len();
+        assert!(len <= target, "{len} > {target} (from {big})");
+        let pixels = decoded(&engine, &smaller).unwrap();
+        assert_eq!((pixels.width(), pixels.height()), (256, 192));
+        assert!(!dir.path().join("smaller/decoded.png").exists());
     }
 
     #[test]

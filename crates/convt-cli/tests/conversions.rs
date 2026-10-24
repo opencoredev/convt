@@ -401,3 +401,83 @@ fn pdf_pages_keep_original_page_names_through_multiple_hops() {
     );
     assert_eq!(std::fs::read_dir(bad).unwrap().count(), 0);
 }
+
+#[test]
+fn same_format_compression_keeps_the_input_and_fits_the_target() {
+    let root = tempfile::tempdir().unwrap();
+    let root = root.path();
+    let mut seed = 1u32;
+    let photo = image::RgbImage::from_fn(640, 480, |x, y| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        let n = seed % 40;
+        image::Rgb([
+            (x / 3 + n) as u8,
+            (y / 2 + n) as u8,
+            ((x + y) / 5 + n) as u8,
+        ])
+    });
+    let input = root.join("photo.jpg");
+    photo.save(&input).unwrap();
+    let original = std::fs::read(&input).unwrap();
+
+    // The file's own format is a target, but not a menu entry.
+    let targets = |menu: bool| {
+        let mut args: Vec<&std::ffi::OsStr> = vec!["targets".as_ref(), input.as_os_str()];
+        if menu {
+            args.push("--menu".as_ref());
+        }
+        let out = cli(root, &args);
+        ok(&out);
+        String::from_utf8(out.stdout).unwrap()
+    };
+    assert!(targets(false).lines().any(|l| l == "jpeg"));
+    assert!(!targets(true).lines().any(|l| l == "jpeg"));
+
+    let out = cli(
+        root,
+        &[
+            input.as_os_str(),
+            "--to".as_ref(),
+            "jpeg".as_ref(),
+            "--target-size".as_ref(),
+            "40KB".as_ref(),
+            "--strip-metadata".as_ref(),
+        ],
+    );
+    ok(&out);
+    let compressed = root.join("photo (1).jpg");
+    let len = std::fs::metadata(&compressed).unwrap().len();
+    assert!(len <= 40_000, "{len}");
+    assert!(len < original.len() as u64);
+    assert_eq!(std::fs::read(&input).unwrap(), original, "input untouched");
+    let back = image::open(&compressed).unwrap();
+    assert_eq!((back.width(), back.height()), (640, 480));
+
+    // A folder skips files that already are the target format.
+    let out = cli(root, &[root.as_os_str(), "--to".as_ref(), "jpeg".as_ref()]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("name them directly"));
+
+    for (flag, value, why) in [
+        ("--target-size", "5KB", "at least 10KB"),
+        ("--target-size", "huge", "size"),
+        ("--fps", "0", "fps"),
+        ("--trim-start", "1:75", "time"),
+    ] {
+        let out = cli(
+            root,
+            &[
+                input.as_os_str(),
+                "--to".as_ref(),
+                "png".as_ref(),
+                flag.as_ref(),
+                value.as_ref(),
+            ],
+        );
+        assert!(!out.status.success(), "{flag} {value}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains(why), "{flag} {value}: {err}");
+    }
+}
