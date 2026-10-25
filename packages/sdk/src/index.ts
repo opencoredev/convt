@@ -1,5 +1,8 @@
 import { formats, type Format } from "./formats.js";
 export { formats, type Format };
+
+// Canonical production API hostname (CNV-36).
+export const DEFAULT_BASE_URL = "https://api.convt.app";
 export type Job = {
   id: string;
   status: "created" | "uploaded" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -100,7 +103,7 @@ export class Convt {
     },
   ) {
     this.credential = "apiKey" in options ? options.apiKey : options.token;
-    this.baseUrl = (options.baseUrl ?? "https://api.convt.app").replace(/\/$/, "");
+    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     if (!this.credential)
       throw new ConvtError("api_key_required", "Pass apiKey or set CONVT_API_KEY.");
   }
