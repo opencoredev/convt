@@ -1581,7 +1581,9 @@ impl QuickView {
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
-            let status = match (done, self.cloud) {
+            // Where the jobs run, not what was picked: a same-format
+            // target stays here even with Cloud chosen.
+            let status = match (done, self.in_cloud(cx)) {
                 (true, _) => "Done",
                 (false, true) => "Converting in the cloud…",
                 (false, false) => "Converting…",

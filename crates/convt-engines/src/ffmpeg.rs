@@ -576,9 +576,16 @@ impl Engine for FfmpegEngine {
                 .arg("-i")
                 .arg(local_path(input))
                 .args(if keep_tracks {
-                    &["-map", "0:v:0?", "-map", "0:a?"][..]
+                    // Subtitles are copied; MKV also keeps its attachments
+                    // (the fonts styled subtitles use).
+                    let mut maps = vec!["-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?"];
+                    if to == "mkv" {
+                        maps.extend(["-map", "0:t?"]);
+                    }
+                    maps.extend(["-c:s", "copy"]);
+                    maps
                 } else {
-                    &[]
+                    Vec::new()
                 })
                 .args(output_args(if via_png { "png" } else { to }, o, budget))
                 .arg(written);
@@ -1268,6 +1275,42 @@ mod tests {
             let (small, _) = run_step(&engine, &input, ext, &sized).unwrap();
             assert_eq!(tracks(&small), 2);
             assert!(std::fs::metadata(&small).unwrap().len() <= 150_000);
+        }
+    }
+
+    #[test]
+    fn compressing_a_video_keeps_its_subtitles() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let srt = dir.path().join("subs.srt");
+        std::fs::write(&srt, "1\n00:00:00,000 --> 00:00:01,500\nHello\n").unwrap();
+        for (ext, codec) in [("mkv", "srt"), ("mp4", "mov_text")] {
+            let input = dir.path().join(format!("subbed.{ext}"));
+            let mut args = vec![
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x48:rate=10:duration=2",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=2",
+            ];
+            let srt = srt.to_str().unwrap();
+            args.extend(["-i", srt, "-map", "0", "-map", "1", "-map", "2"]);
+            args.extend(["-c:v", "libx264", "-c:a", "aac", "-c:s", codec]);
+            generate(&engine, &input, &args);
+            let subs = |path: &Path| {
+                probe(&engine, path, "stream=codec_type")
+                    .lines()
+                    .filter(|l| l.contains("subtitle"))
+                    .count()
+            };
+            assert_eq!(subs(&input), 1, "{ext} fixture");
+            let (same, _) = run_step(&engine, &input, ext, &Options::default()).unwrap();
+            assert_eq!(subs(&same), 1, "{ext} -> {ext} keeps its subtitles");
         }
     }
 
