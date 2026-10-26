@@ -27,11 +27,19 @@ CACHE_TTL = 30
 def cached_targets(extension, generation):
     if not extension:
         return ()
-    try:
-        out = subprocess.run(
-            [CONVT, "targets", "--menu", f"file.{extension}"],
+
+    def query(*flags):
+        return subprocess.run(
+            [CONVT, "targets", "--menu", *flags, f"file.{extension}"],
             capture_output=True, text=True, timeout=2, check=True,
         ).stdout
+
+    try:
+        try:
+            out = query("--with-pack")
+        except subprocess.CalledProcessError:
+            # A convt older than --with-pack: ask without it.
+            out = query()
     except (OSError, subprocess.SubprocessError):
         return ()
     return tuple(out.split())

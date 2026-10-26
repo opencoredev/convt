@@ -618,7 +618,8 @@ pub fn validate(
     files: &[PathBuf],
     options: &Options,
 ) -> Check<()> {
-    let count = if fixture.format.category == Category::Pdf {
+    // PDF pages become one image each; text and documents are one file.
+    let count = if fixture.format.category == Category::Pdf && to.category == Category::Image {
         (0..fixture.pages)
             .filter(|&i| options.pages.is_none_or(|r| r.contains(i)))
             .count()
@@ -735,6 +736,33 @@ pub fn validate(
                 }
                 let out = helper("pdf-check", path, &[])?;
                 let info: Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
+                if matches!(fixture.format.category, Category::Image | Category::Vector) {
+                    if info["pages"] != 1 {
+                        return Err(format!("image PDF has {} pages", info["pages"]));
+                    }
+                    // Laid out at the requested DPI (96 by default); SVG
+                    // keeps its own 96-per-inch size through PNG.
+                    let points = |px: u32| {
+                        if fixture.format.category == Category::Vector {
+                            px * 72 / 96
+                        } else {
+                            px * 72 / options.dpi.unwrap_or(96)
+                        }
+                    };
+                    let page = raw_image(&helper("pdf-pixels", path, &[])?.stdout)?;
+                    let expected = (points(64), points(48));
+                    if page.width().abs_diff(expected.0) > 1
+                        || page.height().abs_diff(expected.1) > 1
+                    {
+                        return Err(format!(
+                            "image PDF page {:?}; expected {expected:?}",
+                            (page.width(), page.height())
+                        ));
+                    }
+                    // The validator renders onto white, as viewers do.
+                    check_pattern(&page, false, fixture.alpha)?;
+                    continue;
+                }
                 if info["pages"] != 1 || !info["text"].as_str().unwrap_or("").contains(MARKER) {
                     return Err(format!("PDF lost pages/text: {info}"));
                 }
@@ -745,6 +773,13 @@ pub fn validate(
                 {
                     return Err(format!("PDF lost spreadsheet values: {info}"));
                 }
+            }
+            Category::Document if fixture.format.category == Category::Pdf => {
+                let pages: Vec<String> = (1..=fixture.pages)
+                    .filter(|&n| options.pages.is_none_or(|r| r.contains(n - 1)))
+                    .map(|n| n.to_string())
+                    .collect();
+                helper("office-check", path, &["PdfText", &pages.join(",")])?;
             }
             Category::Document | Category::Presentation | Category::Spreadsheet => {
                 // A table laid out as a document keeps its cells, not the

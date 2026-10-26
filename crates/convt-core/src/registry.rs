@@ -37,14 +37,19 @@ pub struct Registry {
     edges: HashMap<&'static str, HashMap<&'static str, Edge>>,
     /// Engines that were skipped, with the reason.
     unavailable: Vec<(&'static str, String)>,
+    /// The skipped engines themselves, so a failed job can say which one
+    /// it needed.
+    skipped: Vec<Arc<dyn Engine>>,
 }
 
 /// Conversions longer than this are almost always lossy detours.
 const MAX_HOPS: usize = 3;
 
 /// Intermediate formats that lose nothing, preferred when routes tie on length.
+/// HTML is not lossless, but it keeps a PDF's paragraphs on the way to a
+/// word processor format, where plain text would not.
 const LOSSLESS_HOPS: &[&str] = &[
-    "png", "tiff", "wav", "flac", "mkv", "pdf", "odt", "ods", "odp",
+    "png", "tiff", "wav", "flac", "mkv", "pdf", "odt", "ods", "odp", "html",
 ];
 
 /// What a subtitle track pulled out of a video may become.
@@ -66,8 +71,15 @@ impl Registry {
         if let Some(reason) = engine.unavailable_reason() {
             tracing::info!(engine = engine.id(), %reason, "engine unavailable");
             self.unavailable.push((engine.id(), reason));
+            self.skipped.push(engine);
             return self;
         }
+        self.add_edges(&engine);
+        self.engines.push(engine);
+        self
+    }
+
+    fn add_edges(&mut self, engine: &Arc<dyn Engine>) {
         for step in engine.steps() {
             let targets = self.edges.entry(step.from.id).or_default();
             let better = targets
@@ -77,8 +89,6 @@ impl Registry {
                 targets.insert(step.to.id, (engine.clone(), step));
             }
         }
-        self.engines.push(engine);
-        self
     }
 
     pub fn engines(&self) -> &[Arc<dyn Engine>] {
@@ -123,7 +133,7 @@ impl Registry {
             let mut next: Vec<_> = self.edges.get(node).into_iter().flatten().collect();
             next.sort_by_key(|(target, edge)| {
                 (
-                    -edge.0.priority(),
+                    std::cmp::Reverse(edge.0.priority()),
                     !LOSSLESS_HOPS.contains(target),
                     **target,
                 )
@@ -148,6 +158,23 @@ impl Registry {
                     && edge.1.from.category == Category::Document
                     && !SUBTITLE_TEXT.contains(&edge.1.to.id)
                 {
+                    continue;
+                }
+                // Text pulled out of a PDF is only offered for PDFs: a photo,
+                // a spreadsheet or a slide deck is not offered TXT or DOCX by
+                // way of the PDF made from it. Images may still reach PDF
+                // through PNG, but a video never offers a PDF of its first
+                // frame.
+                let document = |f: &Format| {
+                    matches!(
+                        f.category,
+                        Category::Document | Category::Spreadsheet | Category::Presentation
+                    )
+                };
+                if d > 0 && edge.1.from.category == Category::Pdf && document(edge.1.to) {
+                    continue;
+                }
+                if d > 0 && media(from) && edge.1.to.category == Category::Pdf {
                     continue;
                 }
                 if !depth.contains_key(target) {
@@ -229,6 +256,28 @@ impl Registry {
         }
     }
 
+    /// When `from` can't reach `to` only because an engine that would carry
+    /// the route is unavailable here (PDFium or LibreOffice missing), that
+    /// engine and its reason, so the user learns what to install instead of
+    /// a bare "no way to convert".
+    pub fn missing_engine(&self, from: &'static Format, to: &'static Format) -> Option<Error> {
+        if self.skipped.is_empty() || self.plan(from, to).is_ok() {
+            return None;
+        }
+        let mut whole = Registry::new();
+        for engine in self.engines.iter().chain(&self.skipped) {
+            whole.add_edges(engine);
+        }
+        let plan = whole.plan(from, to).ok()?;
+        plan.hops.iter().find_map(|(engine, _)| {
+            let (id, reason) = self.unavailable.iter().find(|(id, _)| *id == engine.id())?;
+            Some(Error::EngineUnavailable {
+                engine: id,
+                reason: reason.clone(),
+            })
+        })
+    }
+
     /// Every format some file of `category` can be converted to, sorted like
     /// [`targets`](Self::targets): what a menu for that kind may offer.
     pub fn category_targets(&self, category: Category) -> Vec<&'static Format> {
@@ -253,7 +302,9 @@ impl Registry {
         let input = &job.input;
         let from =
             format_by_extension(input).ok_or_else(|| Error::UndetectedFormat(input.clone()))?;
-        let plan = self.plan(from, job.to)?;
+        let plan = self
+            .plan(from, job.to)
+            .map_err(|e| self.missing_engine(from, job.to).unwrap_or(e))?;
         tracing::debug!(plan = plan.describe(), "converting {}", input.display());
 
         let destination = Destination::of(job)?;
@@ -567,6 +618,14 @@ mod tests {
     }
 
     #[test]
+    fn extreme_priorities_route_without_overflow() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake("lowest", i32::MIN, vec![("png", "jpeg")])));
+        r.register(Arc::new(Fake("highest", i32::MAX, vec![("jpeg", "webp")])));
+        assert_eq!(r.plan(f("png"), f("webp")).unwrap().hops.len(), 2);
+    }
+
+    #[test]
     fn menus_offer_the_popular_targets_that_are_reachable() {
         let mut r = Registry::new();
         r.register(Arc::new(Fake(
@@ -582,17 +641,188 @@ mod tests {
             ],
         )));
         r.register(Arc::new(Fake("x", 0, vec![("flac", "opus")])));
-        let ids = |from| {
+        let ids = |r: &Registry, from| {
             r.menu_targets(f(from))
                 .iter()
                 .map(|t| t.id)
                 .collect::<Vec<_>>()
         };
         // GIF, ICO and the input's own format stay in Quick convert.
-        assert_eq!(ids("heic"), ["jpeg", "png", "webp"]);
-        assert_eq!(ids("png"), ["jpeg", "webp"]);
+        assert_eq!(ids(&r, "heic"), ["jpeg", "png", "webp"]);
+        assert_eq!(ids(&r, "png"), ["jpeg", "webp"]);
         // No preferred target is reachable: fall back to what is.
-        assert_eq!(ids("flac"), ["opus"]);
+        assert_eq!(ids(&r, "flac"), ["opus"]);
+
+        // With PDF in reach, images offer it last and a PDF offers text.
+        r.register(Arc::new(Fake(
+            "pdf",
+            10,
+            vec![
+                ("png", "pdf"),
+                ("pdf", "png"),
+                ("pdf", "jpeg"),
+                ("pdf", "txt"),
+                ("pdf", "html"),
+            ],
+        )));
+        assert_eq!(ids(&r, "heic"), ["jpeg", "png", "webp", "pdf"]);
+        assert_eq!(ids(&r, "png"), ["jpeg", "webp", "pdf"]);
+        r.register(Arc::new(Fake("svg", 0, vec![("svg", "png")])));
+        assert!(r.targets(f("svg")).contains(&f("pdf")));
+        assert_eq!(ids(&r, "svg"), ["png", "jpeg"]);
+        // DOCX appears only once something can write it.
+        assert_eq!(ids(&r, "pdf"), ["png", "jpeg", "txt"]);
+        r.register(Arc::new(Fake("office", 0, vec![("html", "docx")])));
+        assert_eq!(ids(&r, "pdf"), ["png", "jpeg", "docx", "txt"]);
+    }
+
+    /// The engines the real registry has for PDFs, as fakes.
+    fn document_registry() -> Registry {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake(
+            "image",
+            0,
+            vec![("png", "jpeg"), ("jpeg", "png"), ("png", "webp")],
+        )));
+        r.register(Arc::new(Fake("heif", 0, vec![("heic", "png")])));
+        r.register(Arc::new(Fake("ffmpeg", 0, vec![("mp4", "png")])));
+        r.register(Arc::new(Fake(
+            "pdfium",
+            10,
+            vec![
+                ("png", "pdf"),
+                ("jpeg", "pdf"),
+                ("pdf", "png"),
+                ("pdf", "jpeg"),
+                ("pdf", "txt"),
+                ("pdf", "html"),
+            ],
+        )));
+        let docs = ["docx", "odt", "rtf", "txt", "html"];
+        let office: Vec<_> = docs
+            .iter()
+            .flat_map(|a| {
+                docs.iter()
+                    .chain(&["pdf"])
+                    .filter(move |b| a != *b)
+                    .map(move |b| (*a, *b))
+            })
+            .collect();
+        r.register(Arc::new(Fake("office", 0, office)));
+        r
+    }
+
+    #[test]
+    fn pdfs_reach_word_processors_through_html() {
+        let r = document_registry();
+        for to in ["docx", "odt", "rtf"] {
+            assert_eq!(
+                r.plan(f("pdf"), f(to)).unwrap().describe(),
+                format!("pdf -[pdfium]-> html -[office]-> {to}")
+            );
+        }
+        assert_eq!(
+            r.plan(f("pdf"), f("txt")).unwrap().describe(),
+            "pdf -[pdfium]-> txt"
+        );
+        assert_eq!(
+            r.plan(f("heic"), f("pdf")).unwrap().describe(),
+            "heic -[heif]-> png -[pdfium]-> pdf"
+        );
+    }
+
+    #[test]
+    fn pictures_never_become_documents_through_a_pdf() {
+        let r = document_registry();
+        for from in ["png", "jpeg", "heic"] {
+            let targets: Vec<_> = r.targets(f(from)).iter().map(|t| t.id).collect();
+            assert!(targets.contains(&"pdf"), "{from}: {targets:?}");
+            for doc in ["txt", "html", "docx", "odt", "rtf"] {
+                assert!(!targets.contains(&doc), "{from} offers {doc}: {targets:?}");
+            }
+        }
+        // A video's first frame is not a PDF either.
+        assert!(r.plan(f("mp4"), f("png")).is_ok());
+        assert!(r.plan(f("mp4"), f("pdf")).is_err());
+    }
+
+    #[test]
+    fn only_pdfs_offer_the_text_pulled_out_of_a_pdf() {
+        let mut r = document_registry();
+        // LibreOffice also reads spreadsheets and slides, but writes only
+        // their own kind and PDF.
+        r.register(Arc::new(Fake(
+            "office2",
+            0,
+            vec![
+                ("xlsx", "pdf"),
+                ("xlsx", "csv"),
+                ("csv", "pdf"),
+                ("csv", "xlsx"),
+                ("pptx", "pdf"),
+                ("pptx", "odp"),
+            ],
+        )));
+        let ids = |from| r.targets(f(from)).iter().map(|t| t.id).collect::<Vec<_>>();
+        assert_eq!(ids("xlsx"), ["jpeg", "png", "webp", "pdf", "csv"]);
+        assert_eq!(ids("csv"), ["jpeg", "png", "webp", "pdf", "xlsx"]);
+        assert_eq!(ids("pptx"), ["jpeg", "png", "webp", "pdf", "odp"]);
+        // A word processor file keeps its direct text steps.
+        assert_eq!(
+            r.plan(f("docx"), f("txt")).unwrap().describe(),
+            "docx -[office]-> txt"
+        );
+        assert!(r.plan(f("pdf"), f("docx")).is_ok());
+    }
+
+    struct Missing(Fake);
+
+    impl Engine for Missing {
+        fn id(&self) -> &'static str {
+            self.0.id()
+        }
+        fn unavailable_reason(&self) -> Option<String> {
+            Some(format!("{} is not installed", self.0.id()))
+        }
+        fn steps(&self) -> Vec<Step> {
+            self.0.steps()
+        }
+        fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
+            self.0.convert(ctx, input, out_dir)
+        }
+    }
+
+    #[test]
+    fn jobs_name_the_unavailable_engine_their_route_needs() {
+        let mut r = Registry::new();
+        r.register(Arc::new(Fake("pdfium", 10, vec![("pdf", "html")])));
+        r.register(Arc::new(Missing(Fake("office", 0, vec![("html", "docx")]))));
+        assert_eq!(
+            r.plan(f("pdf"), f("docx")).err().map(|e| e.kind()),
+            Some("no_route")
+        );
+        let err = r.missing_engine(f("pdf"), f("docx")).unwrap();
+        assert_eq!(err.kind(), "engine_missing");
+        assert_eq!(
+            err.to_string(),
+            "office is not available: office is not installed"
+        );
+        // Nothing would help: still a plain "no route".
+        assert!(r.missing_engine(f("pdf"), f("mp4")).is_none());
+        assert!(r.missing_engine(f("pdf"), f("html")).is_none());
+
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("doc.pdf");
+        std::fs::write(&input, b"src").unwrap();
+        let err = r
+            .run(&Job::new(&input, f("docx")), &no_progress, &Cancel::new())
+            .unwrap_err();
+        assert_eq!(err.kind(), "engine_missing");
+        let err = r
+            .run(&Job::new(&input, f("mp4")), &no_progress, &Cancel::new())
+            .unwrap_err();
+        assert_eq!(err.kind(), "no_route");
+        assert_eq!(listing(dir.path()), ["doc.pdf"]);
     }
 
     #[test]

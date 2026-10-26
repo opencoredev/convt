@@ -224,6 +224,9 @@ impl pack::Backend for SystemPacks {
     fn registry_without_documents(&self) -> Registry {
         convt_engines::registry_without_documents()
     }
+    fn planned_registry(&self) -> Registry {
+        convt_engines::default_registry()
+    }
 }
 
 /// "Converts" documents to PDF and text, standing in for LibreOffice so the
@@ -258,11 +261,41 @@ impl Engine for TestOffice {
     }
 }
 
+/// Fixed steps that write a placeholder file: PDFium's PDF to PNG and HTML
+/// without the pack, or LibreOffice's HTML to DOCX with it.
+struct TestSteps(&'static str, &'static [(&'static str, &'static str)]);
+
+impl Engine for TestSteps {
+    fn id(&self) -> &'static str {
+        self.0
+    }
+    fn steps(&self) -> Vec<convt_core::Step> {
+        let f = |id| format_by_id(id).unwrap();
+        self.1
+            .iter()
+            .map(|(from, to)| convt_core::Step {
+                from: f(from),
+                to: f(to),
+            })
+            .collect()
+    }
+    fn convert(&self, ctx: &Ctx, _: &Path, out_dir: &Path) -> convt_core::Result<Vec<PathBuf>> {
+        let out = ctx.artifact(out_dir, 0);
+        std::fs::write(&out, b"test")?;
+        Ok(vec![out])
+    }
+}
+
+const TEST_PDFIUM: TestSteps = TestSteps("test-pdfium", &[("pdf", "png"), ("pdf", "html")]);
+const TEST_HTML_TO_WORD: TestSteps = TestSteps("test-office-html", &[("html", "docx")]);
+
 /// A scripted document pack: it downloads 150 MB in 10 MB steps, can hold
 /// mid-download, fail as told, and counts every call.
 #[derive(Default)]
 struct TestPacks {
     unconfigured: bool,
+    /// PDFs open without the pack, and with it reach DOCX through HTML.
+    pdf: bool,
     installed: AtomicBool,
     rejected: Mutex<Option<String>>,
     /// How the next install ends; `None` installs.
@@ -283,6 +316,13 @@ struct TestPacks {
 const PACK_SIZE: u64 = 150_000_000;
 
 impl TestPacks {
+    fn register_office(&self, registry: &mut Registry) {
+        registry.register(Arc::new(TestOffice));
+        if self.pdf {
+            registry.register(Arc::new(TEST_HTML_TO_WORD));
+        }
+    }
+
     fn installs(&self) -> usize {
         self.installs.load(Ordering::SeqCst)
     }
@@ -362,7 +402,7 @@ impl pack::Backend for TestPacks {
     fn registry(&self) -> Registry {
         let mut registry = self.registry_without_documents();
         if self.installed.load(Ordering::SeqCst) {
-            registry.register(Arc::new(TestOffice));
+            self.register_office(&mut registry);
         }
         registry
     }
@@ -375,6 +415,15 @@ impl pack::Backend for TestPacks {
         registry.register(Arc::new(convt_engines::markdown::MarkdownEngine));
         registry.register(Arc::new(convt_engines::data::DataEngine));
         registry.register(Arc::new(convt_engines::subtitle::SubtitleEngine));
+        if self.pdf {
+            registry.register(Arc::new(TEST_PDFIUM));
+        }
+        registry
+    }
+    /// As if installed: what the pack would add.
+    fn planned_registry(&self) -> Registry {
+        let mut registry = self.registry_without_documents();
+        self.register_office(&mut registry);
         registry
     }
 }
@@ -1283,7 +1332,9 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn the_menu_tab_picks_what_right_click_menus_offer(cx: &mut TestAppContext) {
-    let f = Fixture::new(cx);
+    // Images that can't become a PDF here, so the default's PDF stays
+    // hidden whatever this machine has.
+    let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
     let (window, _) = f.settings(SettingsTab::Menu, cx);
     let file = f.dir.path().join("menu.toml");
     let menu_for = |cx: &mut TestAppContext, input: &str| {
@@ -1317,7 +1368,8 @@ fn the_menu_tab_picks_what_right_click_menus_offer(cx: &mut TestAppContext) {
     assert_eq!(selected(cx, window, "menu-image-tiff"), Some(true));
     let saved = std::fs::read_to_string(&file).unwrap();
     assert!(
-        saved.contains(r#"image = ["png", "webp", "tiff"]"#),
+        // The default's PDF, hidden here, keeps its place for where it works.
+        saved.contains(r#"image = ["png", "webp", "tiff", "pdf"]"#),
         "{saved}"
     );
     // A PNG skips its own format; a JPEG gets the whole list.
@@ -2323,8 +2375,16 @@ fn yes_to_documents_installs_the_pack(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(view.read(cx).screen, Screen::Question(Question::Documents)));
     assert_eq!(
         label(cx, window, "onboarding-title").as_deref(),
-        Some("Convert PDFs and documents too?")
+        Some("Convert Word, Excel and PowerPoint files too?")
     );
+    // What the pack adds, what works without it, and the size.
+    let detail = label(cx, window, "question-detail").unwrap();
+    assert!(
+        detail.starts_with("Adds Word, Excel, PowerPoint and OpenDocument files"),
+        "{detail}"
+    );
+    assert!(detail.ends_with("One 150 MB download."), "{detail}");
+    assert!(!detail.contains('—'), "no em dashes: {detail}");
     // The arrow keys move between the tiles; nothing downloads until a pick.
     cx.simulate_keystrokes(window, "right");
     cx.read(|cx| assert!(!view.read(cx).yes));
@@ -3833,10 +3893,20 @@ fn a_document_offers_the_pack_and_downloads_only_after_the_click(cx: &mut TestAp
             label(cx, window, "pack-download").as_deref(),
             Some("Download (150 MB)")
         );
-        // No dead end: the picker and "can't be converted" give way to the card.
+        // No dead end: the targets the pack unlocks show, marked, and
+        // "can't be converted" gives way to the card.
         assert!(!shown(cx, window, "skipped"));
-        assert!(!shown(cx, window, "to-pdf"));
-        cx.read(|cx| assert!(view.read(cx).targets.formats.is_empty()));
+        assert!(shown(cx, window, "to-pdf"));
+        assert_eq!(
+            label(cx, window, "pack-tag-pdf").as_deref(),
+            Some("Document pack")
+        );
+        cx.read(|cx| {
+            let targets = &view.read(cx).targets;
+            let ids: Vec<_> = targets.formats.iter().map(|f| f.id).collect();
+            assert_eq!(ids, ["pdf", "txt"]);
+            assert_eq!(targets.pack, targets.formats);
+        });
         // Settings shows the same state, and offers the same button.
         let (settings, _) = f.settings(SettingsTab::General, cx);
         assert_eq!(
@@ -3862,8 +3932,10 @@ fn a_document_offers_the_pack_and_downloads_only_after_the_click(cx: &mut TestAp
     cx.read(|cx| {
         let ids: Vec<_> = view.read(cx).targets.formats.iter().map(|f| f.id).collect();
         assert_eq!(ids, ["pdf", "txt"]);
+        assert!(view.read(cx).targets.pack.is_empty());
     });
-    assert_eq!(f.jobs(cx), 0, "converting still takes a click");
+    assert!(!shown(cx, window, "pack-tag-pdf"));
+    assert_eq!(f.jobs(cx), 0, "Download alone never converts");
     click(cx, window, "to-pdf");
     click(cx, window, "convert");
     let job = f.last_job(cx);
@@ -3898,13 +3970,18 @@ fn a_silent_convert_of_a_document_opens_the_offer_and_never_downloads(cx: &mut T
         "the card explains, not an error"
     );
     cx.read(|cx| assert_eq!(view.read(cx).wanted.map(|f| f.id), Some("pdf")));
-
-    click(cx, window, "pack-download");
-    wait_for_label(cx, window, "pack-done", |_| true);
-    // The target the menu asked for is picked; Convert finishes the job.
+    // The target the menu asked for is picked, and Install & Convert is
+    // the one action: the card has no button of its own.
     cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
-    assert_eq!(f.jobs(cx), 0);
+    assert!(!shown(cx, window, "pack-download"));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
+
     click(cx, window, "convert");
+    // One click installs and converts.
+    wait_until(cx, "the job", |cx| !f.app.read(cx).queue.entries.is_empty());
     let job = f.last_job(cx);
     wait_for_label(cx, window, &format!("status-{job}"), |s| {
         s.starts_with("Saved")
@@ -4433,6 +4510,522 @@ fn a_reinstall_waits_for_document_jobs_and_holds_new_ones(cx: &mut TestAppContex
                 .unwrap();
         })
     });
+}
+
+fn intent(view: &Entity<QuickView>, cx: &mut TestAppContext) -> bool {
+    cx.read(|cx| view.read(cx).convert_when_ready)
+}
+
+/// Waits for the newest job and its output in the Quick convert window.
+fn wait_for_saved(f: &Fixture, cx: &mut TestAppContext, window: AnyWindowHandle) {
+    wait_until(cx, "a job", |cx| !f.app.read(cx).queue.entries.is_empty());
+    let job = f.last_job(cx);
+    wait_for_label(cx, window, &format!("status-{job}"), |s| {
+        s.starts_with("Saved")
+    });
+}
+
+#[gpui_kit::test]
+fn the_picker_shows_what_the_pack_would_unlock(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let (docx, xlsx, png) = (f.docx("Report.docx"), f.docx("Budget.xlsx"), f.png("a.png"));
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let (window, view) = f.quick(cli(vec![docx.clone()], None, None), cx);
+        for id in ["pdf", "txt"] {
+            assert!(shown(cx, window, &format!("to-{id}")), "{id}");
+            assert!(shown(cx, window, &format!("pack-tag-{id}")), "{id}");
+        }
+        // Nothing picked yet: the card offers a plain download.
+        assert_eq!(
+            label(cx, window, "pack-download").as_deref(),
+            Some("Download (150 MB)")
+        );
+        assert_eq!(label(cx, window, "convert").as_deref(), Some("Convert"));
+        click(cx, window, "to-txt");
+        cx.read(|cx| assert!(view.read(cx).needs_pack()));
+        // Picked: Install & Convert below is the one action.
+        assert!(!shown(cx, window, "pack-download"));
+        assert_eq!(
+            label(cx, window, "convert").as_deref(),
+            Some("Install & Convert")
+        );
+        // A name for the output can be set before installing.
+        assert!(shown(cx, window, "file-name-edit"));
+    }
+    // Several documents: what they all could become.
+    let (_, view) = f.quick(cli(vec![docx.clone(), xlsx], None, None), cx);
+    cx.read(|cx| {
+        let ids: Vec<_> = view.read(cx).targets.pack.iter().map(|f| f.id).collect();
+        assert_eq!(ids, ["pdf", "txt"]);
+    });
+    // A mixed selection: image targets convert now, the document is
+    // skipped for them, and none of them is marked.
+    let (window, view) = f.quick(cli(vec![png, docx], None, None), cx);
+    assert!(shown(cx, window, "to-webp"));
+    assert!(!shown(cx, window, "pack-tag-webp"));
+    cx.read(|cx| {
+        let pack: Vec<_> = view.read(cx).targets.pack.iter().map(|f| f.id).collect();
+        assert!(!pack.contains(&"webp"), "{pack:?}");
+    });
+    assert_eq!(packs.installs(), 0, "showing targets never downloads");
+}
+
+#[gpui_kit::test]
+fn a_pdf_to_word_card_talks_about_the_target(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs.clone());
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    let (window, _) = f.quick(cli(vec![pdf.clone()], None, None), cx);
+    // The PDF opens without the pack: no card until a target needs it.
+    assert!(shown(cx, window, "to-png"));
+    assert!(!shown(cx, window, "pack-card"));
+    click(cx, window, "to-docx");
+    let body = label(cx, window, "pack-body").unwrap();
+    assert!(
+        body.starts_with(
+            "Turning this PDF into DOCX uses LibreOffice, which convt downloads once."
+        ),
+        "{body}"
+    );
+    assert!(!body.contains("skipped"), "{body}");
+    // Several PDFs.
+    let other = f.dir.path().join("Other.pdf");
+    std::fs::write(&other, b"%PDF-1.4 test").unwrap();
+    let (two, _) = f.quick(cli(vec![pdf.clone(), other], Some("docx"), None), cx);
+    assert!(
+        label(cx, two, "pack-body")
+            .unwrap()
+            .starts_with("Turning these PDF files into DOCX")
+    );
+
+    // A window where PNG was picked never waited on the pack, so it says
+    // nothing when the pack goes in; the DOCX window says what's left.
+    let (png, _) = f.quick(cli(vec![pdf], Some("png"), None), cx);
+    assert!(!shown(cx, png, "pack-card"));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "pack-download");
+    wait_until(cx, "the install", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+    wait_for_label(cx, window, "pack-done", |s| {
+        s == "Document support is installed. Click Convert to finish."
+    });
+    assert!(!shown(cx, png, "pack-done"));
+    assert_eq!(f.jobs(cx), 0);
+}
+
+#[gpui_kit::test]
+fn install_and_convert_converts_once_the_pack_is_in(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Report.docx");
+    let (window, view) = f.quick(cli(vec![docx], None, None), cx);
+    click(cx, window, "to-pdf");
+    // Convert with a target that needs the pack never queues a job that
+    // can't run.
+    cx.update(|cx| view.update(cx, |v, cx| v.convert(cx)));
+    assert_eq!(f.jobs(cx), 0);
+    assert_eq!(packs.installs(), 0);
+
+    click(cx, window, "convert");
+    wait_until(cx, "the download", |_| packs.installs() == 1);
+    wait_for_saved(&f, cx, window);
+    assert!(f.dir.path().join("Report.pdf").exists());
+    assert_eq!(f.jobs(cx), 1);
+    assert!(!intent(&view, cx));
+    cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
+    assert_eq!(packs.installs(), 1);
+}
+
+#[gpui_kit::test]
+fn convert_joins_a_download_already_running(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.hold.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    // Started somewhere else, such as Settings or Activity.
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "pack-download");
+    wait_until(cx, "the download", |_| packs.installs() == 1);
+
+    let docx = f.docx("Report.docx");
+    let (window, view) = f.quick(cli(vec![docx], Some("pdf"), None), cx);
+    assert!(shown(cx, window, "pack-progress"), "live progress");
+    assert!(!shown(cx, window, "pack-download"));
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Converts when installed")
+    );
+    // A second click does nothing more.
+    click(cx, window, "convert");
+    assert_eq!(f.jobs(cx), 0);
+
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_for_saved(&f, cx, window);
+    assert!(f.dir.path().join("Report.pdf").exists());
+    assert_eq!(packs.installs(), 1, "one download");
+}
+
+#[gpui_kit::test]
+fn a_failed_or_stopped_install_forgets_the_conversion(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Report.docx");
+    let (window, view) = f.quick(cli(vec![docx], Some("pdf"), None), cx);
+
+    packs.fail_next(FailureKind::Network, "Connection refused");
+    click(cx, window, "convert");
+    wait_for_label(cx, window, "pack-card", |s| {
+        s == "Couldn't download document support"
+    });
+    assert!(!intent(&view, cx));
+    // Install & Convert tries again; the card has no second button.
+    assert!(!shown(cx, window, "pack-download"));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
+
+    // Stopped by the user: also forgotten.
+    packs.hold.store(true, Ordering::SeqCst);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    click(cx, window, "pack-cancel");
+    wait_for_label(cx, window, "pack-detail", |s| {
+        s.starts_with("Download stopped")
+    });
+    assert!(!intent(&view, cx));
+    packs.hold.store(false, Ordering::SeqCst);
+
+    // A later install from Settings doesn't convert behind the user's back.
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    click(cx, settings, "pack-download");
+    wait_until(cx, "the install", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+    wait_for_label(cx, window, "convert", |s| s == "Convert to PDF");
+    assert_eq!(f.jobs(cx), 0);
+    cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
+    click(cx, window, "convert");
+    wait_for_saved(&f, cx, window);
+    assert_eq!(packs.installs(), 3);
+}
+
+#[gpui_kit::test]
+fn picking_another_target_drops_install_and_convert(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.hold.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Report.docx");
+    let (window, view) = f.quick(cli(vec![docx], Some("pdf"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    click(cx, window, "to-txt");
+    assert!(!intent(&view, cx));
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the install", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+    wait_for_label(cx, window, "convert", |s| s == "Convert to Plain text");
+    assert_eq!(f.jobs(cx), 0);
+}
+
+#[gpui_kit::test]
+fn a_preset_for_another_target_drops_install_and_convert(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    packs.hold.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    save_preset(
+        &f,
+        cx,
+        "pictures",
+        Preset {
+            to: Some("png".into()),
+            options: Options::default(),
+        },
+    );
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    let (window, view) = f.quick(cli(vec![pdf], Some("docx"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    click(cx, window, "preset-pictures");
+    assert!(!intent(&view, cx), "the preset picked another target");
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_until(cx, "the install", |cx| {
+        f.app.read(cx).pack.phase == PackPhase::Done
+    });
+    cx.run_until_parked();
+    assert_eq!(f.jobs(cx), 0, "PNG waits for its own click");
+}
+
+#[gpui_kit::test]
+fn a_preset_for_a_pack_target_converts_on_this_computer(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs);
+    save_preset(
+        &f,
+        cx,
+        "word",
+        Preset {
+            to: Some("docx".into()),
+            options: Options::default(),
+        },
+    );
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+    let (window, view) = f.quick(cli(vec![pdf], Some("png"), None), cx);
+    click(cx, window, "where-cloud");
+    click(cx, window, "cloud-consent-agree");
+    cx.read(|cx| assert!(view.read(cx).cloud));
+    click(cx, window, "preset-word");
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.to.map(|f| f.id), Some("docx"));
+        assert!(!v.cloud, "pack targets convert locally once installed");
+    });
+}
+
+#[gpui_kit::test]
+fn a_target_the_pack_cannot_unlock_still_says_why(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs);
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    // The pack adds DOCX for a PDF, but nothing makes it an MP3.
+    let (window, view) = f.quick(cli(vec![pdf], Some("mp3"), None), cx);
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(v.to.is_none() && v.wanted.is_none());
+        assert!(v.error.is_some(), "an unreachable target says so");
+    });
+    assert_eq!(
+        label(cx, window, "error"),
+        cx.read(|cx| view.read(cx).error.clone())
+    );
+}
+
+#[gpui_kit::test]
+fn the_pack_stays_while_a_pdf_becomes_word(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        pdf: true,
+        ..TestPacks::default()
+    });
+    packs.installed.store(true, Ordering::SeqCst);
+    let f = Fixture::with_packs(cx, packs.clone());
+    let pdf = f.dir.path().join("Scan.pdf");
+    std::fs::write(&pdf, b"%PDF-1.4 test").unwrap();
+    let app = f.app.clone();
+    cx.update(|cx| {
+        app.update(cx, |s, cx| {
+            let docx = format_by_id("docx").unwrap();
+            s.convert(std::slice::from_ref(&pdf), docx, &Options::default(), cx)
+                .unwrap();
+            assert!(s.remove_pack(cx).unwrap_err().contains("Wait"));
+        })
+    });
+    assert_eq!(packs.removes.load(Ordering::SeqCst), 0);
+}
+
+#[gpui_kit::test]
+fn menus_offer_documents_only_when_the_pack_can_be_downloaded(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    cx.read(|cx| {
+        let state = f.app.read(cx);
+        let list = crate::finder::target_list(state.menu_registry(), &state.menu);
+        for ext in ["docx", "odt", "xlsx"] {
+            let id = list.extensions[ext];
+            let menu: Vec<_> = list.targets[id].iter().map(|t| t.id).collect();
+            assert!(menu.contains(&"pdf"), "{ext}: {menu:?}");
+        }
+        assert!(list.targets.contains_key("png"));
+        // Jobs never run with what the menu promises.
+        assert!(
+            state
+                .registry
+                .targets(format_by_id("docx").unwrap())
+                .is_empty()
+        );
+    });
+
+    let unconfigured = Arc::new(TestPacks {
+        unconfigured: true,
+        ..TestPacks::default()
+    });
+    let g = Fixture::with_packs(cx, unconfigured);
+    cx.read(|cx| {
+        let state = g.app.read(cx);
+        let list = crate::finder::target_list(state.menu_registry(), &state.menu);
+        for ext in ["docx", "odt", "xlsx"] {
+            assert!(!list.extensions.contains_key(ext), "{ext}");
+        }
+        assert!(
+            g.app
+                .read(cx)
+                .pack_targets(format_by_id("docx").unwrap())
+                .is_empty()
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn a_menu_click_on_a_document_lands_on_install_and_convert(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Slides.docx");
+    // As Finder's "Convert to PDF" arrives: a command-line request.
+    cx.update(|cx| super::route(cli(vec![docx], Some("pdf"), None), cx));
+    let (window, view) = last_quick(cx);
+    assert_eq!(f.jobs(cx), 0);
+    assert_eq!(packs.installs(), 0);
+    assert!(!shown(cx, window, "error"));
+    cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
+    click(cx, window, "convert");
+    wait_for_saved(&f, cx, window);
+    assert!(f.dir.path().join("Slides.pdf").exists());
+}
+
+#[gpui_kit::test]
+fn a_build_without_a_pack_shows_no_pack_targets(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks {
+        unconfigured: true,
+        ..TestPacks::default()
+    });
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Report.docx");
+    let (window, view) = f.quick(cli(vec![docx], Some("pdf"), None), cx);
+    assert!(!shown(cx, window, "to-pdf"));
+    assert!(!shown(cx, window, "pack-tag-pdf"));
+    assert_eq!(label(cx, window, "convert").as_deref(), Some("Convert"));
+    cx.read(|cx| assert!(view.read(cx).targets.pack.is_empty()));
+    let (main, _) = f.main(cx);
+    assert!(!shown(cx, main, "pack-hint"));
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(!shown(cx, settings, "pack-about"));
+}
+
+#[gpui_kit::test]
+fn activity_offers_the_pack_until_it_is_installed_or_dismissed(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let (main, _) = f.main(cx);
+    assert_eq!(
+        label(cx, main, "pack-hint").as_deref(),
+        Some("Convert Word, Excel and PowerPoint files")
+    );
+    let body = label(cx, main, "pack-hint-body").unwrap();
+    assert!(
+        body.starts_with("Adds Word, Excel, PowerPoint and OpenDocument files"),
+        "{body}"
+    );
+    assert!(!body.contains('—'), "no em dashes: {body}");
+    assert_eq!(
+        label(cx, main, "pack-download").as_deref(),
+        Some("Download (150 MB)")
+    );
+    assert_eq!(packs.installs(), 0);
+    // Settings says the same.
+    let (settings, _) = f.settings(SettingsTab::General, cx);
+    assert!(
+        label(cx, settings, "pack-about")
+            .unwrap()
+            .starts_with("Adds Word")
+    );
+
+    // While it downloads, Activity shows the download once: its own
+    // notice, not the offer as well.
+    packs.hold.store(true, Ordering::SeqCst);
+    click(cx, main, "pack-download");
+    wait_for_label(cx, main, "activity-pack", |s| {
+        s == "Adding document support"
+    });
+    assert!(!shown(cx, main, "pack-hint"));
+    packs.hold.store(false, Ordering::SeqCst);
+    wait_for_label(cx, main, "pack-hint", |s| {
+        s == "Document support is installed"
+    });
+    assert!(!shown(cx, main, "activity-pack"));
+    assert!(!shown(cx, settings, "pack-about"));
+    click(cx, main, "pack-hint-dismiss");
+    assert!(!shown(cx, main, "pack-hint"));
+    assert!(f.settings_file().contains("pack_hint_dismissed = true"));
+
+    // Dismissed before installing: it stays away.
+    let g = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
+    let (main, _) = g.main(cx);
+    click(cx, main, "pack-hint-dismiss");
+    assert!(!shown(cx, main, "pack-hint"));
+    // A plain build from source has nothing to offer.
+    let h = Fixture::new(cx);
+    let (main, _) = h.main(cx);
+    assert!(!shown(cx, main, "pack-hint"));
+}
+
+#[gpui_kit::test]
+fn dropped_documents_open_with_their_default_picked(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs.clone());
+    let (docx, xlsx) = (f.docx("Report.docx"), f.docx("Budget.xlsx"));
+    let (_, popover) = cx.update(super::open_popover).unwrap();
+    popover.update(cx, |v, cx| v.drop_files(&[docx, xlsx], cx));
+    let (window, view) = last_quick(cx);
+    // Documents → PDF is the default, so PDF is picked.
+    cx.read(|cx| assert_eq!(view.read(cx).to.map(|f| f.id), Some("pdf")));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
+    assert_eq!(f.jobs(cx), 0);
+    assert_eq!(packs.installs(), 0);
+    assert!(!shown(cx, window, "pack-download"));
+    click(cx, window, "convert");
+    wait_until(cx, "both jobs", |cx| {
+        let q = &f.app.read(cx).queue;
+        q.entries.len() == 2 && q.active() == 0
+    });
+    assert!(f.dir.path().join("Report.pdf").exists());
+    assert!(f.dir.path().join("Budget.pdf").exists());
+}
+
+#[gpui_kit::test]
+fn the_pack_offers_fit_their_windows(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    let f = Fixture::with_packs(cx, packs);
+    let docx = f.docx("Quarterly report with a long name.docx");
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        cx.update(|cx| super::open_quick(cli(vec![docx.clone()], Some("pdf"), None), cx));
+        let (quick, _) = last_quick(cx);
+        assert!(
+            fits(cx, quick, "convert"),
+            "Quick convert, Install & Convert"
+        );
+        cx.update(super::show_main);
+        let (main, _) = window_of::<MainView>(cx);
+        assert!(fits(cx, main, "pack-hint-dismiss"), "Activity card");
+    }
 }
 
 /// A Pro key signed with [`test_key`].
@@ -6904,4 +7497,86 @@ fn restart_to_update_waits_for_document_support_and_holds_pack_work(cx: &mut Tes
     wait_until(cx, "installed", |_| {
         !installer.installed.lock().unwrap().is_empty()
     });
+}
+
+/// Install & Convert joined to onboarding's background download keeps its
+/// promise while that download waits to try again, converts once it's in,
+/// and forgets it only when the retries run out.
+#[gpui_kit::test]
+fn install_and_convert_waits_through_a_background_retry(cx: &mut TestAppContext) {
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "connection reset");
+    let f = Fixture::with_packs(cx, packs.clone());
+    let docx = f.docx("Report.docx");
+    cx.update(|cx| super::pack::start_background_install(&f.app, cx));
+    wait_until(cx, "the first try failed", |cx| {
+        f.app.read(cx).pack_retry_pending()
+    });
+    let (window, view) = f.quick(cli(vec![docx.clone()], Some("pdf"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    assert_eq!(packs.installs(), 1, "joins the download, starts no other");
+    pass_pack_retry(cx, &f.app, 1);
+    wait_for_saved(&f, cx, window);
+    assert!(f.dir.path().join("Report.pdf").exists());
+    assert_eq!(packs.installs(), 2);
+
+    // Every retry fails: the promise goes with the last one.
+    let packs = Arc::new(TestPacks::default());
+    packs.fail_next(FailureKind::Network, "offline");
+    packs.fail_always.store(true, Ordering::SeqCst);
+    let g = Fixture::with_packs(cx, packs.clone());
+    let docx = g.docx("Plan.docx");
+    cx.update(|cx| super::pack::start_background_install(&g.app, cx));
+    wait_until(cx, "the first try failed", |cx| {
+        g.app.read(cx).pack_retry_pending()
+    });
+    let (window, view) = g.quick(cli(vec![docx], Some("pdf"), None), cx);
+    click(cx, window, "convert");
+    assert!(intent(&view, cx));
+    pass_pack_retry(cx, &g.app, 1);
+    // Still waiting between tries.
+    assert!(intent(&view, cx));
+    pass_pack_retry(cx, &g.app, 2);
+    wait_until(cx, "the last try failed", |cx| {
+        matches!(g.app.read(cx).pack.phase, PackPhase::Failed(_))
+    });
+    cx.run_until_parked();
+    assert!(!intent(&view, cx));
+    assert_eq!(packs.installs(), 3);
+    assert_eq!(g.jobs(cx), 0);
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Install & Convert")
+    );
+}
+
+/// Settings → Menu offers what the right-click menus can: documents too,
+/// while the pack can be downloaded, so a pick there reaches Finder's list.
+#[gpui_kit::test]
+fn the_menu_tab_lists_documents_while_the_pack_can_be_downloaded(cx: &mut TestAppContext) {
+    let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
+    let (window, _) = f.settings(SettingsTab::Menu, cx);
+    assert!(shown(cx, window, "menu-summary-document"));
+    click(cx, window, "menu-document-pdf");
+    cx.read(|cx| {
+        let state = f.app.read(cx);
+        let list = crate::finder::target_list(state.menu_registry(), &state.menu);
+        let docx: Vec<_> = list.targets["docx"].iter().map(|t| t.id).collect();
+        assert!(!docx.contains(&"pdf"), "unpicked: {docx:?}");
+        assert!(!docx.is_empty());
+    });
+
+    let g = Fixture::with_packs(
+        cx,
+        Arc::new(TestPacks {
+            unconfigured: true,
+            ..TestPacks::default()
+        }),
+    );
+    let (window, _) = g.settings(SettingsTab::Menu, cx);
+    // Markdown, JSON and subtitles convert without the pack, so documents
+    // keep their menu; slide decks have nothing to offer.
+    assert!(shown(cx, window, "menu-summary-document"));
+    assert!(!shown(cx, window, "menu-summary-presentation"));
 }

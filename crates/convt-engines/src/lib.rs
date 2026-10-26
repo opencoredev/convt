@@ -54,6 +54,18 @@ pub fn registry_without_documents() -> Registry {
     registry(false)
 }
 
+/// [`default_registry`] as it would be with the document pack installed:
+/// where LibreOffice can't run, [`office::PlannedOfficeEngine`] declares its
+/// steps instead. Only for showing what the pack unlocks; never run a job
+/// with it.
+pub fn registry_with_planned_documents() -> Registry {
+    let mut r = registry(true);
+    if r.unavailable().iter().any(|(id, _)| *id == "libreoffice") {
+        r.register(Arc::new(office::PlannedOfficeEngine));
+    }
+    r
+}
+
 fn registry(documents: bool) -> Registry {
     let mut r = Registry::new();
     r.register(Arc::new(image::ImageEngine));

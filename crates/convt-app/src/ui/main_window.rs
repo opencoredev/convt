@@ -252,6 +252,18 @@ impl MainView {
         let mut notices: Vec<AnyElement> = super::pack::activity_notice(&state.pack, p)
             .into_iter()
             .collect();
+        // The offer of the pack; the download itself is the notice above.
+        let app = self.app.clone();
+        notices.extend(super::pack::activity_card(
+            &self.app,
+            move |_, cx| {
+                app.update(cx, |s, cx| {
+                    s.update_settings(|s| s.pack_hint_dismissed = true, cx)
+                })
+            },
+            p,
+            cx,
+        ));
         if finder_off {
             notices.push(finder_setup_card(p).into_any_element());
         }

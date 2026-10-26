@@ -16,16 +16,15 @@
 //! requests, so a link alone never converts anything. See
 //! `integrations/macos/README.md`.
 
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use convt_core::{FORMATS, MenuChoices, Registry};
+use convt_core::{MenuChoices, Registry};
 use futures::channel::mpsc::UnboundedSender;
 use gpui_kit::{App, Entity};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::model::AppState;
 use crate::request::{self, Command, Request, Source};
@@ -53,12 +52,14 @@ pub fn init(state: &Entity<AppState>, requests: UnboundedSender<Request>, cx: &m
     services::register(requests);
     let generation = |state: &AppState| (state.registry_generation, state.menu_generation);
     let mut published = generation(state.read(cx));
-    publish(&state.read(cx).registry, &state.read(cx).menu);
+    // With the pack's targets while it can be downloaded, so documents keep
+    // their menu and a click opens Quick convert with Install & Convert.
+    publish(state.read(cx).menu_registry(), &state.read(cx).menu);
     cx.observe(state, move |state, cx| {
         let state = state.read(cx);
         if generation(state) != published {
             published = generation(state);
-            publish(&state.registry, &state.menu);
+            publish(state.menu_registry(), &state.menu);
         }
     })
     .detach();
@@ -109,57 +110,13 @@ pub fn open_urls(links: Vec<String>) -> (Vec<Request>, Vec<String>) {
     (requests, rest)
 }
 
-#[derive(Serialize)]
-struct TargetList<'a> {
-    version: u32,
-    /// Lowercase extension to format id.
-    extensions: BTreeMap<&'a str, &'a str>,
-    /// Format id to the formats it converts to, in menu order.
-    targets: BTreeMap<&'a str, Vec<Target<'a>>>,
-}
-
-#[derive(Serialize)]
-struct Target<'a> {
-    id: &'a str,
-    name: &'a str,
-    category: String,
-}
-
-fn target_list(registry: &Registry, menu: &MenuChoices) -> TargetList<'static> {
-    let mut list = TargetList {
-        version: 1,
-        extensions: BTreeMap::new(),
-        targets: BTreeMap::new(),
-    };
-    for format in FORMATS {
-        let targets = registry.menu_targets_with(format, menu);
-        if targets.is_empty() {
-            continue;
-        }
-        for ext in format.extensions {
-            list.extensions.insert(ext, format.id);
-        }
-        list.targets.insert(
-            format.id,
-            targets
-                .into_iter()
-                .map(|t| Target {
-                    id: t.id,
-                    name: t.name,
-                    category: format!("{:?}", t.category),
-                })
-                .collect(),
-        );
-    }
-    list
-}
-
 fn publish(registry: &Registry, menu: &MenuChoices) {
     let Some(dir) = cocoa::group_container() else {
         tracing::debug!("no App Group container; not publishing Finder targets");
         return;
     };
-    let json = serde_json::to_vec(&target_list(registry, menu)).expect("serializable");
+    let json =
+        serde_json::to_vec(&crate::finder::target_list(registry, menu)).expect("serializable");
     match crate::settings::write_atomic(&dir.join(TARGETS_FILE), &json) {
         Ok(()) => tracing::debug!(dir = %dir.display(), "published Finder targets"),
         Err(e) => tracing::warn!(error = %e, "could not publish Finder targets"),
@@ -436,31 +393,6 @@ mod tests {
             parse_pluginkit("+    leodev.convt.ConvtFinder(1.0)\n"),
             None
         );
-    }
-
-    #[test]
-    fn target_list_covers_every_convertible_extension() {
-        let list = target_list(&convt_engines::default_registry(), &MenuChoices::default());
-        assert_eq!(list.extensions.get("jpg"), Some(&"jpeg"));
-        let png = &list.targets["png"];
-        assert!(png.iter().any(|t| t.id == "webp" && t.category == "Image"));
-        assert!(png.iter().all(|t| t.id != "png"));
-        for id in list.extensions.values() {
-            assert!(list.targets.contains_key(id));
-        }
-    }
-
-    #[test]
-    fn target_list_follows_the_menu_choices() {
-        use convt_core::{Category, format_by_id};
-        let mut menu = MenuChoices::default();
-        menu.set(
-            Category::Image,
-            vec![format_by_id("tiff").unwrap(), format_by_id("png").unwrap()],
-        );
-        let list = target_list(&convt_engines::default_registry(), &menu);
-        let ids: Vec<_> = list.targets["jpeg"].iter().map(|t| t.id).collect();
-        assert_eq!(ids, ["tiff", "png"]);
     }
 
     #[test]

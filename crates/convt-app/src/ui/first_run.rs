@@ -62,7 +62,7 @@ pub enum Question {
 impl Question {
     fn title(self) -> &'static str {
         match self {
-            Question::Documents => "Convert PDFs and documents too?",
+            Question::Documents => "Convert Word, Excel and PowerPoint files too?",
             Question::Finder => "Add convt to Finder?",
         }
     }
@@ -641,12 +641,15 @@ impl FirstRunView {
     fn question_screen(&self, question: Question, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx);
         let detail = match question {
+            // What the pack adds and what already works without it, as
+            // Activity and Settings say it.
             Question::Documents => match state.pack.offer.download {
                 Some(bytes) => format!(
-                    "Word, Excel, PowerPoint and more. One {} download.",
+                    "{} One {} download.",
+                    state.pack_adds(),
                     super::human_size(bytes)
                 ),
-                None => "Word, Excel, PowerPoint and more. One download.".to_string(),
+                None => format!("{} One download.", state.pack_adds()),
             },
             Question::Finder => {
                 "Right-click any file in Finder to convert it. System Settings opens to turn it on."
@@ -663,7 +666,13 @@ impl FirstRunView {
         };
         column()
             .child(heading(question.title(), p))
-            .child(line(&detail, p))
+            .child(
+                div()
+                    .id("question-detail")
+                    .test_support()
+                    .aria_label(SharedString::from(detail.clone()))
+                    .child(line(&detail, p)),
+            )
             .child(div().h(px(8.)))
             .child(
                 div()

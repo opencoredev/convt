@@ -10,6 +10,7 @@ Local file conversion for your own machine. Right-click a file, pick a format, a
 - 49 formats, routed through native engines (FFmpeg, PDFium, LibreOffice, image, resvg)
 - A desktop app built with [GPUI](https://www.gpui.rs), with a Finder menu on macOS and file manager menus on Linux. The Windows Explorer menu is built (`crates/convt-shell`) but not yet in the release installer
 - The `convt` CLI, shipped in the same install
+- A [Raycast extension](https://www.raycast.com/0xdhrv/convt) for macOS and Windows, by Dhruv Suthar
 - Multi-hop routes of at most three steps when no engine can convert directly
 - Document support for Word, Excel and PowerPoint: a one-time download that setup offers, or that you can add later in Settings
 - A paid cloud API and TypeScript SDK for converting files on convt's servers
@@ -44,6 +45,12 @@ convt lease.pdf --to png --pages 1-3
 ```
 
 From a checkout, prefix those with `cargo run -p convt-cli --`. Output lands next to each input unless you pass `--out-dir`.
+
+## Raycast
+
+[convt for Raycast](https://www.raycast.com/0xdhrv/convt), built by Dhruv Suthar ([0xdhrv](https://github.com/0xdhrv)), converts the files selected in Finder, or files and folders you pick in Raycast on Windows and macOS, and Raycast AI can call it too. It runs the `convt` CLI you already installed and finds it in the app bundle, the Windows install folder, Homebrew or `PATH`. Install it from the Raycast Store.
+
+The extension's source lives in [raycast/extensions](https://github.com/raycast/extensions/tree/main/extensions/convt), with a working copy in [`integrations/raycast`](integrations/raycast) that tracks new CLI options. `crates/convt-cli/tests/raycast_contract.rs` pins the output it parses (`convt formats --json`, `convt targets`, `convt presets` and the `--json` events), so a change that would break the extension fails `cargo test`.
 
 ## Engines
 
@@ -80,6 +87,7 @@ The cloud API converts files on convt's servers for a paid plan. You upload a fi
 - **[convt.app](https://convt.app)**: product site, pricing and sign-in
 - **[Download](https://convt.app/download)**: desktop builds and matching source archives
 - **[Formats](https://convt.app/formats)**: every format and the targets it can reach
+- **[Raycast extension](https://www.raycast.com/0xdhrv/convt)**: convert selected files from Raycast on macOS and Windows
 - **[API docs](https://convt.app/docs)**: the cloud API, the SDK and the API reference
 - **[AGENTS.md](AGENTS.md)**: repo layout, conventions, and how to check, test and build
 

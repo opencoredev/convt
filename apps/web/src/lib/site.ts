@@ -6,6 +6,8 @@ export const SITE_ORIGIN = "https://convt.app";
 export const SITE_NAME = "convt";
 
 export const GITHUB_URL = "https://github.com/opencoredev/convt";
+/** The Raycast extension by Dhruv Suthar (0xdhrv); source in integrations/raycast. */
+export const RAYCAST_URL = "https://www.raycast.com/0xdhrv/convt";
 
 /**
  * True since launch (7 October 2026): the landing page links downloads, sign-in, the

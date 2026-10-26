@@ -69,6 +69,9 @@ pub trait Backend: Send + Sync {
     /// The registry while the pack is being removed: everything but
     /// documents, so nothing starts LibreOffice from a folder being deleted.
     fn registry_without_documents(&self) -> Registry;
+    /// [`Self::registry`] as it would be with the pack installed, to show
+    /// what the pack unlocks. Never run a job with it.
+    fn planned_registry(&self) -> Registry;
 }
 
 /// The pack API in `convt-engines`, with the source pinned into this build.
@@ -133,6 +136,10 @@ impl Backend for Engines {
 
     fn registry_without_documents(&self) -> Registry {
         convt_engines::registry_without_documents()
+    }
+
+    fn planned_registry(&self) -> Registry {
+        convt_engines::registry_with_planned_documents()
     }
 }
 
