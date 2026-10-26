@@ -53,6 +53,7 @@ impl Engine for DataEngine {
                 _ => tree_to_rows_checked(read_tree(from, &source)?, &|| ctx.check())?,
             };
             ctx.check()?;
+            check_padded_size(&rows)?;
             match to {
                 "csv" | "tsv" => write_table(&rows, delimiter(to))?,
                 "json" | "yaml" => write_tree(&rows_to_tree(rows)?, to)?,
@@ -741,6 +742,21 @@ pub fn rows_to_tree(rows: Vec<Vec<String>>) -> Result<Value> {
 /// fill. Objects with distinct keys multiply into far more cells than the
 /// input holds, so the size is checked before any row is built.
 pub const MAX_CELLS: usize = 50_000_000;
+
+/// Renderers pad every row to the widest one, so a ragged table read from
+/// CSV or TSV (or an array of arrays) can hold far fewer cells than it
+/// writes. Checks rows × widest row against [`MAX_CELLS`] before any output.
+fn check_padded_size(rows: &[Vec<String>]) -> Result<()> {
+    let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let height = rows.len();
+    if columns.saturating_mul(height) > MAX_CELLS {
+        return Err(failed(format!(
+            "this would make a table of {columns} columns × {height} rows; \
+             convt stops at {MAX_CELLS} cells"
+        )));
+    }
+    Ok(())
+}
 
 /// How many rows to build between cancellation checks.
 const CHECK_EVERY: usize = 4096;
@@ -1487,5 +1503,19 @@ mod tests {
     fn text_aligns_columns_by_display_width() {
         let txt = text::aligned_columns(&table("name,n\n日本,1\nab,22\n"));
         assert_eq!(txt, "name  n\n日本  1\nab    22\n");
+    }
+    #[test]
+    fn ragged_tables_are_sized_by_their_widest_row() {
+        let wide = vec!["x".to_string(); 20_000];
+        let mut rows = vec![wide];
+        rows.extend((0..20_000).map(|_| vec!["y".to_string()]));
+        let error = check_padded_size(&rows).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("20000 columns × 20001 rows; convt stops at 50000000 cells"),
+            "{error}"
+        );
+        assert!(check_padded_size(&rows[..100]).is_ok());
     }
 }
