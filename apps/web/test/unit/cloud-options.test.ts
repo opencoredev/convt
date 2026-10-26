@@ -22,6 +22,20 @@ test("a GIF made from video is sized by height, one made from an image by its lo
   expect(sizeControl({ from: undefined, to: "gif" })?.field).toBe("max_size");
   // A frame grabbed from video still takes the image size.
   expect(sizeControl({ from: "mp4", to: "png" })?.field).toBe("max_size");
+  // With no height, FFmpeg caps a video GIF at 720 px wide, so it isn't "Original".
+  expect(sizeControl({ from: "mp4", to: "gif" })?.choices[0]).toEqual({
+    label: "Default (up to 720 px wide)",
+    value: null,
+  });
+  expect(sizeControl({ from: "mov", to: "mp4" })?.choices[0]?.label).toBe("Original");
+  expect(sizeControl({ from: "png", to: "gif" })?.choices[0]?.label).toBe("Original");
+  expect(sizeControl({ from: "mp4", to: "gif" })?.choices.map((c) => c.value)).toEqual([
+    null,
+    2160,
+    1080,
+    720,
+    480,
+  ]);
   expect(jobOptions({ from: "mp4", to: "gif" }, { quality: null, size: 480 })).toEqual({
     video_height: 480,
   });

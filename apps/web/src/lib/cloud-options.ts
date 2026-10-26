@@ -42,6 +42,16 @@ const VIDEO_SIZES: SizeControl = {
   ],
 };
 
+/**
+ * FFmpeg makes a GIF from video at most 720 px wide unless a height is set
+ * (`scale='min(720,iw)':-2` in crates/convt-engines/src/ffmpeg.rs), so its
+ * no-option choice doesn't keep the original size.
+ */
+const VIDEO_GIF_SIZES: SizeControl = {
+  ...VIDEO_SIZES,
+  choices: [{ label: "Default (up to 720 px wide)", value: null }, ...VIDEO_SIZES.choices.slice(1)],
+};
+
 function categoryOf(target: Format) {
   return formats.find((f) => f.id === target)?.category;
 }
@@ -59,8 +69,8 @@ export type Pair = { from: Format | undefined; to: Format };
 export function sizeControl({ from, to }: Pair): SizeControl | null {
   const category = categoryOf(to);
   if (category === "video") return VIDEO_SIZES;
-  // FFmpeg makes a GIF from video and scales it by height only.
-  if (to === "gif" && from !== undefined && categoryOf(from) === "video") return VIDEO_SIZES;
+  // FFmpeg makes a GIF from video and scales it by height.
+  if (to === "gif" && from !== undefined && categoryOf(from) === "video") return VIDEO_GIF_SIZES;
   if (category === "image" && to !== "ico") return IMAGE_SIZES;
   return null;
 }
