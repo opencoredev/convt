@@ -106,6 +106,10 @@ enum Cmd {
         /// Only the few targets right-click menus offer (see `convt menu`)
         #[arg(long)]
         menu: bool,
+        /// Include targets the document pack would add when this build can
+        /// download it, for menus that open the app (which offers the install)
+        #[arg(long)]
+        with_pack: bool,
     },
     /// Show or change which formats right-click menus offer, by kind of file
     Menu {
@@ -388,15 +392,28 @@ fn main() -> anyhow::Result<()> {
                 println!("{:<6} {:<13} {}", f.id, format!("{:?}", f.category), f.name);
             }
         }
-        Some(Cmd::Targets { file, menu }) => {
+        Some(Cmd::Targets {
+            file,
+            menu,
+            with_pack,
+        }) => {
             let from = format_by_extension(&file)
                 .with_context(|| format!("unknown format: {}", file.display()))?;
+            let planned;
+            let registry = if with_pack && convt_engines::packs::documents_configured() {
+                planned = convt_engines::registry_with_planned_documents();
+                &planned
+            } else {
+                &registry
+            };
             let targets = if menu {
                 registry.menu_targets_with(from, &convt_engines::paths::menu_choices())
             } else {
                 registry.targets(from)
             };
-            for f in targets {
+            // The file's own format is left out: Raycast and the site read
+            // this list as "convert to", and `--to <its format>` compresses.
+            for f in targets.into_iter().filter(|f| *f != from) {
                 println!("{}", f.id);
             }
         }

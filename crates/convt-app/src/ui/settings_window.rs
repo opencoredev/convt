@@ -93,7 +93,9 @@ impl SettingsView {
     pub fn new(app: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let registry = app.read(cx).registry.clone();
         let menu_options_generation = app.read(cx).registry_generation;
-        let menu_options = kinds_and_targets(&registry);
+        // What right-click menus can offer, the pack's targets included
+        // while it can be downloaded, as Finder and the Linux menus do.
+        let menu_options = kinds_and_targets(app.read(cx).menu_registry());
         let outputs = FORMATS
             .iter()
             .filter(|f| {
@@ -111,7 +113,7 @@ impl SettingsView {
                 let state = app.read(cx);
                 if state.registry_generation != this.menu_options_generation {
                     this.menu_options_generation = state.registry_generation;
-                    this.menu_options = kinds_and_targets(&state.registry);
+                    this.menu_options = kinds_and_targets(state.menu_registry());
                 }
                 cx.notify()
             }),

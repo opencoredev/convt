@@ -26,6 +26,12 @@ pub(crate) fn open_oriented(input: &Path) -> Result<DynamicImage> {
         .into_decoder()
         .map_err(failed)?;
     let orientation = decoder.orientation().map_err(failed)?;
+    // `ImageReader::decode` checks the pixel buffer against the decoding
+    // limits before allocating it; going through the decoder skips that, so
+    // a small file declaring huge dimensions would allocate gigabytes.
+    let mut limits = image::Limits::default();
+    limits.reserve(decoder.total_bytes()).map_err(failed)?;
+    decoder.set_limits(limits).map_err(failed)?;
     let mut img = DynamicImage::from_decoder(decoder).map_err(failed)?;
     img.apply_orientation(orientation);
     Ok(img)
@@ -1540,6 +1546,17 @@ pub(crate) fn jpeg_with_orientation(jpeg: &[u8], orientation: u8) -> Result<Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn huge_declared_dimensions_hit_the_decoding_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let ppm = dir.path().join("huge.ppm");
+        // 30000 x 30000 RGB is 2.7 GB, far past the 512 MiB default limit;
+        // the file itself is a few bytes.
+        std::fs::write(&ppm, b"P6\n30000 30000\n255\n\0\0\0").unwrap();
+        let error = open_oriented(&ppm).unwrap_err().to_string();
+        assert!(error.contains("limit"), "{error}");
+    }
 
     #[test]
     fn heif_irot_imir_match_exif() {

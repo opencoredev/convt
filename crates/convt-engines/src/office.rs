@@ -34,6 +34,41 @@ impl Default for OfficeEngine {
     }
 }
 
+/// Every conversion LibreOffice performs, whether or not it is installed.
+fn office_steps() -> Vec<Step> {
+    let with_pdf = |set: &[&'static str]| set.iter().copied().chain(["pdf"]).collect::<Vec<_>>();
+    crate::steps(DOCUMENTS, &with_pdf(DOCUMENTS))
+        .chain(crate::steps(PRESENTATIONS, &with_pdf(PRESENTATIONS)))
+        .chain(crate::steps(SPREADSHEETS, &with_pdf(SPREADSHEETS)))
+        .collect()
+}
+
+/// Stands in for [`OfficeEngine`] when the document pack isn't installed, so
+/// a registry can say what the pack would add. It declares the same steps
+/// and never converts; see [`crate::registry_with_planned_documents`].
+pub struct PlannedOfficeEngine;
+
+impl Engine for PlannedOfficeEngine {
+    fn id(&self) -> &'static str {
+        "libreoffice-planned"
+    }
+
+    fn priority(&self) -> i32 {
+        i32::MIN
+    }
+
+    fn steps(&self) -> Vec<Step> {
+        office_steps()
+    }
+
+    fn convert(&self, _: &Ctx, _: &Path, _: &Path) -> Result<Vec<PathBuf>> {
+        Err(Error::EngineUnavailable {
+            engine: "libreoffice",
+            reason: "the document pack is not installed".into(),
+        })
+    }
+}
+
 fn filter(step: Step) -> &'static str {
     // HTML embeds images as data URIs; otherwise they land in companion files
     // that a single-file output can't carry.
@@ -65,12 +100,7 @@ impl Engine for OfficeEngine {
     }
 
     fn steps(&self) -> Vec<Step> {
-        let with_pdf =
-            |set: &[&'static str]| set.iter().copied().chain(["pdf"]).collect::<Vec<_>>();
-        crate::steps(DOCUMENTS, &with_pdf(DOCUMENTS))
-            .chain(crate::steps(PRESENTATIONS, &with_pdf(PRESENTATIONS)))
-            .chain(crate::steps(SPREADSHEETS, &with_pdf(SPREADSHEETS)))
-            .collect()
+        office_steps()
     }
 
     fn convert(&self, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {

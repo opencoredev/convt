@@ -1,5 +1,6 @@
 import {
   ArrowDown01Icon,
+  ArrowUpRight01Icon,
   Copy01Icon,
   Download01Icon,
   Tick02Icon,
@@ -13,7 +14,7 @@ import { Icon } from "#/components/icon";
 import { Mark } from "#/components/logo";
 import { kindLabels, osNames, osOrder, type Os, type Release, type Slot } from "#/lib/platform";
 import { fileName, formatBytes } from "#/lib/release-manifest";
-import { GITHUB_URL } from "#/lib/site";
+import { GITHUB_URL, RAYCAST_URL } from "#/lib/site";
 
 /*
  * /download. Direction, from the Mobbin references (download-refs/):
@@ -24,7 +25,8 @@ import { GITHUB_URL } from "#/lib/site";
  *   the dithered glow from sign-in rising behind it.
  * - Type: Inter for everything people read; Geist Mono only for commands and checksums.
  * - Layout: a centered stage for the recommended build, then Homebrew for Mac visitors,
- *   then every platform as rows in a narrow column, then checksums folded away.
+ *   then every platform as rows in a narrow column, then checksums folded away, then the
+ *   Raycast extension for macOS and Windows visitors.
  * - Avoiding: eyebrow labels, numbered steps, terminal chrome, raw file names on buttons.
  */
 
@@ -195,6 +197,43 @@ export function Homebrew() {
         </p>
       </div>
       <CommandBlock label="Homebrew" commands={homebrewCommands} />
+    </section>
+  );
+}
+
+/**
+ * The Raycast extension by Dhruv Suthar, which drives the installed CLI. Raycast
+ * runs on macOS and Windows, so Linux visitors don't see it.
+ */
+export function Raycast() {
+  return (
+    <section aria-labelledby="raycast-title" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="raycast-title" className="text-[17px]/6 font-semibold tracking-[-0.015em]">
+          Convert from Raycast
+        </h2>
+        <p className="text-[14px]/[22px] text-pretty text-ink-2">
+          Select files in Finder, or pick them in Raycast on Windows, then choose a format. The
+          extension uses the convt you install here, so files still stay on your computer.
+        </p>
+      </div>
+      <div className="flex items-center justify-between gap-4 rounded-2xl bg-raised px-5 py-4 shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/4%)] dark:bg-panel">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[14px]/5 font-medium">convt for Raycast</span>
+          <span className="text-[13px]/[18px] text-ink-2">By Dhruv Suthar · macOS and Windows</span>
+        </div>
+        <a
+          href={RAYCAST_URL}
+          aria-label="Install the convt extension from the Raycast Store"
+          className={cx(
+            "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-raised px-3 text-[13px]/4 font-medium text-ink shadow-[var(--shadow-input)] transition-colors duration-150 hover:bg-hover dark:bg-sunken dark:hover:bg-hover",
+            focusRing,
+          )}
+        >
+          Raycast Store
+          <Icon icon={ArrowUpRight01Icon} size={15} strokeWidth={1.8} className="text-ink-2" />
+        </a>
+      </div>
     </section>
   );
 }
