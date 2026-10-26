@@ -159,7 +159,8 @@ struct Images {
     /// Bytes the page may still inline.
     budget: u64,
     /// Each picture read so far by resolved path, with its size; `None` for
-    /// a file that is not one.
+    /// a file that is not one. Only pictures that fit the budget when first
+    /// named are read, so this holds at most the page's budget.
     read: std::collections::HashMap<PathBuf, Option<(String, u64)>>,
 }
 
@@ -203,12 +204,20 @@ impl Images {
         if !path.starts_with(&self.dir) {
             return None;
         }
-        let max_image = self.max_image;
-        let (uri, len) = self
-            .read
-            .entry(path)
-            .or_insert_with_key(|path| data_uri(path, max_image))
-            .as_ref()?;
+        let cached = match self.read.get(&path) {
+            Some(cached) => cached,
+            // A new picture is read only if it fits what is left: the budget
+            // only shrinks, so one too big now never fits later.
+            None => {
+                let cap = self.max_image.min(self.budget);
+                if std::fs::metadata(&path).ok()?.len() > cap {
+                    return None;
+                }
+                let read = data_uri(&path, cap);
+                self.read.entry(path).or_insert(read)
+            }
+        };
+        let (uri, len) = cached.as_ref()?;
         self.budget = self.budget.checked_sub(*len)?;
         Some(uri.clone())
     }
@@ -653,6 +662,31 @@ mod tests {
         assert!(images.link("red.png").unwrap().starts_with("data:"));
         std::fs::write(dir.path().join("red.png"), "changed").unwrap();
         assert!(images.link("red.png").unwrap().starts_with("data:"));
+    }
+
+    #[test]
+    fn pictures_past_the_budget_are_not_read_or_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbImage::new(2, 2)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        let len = png.get_ref().len() as u64;
+        for name in ["red.png", "blue.png", "green.png"] {
+            std::fs::write(dir.path().join(name), png.get_ref()).unwrap();
+        }
+        // Room for one picture: the first fills it, and the others link to
+        // their files without being read into the cache.
+        let mut images = Images::new(dir.path(), len, len).unwrap();
+        assert!(images.link("red.png").unwrap().starts_with("data:"));
+        for name in ["blue.png", "green.png", "blue.png"] {
+            assert!(images.link(name).unwrap().starts_with("file:///"), "{name}");
+        }
+        assert_eq!(images.read.len(), 1, "{:?}", images.read.keys());
+        // A picture bigger than what is left is not read either.
+        let mut images = Images::new(dir.path(), u64::MAX, len - 1).unwrap();
+        assert!(images.link("red.png").unwrap().starts_with("file:///"));
+        assert!(images.read.is_empty());
     }
 
     #[test]
