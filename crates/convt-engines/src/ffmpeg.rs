@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, VideoCodec};
+use convt_core::{Background, Ctx, Engine, Error, Options, Result, Step, Timestamp, VideoCodec};
 
 const VIDEO_IN: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
 const VIDEO_OUT: &[&str] = &["mp4", "mov", "webm", "mkv", "avi", "gif"];
@@ -19,6 +19,13 @@ const AUDIO: &[&str] = &[
 /// MOV carry mov_text, MKV and WebM carry SubRip, ASS or WebVTT.
 const SUBTITLE_IN: &[&str] = &["mp4", "mov", "mkv", "webm"];
 const SUBTITLE_OUT: &[&str] = &["srt", "vtt"];
+/// Formats re-encoded into themselves, to shrink, trim, strip or retime a
+/// file. GIF is here so its animation survives; the image engine would keep
+/// only the first frame. CAF (Apple Lossless) is here for trimming and
+/// stripping, like FLAC; AIFF stays out, like WAV.
+const SAME: &[&str] = &[
+    "mp4", "mov", "webm", "mkv", "gif", "mp3", "m4a", "m4r", "ogg", "opus", "flac", "caf",
+];
 
 /// The FFmpeg binary the engine would run, found the way every tool is:
 /// `CONVT_FFMPEG`, next to the executable, then `PATH`. The desktop app uses
@@ -101,6 +108,36 @@ impl FfmpegEngine {
             Ok(()) => Ok(secs),
         }
     }
+
+    /// How many audio streams the input has. Without ffprobe, or when it
+    /// can't tell, assume one, which only costs a target size some video
+    /// bitrate.
+    fn audio_tracks(&self, ctx: &Ctx, input: &Path) -> Result<u32> {
+        let Some(ffprobe) = &self.ffprobe else {
+            return Ok(1);
+        };
+        let mut cmd = Command::new(ffprobe);
+        cmd.args(LOCAL_INPUT_ARGS)
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_entries",
+                "stream=index",
+                "-of",
+                "csv=p=0",
+            ])
+            .arg(local_path(input));
+        let mut found = 0;
+        match crate::run_tool("ffprobe", cmd, ctx, |line| {
+            found += u32::from(!line.trim().is_empty());
+        }) {
+            Err(Error::Cancelled) => Err(Error::Cancelled),
+            Err(_) => Ok(1),
+            Ok(()) => Ok(found),
+        }
+    }
 }
 
 /// Targets are offered per format, so a silent video still lists audio ones
@@ -167,20 +204,37 @@ impl HwEncoder {
     }
 
     /// Encoder and rate-control arguments for 1-100 `quality`, `None`
-    /// meaning the software default's equivalent (quality 80, CRF 20).
-    fn video_args(self, codec: VideoCodec, quality: Option<u8>) -> Vec<String> {
+    /// meaning the software default's equivalent (quality 80, CRF 20). A
+    /// `kbps` from a target size's budget replaces quality with a bitrate,
+    /// as it does for the software encoders.
+    fn video_args(self, codec: VideoCodec, quality: Option<u8>, kbps: Option<u32>) -> Vec<String> {
         let q = f32::from(quality.unwrap_or(80));
         let mut args = vec!["-c:v".to_string(), self.encoder(codec).to_string()];
-        match self {
+        match (self, kbps) {
+            // VideoToolbox has no -maxrate on every macOS, so its average
+            // is the whole cap; the retry loop catches an overshoot.
+            (HwEncoder::VideoToolbox, Some(v)) => {
+                args.extend(["-b:v".into(), format!("{v}k")]);
+            }
+            (HwEncoder::Nvenc, Some(v)) => {
+                let (v, buf) = (format!("{v}k"), format!("{}k", v * 2));
+                args.extend(
+                    [
+                        "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-b:v", &v, "-maxrate", &v,
+                        "-bufsize", &buf,
+                    ]
+                    .map(String::from),
+                );
+            }
             // Constant quality, where higher is better. Intel Macs without
             // a constant-quality encoder fail the probe and stay software.
-            HwEncoder::VideoToolbox => {
+            (HwEncoder::VideoToolbox, None) => {
                 args.extend(["-q:v".into(), format!("{:.0}", 20.0 + q * 0.6)]);
             }
             // Constant quality with VBR, on a scale like CRF. NVENC files run
             // a little larger than x264's at the same number, so it starts two
             // points higher.
-            HwEncoder::Nvenc => {
+            (HwEncoder::Nvenc, None) => {
                 let worst = match codec {
                     VideoCodec::H264 => 42.0,
                     VideoCodec::Hevc => 46.0,
@@ -286,7 +340,7 @@ fn probe_hardware(ffmpeg: &Path, codec: VideoCodec, ctx: &Ctx) -> Result<Option<
         let mut test = Command::new(ffmpeg);
         test.args(["-hide_banner", "-nostdin", "-v", "error"])
             .args(["-f", "lavfi", "-i", "color=c=gray:s=256x256:r=10:d=0.3"])
-            .args(hw.video_args(codec, None))
+            .args(hw.video_args(codec, None, None))
             .args(["-pix_fmt", "yuv420p", "-f", "null", "-"]);
         if run_probe(test, ctx)?.is_some() {
             return Ok(Some(hw));
@@ -402,39 +456,131 @@ fn video_scale(height: u32) -> String {
     )
 }
 
-/// [`encoder_args`] with the software encoders.
-#[cfg(test)]
-fn output_args(to: &str, o: &Options) -> Vec<String> {
-    encoder_args(to, o, None)
+/// Bitrates or a GIF scale picked to meet `target_size` on one encode
+/// attempt. The default keeps the quality-based arguments.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Budget {
+    video_kbps: Option<u32>,
+    audio_kbps: Option<u32>,
+    /// Extra GIF downscale factor, applied after the usual size cap.
+    gif_scale: Option<f64>,
 }
 
-/// Encoder arguments for one output format and the user's options. `hw`
-/// replaces libx264 or libx265 for MP4, MOV and MKV; everything else (pixel
-/// format, tags, audio, faststart, scaling) is the same on both paths.
-fn encoder_args(to: &str, o: &Options, hw: Option<HwEncoder>) -> Vec<String> {
+/// The bitrates each sizable audio encoder accepts, in kbit/s. Vorbis
+/// refuses much under 48 for 44.1 kHz stereo.
+fn audio_range(to: &str) -> Option<(f64, f64)> {
+    match to {
+        "mp3" => Some((8.0, 320.0)),
+        "aac" | "m4a" | "m4r" => Some((8.0, 320.0)),
+        "ogg" => Some((48.0, 320.0)),
+        "opus" => Some((6.0, 256.0)),
+        _ => None,
+    }
+}
+
+/// The highest video bitrate a budget asks for, in kbit/s. Far above what
+/// any encoder here produces, and small enough that doubling it for the
+/// buffer size can't overflow.
+const MAX_VIDEO_KBPS: f64 = 1_000_000.0;
+
+/// Splits `total_kbps` between video and audio for `to`, or says why a
+/// `target` of bytes can't hold `secs` of it. `tracks` is how many audio
+/// tracks the output carries, each at the same bitrate; a silent input or
+/// `strip_audio` reserves none.
+fn budget(
+    to: &str,
+    o: &Options,
+    tracks: u32,
+    total_kbps: f64,
+    target: u64,
+    secs: f64,
+) -> Result<Budget> {
+    let too_small = |kind: &str| {
+        Error::InvalidOption(format!(
+            "{} is too small for {secs:.1} s of {kind}; pick a larger size or trim it",
+            convt_core::format_size(target)
+        ))
+    };
+    if to == "gif" || FRAME.contains(&to) {
+        return Ok(Budget::default());
+    }
+    if VIDEO_OUT.contains(&to) {
+        let audio = if o.strip_audio || tracks == 0 {
+            None
+        } else {
+            Some(
+                o.audio_bitrate
+                    .unwrap_or((total_kbps / 8.0 / f64::from(tracks)).clamp(32.0, 128.0) as u32),
+            )
+        };
+        let video = total_kbps - f64::from(audio.unwrap_or(0)) * f64::from(tracks);
+        if video < 50.0 {
+            return Err(too_small("video"));
+        }
+        return Ok(Budget {
+            video_kbps: Some(video.min(MAX_VIDEO_KBPS) as u32),
+            audio_kbps: audio,
+            gif_scale: None,
+        });
+    }
+    let Some((min, max)) = audio_range(to) else {
+        let name = convt_core::format_by_id(to).map_or(to, |f| f.name);
+        return Err(Error::InvalidOption(format!(
+            "{name} is lossless, so a target size can't apply; convert to MP3 or M4A instead"
+        )));
+    };
+    if total_kbps < min {
+        return Err(too_small("audio"));
+    }
+    Ok(Budget {
+        audio_kbps: Some(total_kbps.min(max) as u32),
+        ..Budget::default()
+    })
+}
+
+/// [`encoder_args`] with the software encoders.
+#[cfg(test)]
+fn output_args(to: &str, o: &Options, budget: &Budget) -> Vec<String> {
+    encoder_args(to, o, budget, None)
+}
+
+/// Encoder arguments for one output format and the user's options. A
+/// `budget` from `target_size` replaces CRF and quality scales with
+/// bitrates, so an explicit `quality` is ignored then. `hw` replaces libx264
+/// or libx265 for MP4, MOV and MKV; everything else (pixel format, tags,
+/// audio, faststart, filters) is the same on both paths.
+fn encoder_args(to: &str, o: &Options, budget: &Budget, hw: Option<HwEncoder>) -> Vec<String> {
     let q = o.quality;
     let x264_crf = q.map_or("20".into(), |q| crf(q, 40.0));
     let vp9_crf = q.map_or("32".into(), |q| crf(q, 52.0));
-    let aac = format!("{}k", o.audio_bitrate.unwrap_or(192));
-    let bitrate = o.audio_bitrate.map(|b| format!("{b}k"));
+    let audio_kbps = budget.audio_kbps.or(o.audio_bitrate);
+    let aac = format!("{}k", audio_kbps.unwrap_or(192));
+    let bitrate = audio_kbps.map(|b| format!("{b}k"));
+    let rate = budget
+        .video_kbps
+        .map(|v| (format!("{v}k"), format!("{}k", v * 2)));
     let scale = o.video_height.map(video_scale);
     let mut args: Vec<String> = Vec::new();
     let mut push = |a: &[&str]| args.extend(a.iter().map(|s| s.to_string()));
+    if o.strip_metadata {
+        push(&["-map_metadata", "-1", "-map_chapters", "-1"]);
+    }
     match to {
         "mp4" | "mov" | "mkv" => {
             let codec = o.video_codec.unwrap_or(VideoCodec::H264);
-            match (hw, codec) {
+            let (encoder, crf) = match codec {
+                VideoCodec::H264 => ("libx264", x264_crf),
+                VideoCodec::Hevc => ("libx265", q.map_or("24".into(), |q| crf(q, 44.0))),
+            };
+            match (hw, &rate) {
                 (Some(hw), _) => {
-                    let video = hw.video_args(codec, q);
+                    let video = hw.video_args(codec, q, budget.video_kbps);
                     push(&video.iter().map(String::as_str).collect::<Vec<_>>());
                 }
-                (None, VideoCodec::H264) => {
-                    push(&["-c:v", "libx264", "-preset", "medium", "-crf", &x264_crf]);
-                }
-                (None, VideoCodec::Hevc) => {
-                    let x265_crf = q.map_or("24".into(), |q| crf(q, 44.0));
-                    push(&["-c:v", "libx265", "-preset", "medium", "-crf", &x265_crf]);
-                }
+                (None, Some((v, buf))) => push(&[
+                    "-c:v", encoder, "-preset", "medium", "-b:v", v, "-maxrate", v, "-bufsize", buf,
+                ]),
+                (None, None) => push(&["-c:v", encoder, "-preset", "medium", "-crf", &crf]),
             }
             // QuickTime and Apple devices only play HEVC tagged hvc1.
             if codec == VideoCodec::Hevc && to != "mkv" {
@@ -449,16 +595,30 @@ fn encoder_args(to: &str, o: &Options, hw: Option<HwEncoder>) -> Vec<String> {
             }
         }
         "webm" => {
-            push(&[
-                "-c:v",
-                "libvpx-vp9",
-                "-crf",
-                &vp9_crf,
-                "-b:v",
-                "0",
-                "-row-mt",
-                "1",
-            ]);
+            match &rate {
+                Some((v, buf)) => push(&[
+                    "-c:v",
+                    "libvpx-vp9",
+                    "-b:v",
+                    v,
+                    "-maxrate",
+                    v,
+                    "-bufsize",
+                    buf,
+                    "-row-mt",
+                    "1",
+                ]),
+                None => push(&[
+                    "-c:v",
+                    "libvpx-vp9",
+                    "-crf",
+                    &vp9_crf,
+                    "-b:v",
+                    "0",
+                    "-row-mt",
+                    "1",
+                ]),
+            }
             // FFmpeg 9 refuses VP9 in RGB (gbrap, from a transparent GIF),
             // and few players handle it anyway.
             push(&["-deadline", "good", "-cpu-used", "4", "-pix_fmt", "yuv420p"]);
@@ -470,8 +630,15 @@ fn encoder_args(to: &str, o: &Options, hw: Option<HwEncoder>) -> Vec<String> {
             }
         }
         "avi" => {
-            let qv = q.map_or(3, |q| 2 + (100 - u32::from(q)) * 29 / 99);
-            push(&["-c:v", "mpeg4", "-q:v", &qv.to_string()]);
+            match &rate {
+                Some((v, buf)) => {
+                    push(&["-c:v", "mpeg4", "-b:v", v, "-maxrate", v, "-bufsize", buf]);
+                }
+                None => {
+                    let qv = q.map_or(3, |q| 2 + (100 - u32::from(q)) * 29 / 99);
+                    push(&["-c:v", "mpeg4", "-q:v", &qv.to_string()]);
+                }
+            }
             if !o.strip_audio {
                 push(&["-c:a", "libmp3lame"]);
                 if let Some(b) = &bitrate {
@@ -483,8 +650,13 @@ fn encoder_args(to: &str, o: &Options, hw: Option<HwEncoder>) -> Vec<String> {
             let size = o
                 .video_height
                 .map_or("scale='min(720,iw)':-2".into(), video_scale);
+            // A target size shrinks the frame further; 16 pixels is the floor.
+            let shrink = budget.gif_scale.map_or(String::new(), |f| {
+                format!(",scale='max(16,trunc(iw*{f:.4}/2)*2)':-2:flags=lanczos")
+            });
             let vf = format!(
-                "fps=12,{size}:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse"
+                "fps={},{size}:flags=lanczos{shrink},split[a][b];[a]palettegen[p];[b][p]paletteuse",
+                o.fps.unwrap_or(12)
             );
             push(&["-vf", &vf, "-an"]);
             return args;
@@ -532,11 +704,20 @@ fn encoder_args(to: &str, o: &Options, hw: Option<HwEncoder>) -> Vec<String> {
         }
         _ => {}
     }
-    if o.strip_audio && VIDEO_OUT.contains(&to) {
-        args.push("-an".into());
-    }
-    if let Some(vf) = scale.filter(|_| VIDEO_OUT.contains(&to)) {
-        args.extend(["-vf".into(), vf]);
+    if VIDEO_OUT.contains(&to) {
+        if o.strip_audio {
+            args.push("-an".into());
+        }
+        // One chain: a second -vf would replace the first.
+        let filters: Vec<String> = o
+            .fps
+            .map(|f| format!("fps={f}"))
+            .into_iter()
+            .chain(scale)
+            .collect();
+        if !filters.is_empty() {
+            args.extend(["-vf".into(), filters.join(",")]);
+        }
     }
     args
 }
@@ -559,11 +740,19 @@ impl Engine for FfmpegEngine {
             .chain(FRAME)
             .copied()
             .collect();
+        let same = SAME.iter().map(|id| {
+            let format = convt_core::format_by_id(id).expect("known format");
+            Step {
+                from: format,
+                to: format,
+            }
+        });
         crate::steps(VIDEO_IN, &video_targets)
             // GIF has no audio stream, so extraction is never meaningful.
             .filter(|step| !(step.from.id == "gif" && AUDIO.contains(&step.to.id)))
             .chain(crate::steps(AUDIO, AUDIO))
             .chain(crate::steps(SUBTITLE_IN, SUBTITLE_OUT))
+            .chain(same)
             .collect()
     }
 
@@ -583,10 +772,11 @@ impl Engine for FfmpegEngine {
 }
 
 impl FfmpegEngine {
-    /// Converts with `hw` when given, and if that fails for any reason but
-    /// cancellation, deletes its output and converts again in software. A
-    /// probe can pass while a particular input still fails in hardware (too
-    /// large a frame, a busy or reset GPU).
+    /// Converts with `hw` when given. An encode that fails in hardware for
+    /// any reason but cancellation deletes its output and runs again in
+    /// software, and later attempts stay in software. A probe can pass while
+    /// a particular input still fails in hardware (too large a frame, a busy
+    /// or reset GPU).
     fn convert_with(
         &self,
         ctx: &Ctx,
@@ -598,21 +788,88 @@ impl FfmpegEngine {
             engine: "ffmpeg",
             reason: "ffmpeg not found".into(),
         })?;
-        let total = self.duration_us(ctx, input)?.filter(|t| *t > 0.0);
-        if total.is_none() {
-            ctx.indeterminate();
-        }
-        let output = ctx.artifact(out_dir, 0);
+        let o = ctx.options;
         let to = ctx.step.to.id;
-        if to == "gif" && matches!(ctx.options.background, Some(Background::Color(_))) {
+        let subtitle = SUBTITLE_OUT.contains(&to);
+        // FFmpeg's seeks keep or drop a cue that starts before the trim
+        // instead of moving the rest onto the trimmed clock, so the times
+        // would be wrong.
+        if subtitle && (o.trim_start.is_some() || o.trim_end.is_some()) {
             return Err(Error::InvalidOption(
-                "a background color isn't supported for video to GIF yet".into(),
+                "trimming applies to video and audio, not subtitles; extract them whole".into(),
             ));
         }
         // A JPEG frame is written as PNG and encoded by the image engine, so
         // transparency gets the same background handling as any other image
         // (FFmpeg's JPEG encoder dropped it to black). A PNG frame keeps
         // FFmpeg's file, with its color and pixel-aspect tags.
+        let still = FRAME.contains(&to);
+        let duration = self
+            .duration_us(ctx, input)?
+            .filter(|t| *t > 0.0)
+            .map(|us| us / 1_000_000.0);
+        let start = o.trim_start.map_or(0.0, Timestamp::as_secs_f64);
+        if let (Some(at), Some(duration)) = (o.trim_start, duration)
+            && start >= duration
+        {
+            return Err(Error::InvalidOption(format!(
+                "trim start {at} s is past the end of the input ({duration:.1} s)"
+            )));
+        }
+        // The length of the output: what's left after the trim. Without
+        // ffprobe, a trim end still bounds it.
+        let end = o.trim_end.map(Timestamp::as_secs_f64);
+        let secs = match (duration, end) {
+            (Some(d), end) => Some(end.map_or(d, |e| e.min(d)) - start),
+            (None, Some(e)) => Some(e - start),
+            (None, None) => None,
+        }
+        .filter(|s| *s > 0.0);
+        if secs.is_none() {
+            ctx.indeterminate();
+        }
+        let output = ctx.artifact(out_dir, 0);
+        if to == "gif" && matches!(o.background, Some(Background::Color(_))) {
+            return Err(Error::InvalidOption(
+                "a background color isn't supported for video to GIF yet".into(),
+            ));
+        }
+        // Still frames leave target_size to the image engine's encoder, and
+        // subtitle text is too small for one to matter.
+        let target = o.target_size.filter(|_| !still && !subtitle);
+        let mut total_kbps = 0.0;
+        // Re-encoding a video into its own container keeps every audio
+        // track (several languages, commentary); other conversions keep
+        // FFmpeg's pick of one.
+        let keep_tracks = ctx.step.from == ctx.step.to && VIDEO_OUT.contains(&to) && to != "gif";
+        let mut audio = 0;
+        let mut plan = Budget::default();
+        let target = match target {
+            Some(target) => {
+                let secs = secs.ok_or_else(|| {
+                    Error::InvalidOption("a target size needs ffprobe to read the duration".into())
+                })?;
+                total_kbps = target as f64 * 8.0 * 0.95 / secs / 1000.0;
+                audio = if VIDEO_OUT.contains(&to) && !o.strip_audio && to != "gif" {
+                    let tracks = self.audio_tracks(ctx, input)?;
+                    if keep_tracks { tracks } else { tracks.min(1) }
+                } else {
+                    0
+                };
+                plan = budget(to, o, audio, total_kbps, target, secs)?;
+                Some((target, secs))
+            }
+            None => None,
+        };
+        // Seeking on the input is fast and frame-accurate when re-encoding;
+        // `-to` there is a position in the input, not a length.
+        let mut seek: Vec<String> = Vec::new();
+        if let Some(at) = o.trim_start {
+            seek.extend(["-ss".into(), at.to_string()]);
+        }
+        if let Some(at) = o.trim_end.filter(|_| !still) {
+            seek.extend(["-to".into(), at.to_string()]);
+        }
         let via_png = to == "jpeg";
         let frame = out_dir.join("frame.png");
         let written = if via_png { &frame } else { &output };
@@ -620,20 +877,36 @@ impl FfmpegEngine {
         // priming often makes that negative in MKV (-0.023 s), which would
         // move every cue late; a later start (a trimmed recording) should
         // still be subtracted, since players count from it.
-        let copy_times = SUBTITLE_OUT.contains(&to)
+        let copy_times = subtitle
             && self
                 .format_secs(ctx, input, "start_time")?
                 .is_some_and(|start| start <= 0.0);
-        let run = |hw: Option<HwEncoder>| {
+        let hw = std::cell::Cell::new(hw);
+        let run = |budget: &Budget, hw: Option<HwEncoder>, from: f32, until: f32| {
             let mut cmd = Command::new(ffmpeg);
             cmd.args(["-hide_banner", "-nostdin", "-y", "-v", "error"])
                 .args(copy_times.then_some("-copyts"))
                 .args(LOCAL_INPUT_ARGS)
-                .args(["-progress", "pipe:1", "-nostats", "-i"])
+                .args(["-progress", "pipe:1", "-nostats"])
+                .args(&seek)
+                .arg("-i")
                 .arg(local_path(input))
+                .args(if keep_tracks {
+                    // Subtitles are copied; MKV also keeps its attachments
+                    // (the fonts styled subtitles use).
+                    let mut maps = vec!["-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?"];
+                    if to == "mkv" {
+                        maps.extend(["-map", "0:t?"]);
+                    }
+                    maps.extend(["-c:s", "copy"]);
+                    maps
+                } else {
+                    Vec::new()
+                })
                 .args(encoder_args(
                     if via_png { "png" } else { to },
-                    ctx.options,
+                    o,
+                    budget,
                     hw,
                 ))
                 .arg(written);
@@ -641,18 +914,68 @@ impl FfmpegEngine {
                 let us = line
                     .strip_prefix("out_time_us=")
                     .and_then(|v| v.parse::<f64>().ok());
-                if let (Some(us), Some(total)) = (us, total) {
-                    ctx.progress((us / total) as f32);
+                if let (Some(us), Some(secs)) = (us, secs) {
+                    let done = (us / (secs * 1_000_000.0)).clamp(0.0, 1.0) as f32;
+                    ctx.progress(from + (until - from) * done);
                 }
             })
         };
-        with_software_fallback(hw, run, || {
-            let _ = std::fs::remove_file(written);
-            if total.is_some() {
-                ctx.progress(0.0);
+        let encode = |budget: &Budget, from: f32, until: f32| {
+            with_software_fallback(
+                hw.get(),
+                |encoder| run(budget, encoder, from, until),
+                || {
+                    hw.set(None);
+                    let _ = std::fs::remove_file(written);
+                    if secs.is_some() {
+                        ctx.progress(from);
+                    }
+                },
+            )
+            .map_err(|e| missing_stream_error(e, to))
+        };
+        match target {
+            None => encode(&plan, 0.0, 1.0)?,
+            Some((target, target_secs)) => {
+                // Bitrate control overshoots on short or noisy clips, and a
+                // GIF has no bitrate at all, so measure and retry smaller.
+                // Each attempt fills most of the progress that's left.
+                let attempts = if to == "gif" { 6 } else { 3 };
+                let mut from = 0.0;
+                let mut size = 0;
+                for attempt in 0..attempts {
+                    ctx.check()?;
+                    let until = from + (1.0 - from) * 0.9;
+                    encode(&plan, from, until)?;
+                    from = until;
+                    size = std::fs::metadata(&output)?.len();
+                    if size <= target || attempt + 1 == attempts {
+                        break;
+                    }
+                    let ratio = target as f64 / size as f64;
+                    if to == "gif" {
+                        plan.gif_scale = Some(plan.gif_scale.unwrap_or(1.0) * ratio.sqrt() * 0.9);
+                    } else {
+                        total_kbps *= ratio * 0.95;
+                        plan = budget(to, o, audio, total_kbps, target, target_secs)?;
+                    }
+                }
+                if size > target {
+                    let _ = std::fs::remove_file(&output);
+                    return Err(Error::InvalidOption(format!(
+                        "couldn't fit the {} under {} (the smallest try was {}); pick a larger size{}",
+                        ctx.step.to.name,
+                        convt_core::format_size(target),
+                        convt_core::format_size(size),
+                        if to == "gif" {
+                            ", a lower fps or a shorter trim"
+                        } else {
+                            " or trim it"
+                        }
+                    )));
+                }
             }
-        })
-        .map_err(|e| missing_stream_error(e, to))?;
+        }
         if via_png {
             let img = image::open(&frame).map_err(|e| Error::EngineFailed {
                 engine: "ffmpeg",
@@ -660,7 +983,11 @@ impl FfmpegEngine {
             })?;
             let pixel_aspect = png_pixel_aspect(&frame);
             let _ = std::fs::remove_file(&frame);
-            crate::image::encode_with_pixel_aspect(img, to, ctx.options, &output, pixel_aspect)?;
+            let meta = crate::image::Meta {
+                pixel_aspect,
+                icc: None,
+            };
+            crate::image::encode_with_meta(img, to, ctx.options, &output, &meta, &|| ctx.check())?;
         } else if to == "png" {
             crate::image::background_png(&output, ctx.options)?;
         }
@@ -680,17 +1007,21 @@ mod tests {
             audio_bitrate: Some(96),
             ..Options::default()
         };
-        let mp4 = output_args("mp4", &o).join(" ");
+        let mp4 = output_args("mp4", &o, &Budget::default()).join(" ");
         assert!(mp4.contains("-crf 20") && mp4.contains("-b:a 96k"), "{mp4}");
         assert!(mp4.ends_with(&format!("-vf {}", video_scale(480))), "{mp4}");
-        let gif = output_args("gif", &o).join(" ");
+        let gif = output_args("gif", &o, &Budget::default()).join(" ");
         assert!(
             gif.contains(&format!("{}:flags", video_scale(480))) && !gif.contains("-vf scale"),
             "{gif}"
         );
-        let mp3 = output_args("mp3", &o).join(" ");
+        let mp3 = output_args("mp3", &o, &Budget::default()).join(" ");
         assert!(mp3.contains("-b:a 96k") && !mp3.contains("-q:a"), "{mp3}");
-        assert!(!output_args("png", &o).join(" ").contains("scale"));
+        assert!(
+            !output_args("png", &o, &Budget::default())
+                .join(" ")
+                .contains("scale")
+        );
     }
 
     #[test]
@@ -715,19 +1046,19 @@ mod tests {
     fn defaults_are_unchanged() {
         let o = Options::default();
         assert_eq!(
-            output_args("mp4", &o).join(" "),
+            output_args("mp4", &o, &Budget::default()).join(" "),
             "-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart"
         );
         assert_eq!(
-            output_args("mkv", &o).join(" "),
+            output_args("mkv", &o, &Budget::default()).join(" "),
             "-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k"
         );
         assert_eq!(
-            output_args("webm", &o).join(" "),
+            output_args("webm", &o, &Budget::default()).join(" "),
             "-c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -deadline good -cpu-used 4 -pix_fmt yuv420p -c:a libopus"
         );
         assert_eq!(
-            output_args("avi", &o).join(" "),
+            output_args("avi", &o, &Budget::default()).join(" "),
             "-c:v mpeg4 -q:v 3 -c:a libmp3lame"
         );
     }
@@ -738,26 +1069,174 @@ mod tests {
             video_codec: Some(VideoCodec::Hevc),
             ..Options::default()
         };
-        let mp4 = output_args("mp4", &hevc).join(" ");
+        let mp4 = output_args("mp4", &hevc, &Budget::default()).join(" ");
         assert!(
             mp4.contains("-c:v libx265") && mp4.contains("-tag:v hvc1") && !mp4.contains("libx264"),
             "{mp4}"
         );
-        assert!(!output_args("mkv", &hevc).join(" ").contains("hvc1"));
+        assert!(
+            !output_args("mkv", &hevc, &Budget::default())
+                .join(" ")
+                .contains("hvc1")
+        );
         // The codec only applies where it can: WebM stays VP9.
-        assert!(output_args("webm", &hevc).join(" ").contains("libvpx-vp9"));
+        assert!(
+            output_args("webm", &hevc, &Budget::default())
+                .join(" ")
+                .contains("libvpx-vp9")
+        );
 
         let silent = Options {
             strip_audio: true,
             ..Options::default()
         };
         for to in ["mp4", "mov", "mkv", "webm", "avi"] {
-            let args = output_args(to, &silent);
+            let args = output_args(to, &silent, &Budget::default());
             assert!(args.contains(&"-an".to_string()), "{to}: {args:?}");
             assert!(!args.contains(&"-c:a".to_string()), "{to}: {args:?}");
         }
         // Audio targets ignore it rather than producing an empty file.
-        assert!(!output_args("mp3", &silent).contains(&"-an".to_string()));
+        assert!(!output_args("mp3", &silent, &Budget::default()).contains(&"-an".to_string()));
+    }
+
+    #[test]
+    fn same_format_steps_are_explicit() {
+        let steps = FfmpegEngine::new().steps();
+        let mut same: Vec<_> = steps
+            .iter()
+            .filter(|s| s.from == s.to)
+            .map(|s| s.to.id)
+            .collect();
+        same.sort_unstable();
+        let mut expected = SAME.to_vec();
+        expected.sort_unstable();
+        assert_eq!(same, expected);
+    }
+
+    #[test]
+    fn strip_metadata_and_fps_shape_encoder_args() {
+        let strip = Options {
+            strip_metadata: true,
+            ..Options::default()
+        };
+        for to in ["mp4", "webm", "gif", "png", "mp3", "flac"] {
+            let args = output_args(to, &strip, &Budget::default()).join(" ");
+            assert!(
+                args.starts_with("-map_metadata -1 -map_chapters -1 "),
+                "{to}: {args}"
+            );
+        }
+        let fps = Options {
+            fps: Some(24),
+            video_height: Some(480),
+            ..Options::default()
+        };
+        let mp4 = output_args("mp4", &fps, &Budget::default());
+        assert_eq!(mp4.iter().filter(|a| *a == "-vf").count(), 1, "{mp4:?}");
+        assert!(
+            mp4.join(" ")
+                .ends_with(&format!("-vf fps=24,{}", video_scale(480))),
+            "{mp4:?}"
+        );
+        let gif = output_args("gif", &fps, &Budget::default()).join(" ");
+        assert!(gif.contains("fps=24,") && !gif.contains("fps=12"), "{gif}");
+        for to in ["mp3", "png"] {
+            let args = output_args(to, &fps, &Budget::default()).join(" ");
+            assert!(!args.contains("fps"), "{to}: {args}");
+        }
+    }
+
+    #[test]
+    fn a_budget_replaces_quality_with_bitrates() {
+        let o = Options {
+            quality: Some(90),
+            ..Options::default()
+        };
+        let plan = Budget {
+            video_kbps: Some(400),
+            audio_kbps: Some(64),
+            gif_scale: None,
+        };
+        for to in ["mp4", "webm", "avi"] {
+            let args = output_args(to, &o, &plan).join(" ");
+            assert!(
+                args.contains("-b:v 400k -maxrate 400k -bufsize 800k")
+                    && args.contains("-b:a 64k")
+                    && !args.contains("-crf")
+                    && !args.contains("-q:v")
+                    && !args.contains("-b:v 0"),
+                "{to}: {args}"
+            );
+        }
+        let audio = Budget {
+            audio_kbps: Some(48),
+            ..Budget::default()
+        };
+        let mp3 = output_args("mp3", &o, &audio).join(" ");
+        assert!(mp3.contains("-b:a 48k") && !mp3.contains("-q:a"), "{mp3}");
+        let smaller = Budget {
+            gif_scale: Some(0.5),
+            ..Budget::default()
+        };
+        let gif = output_args("gif", &o, &smaller).join(" ");
+        assert!(
+            gif.contains(",scale='max(16,trunc(iw*0.5000/2)*2)'"),
+            "{gif}"
+        );
+    }
+
+    #[test]
+    fn budget_splits_or_refuses_a_target() {
+        let o = Options::default();
+        // 1MB over 10 s: 760 kbit/s, 95 of them audio.
+        let video = budget("mp4", &o, 1, 760.0, 1_000_000, 10.0).unwrap();
+        assert_eq!((video.video_kbps, video.audio_kbps), (Some(665), Some(95)));
+        let silent = Options {
+            strip_audio: true,
+            ..Options::default()
+        };
+        let video = budget("mp4", &silent, 1, 760.0, 1_000_000, 10.0).unwrap();
+        assert_eq!((video.video_kbps, video.audio_kbps), (Some(760), None));
+        // An input without audio gets the whole budget for video too.
+        // Two tracks reserve twice the audio.
+        let two = budget("mp4", &o, 2, 760.0, 1_000_000, 10.0).unwrap();
+        assert_eq!((two.video_kbps, two.audio_kbps), (Some(666), Some(47)));
+        let video = budget("mp4", &o, 0, 760.0, 1_000_000, 10.0).unwrap();
+        assert_eq!((video.video_kbps, video.audio_kbps), (Some(760), None));
+        // A huge target stays a bitrate the buffer size can double.
+        let huge = budget("mp4", &o, 0, 1e12, u64::MAX, 1.0).unwrap();
+        assert_eq!(huge.video_kbps, Some(MAX_VIDEO_KBPS as u32));
+        assert!(
+            output_args("mp4", &o, &huge)
+                .join(" ")
+                .contains("-bufsize 2000000k")
+        );
+        let err = budget("mp4", &o, 1, 60.0, 10_000, 1.3)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("10KB is too small for 1.3 s of video"),
+            "{err}"
+        );
+        // Audio stays within what each encoder accepts.
+        assert_eq!(
+            budget("opus", &o, 1, 900.0, 1, 1.0).unwrap().audio_kbps,
+            Some(256)
+        );
+        assert_eq!(
+            budget("mp3", &o, 1, 64.5, 1, 1.0).unwrap().audio_kbps,
+            Some(64)
+        );
+        assert!(budget("ogg", &o, 1, 40.0, 10_000, 2.0).is_err());
+        let err = budget("flac", &o, 1, 900.0, 1, 1.0)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("FLAC") && err.contains("MP3 or M4A"), "{err}");
+        assert!(budget("wav", &o, 1, 900.0, 1, 1.0).is_err());
+        assert_eq!(
+            budget("gif", &o, 1, 1.0, 1, 1.0).unwrap(),
+            Budget::default()
+        );
     }
 
     #[test]
@@ -766,22 +1245,28 @@ mod tests {
             audio_bitrate: Some(128),
             ..Options::default()
         };
-        assert_eq!(output_args("aiff", &o).join(" "), "-vn -c:a pcm_s16be");
-        assert_eq!(output_args("caf", &o).join(" "), "-vn -c:a alac");
         assert_eq!(
-            output_args("m4r", &o).join(" "),
+            output_args("aiff", &o, &Budget::default()).join(" "),
+            "-vn -c:a pcm_s16be"
+        );
+        assert_eq!(
+            output_args("caf", &o, &Budget::default()).join(" "),
+            "-vn -c:a alac"
+        );
+        assert_eq!(
+            output_args("m4r", &o, &Budget::default()).join(" "),
             "-vn -c:a aac -b:a 128k -f ipod"
         );
         assert_eq!(
-            output_args("m4r", &Options::default()).join(" "),
+            output_args("m4r", &Options::default(), &Budget::default()).join(" "),
             "-vn -c:a aac -b:a 192k -f ipod"
         );
         assert_eq!(
-            output_args("srt", &o).join(" "),
+            output_args("srt", &o, &Budget::default()).join(" "),
             "-map 0:s:0 -c:s srt -f srt"
         );
         assert_eq!(
-            output_args("vtt", &o).join(" "),
+            output_args("vtt", &o, &Budget::default()).join(" "),
             "-map 0:s:0 -c:s webvtt -f webvtt"
         );
     }
@@ -852,7 +1337,8 @@ mod tests {
             quality: Some(100),
             ..Options::default()
         };
-        let args = |to: &str, o: &Options, hw| encoder_args(to, o, Some(hw)).join(" ");
+        let args =
+            |to: &str, o: &Options, hw| encoder_args(to, o, &Budget::default(), Some(hw)).join(" ");
         assert_eq!(
             args("mp4", &Options::default(), HwEncoder::VideoToolbox),
             "-c:v h264_videotoolbox -q:v 68 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart"
@@ -889,10 +1375,42 @@ mod tests {
         // Only H.264 and HEVC containers have hardware encoders.
         for to in ["webm", "avi", "gif", "mp3"] {
             assert_eq!(
-                encoder_args(to, &Options::default(), Some(HwEncoder::Nvenc)),
-                output_args(to, &Options::default()),
+                encoder_args(
+                    to,
+                    &Options::default(),
+                    &Budget::default(),
+                    Some(HwEncoder::Nvenc)
+                ),
+                output_args(to, &Options::default(), &Budget::default()),
                 "{to}"
             );
+        }
+    }
+
+    #[test]
+    fn a_budget_puts_hardware_encoders_in_bitrate_mode() {
+        let hevc = Options {
+            video_codec: Some(VideoCodec::Hevc),
+            quality: Some(90),
+            ..Options::default()
+        };
+        let plan = Budget {
+            video_kbps: Some(400),
+            audio_kbps: Some(64),
+            gif_scale: None,
+        };
+        let vt = encoder_args("mp4", &hevc, &plan, Some(HwEncoder::VideoToolbox)).join(" ");
+        assert_eq!(
+            vt,
+            "-c:v hevc_videotoolbox -b:v 400k -tag:v hvc1 -pix_fmt yuv420p -c:a aac -b:a 64k -movflags +faststart"
+        );
+        let nvenc = encoder_args("mkv", &hevc, &plan, Some(HwEncoder::Nvenc)).join(" ");
+        assert_eq!(
+            nvenc,
+            "-c:v hevc_nvenc -preset p5 -tune hq -rc vbr -b:v 400k -maxrate 400k -bufsize 800k -pix_fmt yuv420p -c:a aac -b:a 64k"
+        );
+        for args in [&vt, &nvenc] {
+            assert!(!args.contains("-q:v") && !args.contains("-cq"), "{args}");
         }
     }
 
@@ -1176,6 +1694,410 @@ mod tests {
         }
     }
 
+    /// The engine, or `None` (after saying so) when FFmpeg or ffprobe is
+    /// missing.
+    fn engine_with_probe() -> Option<FfmpegEngine> {
+        let engine = FfmpegEngine::new();
+        if engine.ffmpeg.is_none() || engine.ffprobe.is_none() {
+            eprintln!("skipping: FFmpeg or ffprobe not found");
+            return None;
+        }
+        Some(engine)
+    }
+
+    /// Generates an input with FFmpeg from `args` (inputs and encoders).
+    fn generate(engine: &FfmpegEngine, path: &Path, args: &[&str]) {
+        let out = Command::new(engine.ffmpeg.as_ref().unwrap())
+            .args(["-v", "error", "-y"])
+            .args(args)
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "generate {path:?}: {out:?}");
+    }
+
+    /// Runs one step and returns the output and the last progress reported.
+    fn run_step(
+        engine: &FfmpegEngine,
+        input: &Path,
+        to: &str,
+        options: &Options,
+    ) -> Result<(PathBuf, f32)> {
+        let step = Step {
+            from: convt_core::format_by_extension(input).unwrap(),
+            to: convt_core::format_by_id(to).unwrap(),
+        };
+        let last = std::sync::Mutex::new(0.0f32);
+        let progress = |p: Option<f32>| {
+            if let Some(p) = p {
+                *last.lock().unwrap() = p;
+            }
+        };
+        let cancel = convt_core::Cancel::new();
+        let ctx = Ctx::new(step, options, &progress, &cancel);
+        let out = input.with_extension(format!("{to}.out"));
+        std::fs::create_dir_all(&out).unwrap();
+        let outputs = engine.convert(&ctx, input, &out)?;
+        let last = *last.lock().unwrap();
+        Ok((outputs[0].clone(), last))
+    }
+
+    /// One `-show_entries` value from ffprobe, as `key=value` lines.
+    fn probe(engine: &FfmpegEngine, path: &Path, entries: &str) -> String {
+        let out = Command::new(engine.ffprobe.as_ref().unwrap())
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                entries,
+                "-of",
+                "default=nw=1",
+            ])
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "ffprobe {path:?}: {out:?}");
+        String::from_utf8(out.stdout).unwrap().to_lowercase()
+    }
+
+    fn probe_duration(engine: &FfmpegEngine, path: &Path) -> f64 {
+        probe(engine, path, "format=duration")
+            .trim()
+            .trim_start_matches("duration=")
+            .parse()
+            .unwrap()
+    }
+
+    /// A 320x240 clip with noise and a tone: hard to compress, so a size
+    /// target has to work for it.
+    fn noisy_clip(engine: &FfmpegEngine, path: &Path, secs: u32) {
+        let video = format!("testsrc2=size=320x240:rate=25:duration={secs},noise=alls=40:allf=t+u");
+        let audio = format!("anoisesrc=duration={secs}:amplitude=0.3");
+        generate(
+            engine,
+            path,
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                &video,
+                "-f",
+                "lavfi",
+                "-i",
+                &audio,
+                "-c:v",
+                "libx264",
+                "-crf",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+            ],
+        );
+    }
+
+    #[test]
+    fn compressing_a_video_keeps_every_audio_track() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        for ext in ["mkv", "mp4"] {
+            let input = dir.path().join(format!("two-tracks.{ext}"));
+            generate(
+                &engine,
+                &input,
+                &[
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=64x48:rate=10:duration=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=880:duration=2",
+                    "-map",
+                    "0",
+                    "-map",
+                    "1",
+                    "-map",
+                    "2",
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                ],
+            );
+            let tracks = |path: &Path| {
+                probe(&engine, path, "stream=codec_type")
+                    .lines()
+                    .filter(|l| l.contains("audio"))
+                    .count()
+            };
+            assert_eq!(tracks(&input), 2);
+            let (same, _) = run_step(&engine, &input, ext, &Options::default()).unwrap();
+            assert_eq!(tracks(&same), 2, "{ext} -> {ext} keeps both tracks");
+            // Both count toward a target size.
+            let sized = Options {
+                target_size: Some(150_000),
+                ..Options::default()
+            };
+            let (small, _) = run_step(&engine, &input, ext, &sized).unwrap();
+            assert_eq!(tracks(&small), 2);
+            assert!(std::fs::metadata(&small).unwrap().len() <= 150_000);
+        }
+    }
+
+    #[test]
+    fn compressing_a_video_keeps_its_subtitles() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let srt = dir.path().join("subs.srt");
+        std::fs::write(&srt, "1\n00:00:00,000 --> 00:00:01,500\nHello\n").unwrap();
+        for (ext, codec) in [("mkv", "srt"), ("mp4", "mov_text")] {
+            let input = dir.path().join(format!("subbed.{ext}"));
+            let mut args = vec![
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x48:rate=10:duration=2",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=2",
+            ];
+            let srt = srt.to_str().unwrap();
+            args.extend(["-i", srt, "-map", "0", "-map", "1", "-map", "2"]);
+            args.extend(["-c:v", "libx264", "-c:a", "aac", "-c:s", codec]);
+            generate(&engine, &input, &args);
+            let subs = |path: &Path| {
+                probe(&engine, path, "stream=codec_type")
+                    .lines()
+                    .filter(|l| l.contains("subtitle"))
+                    .count()
+            };
+            assert_eq!(subs(&input), 1, "{ext} fixture");
+            let (same, _) = run_step(&engine, &input, ext, &Options::default()).unwrap();
+            assert_eq!(subs(&same), 1, "{ext} -> {ext} keeps its subtitles");
+        }
+    }
+
+    #[test]
+    fn real_ffmpeg_strips_metadata() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        for (from, to) in [
+            ("mp4", "mp4"),
+            ("mov", "mkv"),
+            ("mp3", "mp3"),
+            ("mp3", "ogg"),
+        ] {
+            let input = dir.path().join(format!("tagged-{to}.{from}"));
+            let video: &[&str] = if from == "mp3" {
+                &[]
+            } else {
+                &["-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=1"]
+            };
+            let args = [
+                video,
+                &[
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=duration=1",
+                    "-shortest",
+                    "-metadata",
+                    "title=secret",
+                    "-metadata",
+                    "location=+40.0-074.0",
+                    // Stream-scoped tags, which global stripping must reach.
+                    "-metadata:s:a:0",
+                    "title=streamsecret",
+                ],
+            ]
+            .concat();
+            generate(&engine, &input, &args);
+            let (kept, _) = run_step(&engine, &input, to, &Options::default()).unwrap();
+            let tags = probe(&engine, &kept, "format_tags:stream_tags");
+            assert!(tags.contains("secret"), "{from}->{to} copies tags: {tags}");
+            let strip = Options {
+                strip_metadata: true,
+                ..Options::default()
+            };
+            let (stripped, _) = run_step(&engine, &input, to, &strip).unwrap();
+            let tags = probe(&engine, &stripped, "format_tags:stream_tags");
+            assert!(
+                !tags.contains("secret") && !tags.contains("+40.0"),
+                "{from}->{to}: {tags}"
+            );
+            if from != "mp3" {
+                let video_tag = [
+                    &["-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=1"][..],
+                    &["-metadata:s:v:0", "title=videosecret"],
+                ]
+                .concat();
+                let tagged = dir.path().join(format!("stream-{to}.{from}"));
+                generate(&engine, &tagged, &video_tag);
+                let (stripped, _) = run_step(&engine, &tagged, to, &strip).unwrap();
+                let tags = probe(&engine, &stripped, "format_tags:stream_tags");
+                assert!(!tags.contains("videosecret"), "{from}->{to}: {tags}");
+            }
+        }
+    }
+
+    #[test]
+    fn real_ffmpeg_trims_and_reports_trimmed_progress() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("three.mp4");
+        generate(
+            &engine,
+            &input,
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x48:rate=25:duration=3",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=3",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-shortest",
+            ],
+        );
+        let at = |s: &str| Some(s.parse::<Timestamp>().unwrap());
+        let trim = Options {
+            trim_start: at("1"),
+            trim_end: at("2"),
+            ..Options::default()
+        };
+        for to in ["mp4", "webm", "gif", "mp3"] {
+            let (output, progress) = run_step(&engine, &input, to, &trim).unwrap();
+            let secs = probe_duration(&engine, &output);
+            assert!((secs - 1.0).abs() <= 0.15, "{to}: {secs} s");
+            assert!(progress > 0.9, "{to}: progress ended at {progress}");
+        }
+        // A trim end past the input keeps the rest of it.
+        let tail = Options {
+            trim_start: at("2.5"),
+            trim_end: at("10"),
+            ..Options::default()
+        };
+        let (output, _) = run_step(&engine, &input, "mp4", &tail).unwrap();
+        assert!((probe_duration(&engine, &output) - 0.5).abs() <= 0.15);
+        let late = Options {
+            trim_start: at("3.5"),
+            ..Options::default()
+        };
+        let err = run_step(&engine, &input, "mp4", &late).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidOption(_)) && err.to_string().contains("past the end"),
+            "{err}"
+        );
+        // A still frame comes from the trim start.
+        let (frame, _) = run_step(&engine, &input, "png", &trim).unwrap();
+        assert!(image::open(frame).is_ok());
+    }
+
+    #[test]
+    fn real_ffmpeg_applies_fps() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("clip.mp4");
+        generate(
+            &engine,
+            &input,
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x48:rate=25:duration=1",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+            ],
+        );
+        let fps = Options {
+            fps: Some(5),
+            video_height: Some(24),
+            ..Options::default()
+        };
+        for to in ["mp4", "gif"] {
+            let (output, _) = run_step(&engine, &input, to, &fps).unwrap();
+            let stream = probe(&engine, &output, "stream=avg_frame_rate,height");
+            assert!(
+                stream.contains("avg_frame_rate=5/1") && stream.contains("height=24"),
+                "{to}: {stream}"
+            );
+        }
+    }
+
+    #[test]
+    fn real_ffmpeg_meets_a_target_size() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("noisy.mp4");
+        noisy_clip(&engine, &input, 4);
+        let original = std::fs::metadata(&input).unwrap().len();
+        let sized = |bytes| Options {
+            target_size: Some(bytes),
+            quality: Some(100),
+            ..Options::default()
+        };
+        for (to, target) in [("mp4", 100_000), ("webm", 100_000), ("gif", 150_000)] {
+            assert!(original > target, "the clip is already small: {original}");
+            let (output, progress) = run_step(&engine, &input, to, &sized(target))
+                .unwrap_or_else(|e| panic!("{to}: {e}"));
+            let size = std::fs::metadata(&output).unwrap().len();
+            eprintln!("{to}: {original} -> {size} bytes (target {target})");
+            assert!(size <= target, "{to}: {size} > {target}");
+            // The output still plays for the full length.
+            assert!(
+                (probe_duration(&engine, &output) - 4.0).abs() <= 0.3,
+                "{to}"
+            );
+            assert!(progress > 0.85, "{to}: progress ended at {progress}");
+        }
+        let wav = dir.path().join("noise.wav");
+        generate(
+            &engine,
+            &wav,
+            &["-f", "lavfi", "-i", "anoisesrc=duration=10", "-ac", "2"],
+        );
+        let (mp3, _) = run_step(&engine, &wav, "mp3", &sized(60_000)).unwrap();
+        let size = std::fs::metadata(&mp3).unwrap().len();
+        assert!(size <= 60_000, "mp3: {size}");
+        assert!((probe_duration(&engine, &mp3) - 10.0).abs() <= 0.3);
+        let err = run_step(&engine, &wav, "flac", &sized(60_000)).unwrap_err();
+        assert!(err.to_string().contains("MP3 or M4A"), "{err}");
+        let err = run_step(&engine, &input, "mp4", &sized(10_000)).unwrap_err();
+        assert!(
+            matches!(err, Error::InvalidOption(_)) && err.to_string().contains("too small"),
+            "{err}"
+        );
+    }
+
     /// Generates `name` in a fresh directory from FFmpeg arguments, or `None`
     /// when FFmpeg (or an encoder the fixture needs) is missing.
     fn fixture(name: &str, args: &[&str]) -> Option<(FfmpegEngine, tempfile::TempDir, PathBuf)> {
@@ -1289,6 +2211,19 @@ mod tests {
                     assert!(text.contains("00:00:01,000 --> 00:00:01,900"), "{text}");
                 }
             }
+            if codec.is_empty() {
+                continue;
+            }
+            // FFmpeg can't trim cues onto the trimmed clock, so it's refused.
+            let trimmed = Options {
+                trim_start: Some(Timestamp { millis: 500 }),
+                ..Options::default()
+            };
+            let (result, _) = convert_file(&engine, &path, "srt", &trimmed, None);
+            assert!(
+                matches!(result, Err(Error::InvalidOption(ref e)) if e.contains("not subtitles")),
+                "{name} trimmed: {result:?}"
+            );
         }
     }
 
@@ -1386,6 +2321,53 @@ mod tests {
             }
         }
         drop(dir);
+    }
+
+    /// A hardware encoder that fails during a target-size encode falls back
+    /// to software for that attempt and every later one, and progress only
+    /// steps back once, to the start of the attempt that fell back.
+    #[test]
+    fn real_ffmpeg_falls_back_from_hardware_while_meeting_a_target_size() {
+        let Some(engine) = engine_with_probe() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("noisy.mp4");
+        noisy_clip(&engine, &input, 4);
+        let options = Options {
+            target_size: Some(100_000),
+            ..Options::default()
+        };
+        for hw in [HwEncoder::VideoToolbox, HwEncoder::Nvenc] {
+            let step = Step {
+                from: convt_core::format_by_id("mp4").unwrap(),
+                to: convt_core::format_by_id("mp4").unwrap(),
+            };
+            let seen = Mutex::new(Vec::new());
+            let progress = |p: Option<f32>| {
+                if let Some(p) = p {
+                    seen.lock().unwrap().push(p);
+                }
+            };
+            let cancel = convt_core::Cancel::new();
+            let ctx = Ctx::new(step, &options, &progress, &cancel);
+            let out = dir.path().join(format!("out-{hw:?}"));
+            std::fs::create_dir(&out).unwrap();
+            let outputs = engine
+                .convert_with(&ctx, &input, &out, Some(hw))
+                .unwrap_or_else(|e| panic!("{hw:?}: {e}"));
+            let left: Vec<_> = std::fs::read_dir(&out)
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .collect();
+            assert_eq!(left, outputs, "{hw:?}");
+            let size = std::fs::metadata(&outputs[0]).unwrap().len();
+            assert!(size <= 100_000, "{hw:?}: {size}");
+            let seen = seen.into_inner().unwrap();
+            let backs = seen.windows(2).filter(|w| w[1] < w[0]).count();
+            assert!(backs <= 1, "{hw:?}: {seen:?}");
+            assert!(seen.last().is_some_and(|p| *p > 0.85), "{hw:?}: {seen:?}");
+        }
     }
 
     /// The probe only accepts an encoder that really encodes, and the full

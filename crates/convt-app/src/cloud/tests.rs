@@ -939,7 +939,7 @@ mod app {
         assert_eq!(creates.len(), 2);
         for create in &creates {
             assert!(
-                create.ends_with(r#" {"quality":40,"max_size":512,"video_height":null,"audio_bitrate":null,"pages":null,"dpi":null,"video_codec":null,"background":null}"#),
+                create.ends_with(r#" {"quality":40,"max_size":512,"video_height":null,"audio_bitrate":null,"pages":null,"dpi":null,"video_codec":null,"background":null,"trim_start":null,"trim_end":null,"fps":null}"#),
                 "{create}"
             );
         }

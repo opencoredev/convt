@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use convt_core::{
-    Background, Category, Format, Options, Output, Registry, VideoCodec, format_by_id,
+    Background, Category, Format, Options, Output, Registry, VideoCodec, format_by_id, format_size,
 };
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::tooltip::Tooltip;
@@ -34,6 +34,17 @@ const QUALITY: [(&str, &str, Option<u8>); 3] = [
     ("best", "Best", Some(95)),
 ];
 
+/// The Max file size choices in bytes, decimal like upload limits; `None`
+/// is no limit.
+const TARGET_SIZES: [Option<u64>; 6] = [
+    None,
+    Some(2_000_000),
+    Some(8_000_000),
+    Some(10_000_000),
+    Some(25_000_000),
+    Some(50_000_000),
+];
+
 /// The segment key for a quality value; "preset" for a value a preset set
 /// that no segment matches.
 fn quality_key(quality: Option<u8>) -> &'static str {
@@ -47,6 +58,7 @@ fn quality_key(quality: Option<u8>) -> &'static str {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Open {
     Size,
+    TargetSize,
     Codec,
     Background,
 }
@@ -69,6 +81,10 @@ pub struct QuickView {
     pub(super) video_codec: Option<VideoCodec>,
     /// The Keep audio checkbox, unchecked.
     pub(super) strip_audio: bool,
+    /// The Max file size control, in bytes. `None` is no limit.
+    pub(super) target_size: Option<u64>,
+    /// The Strip metadata checkbox.
+    pub(super) strip_metadata: bool,
     /// The Background control for image targets. `None` shows the engine's
     /// default: Transparent where the format keeps it, White where it can't.
     pub(super) background: Option<Background>,
@@ -177,6 +193,8 @@ impl QuickView {
             size: None,
             video_codec: None,
             strip_audio: false,
+            target_size: None,
+            strip_metadata: false,
             background: None,
             open: None,
             options_open: false,
@@ -297,6 +315,8 @@ impl QuickView {
         self.quality = o.quality;
         self.video_codec = o.video_codec;
         self.strip_audio = o.strip_audio;
+        self.target_size = o.target_size;
+        self.strip_metadata = o.strip_metadata;
         self.background = o.background;
         self.size = self.preset_size();
     }
@@ -409,6 +429,16 @@ impl QuickView {
         if audio_applies(to) {
             options.strip_audio = self.strip_audio;
         }
+        // Where the row is hidden (lossless audio), a preset's limit would only
+        // make the conversion fail, with nothing in the window to clear it.
+        options.target_size = if target_size_applies(to) {
+            self.target_size
+        } else {
+            None
+        };
+        if media(to) {
+            options.strip_metadata = self.strip_metadata;
+        }
         // Where the control is hidden (video to GIF), a preset's color would
         // only make the conversion fail, with nothing in the window to clear it.
         options.background = if background_applies(to, &self.files) {
@@ -463,6 +493,14 @@ impl QuickView {
                 return;
             }
         };
+        if let Output::Exact(path) = &output
+            && files.iter().any(|f| same_file(f, path))
+        {
+            self.name_error = Some("That's the original file's name. Pick another one.".into());
+            self.editing_name = true;
+            cx.notify();
+            return;
+        }
         self.name_error = None;
         if cloud && !self.app.read(cx).settings.cloud_consent {
             return;
@@ -504,7 +542,16 @@ impl QuickView {
 
     /// Cloud is picked and can run.
     fn in_cloud(&self, cx: &App) -> bool {
-        self.cloud && self.cloud_access(cx).ready()
+        self.cloud && self.cloud_access(cx).ready() && self.cloud_blocked().is_none()
+    }
+
+    /// Why Cloud can't take this target although the account could: it
+    /// doesn't compress a file into its own format.
+    fn cloud_blocked(&self) -> Option<&'static str> {
+        let to = self.to?;
+        sources(&self.files)
+            .any(|f| f == to)
+            .then_some("Compressing a file into its own format runs on this computer.")
     }
 
     pub(super) fn set_cloud(&mut self, cloud: bool, cx: &mut Context<Self>) {
@@ -711,8 +758,15 @@ impl QuickView {
         });
         let cards = self.targets.formats.iter().map(|&format| {
             let on = self.to == Some(format);
+            // A file's own format makes a smaller or cleaner copy of it.
+            let same = sources(&self.files).all(|f| f == format);
             let needs_pack = self.targets.pack.contains(&format);
             let weak = cx.entity().downgrade();
+            let blurb = if same {
+                "Compress"
+            } else {
+                blurb(format, video_input)
+            };
             theme::choice(
                 theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name),
                 on,
@@ -760,9 +814,15 @@ impl QuickView {
                     ))
                 } else {
                     d.child(
-                        styled(size::CAPTION, if on { p.green_text } else { p.secondary })
-                            .truncate()
-                            .child(blurb(format, video_input)),
+                        div()
+                            .id(SharedString::from(format!("blurb-{}", format.id)))
+                            .test_support()
+                            .aria_label(blurb)
+                            .child(
+                                styled(size::CAPTION, if on { p.green_text } else { p.secondary })
+                                    .truncate()
+                                    .child(blurb),
+                            ),
                     )
                 }
             })
@@ -1062,10 +1122,70 @@ impl QuickView {
                 p,
             )
         });
-        let mut rows: Vec<AnyElement> = [quality, size, codec, background, audio]
-            .into_iter()
-            .flatten()
-            .collect();
+        let target_size = target_size_applies(to).then(|| {
+            let mut choices: Vec<Option<u64>> = TARGET_SIZES.to_vec();
+            // A preset's own limit gets an entry of its own, which stays
+            // pickable after choosing another.
+            for custom in [self.options.target_size, self.target_size] {
+                if !choices.contains(&custom) {
+                    choices.push(custom);
+                }
+            }
+            let id = |v: Option<u64>| v.map_or("none".into(), |v| v.to_string());
+            let toggle = cx.entity().downgrade();
+            let pick = cx.entity().downgrade();
+            row_label(
+                "Max file size",
+                theme::select(
+                    "target-size",
+                    target_size_label(self.target_size),
+                    &id(self.target_size),
+                    SELECT_WIDTH,
+                    false,
+                    self.open == Some(Open::TargetSize),
+                    choices
+                        .iter()
+                        .map(|&v| Choice::new(id(v), target_size_label(v)))
+                        .collect(),
+                    p,
+                    move |_, cx| {
+                        let _ = toggle.update(cx, |this, cx| this.toggle(Open::TargetSize, cx));
+                    },
+                    move |id, _, cx| {
+                        let value = id.parse().ok();
+                        let _ = pick.update(cx, |this, cx| {
+                            this.target_size = value;
+                            this.open = None;
+                            cx.notify();
+                        });
+                    },
+                ),
+                p,
+            )
+        });
+        let strip_metadata = media(to).then(|| {
+            row_label(
+                "Metadata",
+                theme::checkbox("strip-metadata", "Strip metadata", self.strip_metadata, p)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.strip_metadata = !this.strip_metadata;
+                        cx.notify();
+                    })),
+                p,
+            )
+        });
+        let mut rows: Vec<AnyElement> = [
+            quality,
+            size,
+            target_size,
+            codec,
+            background,
+            audio,
+            strip_metadata,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         if rows.is_empty() {
             return None;
         }
@@ -1209,7 +1329,10 @@ impl QuickView {
                         icon: IconName::Cloud,
                         title: "Cloud".into(),
                         line: "Faster for big videos".into(),
-                        disabled: access.reason().map(Into::into),
+                        disabled: access
+                            .reason()
+                            .or_else(|| self.cloud_blocked().map(Into::into))
+                            .map(Into::into),
                     },
                 ],
                 if cloud { "cloud" } else { "local" },
@@ -1442,7 +1565,9 @@ impl QuickView {
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
-            let status = match (done, self.cloud) {
+            // Where the jobs run, not what was picked: a same-format
+            // target stays here even with Cloud chosen.
+            let status = match (done, self.in_cloud(cx)) {
                 (true, _) => "Done",
                 (false, true) => "Converting in the cloud…",
                 (false, false) => "Converting…",
@@ -1658,6 +1783,36 @@ fn shown_background(to: &Format, picked: Option<Background>) -> Option<Backgroun
     }
 }
 
+/// Whether `to` is video, audio or an image, for Max file size and Strip
+/// metadata.
+fn media(to: &Format) -> bool {
+    matches!(
+        to.category,
+        Category::Video | Category::Audio | Category::Image
+    )
+}
+
+/// Whether Max file size shows for `to`. Lossless audio (WAV, FLAC, AIFF,
+/// CAF) can't trade quality for size, so the engine refuses a limit there.
+fn target_size_applies(to: &Format) -> bool {
+    media(to) && !matches!(to.id, "wav" | "flac" | "aiff" | "caf")
+}
+
+/// "No limit" or the size as presets write it: "10MB".
+fn target_size_label(bytes: Option<u64>) -> String {
+    bytes.map_or_else(|| "No limit".into(), format_size)
+}
+
+/// Whether `a` and `b` name the same file, even through another spelling of
+/// the folder.
+fn same_file(a: &Path, b: &Path) -> bool {
+    a == b
+        || matches!(
+            (std::fs::canonicalize(a), std::fs::canonicalize(b)),
+            (Ok(a), Ok(b)) if a == b
+        )
+}
+
 /// Whether `to` is video that can carry audio, for Keep audio.
 fn audio_applies(to: &Format) -> bool {
     to.category == Category::Video && to.id != "gif"
@@ -1704,7 +1859,7 @@ fn size_choices(to: &Format) -> Option<(&'static str, &'static [SizeChoice])> {
                 (Some(512), "512 px"),
             ],
         )),
-        Category::Audio if !matches!(to.id, "wav" | "flac") => Some((
+        Category::Audio if !matches!(to.id, "wav" | "flac" | "aiff" | "caf") => Some((
             "Bitrate",
             &[
                 (None, "Original"),
@@ -1864,6 +2019,7 @@ impl Render for QuickView {
             .child(
                 div()
                     .id("quick-body")
+                    .test_support()
                     .flex()
                     .flex_col()
                     .flex_1()

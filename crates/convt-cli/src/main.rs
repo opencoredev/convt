@@ -6,7 +6,7 @@ use anyhow::{Context, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use convt_core::{
     Background, Cancel, Category, Event, FORMATS, Job, Options, Output, PageRange, Preset,
-    VideoCodec, expand_inputs, format_by_extension, format_by_id, run_batch,
+    Timestamp, VideoCodec, expand_inputs, format_by_extension, format_by_id, parse_size, run_batch,
 };
 use convt_license::client::{Config, Licensing};
 use serde_json::json;
@@ -39,9 +39,24 @@ struct Cli {
     /// A preset name from `convt presets`, or a path to a preset file
     #[arg(short, long)]
     preset: Option<String>,
-    /// Lossy quality from 1 to 100 (JPEG, HEIC, AVIF, video)
+    /// Lossy quality from 1 to 100 (JPEG, WebP, HEIC, AVIF, video); 100 makes WebP lossless
     #[arg(short, long)]
     quality: Option<u8>,
+    /// Largest output file, e.g. 10MB, 8M or 500KB; lowers quality (and image size) to fit
+    #[arg(long, value_name = "SIZE", value_parser = parse_size)]
+    target_size: Option<u64>,
+    /// Leave EXIF, GPS and other metadata out of the output
+    #[arg(long)]
+    strip_metadata: bool,
+    /// Start video or audio output here: seconds (12.5) or a timestamp (1:30)
+    #[arg(long, value_name = "TIME")]
+    trim_start: Option<Timestamp>,
+    /// End video or audio output here: seconds (12.5) or a timestamp (1:30)
+    #[arg(long, value_name = "TIME")]
+    trim_end: Option<Timestamp>,
+    /// Frames per second for video and GIF output
+    #[arg(long)]
+    fps: Option<u32>,
     /// Longest edge of image output, in pixels
     #[arg(long, value_name = "PX")]
     max_size: Option<u32>,
@@ -396,7 +411,9 @@ fn main() -> anyhow::Result<()> {
             } else {
                 registry.targets(from)
             };
-            for f in targets {
+            // The file's own format is left out: Raycast and the site read
+            // this list as "convert to", and `--to <its format>` compresses.
+            for f in targets.into_iter().filter(|f| *f != from) {
                 println!("{}", f.id);
             }
         }
@@ -453,6 +470,11 @@ fn convert(cli: Cli, registry: &convt_core::Registry) -> anyhow::Result<()> {
         video_codec: cli.video_codec,
         strip_audio: cli.no_audio,
         background: cli.background,
+        target_size: cli.target_size,
+        strip_metadata: cli.strip_metadata,
+        trim_start: cli.trim_start,
+        trim_end: cli.trim_end,
+        fps: cli.fps,
     }
     .or(&preset.map(|p| p.options).unwrap_or_default());
     options.validate()?;
@@ -466,8 +488,9 @@ fn convert(cli: Cli, registry: &convt_core::Registry) -> anyhow::Result<()> {
         );
     }
 
-    // Files found in a folder are skipped quietly when they can't become `to`;
-    // files named directly are always attempted, so their errors show.
+    // Files found in a folder are skipped quietly when they can't become `to`
+    // or already are `to`; files named directly are always attempted, so
+    // their errors show and `photo.jpg --to jpeg` re-encodes it.
     let jobs: Vec<Job> = expand_inputs(&cli.files, cli.recursive)?
         .into_iter()
         .filter(|item| {
@@ -495,7 +518,10 @@ fn convert(cli: Cli, registry: &convt_core::Registry) -> anyhow::Result<()> {
         })
         .collect::<anyhow::Result<_>>()?;
     if jobs.is_empty() {
-        bail!("nothing in those folders converts to {}", to.id);
+        bail!(
+            "nothing in those folders converts to {}; to re-encode {0} files, name them directly",
+            to.id
+        );
     }
     if let Err(blocked) = licensing().begin_conversion() {
         bail!("{blocked}");

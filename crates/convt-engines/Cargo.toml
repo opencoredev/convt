@@ -15,6 +15,7 @@ convt-core.workspace = true
 dirs.workspace = true
 image.workspace = true
 png = "=0.18.1"
+libwebp-sys = "=0.14.4"
 libloading.workspace = true
 pdfium-render = { workspace = true, optional = true }
 resvg.workspace = true

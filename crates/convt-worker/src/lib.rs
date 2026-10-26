@@ -329,8 +329,15 @@ pub fn cli_args(options: &convt_core::Options) -> Vec<String> {
     flag("dpi", options.dpi.map(|v| v.to_string()));
     flag("video-codec", options.video_codec.map(|v| v.id().into()));
     flag("background", options.background.map(|v| v.id()));
+    flag("target-size", options.target_size.map(|v| v.to_string()));
+    flag("trim-start", options.trim_start.map(|v| v.to_string()));
+    flag("trim-end", options.trim_end.map(|v| v.to_string()));
+    flag("fps", options.fps.map(|v| v.to_string()));
     if options.strip_audio {
         args.push("--no-audio".into());
+    }
+    if options.strip_metadata {
+        args.push("--strip-metadata".into());
     }
     args
 }
@@ -527,7 +534,8 @@ mod tests {
         let options: convt_core::Options = serde_json::from_value(serde_json::json!({
             "quality": 40, "max_size": 512, "video_height": 720, "audio_bitrate": 128,
             "pages": "2-3", "dpi": 150, "video_codec": "hevc", "background": "#ff8800",
-            "strip_audio": true
+            "strip_audio": true, "target_size": 8000000, "trim_start": "1.5",
+            "trim_end": "90", "fps": 15, "strip_metadata": true
         }))
         .unwrap();
         assert_eq!(
@@ -541,7 +549,12 @@ mod tests {
                 "--dpi=150",
                 "--video-codec=hevc",
                 "--background=#ff8800",
+                "--target-size=8000000",
+                "--trim-start=1.5",
+                "--trim-end=90",
+                "--fps=15",
                 "--no-audio",
+                "--strip-metadata",
             ]
         );
     }

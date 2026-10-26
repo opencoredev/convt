@@ -114,12 +114,21 @@ fn formats_with_transparency_keep_it_unless_a_color_is_chosen() {
             );
         }
         let files = convert(&src, to, Some(Background::WHITE)).unwrap();
-        assert_eq!(
-            pixel(&files[0], 0, 0),
-            [255, 255, 255, 255],
-            "{to} on white"
-        );
-        assert_eq!(pixel(&files[0], 20, 20), [255, 0, 0, 255], "{to} on white");
+        let (corner, inside) = (pixel(&files[0], 0, 0), pixel(&files[0], 20, 20));
+        if to == "webp" {
+            // WebP is lossy by default, so colors land within a step or two.
+            assert!(
+                near(corner, [255, 255, 255]) && corner[3] == 255,
+                "{to} on white: {corner:?}"
+            );
+            assert!(
+                near(inside, [255, 0, 0]) && inside[3] == 255,
+                "{to} on white: {inside:?}"
+            );
+            continue;
+        }
+        assert_eq!(corner, [255, 255, 255, 255], "{to} on white");
+        assert_eq!(inside, [255, 0, 0, 255], "{to} on white");
     }
 }
 

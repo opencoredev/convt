@@ -19,6 +19,16 @@ export type JobOptions = {
   background?: string | null;
   /** Leave the audio out of video output. */
   strip_audio?: boolean;
+  /** Largest output file in bytes, at least 10000. Lowers quality to fit. */
+  target_size?: number | null;
+  /** Leave EXIF, GPS and other metadata out of the output. */
+  strip_metadata?: boolean;
+  /** Start video or audio output here: seconds or a timestamp like "1:30". */
+  trim_start?: number | string | null;
+  /** End video or audio output here: seconds or a timestamp like "1:30". */
+  trim_end?: number | string | null;
+  /** Frames per second for video and GIF output, from 1 to 120. */
+  fps?: number | null;
 };
 export type Job = {
   id: string;

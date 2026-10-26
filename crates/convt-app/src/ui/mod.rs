@@ -425,10 +425,11 @@ pub fn show_about(cx: &mut App) {
     );
 }
 
-/// Quick convert's size: room for a typical image's format cards, the
-/// Options row, where it runs and Save without scrolling. Opened options,
-/// video and long lists scroll.
-pub(super) const QUICK_SIZE: (f32, f32) = (600., 720.);
+/// Quick convert's size: room for a typical image's format cards (four
+/// rows, with its own format to compress and HEIC on macOS), the Options
+/// row, where it runs and Save without scrolling. Opened options, video and
+/// long lists scroll.
+pub(super) const QUICK_SIZE: (f32, f32) = (600., 752.);
 
 /// Quick convert's height, plus the title bar macOS draws inside it.
 pub(super) fn quick_height() -> Pixels {
@@ -631,6 +632,21 @@ fn describe(preset: &Preset) -> String {
     }
     if o.strip_audio {
         parts.push("no audio".into());
+    }
+    if let Some(bytes) = o.target_size {
+        parts.push(format!("under {}", convt_core::format_size(bytes)));
+    }
+    if o.strip_metadata {
+        parts.push("no metadata".into());
+    }
+    match (o.trim_start, o.trim_end) {
+        (Some(start), Some(end)) => parts.push(format!("{start}s to {end}s")),
+        (Some(start), None) => parts.push(format!("from {start}s")),
+        (None, Some(end)) => parts.push(format!("first {end}s")),
+        (None, None) => {}
+    }
+    if let Some(fps) = o.fps {
+        parts.push(format!("{fps} fps"));
     }
     if let Some(background) = o.background {
         parts.push(format!("{} background", background.name().to_lowercase()));

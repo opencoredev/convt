@@ -670,6 +670,30 @@
           "strip_audio": {
             "type": "boolean",
             "default": false
+          },
+          "target_size": {
+            "type": ["integer", "null"],
+            "minimum": 10000,
+            "description": "Largest output file in bytes. Lowers quality, and image size, to fit."
+          },
+          "strip_metadata": {
+            "type": "boolean",
+            "default": false,
+            "description": "Leave EXIF, GPS and other metadata out of the output."
+          },
+          "trim_start": {
+            "type": ["number", "string", "null"],
+            "description": "Start video or audio output here: seconds (12.5) or a timestamp (\"1:30\")."
+          },
+          "trim_end": {
+            "type": ["number", "string", "null"],
+            "description": "End video or audio output here: seconds (12.5) or a timestamp (\"1:30\")."
+          },
+          "fps": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 120,
+            "description": "Frames per second for video and GIF output."
           }
         }
       }
