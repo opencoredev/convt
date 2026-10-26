@@ -50,7 +50,7 @@ impl Engine for DataEngine {
         } else {
             let rows = match from {
                 "csv" | "tsv" => read_table(&source, delimiter(from))?,
-                _ => tree_to_rows(read_tree(from, &source)?)?,
+                _ => tree_to_rows_checked(read_tree(from, &source)?, &|| ctx.check())?,
             };
             ctx.check()?;
             match to {
@@ -737,9 +737,26 @@ pub fn rows_to_tree(rows: Vec<Vec<String>>) -> Result<Value> {
     ))
 }
 
+/// The most cells (rows × columns, header included) an array of objects may
+/// fill. Objects with distinct keys multiply into far more cells than the
+/// input holds, so the size is checked before any row is built.
+pub const MAX_CELLS: usize = 50_000_000;
+
+/// How many rows to build between cancellation checks.
+const CHECK_EVERY: usize = 4096;
+
 /// A table from an array of objects (their keys in first-seen order make the
 /// header), an array of arrays (rows as they are), or a single object (one row).
 pub fn tree_to_rows(value: Value) -> Result<Vec<Vec<String>>> {
+    tree_to_rows_checked(value, &|| Ok(()))
+}
+
+/// [`tree_to_rows`], calling `check` between batches of rows so a large
+/// table can be cancelled.
+pub fn tree_to_rows_checked(
+    value: Value,
+    check: &dyn Fn() -> Result<()>,
+) -> Result<Vec<Vec<String>>> {
     let items = match value {
         Value::Array(items) => items,
         object @ Value::Object(_) => vec![object],
@@ -767,8 +784,19 @@ pub fn tree_to_rows(value: Value) -> Result<Vec<Vec<String>>> {
         if keys.is_empty() {
             return Err(failed("the objects have no fields to make columns from"));
         }
-        let mut rows = vec![keys.clone()];
-        for item in items {
+        let (columns, height) = (keys.len(), items.len() + 1);
+        if columns.saturating_mul(height) > MAX_CELLS {
+            return Err(failed(format!(
+                "this would make a table of {columns} columns × {height} rows; \
+                 convt stops at {MAX_CELLS} cells"
+            )));
+        }
+        let mut rows = Vec::with_capacity(height);
+        rows.push(keys.clone());
+        for (i, item) in items.into_iter().enumerate() {
+            if i % CHECK_EVERY == 0 {
+                check()?;
+            }
             let Value::Object(entries) = item else {
                 unreachable!()
             };
@@ -1067,6 +1095,54 @@ mod tests {
                 vec![r#"{"x":[1,2]}"#, "", "", "s"],
             ]
         );
+    }
+
+    #[test]
+    fn objects_with_distinct_keys_stop_before_building_a_huge_table() {
+        // 20,000 one-key objects with distinct keys: about 300 KB of JSON
+        // that would otherwise fill 400 million cells.
+        let json = format!(
+            "[{}]",
+            (0..20_000)
+                .map(|i| format!("{{\"k{i}\":1}}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let error = tree_to_rows(read_tree("json", &json).unwrap()).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("20000 columns × 20001 rows; convt stops at 50000000 cells"),
+            "{error}"
+        );
+
+        // Just over the budget with fewer columns.
+        let columns = 5_000;
+        let rows = MAX_CELLS / columns;
+        let first = Value::Object(
+            (0..columns)
+                .map(|i| (format!("k{i}"), Value::Null))
+                .collect(),
+        );
+        let tall = Value::Array(
+            std::iter::once(first)
+                .chain((1..rows).map(|_| Value::Object(Vec::new())))
+                .collect(),
+        );
+        let error = tree_to_rows(tall).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("{columns} columns × {} rows", rows + 1)),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn building_rows_can_be_cancelled() {
+        let value = read_tree("json", r#"[{"a":1},{"a":2}]"#).unwrap();
+        let error = tree_to_rows_checked(value, &|| Err(Error::Cancelled)).unwrap_err();
+        assert!(matches!(error, Error::Cancelled), "{error}");
     }
 
     #[test]
