@@ -672,7 +672,7 @@
             "default": false
           },
           "target_size": {
-            "type": ["integer", "null"],
+            "type": "integer",
             "minimum": 10000,
             "description": "Largest output file in bytes. Lowers quality, and image size, to fit."
           },

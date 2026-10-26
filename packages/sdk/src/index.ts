@@ -20,7 +20,7 @@ export type JobOptions = {
   /** Leave the audio out of video output. */
   strip_audio?: boolean;
   /** Largest output file in bytes, at least 10000. Lowers quality to fit. */
-  target_size?: number | null;
+  target_size?: number;
   /** Leave EXIF, GPS and other metadata out of the output. */
   strip_metadata?: boolean;
   /** Start video or audio output here: seconds or a timestamp like "1:30". */

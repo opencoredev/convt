@@ -53,7 +53,14 @@ impl Engine for DataEngine {
                 _ => tree_to_rows_checked(read_tree(from, &source)?, &|| ctx.check())?,
             };
             ctx.check()?;
-            check_padded_size(&rows)?;
+            // HTML and Markdown fill short rows out to the widest; the other
+            // writers keep each row as long as it is.
+            if matches!(to, "html" | "md") {
+                check_padded_size(&rows)?;
+            }
+            if to == "txt" {
+                check_aligned_size(&rows)?;
+            }
             match to {
                 "csv" | "tsv" => write_table(&rows, delimiter(to))?,
                 "json" | "yaml" => write_tree(&rows_to_tree(rows)?, to)?,
@@ -754,6 +761,37 @@ fn check_padded_size(rows: &[Vec<String>]) -> Result<()> {
             "this would make a table of {columns} columns × {height} rows; \
              convt stops at {MAX_CELLS} cells"
         )));
+    }
+    Ok(())
+}
+
+/// The most bytes aligned text may take. Every cell is padded to its
+/// column's widest, so one long header can multiply a small table.
+pub const MAX_ALIGNED_BYTES: usize = 256_000_000;
+
+/// Checks the size [`text::aligned_columns`] would write before it pads.
+fn check_aligned_size(rows: &[Vec<String>]) -> Result<()> {
+    use unicode_width::UnicodeWidthStr;
+    let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let mut widths = vec![0usize; columns];
+    for row in rows {
+        for (i, cell) in row.iter().enumerate() {
+            widths[i] = widths[i].max(cell.width().max(cell.len()));
+        }
+    }
+    let mut total: usize = 0;
+    for row in rows {
+        let line = widths[..row.len()]
+            .iter()
+            .fold(1usize, |sum, w| sum.saturating_add(w + 2));
+        total = total.saturating_add(line);
+        if total > MAX_ALIGNED_BYTES {
+            return Err(failed(format!(
+                "aligning these columns would write over {} of text; convert to CSV, \
+                 HTML or Markdown instead",
+                convt_core::format_size(MAX_ALIGNED_BYTES as u64)
+            )));
+        }
     }
     Ok(())
 }
@@ -1517,5 +1555,31 @@ mod tests {
             "{error}"
         );
         assert!(check_padded_size(&rows[..100]).is_ok());
+    }
+    #[test]
+    fn aligned_text_is_bounded_by_its_padding() {
+        let mut rows = vec![vec!["h".repeat(1_000_000), "b".into()]];
+        rows.extend((0..1_000).map(|_| vec!["x".to_string(), "y".to_string()]));
+        let error = check_aligned_size(&rows).unwrap_err();
+        assert!(
+            error.to_string().contains("aligning these columns"),
+            "{error}"
+        );
+        assert!(check_aligned_size(&rows[..100]).is_ok());
+    }
+
+    #[test]
+    fn ragged_tables_convert_to_formats_that_keep_short_rows() {
+        let mut csv = vec![
+            (0..20_000)
+                .map(|i| format!("c{i}"))
+                .collect::<Vec<_>>()
+                .join(","),
+        ];
+        csv.extend((0..20_000).map(|_| "y".to_string()));
+        let rows = read_table(&csv.join("\n"), b',').unwrap();
+        assert!(check_padded_size(&rows).is_err());
+        let tsv = write_table(&rows, b'\t').unwrap();
+        assert_eq!(tsv.lines().count(), 20_001);
     }
 }
