@@ -546,7 +546,16 @@ impl QuickView {
 
     /// Cloud is picked and can run.
     fn in_cloud(&self, cx: &App) -> bool {
-        self.cloud && self.cloud_access(cx).ready()
+        self.cloud && self.cloud_access(cx).ready() && self.cloud_blocked().is_none()
+    }
+
+    /// Why Cloud can't take this target although the account could: it
+    /// doesn't compress a file into its own format.
+    fn cloud_blocked(&self) -> Option<&'static str> {
+        let to = self.to?;
+        sources(&self.files)
+            .any(|f| f == to)
+            .then_some("Compressing a file into its own format runs on this computer.")
     }
 
     pub(super) fn set_cloud(&mut self, cloud: bool, cx: &mut Context<Self>) {
@@ -1336,7 +1345,10 @@ impl QuickView {
                         icon: IconName::Cloud,
                         title: "Cloud".into(),
                         line: "Faster for big videos".into(),
-                        disabled: access.reason().map(Into::into),
+                        disabled: access
+                            .reason()
+                            .or_else(|| self.cloud_blocked().map(Into::into))
+                            .map(Into::into),
                     },
                 ],
                 if cloud { "cloud" } else { "local" },

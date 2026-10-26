@@ -3539,6 +3539,16 @@ fn quick_convert_offers_the_files_own_format_without_replacing_it(cx: &mut TestA
     assert_eq!(label(cx, window, "blurb-png").as_deref(), Some("Compress"));
     assert_eq!(label(cx, window, "blurb-jpeg").as_deref(), Some("Photos"));
 
+    // Cloud can't compress into the same format, so that target runs here:
+    // Cloud picked for JPEG asks to upload, and switching to PNG doesn't.
+    cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
+    click(cx, window, "to-jpeg");
+    click(cx, window, "where-cloud");
+    assert!(shown(cx, window, "cloud-consent"));
+    click(cx, window, "to-png");
+    assert!(!shown(cx, window, "cloud-consent"));
+    cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::SignedOut)));
+
     click(cx, window, "to-png");
     click(cx, window, "options-toggle");
     assert!(shown(cx, window, "target-size") && shown(cx, window, "strip-metadata"));
