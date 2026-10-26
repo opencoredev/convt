@@ -1582,4 +1582,14 @@ mod tests {
         let tsv = write_table(&rows, b'\t').unwrap();
         assert_eq!(tsv.lines().count(), 20_001);
     }
+    #[test]
+    fn ragged_text_tables_align_in_linear_time() {
+        let mut rows = vec![(0..200_000).map(|i| i.to_string()).collect::<Vec<_>>()];
+        rows.extend((0..200_000).map(|_| vec!["y".to_string()]));
+        check_aligned_size(&rows).unwrap();
+        let start = std::time::Instant::now();
+        let text = text::aligned_columns(&rows);
+        assert!(start.elapsed() < std::time::Duration::from_secs(20));
+        assert_eq!(text.lines().count(), 200_001);
+    }
 }

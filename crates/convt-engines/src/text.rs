@@ -76,16 +76,15 @@ pub(crate) fn aligned_columns(rows: &[Vec<String>]) -> String {
                 .collect()
         })
         .collect();
+    // One pass over the cells that exist: a ragged table can be far wider
+    // than most of its rows.
     let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
-    let widths: Vec<usize> = (0..columns)
-        .map(|i| {
-            rows.iter()
-                .filter_map(|row| row.get(i))
-                .map(|cell| cell.width())
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
+    let mut widths = vec![0usize; columns];
+    for row in &rows {
+        for (i, cell) in row.iter().enumerate() {
+            widths[i] = widths[i].max(cell.width());
+        }
+    }
     let mut out = String::new();
     for row in &rows {
         let mut line = String::new();
