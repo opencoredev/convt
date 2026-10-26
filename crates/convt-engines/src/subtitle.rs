@@ -183,11 +183,34 @@ pub fn parse_vtt(source: &str) -> Result<Vec<Cue>> {
     Ok(cues)
 }
 
-/// Whether a `<` followed by `after` starts a tag.
-fn opens_tag(after: &str) -> bool {
-    after
-        .trim_start_matches('/')
-        .starts_with(|c: char| c.is_ascii_alphanumeric())
+/// The tags SRT and WebVTT cue text use. `font` carries attributes, and the
+/// WebVTT ones may carry `.classes` and an annotation (`<v Bob>`).
+const TAGS: [&str; 9] = ["b", "i", "u", "font", "c", "v", "lang", "ruby", "rt"];
+
+/// Where the `>` closing a tag is in `after`, the text after a `<`, if that
+/// `<` opens one: a known tag, its closing form, or a WebVTT timestamp such
+/// as `<00:00:01.000>`. Anything else, like `1<0` or `<3`, is text. The
+/// scan stops at the next `<`, so a cue full of them stays linear.
+fn tag_end(after: &str) -> Option<usize> {
+    let end = after.find(['<', '>'])?;
+    if !after[end..].starts_with('>') {
+        return None;
+    }
+    let tag = &after[..end];
+    let is_timestamp = tag.contains(':')
+        && tag.contains('.')
+        && tag
+            .bytes()
+            .all(|b| b.is_ascii_digit() || b == b':' || b == b'.')
+        && timestamp(tag).is_some();
+    let body = tag.strip_prefix('/').unwrap_or(tag);
+    let name_len = body
+        .find(|c: char| !c.is_ascii_alphanumeric())
+        .unwrap_or(body.len());
+    let (name, rest) = body.split_at(name_len);
+    let is_tag = TAGS.iter().any(|t| t.eq_ignore_ascii_case(name))
+        && (rest.is_empty() || rest.starts_with(['.', ' ', '\t']));
+    (is_tag || is_timestamp).then_some(end)
 }
 
 /// Rewrites `s`, passing each `<tag>` (without its brackets) to `tag` and
@@ -198,14 +221,10 @@ fn rewrite(s: &str, tag: &dyn Fn(&str) -> String, text: &dyn Fn(&str) -> String)
     let mut literal = String::new();
     while let Some(lt) = rest.find('<') {
         let after = &rest[lt + 1..];
-        if !opens_tag(after) {
+        let Some(gt) = tag_end(after) else {
             literal.push_str(&rest[..=lt]);
             rest = after;
             continue;
-        }
-        // With no `>` left, no later `<` closes a tag either.
-        let Some(gt) = after.find('>') else {
-            break;
         };
         literal.push_str(&rest[..lt]);
         out.push_str(&text(&std::mem::take(&mut literal)));
@@ -313,7 +332,7 @@ fn escape_srt(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for (i, c) in s.char_indices() {
         match c {
-            '<' if opens_tag(&s[i + 1..]) => out.push_str("&lt;"),
+            '<' if tag_end(&s[i + 1..]).is_some() => out.push_str("&lt;"),
             '&' if SRT_ENTITIES.iter().any(|(e, _)| s[i..].starts_with(e)) => {
                 out.push_str("&amp;");
             }
@@ -496,7 +515,7 @@ mod tests {
         let srt = write_srt(&parse_vtt(vtt).unwrap());
         assert_eq!(
             srt,
-            "1\n00:01:02,500 --> 00:01:04,000\nHi there & &lt;you>\n\n2\n00:01:05,000 --> 00:01:06,000\n<i>Loud</i> later\n\n"
+            "1\n00:01:02,500 --> 00:01:04,000\nHi there & <you>\n\n2\n00:01:05,000 --> 00:01:06,000\n<i>Loud</i> later\n\n"
         );
     }
 
@@ -524,6 +543,32 @@ mod tests {
         let srt = "1\n00:00:01,000 --> 00:00:02,000\n1 &lt; 2 &gt; 0 &amp;&amp; <i>yes</i>\n";
         assert_eq!(transcript(&parse_srt(srt).unwrap()), "1 < 2 > 0 && yes\n");
         assert!(write_vtt(&parse_srt(srt).unwrap()).contains("1 &lt; 2 > 0 &amp;&amp; <i>yes</i>"));
+    }
+
+    #[test]
+    fn only_real_tags_are_markup() {
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\n1<0 therefore\na <b> c\nx <3 y\n<font color=\"red\">hi</font> <I>up</I>\n";
+        let cues = parse_srt(srt).unwrap();
+        assert_eq!(
+            write_vtt(&cues),
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n1&lt;0 therefore\na <b> c\nx &lt;3 y\nhi <i>up</i>\n\n"
+        );
+        assert_eq!(transcript(&cues), "1<0 therefore\na  c\nx <3 y\nhi up\n");
+        let vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n1&lt;0 therefore <00:00:01.500>now\nx &lt;3 y <lang en>a</lang> <ruby>漢<rt>kan</rt></ruby>\n\n";
+        let cues = parse_vtt(vtt).unwrap();
+        assert_eq!(transcript(&cues), "1<0 therefore now\nx <3 y a 漢kan\n");
+        // SRT escapes exactly the `<` its reader would take for a tag, so
+        // text that only looks like one survives both ways.
+        let srt = write_srt(&cues);
+        assert_eq!(
+            srt,
+            "1\n00:00:01,000 --> 00:00:02,000\n1<0 therefore now\nx <3 y a 漢kan\n\n"
+        );
+        let text =
+            "1\n00:00:01,000 --> 00:00:02,000\n&lt;b> &lt;font x> &lt;/i> 1<0 <3 <a> <bee>\n\n";
+        let cues = parse_srt(text).unwrap();
+        assert_eq!(write_srt(&parse_vtt(&write_vtt(&cues)).unwrap()), text);
+        assert_eq!(transcript(&cues), "<b> <font x> </i> 1<0 <3 <a> <bee>\n");
     }
 
     #[test]
