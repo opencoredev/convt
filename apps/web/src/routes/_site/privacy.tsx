@@ -238,7 +238,8 @@ const sections: LegalSection[] = [
               <span className={strong}>Page views and clicks:</span> the address of the page,
               without anything after a <code>?</code> or <code>#</code>, the page you came from, cut
               the same way, and which links and buttons you click, without the text on them or
-              anything you type.
+              anything you type. On the download page, which build you pick: the system, package
+              type and processor.
             </>,
             <>
               <span className={strong}>Device and browser:</span> browser, operating system, device
@@ -250,15 +251,25 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>A random visitor ID</span> kept in a first-party cookie and
-              local storage, so repeat visits count once. It is not linked to your convt account,
-              your email address or your purchases.
+              local storage, so repeat visits count once. While you are signed in it is linked to
+              your convt account ID, never your email address or name, so we can see how visits lead
+              to sign-ups and purchases.
             </>,
           ]}
         />
         <p>
+          Our servers also send PostHog a few account events, each under your account ID and without
+          your email address, name or payment details: when you create an account (how you signed
+          up, and the page and campaign link you came from), when a Pro trial starts, and when a
+          license is added to your account (which plan).
+        </p>
+        <p>
           We do not record sessions. To turn analytics off, use the switch below, turn on Global
           Privacy Control or Do Not Track in your browser, or block PostHog with a content blocker.
-          Once they are off, this browser sends PostHog nothing more.
+          Once they are off, this browser sends PostHog nothing more. The switch, Global Privacy
+          Control and Do Not Track also stop the sign-up event. The trial and license events come
+          from our billing system when Polar reports the trial or payment. It cannot see your
+          browser's setting, so they are sent either way.
         </p>
         <AnalyticsOptOut />
       </>
@@ -299,11 +310,15 @@ const sections: LegalSection[] = [
             </>,
             <>
               <span className={strong}>Sequenzy</span> delivers our emails: sign-in codes, license
-              keys, account notices and the product news described above, in the United States.
+              keys, account notices and the product news described above, in the United States. It
+              records when an email is opened, with a small image in the email, and which of its
+              links are clicked. Emails with a sign-in link or a license key are sent without link
+              tracking, so those links reach you unchanged.
             </>,
             <>
               <span className={strong}>Cloudflare</span> hosts convt.app and stores cloud conversion
-              files.
+              files. Its Web Analytics counts page loads and measures how fast pages load, without
+              cookies or a visitor ID.
             </>,
             <>
               <span className={strong}>Railway</span> hosts our Postgres database and the conversion
