@@ -5,6 +5,7 @@ import { CommandBlock, homebrewCommands } from "../../src/components/app/command
 import {
   Checksums,
   DownloadButton,
+  downloadLink,
   downloadProperties,
   DownloadStage,
   Homebrew,
@@ -142,4 +143,22 @@ test("download_clicked names the build and where it was picked, not the file URL
     placement: "primary",
   });
   expect(JSON.stringify(props)).not.toContain("github.com");
+});
+
+test("every download link sends download_clicked for its build and placement", () => {
+  const sent: Array<[string, unknown]> = [];
+  const send = (event: string, properties: unknown) => void sent.push([event, properties]);
+  const mac = slot("macos");
+  for (const placement of ["primary", "alternate", "list"] as const) {
+    const link = downloadLink({ slot: mac, artifact: mac.artifact!, placement }, send);
+    expect(link.href).toBe(mac.artifact!.url);
+    expect(link.download).toBe("convt-macos-arm64.dmg");
+    link.onClick();
+  }
+  expect(sent).toEqual(
+    (["primary", "alternate", "list"] as const).map((placement) => [
+      "download_clicked",
+      { os: "macos", kind: "dmg", arch: mac.arch, placement },
+    ]),
+  );
 });

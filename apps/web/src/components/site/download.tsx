@@ -14,7 +14,7 @@ import { Icon } from "#/components/icon";
 import { Mark } from "#/components/logo";
 import { track } from "#/components/posthog-provider";
 import { kindLabels, osNames, osOrder, type Os, type Release, type Slot } from "#/lib/platform";
-import { fileName, formatBytes } from "#/lib/release-manifest";
+import { fileName, formatBytes, type ManifestArtifact } from "#/lib/release-manifest";
 import { GITHUB_URL, RAYCAST_URL } from "#/lib/site";
 
 /*
@@ -56,6 +56,18 @@ export type DownloadPlacement = "primary" | "alternate" | "list";
 /** `download_clicked` says which build was picked; never the file's URL. */
 export function downloadProperties(slot: Slot, placement: DownloadPlacement) {
   return { os: slot.os, kind: slot.kind, arch: slot.arch, placement };
+}
+
+/** What every download link spreads: the file, its name, and the click event. */
+export function downloadLink(
+  link: { slot: Slot; artifact: ManifestArtifact; placement: DownloadPlacement },
+  send: typeof track = track,
+) {
+  return {
+    href: link.artifact.url,
+    download: fileName(link.artifact.url),
+    onClick: () => send("download_clicked", downloadProperties(link.slot, link.placement)),
+  };
 }
 
 function Rise({
@@ -119,11 +131,7 @@ export function DownloadStage({ os, release }: { os: Os | null; release: Release
                   {extras.map(({ slot: s, artifact }, i, list) => (
                     <span key={s.kind}>
                       <a
-                        href={artifact.url}
-                        download={fileName(artifact.url)}
-                        onClick={() =>
-                          track("download_clicked", downloadProperties(s, "alternate"))
-                        }
+                        {...downloadLink({ slot: s, artifact, placement: "alternate" })}
                         className={cx(
                           "rounded-sm font-medium text-ink underline decoration-line-strong underline-offset-3 transition-colors duration-150 hover:decoration-ink",
                           focusRing,
@@ -161,9 +169,7 @@ function PrimaryDownload({ slot }: { slot: Slot }) {
     );
   return (
     <a
-      href={slot.artifact.url}
-      download={fileName(slot.artifact.url)}
-      onClick={() => track("download_clicked", downloadProperties(slot, "primary"))}
+      {...downloadLink({ slot, artifact: slot.artifact, placement: "primary" })}
       className={cx(
         "btn-primary inline-flex h-14 w-full max-w-[320px] items-center justify-center gap-2.5 rounded-full px-8 text-[17px]/5 font-semibold tracking-[-0.01em] transition-[filter,scale] duration-150 ease-out active:scale-[0.98] motion-reduce:active:scale-100 sm:w-auto",
         focusRing,
@@ -342,9 +348,7 @@ export function DownloadButton({ slot, label }: { slot: Slot; label: string }) {
   if (!artifact) return <span className="shrink-0 text-[13px]/5 text-ink-2">Shipping today</span>;
   return (
     <a
-      href={artifact.url}
-      download={fileName(artifact.url)}
-      onClick={() => track("download_clicked", downloadProperties(slot, "list"))}
+      {...downloadLink({ slot, artifact, placement: "list" })}
       aria-label={label}
       className={cx(
         "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-raised px-3 text-[13px]/4 font-medium text-ink shadow-[var(--shadow-input)] transition-colors duration-150 hover:bg-hover dark:bg-sunken dark:hover:bg-hover",

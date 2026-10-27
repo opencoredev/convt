@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   syncPostHog,
+  trackWith,
   type PostHogClient,
   type PostHogState,
 } from "../../src/components/posthog-provider";
@@ -67,4 +68,17 @@ test("another account on the same browser starts a fresh visitor", () => {
   const { calls, client } = recorder("usr_1");
   syncPostHog({ client, config, userId: "usr_2", choice: "on", state: fresh });
   expect(calls).toEqual(["init:phc_test", "reset", "identify:usr_2"]);
+});
+
+test("a named event is sent only once PostHog loaded and while analytics are on", () => {
+  const captured: string[] = [];
+  const client = { capture: (event: string) => void captured.push(event) };
+  const event = "download_clicked" as const;
+  const properties = { os: "macos" };
+  trackWith({ client, loaded: false, choice: "on", event, properties });
+  trackWith({ client, loaded: true, choice: "off", event, properties });
+  trackWith({ client, loaded: true, choice: "browser", event, properties });
+  expect(captured).toEqual([]);
+  trackWith({ client, loaded: true, choice: "on", event, properties });
+  expect(captured).toEqual(["download_clicked"]);
 });

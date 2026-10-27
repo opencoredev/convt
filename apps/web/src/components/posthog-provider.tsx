@@ -72,10 +72,26 @@ let state: PostHogState = { loaded: false, identified: null };
 /** Named events the site sends from the browser. Server-side events live in server/analytics. */
 export type BrowserEvent = "download_clicked";
 
-/** Sends `event` when PostHog loaded and analytics are still on; otherwise nothing. */
+/** Sends `event` only when PostHog loaded on this page and analytics are still on. */
+export function trackWith(input: {
+  client: { capture: (event: string, properties: Properties) => unknown };
+  loaded: boolean;
+  choice: AnalyticsChoice;
+  event: BrowserEvent;
+  properties: Properties;
+}) {
+  if (!input.loaded || input.choice !== "on") return;
+  input.client.capture(input.event, input.properties);
+}
+
 export function track(event: BrowserEvent, properties: Properties) {
-  if (!state.loaded || analyticsChoice() !== "on") return;
-  posthog.capture(event, properties);
+  trackWith({
+    client: posthog,
+    loaded: state.loaded,
+    choice: analyticsChoice(),
+    event,
+    properties,
+  });
 }
 
 /**
