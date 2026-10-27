@@ -5,6 +5,7 @@ import { CommandBlock, homebrewCommands } from "../../src/components/app/command
 import {
   Checksums,
   DownloadButton,
+  downloadProperties,
   DownloadStage,
   Homebrew,
   Platforms,
@@ -95,9 +96,9 @@ test("an unpublished build says Shipping today and links nothing", () => {
   const html = renderToStaticMarkup(<DownloadStage os="macos" release={empty} />);
   expect(html).toContain("Shipping today");
   expect(html).not.toContain("download=");
-  expect(renderToStaticMarkup(<DownloadButton artifact={null} label="x" />)).toContain(
-    "Shipping today",
-  );
+  expect(
+    renderToStaticMarkup(<DownloadButton slot={{ ...slot("macos"), artifact: null }} label="x" />),
+  ).toContain("Shipping today");
   expect(renderToStaticMarkup(<Checksums release={empty} />)).toBe("");
 });
 
@@ -130,4 +131,15 @@ test("Raycast links to the store listing and credits its author", () => {
   expect(html).toContain('href="https://www.raycast.com/0xdhrv/convt"');
   expect(html).toContain("By Dhruv Suthar");
   expect(html).toContain("macOS and Windows");
+});
+
+test("download_clicked names the build and where it was picked, not the file URL", () => {
+  const props = downloadProperties(slot("macos"), "primary");
+  expect(props).toEqual({
+    os: "macos",
+    kind: "dmg",
+    arch: slot("macos").arch,
+    placement: "primary",
+  });
+  expect(JSON.stringify(props)).not.toContain("github.com");
 });

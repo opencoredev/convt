@@ -1,13 +1,12 @@
 import { useEffect } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import posthog, { type PostHogConfig as PostHogConfigOptions } from "posthog-js";
+import posthog, { type PostHogConfig as PostHogConfigOptions, type Properties } from "posthog-js";
 
-import { analyticsChoice } from "#/lib/analytics-consent";
+import { analyticsChoice, type AnalyticsChoice } from "#/lib/analytics-consent";
 import { sanitizeEvent } from "#/lib/analytics-sanitize";
+import { syncIdentifiedUser, type IdentifyClient } from "#/lib/identify-user";
 
 type PostHogConfig = { key: string; host: string } | null | undefined;
-
-let initialized = false;
 
 /**
  * The privacy policy promises these: no session recordings or heatmaps, nothing sent
@@ -31,33 +30,72 @@ export function posthogOptions(host: string): Partial<PostHogConfigOptions> {
   };
 }
 
-function initPostHog(config: { key: string; host: string }) {
-  if (initialized || typeof window === "undefined" || analyticsChoice() !== "on") return;
-  posthog.init(config.key, posthogOptions(config.host));
-  initialized = true;
+/** The part of posthog-js that syncPostHog drives. */
+export type PostHogClient = IdentifyClient & {
+  init: (key: string, options: Partial<PostHogConfigOptions>) => unknown;
+};
+
+/** Whether this page loaded PostHog, and the account it is identified as. */
+export type PostHogState = { loaded: boolean; identified: string | null };
+
+/**
+ * Loads PostHog once, then links or unlinks the signed-in account. Both happen in one
+ * step because posthog-js drops identify() made before init(), and a child
+ * component's effect would run before the provider's.
+ */
+export function syncPostHog(input: {
+  client: PostHogClient;
+  config: { key: string; host: string };
+  userId: string | null;
+  choice: AnalyticsChoice;
+  state: PostHogState;
+}): PostHogState {
+  const { client, config, userId, choice, state } = input;
+  let loaded = state.loaded;
+  if (!loaded && choice === "on") {
+    client.init(config.key, posthogOptions(config.host));
+    loaded = true;
+  }
+  if (!loaded) return state;
+  return { loaded, identified: syncIdentifiedUser(client, userId, choice, state.identified) };
+}
+
+let state: PostHogState = { loaded: false, identified: null };
+
+/** Named events the site sends from the browser. Server-side events live in server/analytics. */
+export type BrowserEvent = "download_clicked";
+
+/** Sends `event` when PostHog loaded and analytics are still on; otherwise nothing. */
+export function track(event: BrowserEvent, properties: Properties) {
+  if (!state.loaded || analyticsChoice() !== "on") return;
+  posthog.capture(event, properties);
 }
 
 /**
- * Client-only PostHog init + SPA $pageview on TanStack Router navigations.
+ * Client-only PostHog init, identify, and SPA $pageview on TanStack Router navigations.
  * Renders children untouched and sends nothing when `config` has no key (staging, local).
  */
 export function PostHogProvider({
   config,
+  userId,
   children,
 }: {
   config: PostHogConfig;
+  /** The signed-in account, linked to this browser's visitor id. Never an email. */
+  userId: string | null;
   children?: React.ReactNode;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useRouterState({ select: (s) => s.location.searchStr });
 
+  // Declared before the pageview effect so the first pageview carries the account.
   useEffect(() => {
     if (!config?.key) return;
-    initPostHog(config);
-  }, [config?.key, config?.host]);
+    state = syncPostHog({ client: posthog, config, userId, choice: analyticsChoice(), state });
+  }, [config?.key, config?.host, userId]);
 
   useEffect(() => {
-    if (!config?.key || !initialized) return;
+    if (!config?.key || !state.loaded) return;
     // PostHog reads the URL itself; sanitizeEvent strips its query string.
     posthog.capture("$pageview");
   }, [config?.key, pathname, search]);
