@@ -5,6 +5,7 @@ import {
   analyticsAllowedFromHeaders,
   analyticsEventsToCapture,
   captureEvent,
+  claimedPurchaseEvents,
   desktopTrialStartedEvent,
   emitAnalytics,
   licensePurchasedEvent,
@@ -88,4 +89,17 @@ test("emitAnalytics is a no-op without a sink and swallows capture errors", asyn
     ],
   );
   expect(seen).toEqual(["a", "b"]);
+});
+
+test("a claim's purchase events cover only the licenses it attached", () => {
+  const had = [{ plan: "desktop", orderId: "ord_1" }];
+  const now = [
+    ...had,
+    { plan: "pro", subscriptionId: "sub_1" },
+    { plan: "pro", subscriptionId: "sub_1" },
+  ];
+  expect(claimedPurchaseEvents("usr_1", had, now).map((e) => e.insertId)).toEqual([
+    "license_purchased:pro:sub_1",
+  ]);
+  expect(claimedPurchaseEvents("usr_1", had, had)).toEqual([]);
 });

@@ -1,5 +1,5 @@
-// PostHog events from Polar ingest. Fired after the transaction commits, with
-// `$insert_id` so a webhook retry or the reconciler does not count twice.
+// PostHog events from Polar ingest. Fired after the transaction commits, from the
+// rows that changed, so a webhook retry or the reconciler sends nothing new.
 
 export type AnalyticsEvent = {
   event: string;
@@ -58,6 +58,20 @@ export function purchaseEventsFromLicenses(
     events.push(event);
   }
   return events;
+}
+
+/**
+ * Purchase events for the licenses a claim attached: those in `after` but not in
+ * `before`. PostHog does not dedupe on `$insert_id`, so re-sending a license the user
+ * already had would count that purchase twice.
+ */
+export function claimedPurchaseEvents(
+  userId: string,
+  before: LicensePurchaseRef[],
+  after: LicensePurchaseRef[],
+): AnalyticsEvent[] {
+  const owned = new Set(purchaseEventsFromLicenses(userId, before).map((e) => e.insertId));
+  return purchaseEventsFromLicenses(userId, after).filter((e) => !owned.has(e.insertId));
 }
 
 /** Same first-party cookie the privacy switch sets on convt.app. */

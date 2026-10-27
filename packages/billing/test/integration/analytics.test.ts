@@ -97,6 +97,25 @@ describe("Polar analytics", () => {
     expect(JSON.stringify(claimed[0])).not.toContain(u.email);
   });
 
+  test("a guest purchase to an account's address sends only its own event", async () => {
+    const u = await h.user(testMailbox("analytics-reclaim"));
+    await h.buy("desktop", u, { email: u.email });
+    await h.deliverAll();
+    const desktop = eventsNamed("license_purchased", u.id);
+    expect(desktop.length).toBe(1);
+
+    // Paid without signing in, with the account's address: ingest attaches it to u.
+    await h.buy("desktop", null, { email: u.email });
+    await h.deliverAll();
+    const [claimed] = await h.q<{ n: number }>(
+      sql`select count(*)::int as n from licenses where user_id = ${u.id} and revoked_at is null`,
+    );
+    expect(claimed.n).toBe(2);
+    const sent = h.analytics.filter((e) => e.distinctId === u.id).map((e) => e.insertId);
+    expect(sent.filter((id) => id === desktop[0].insertId)).toEqual([desktop[0].insertId]);
+    expect(new Set(sent).size).toBe(sent.length);
+  });
+
   test("the webhook returns events without calling PostHog before it replies", async () => {
     const u = await h.user(testMailbox("analytics-nowait"));
     await h.buy("desktop", u, { email: u.email });

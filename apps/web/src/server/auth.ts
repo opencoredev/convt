@@ -28,7 +28,7 @@ import { and, eq, lt, ne, sql } from "drizzle-orm";
 import { analyticsAllowedFromHeaders } from "#/lib/analytics-consent";
 import {
   captureEvent,
-  purchaseEventsFromLicenses,
+  claimedPurchaseEvents,
   signupEventFromAuthHook,
   type AuthHookContext,
   type CaptureAnalytics,
@@ -156,10 +156,7 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
   const { db } = scope;
   const deliver = deps.sendMail ?? ((message: MailMessage) => sendMail(env.mail, message));
   const capture = deps.captureAnalytics ?? ((event) => captureEvent(env.posthog, event));
-  const trackClaimedPurchases = async (userId: string, headers?: Headers | null) => {
-    const claimed = await claimPurchases(db, userId);
-    if (claimed.licenses === 0) return;
-    if (headers && !analyticsAllowedFromHeaders(headers)) return;
+  const licenseRefs = async (userId: string) => {
     const licenses = await db.execute<{
       plan: string;
       order_id: string | null;
@@ -167,14 +164,19 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
     }>(
       sql`select plan, order_id, subscription_id from licenses where user_id = ${userId} and revoked_at is null`,
     );
-    for (const event of purchaseEventsFromLicenses(
-      userId,
-      licenses.rows.map((license) => ({
-        plan: license.plan,
-        orderId: license.order_id,
-        subscriptionId: license.subscription_id,
-      })),
-    )) {
+    return licenses.rows.map((license) => ({
+      plan: license.plan,
+      orderId: license.order_id,
+      subscriptionId: license.subscription_id,
+    }));
+  };
+  const trackClaimedPurchases = async (userId: string, headers?: Headers | null) => {
+    // Licenses the account already had were counted when they were attached.
+    const before = await licenseRefs(userId);
+    const claimed = await claimPurchases(db, userId);
+    if (claimed.licenses === 0) return;
+    if (headers && !analyticsAllowedFromHeaders(headers)) return;
+    for (const event of claimedPurchaseEvents(userId, before, await licenseRefs(userId))) {
       scope.background(capture(event));
     }
   };
@@ -465,7 +467,13 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
       },
       session: {
         create: {
-          after: async (session) => void (await claimPurchases(db, session.userId)),
+          after: async (session, hookCtx) =>
+            trackClaimedPurchases(
+              session.userId,
+              (hookCtx as AuthHookContext)?.headers ??
+                (hookCtx as AuthHookContext)?.request?.headers ??
+                null,
+            ),
         },
       },
       verification: {
