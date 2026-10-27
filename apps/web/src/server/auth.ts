@@ -156,8 +156,8 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
   const { db } = scope;
   const deliver = deps.sendMail ?? ((message: MailMessage) => sendMail(env.mail, message));
   const capture = deps.captureAnalytics ?? ((event) => captureEvent(env.posthog, event));
-  const licenseRefs = async (userId: string) => {
-    const licenses = await db.execute<{
+  const licenseRefs = async (q: Pick<typeof db, "execute">, userId: string) => {
+    const licenses = await q.execute<{
       plan: string;
       order_id: string | null;
       subscription_id: string | null;
@@ -171,14 +171,18 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
     }));
   };
   const trackClaimedPurchases = async (userId: string, headers?: Headers | null) => {
-    // Licenses the account already had were counted when they were attached.
-    const before = await licenseRefs(userId);
-    const claimed = await claimPurchases(db, userId);
-    if (claimed.licenses === 0) return;
-    if (headers && !analyticsAllowedFromHeaders(headers)) return;
-    for (const event of claimedPurchaseEvents(userId, before, await licenseRefs(userId))) {
-      scope.background(capture(event));
-    }
+    // Licenses the account already had were counted when they were attached. The
+    // user lock (claim_purchases and billing ingest take it before writing this
+    // user's rows) keeps anything but this claim from landing between the reads.
+    const events = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`user:${userId}`}, 0))`);
+      const before = await licenseRefs(tx, userId);
+      const claimed = await claimPurchases(tx, userId);
+      if (claimed.licenses === 0) return [];
+      return claimedPurchaseEvents(userId, before, await licenseRefs(tx, userId));
+    });
+    if (events.length === 0 || (headers && !analyticsAllowedFromHeaders(headers))) return;
+    for (const event of events) scope.background(capture(event));
   };
   // Set by the before hook on /sign-in/email-otp (and the user create hook), read
   // by its after hook. The auth instance lives for one request, so these cannot

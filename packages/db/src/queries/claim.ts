@@ -17,7 +17,10 @@ export type ClaimResult = {
  * the only way the site attaches them. Better Auth's user create and update hooks
  * call it, and convt-billing calls the same function after ingest.
  */
-export async function claimPurchases(db: Db, userId: string): Promise<ClaimResult> {
+export async function claimPurchases(
+  db: Pick<Db, "execute">,
+  userId: string,
+): Promise<ClaimResult> {
   const res = await db.execute<{
     claimed_orders: number;
     claimed_subscriptions: number;
