@@ -267,9 +267,11 @@ const sections: LegalSection[] = [
           We do not record sessions. To turn analytics off, use the switch below, turn on Global
           Privacy Control or Do Not Track in your browser, or block PostHog with a content blocker.
           Once they are off, this browser sends PostHog nothing more. The switch, Global Privacy
-          Control and Do Not Track also stop the sign-up event. The trial and license events come
-          from our billing system when Polar reports the trial or payment. It cannot see your
-          browser's setting, so they are sent either way.
+          Control and Do Not Track also stop the sign-up event, and the license event for an earlier
+          purchase that joins your account when you sign in. Our billing system sends the trial
+          events, and the license events for purchases it adds to your account itself, when Polar
+          reports the trial or payment. It cannot see your browser's setting, so those are sent
+          either way.
         </p>
         <AnalyticsOptOut />
       </>
