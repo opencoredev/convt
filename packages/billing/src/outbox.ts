@@ -207,6 +207,7 @@ async function sendOne(ctx: BillingContext, row: Row): Promise<keyof Omit<DrainR
       subject: rendered.subject,
       text: rendered.text,
       html: rendered.html,
+      ...(rendered.trackClicks === false ? { trackClicks: false } : {}),
       tags: [
         { name: "outbox_id", value: row.id },
         { name: "kind", value: row.kind },

@@ -65,7 +65,9 @@ describe("outbox", () => {
     expect(r.status).toBe("pending");
     expect(r.attempts).toBe(1);
     expect(r.payload_sha256).not.toBeNull();
-    expect(r.template_version).toBe(3);
+    expect(r.template_version).toBe(4);
+    // The key's convt:// link must not go through a click-tracking redirect.
+    expect(r.payload).toMatchObject({ trackClicks: false });
     const due = Date.parse(r.next_attempt_at.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00"));
     expect(Math.round((due - h.mock.now().getTime()) / 60_000)).toBe(1);
     // Not due yet: nothing is claimed.
