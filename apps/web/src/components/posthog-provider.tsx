@@ -33,6 +33,8 @@ export function posthogOptions(host: string): Partial<PostHogConfigOptions> {
 /** The part of posthog-js that syncPostHog drives. */
 export type PostHogClient = IdentifyClient & {
   init: (key: string, options: Partial<PostHogConfigOptions>) => unknown;
+  get_property: (name: string) => unknown;
+  get_distinct_id: () => string;
 };
 
 /** Whether this page loaded PostHog, and the account it is identified as. */
@@ -41,7 +43,9 @@ export type PostHogState = { loaded: boolean; identified: string | null };
 /**
  * Loads PostHog once, then links or unlinks the signed-in account. Both happen in one
  * step because posthog-js drops identify() made before init(), and a child
- * component's effect would run before the provider's.
+ * component's effect would run before the provider's. The account PostHog saved
+ * from an earlier visit counts as identified, so a signed-out page resets it even
+ * when the sign-out happened elsewhere (another tab, an expired session).
  */
 export function syncPostHog(input: {
   client: PostHogClient;
@@ -51,13 +55,16 @@ export function syncPostHog(input: {
   state: PostHogState;
 }): PostHogState {
   const { client, config, userId, choice, state } = input;
-  let loaded = state.loaded;
-  if (!loaded && choice === "on") {
-    client.init(config.key, posthogOptions(config.host));
-    loaded = true;
-  }
-  if (!loaded) return state;
-  return { loaded, identified: syncIdentifiedUser(client, userId, choice, state.identified) };
+  if (state.loaded)
+    return {
+      loaded: true,
+      identified: syncIdentifiedUser(client, userId, choice, state.identified),
+    };
+  if (choice !== "on") return state;
+  client.init(config.key, posthogOptions(config.host));
+  const saved =
+    client.get_property("$user_state") === "identified" ? client.get_distinct_id() : null;
+  return { loaded: true, identified: syncIdentifiedUser(client, userId, choice, saved) };
 }
 
 let state: PostHogState = { loaded: false, identified: null };

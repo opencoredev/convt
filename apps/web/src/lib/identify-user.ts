@@ -23,7 +23,11 @@ export function syncIdentifiedUser(
     return null;
   }
   if (userId) {
-    if (userId !== previouslyIdentified) client.identify(userId);
+    if (userId !== previouslyIdentified) {
+      // Another account on this browser: start a fresh visitor instead of renaming it.
+      if (previouslyIdentified) client.reset();
+      client.identify(userId);
+    }
     return userId;
   }
   if (previouslyIdentified) client.reset();

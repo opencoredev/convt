@@ -9,12 +9,15 @@ import {
 const config = { key: "phc_test", host: "https://us.i.posthog.com" };
 const fresh: PostHogState = { loaded: false, identified: null };
 
-function recorder() {
+/** A fake posthog-js; `saved` is the account an earlier visit left in its storage. */
+function recorder(saved: string | null = null) {
   const calls: string[] = [];
   const client: PostHogClient = {
     init: (key) => void calls.push(`init:${key}`),
     identify: (id) => void calls.push(`identify:${id}`),
     reset: () => void calls.push("reset"),
+    get_property: (name) => (name === "$user_state" && saved ? "identified" : "anonymous"),
+    get_distinct_id: () => saved ?? "anon_1",
   };
   return { calls, client };
 }
@@ -44,4 +47,24 @@ test("an opted-out browser never loads PostHog or identifies anyone", () => {
     expect(calls).toEqual([]);
     expect(state).toEqual(fresh);
   }
+});
+
+test("a signed-out page forgets the account an earlier visit saved", () => {
+  // Signed out in another tab, or the session expired: this page never saw the account.
+  const { calls, client } = recorder("usr_1");
+  const state = syncPostHog({ client, config, userId: null, choice: "on", state: fresh });
+  expect(calls).toEqual(["init:phc_test", "reset"]);
+  expect(state).toEqual({ loaded: true, identified: null });
+});
+
+test("a saved account that is still signed in is not identified again", () => {
+  const { calls, client } = recorder("usr_1");
+  syncPostHog({ client, config, userId: "usr_1", choice: "on", state: fresh });
+  expect(calls).toEqual(["init:phc_test"]);
+});
+
+test("another account on the same browser starts a fresh visitor", () => {
+  const { calls, client } = recorder("usr_1");
+  syncPostHog({ client, config, userId: "usr_2", choice: "on", state: fresh });
+  expect(calls).toEqual(["init:phc_test", "reset", "identify:usr_2"]);
 });
