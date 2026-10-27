@@ -111,9 +111,16 @@ describe("Polar analytics", () => {
       sql`select count(*)::int as n from licenses where user_id = ${u.id} and revoked_at is null`,
     );
     expect(claimed.n).toBe(2);
-    const sent = h.analytics.filter((e) => e.distinctId === u.id).map((e) => e.insertId);
-    expect(sent.filter((id) => id === desktop[0].insertId)).toEqual([desktop[0].insertId]);
-    expect(new Set(sent).size).toBe(sent.length);
+    const orders = await h.q<{ id: string }>(
+      sql`select id from orders where user_id = ${u.id} order by created_at`,
+    );
+    expect(orders.length).toBe(2);
+    // One event per order: the first is not sent again and the second is not dropped.
+    expect(
+      eventsNamed("license_purchased", u.id)
+        .map((e) => e.insertId)
+        .sort(),
+    ).toEqual(orders.map((o) => `license_purchased:desktop:${o.id}`).sort());
   });
 
   test("the webhook returns events without calling PostHog before it replies", async () => {
