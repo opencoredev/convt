@@ -1,4 +1,4 @@
-import { codeEmail as renderCodeEmail, sequenzyTransport } from "@convt/mail";
+import { codeEmail as renderCodeEmail, sequenzyTransport, type OutgoingEmail } from "@convt/mail";
 
 // Outgoing email. `mailpit` posts to a local Mailpit's send API (its web UI shows
 // the messages), `log` prints a redacted line, and the provider transports send
@@ -13,7 +13,7 @@ export type MailMessage = {
   text: string;
   html?: string;
   idempotencyKey: string;
-};
+} & Pick<OutgoingEmail, "trackClicks">;
 
 export async function sendMail(config: AppEnv["mail"], message: MailMessage): Promise<void> {
   if (config.transport === "log") {

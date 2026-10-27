@@ -5,9 +5,15 @@
 // so a later template change never alters an email that is already queued.
 
 /** Bump when any template's output changes. Stored with each frozen payload. */
-export const templateVersion = 3;
+export const templateVersion = 4;
 
-export type Rendered = { subject: string; text: string; html: string };
+export type Rendered = {
+  subject: string;
+  text: string;
+  html: string;
+  /** Present (false) when a link carries a secret or opens the app; see OutgoingEmail. */
+  trackClicks?: false;
+};
 
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -43,6 +49,12 @@ type Block =
   | { key: string }
   | { code: string }
   | { link: { href: string; label: string } }
+  /**
+   * A link whose URL carries a sign-in code or license key, or opens the app. Click
+   * tracking would send it through the provider's redirect, which breaks `convt://`
+   * and stores the secret there, so the whole email goes out without click tracking.
+   */
+  | { secretLink: { href: string; label: string } }
   | { list: string[] };
 
 /** Text and HTML from the same blocks, so the two never drift. */
@@ -63,10 +75,11 @@ function render(subject: string, blocks: Block[]): Rendered {
       html.push(
         `<p class="key" style="margin:0 0 14px;padding:14px 16px;border:1px solid #d9d9d6;border-radius:10px;background:#f7f8f7;font-family:ui-monospace,Menlo,monospace;font-size:28px;line-height:32px;font-weight:600;letter-spacing:6px">${escapeHtml(b.code)}</p>`,
       );
-    } else if ("link" in b) {
-      text.push(`${b.link.label}: ${b.link.href}`);
+    } else if ("link" in b || "secretLink" in b) {
+      const link = "link" in b ? b.link : b.secretLink;
+      text.push(`${link.label}: ${link.href}`);
       html.push(
-        `<p style="margin:0 0 14px"><a href="${escapeHtml(b.link.href)}" style="color:#1a7f4b;font-weight:600">${escapeHtml(b.link.label)}</a></p>`,
+        `<p style="margin:0 0 14px"><a href="${escapeHtml(link.href)}" style="color:#1a7f4b;font-weight:600">${escapeHtml(link.label)}</a></p>`,
       );
     } else {
       text.push(b.list.map((l) => `- ${l}`).join("\n"));
@@ -77,6 +90,7 @@ function render(subject: string, blocks: Block[]): Rendered {
   }
   return {
     subject,
+    ...(blocks.some((b) => "secretLink" in b) ? { trackClicks: false as const } : {}),
     text: `${text.join("\n\n")}\n`,
     html: `<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>${darkCss}</style></head><body style="margin:0;padding:24px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#1c1c1a;background:#ffffff"><div style="max-width:520px"><p style="margin:0 0 20px;font-size:17px;font-weight:600;letter-spacing:-0.02em">convt</p>${html.join("")}</div></body></html>`,
   };
@@ -101,7 +115,7 @@ export function licenseIssued(input: LicenseIssuedInput): Rendered {
   return render(`Your ${product} license key`, [
     { p: `Thanks for buying ${product}. Here is your license key:` },
     { key: input.token },
-    { link: { href: activationUrl(input.token), label: "Open in convt" } },
+    { secretLink: { href: activationUrl(input.token), label: "Open in convt" } },
     {
       p: "That link opens the convt app and asks you to confirm. You can also paste the key in the app under Settings, or run convt license activate with it.",
     },
@@ -194,7 +208,7 @@ export function codeEmail(input: CodeEmailInput): Rendered {
     return render(`${input.code} is your convt sign-in code`, [
       { p: "Your convt sign-in code:" },
       { code: input.code },
-      { link: { href: input.link, label: "Or sign in with this link" } },
+      { secretLink: { href: input.link, label: "Or sign in with this link" } },
       { p: expiry },
     ]);
   return render(`${input.code} is your convt confirmation code`, [

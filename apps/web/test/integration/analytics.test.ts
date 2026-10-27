@@ -169,5 +169,24 @@ describe("license_purchased on claim", () => {
       h.analytics.filter((e) => e.event === "license_purchased" && e.distinctId === user!.id)
         .length,
     ).toBe(1);
+
+    // A second guest purchase to the same address, claimed at the next sign-in: it
+    // gets its event, and the license the account already had is not sent again.
+    const secondOrder = newId("ord");
+    await h.owner.execute(sql`
+      insert into orders (id, provider, provider_order_id, email, product, amount_cents, currency, status, paid_at, billed_at, created_at, updated_at)
+      values (${secondOrder}, 'polar', ${`polar_${secondOrder}`}, ${address}, 'desktop', 2900, 'usd', 'paid', ${now}, ${now}, ${now}, ${now})`);
+    await h.owner.execute(sql`
+      insert into licenses (id, email, plan, trial, order_id, issued_on, updates_until, token, created_at, updated_at)
+      values (${newId("lic")}, ${address}, 'desktop', false, ${secondOrder}, ${day}, ${"2027-10-07"}, ${"claim-token-2"}, ${now}, ${now})`);
+    await signInWithCode(h, address, new Jar(), nextIp());
+    expect(
+      h.analytics
+        .filter((e) => e.event === "license_purchased" && e.distinctId === user!.id)
+        .map((e) => e.insertId)
+        .sort(),
+    ).toEqual(
+      [`license_purchased:desktop:${orderId}`, `license_purchased:desktop:${secondOrder}`].sort(),
+    );
   });
 });

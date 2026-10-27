@@ -11,6 +11,11 @@ export type OutgoingEmail = {
   html: string;
   /** Resend tags; the outbox puts its row id here so a message can be found later. */
   tags?: Array<{ name: string; value: string }>;
+  /**
+   * `false` when a link carries a secret or opens the app (`convt://`): the provider
+   * must deliver links unrewritten. Absent: the provider's tracking defaults apply.
+   */
+  trackClicks?: false;
 };
 
 export type SendResult =

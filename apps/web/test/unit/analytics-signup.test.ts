@@ -10,6 +10,7 @@ import {
 import { syncIdentifiedUser } from "../../src/lib/identify-user";
 import {
   captureEvent,
+  claimedPurchaseEvents,
   signupEventFromAuthHook,
   signupProperties,
   userSignedUpEvent,
@@ -176,4 +177,13 @@ test("identify sends only the user id and resets on sign-out or opt-out", () => 
   expect(syncIdentifiedUser(client, "usr_2", "browser", "usr_2")).toBeNull();
   expect(syncIdentifiedUser(client, "usr_3", "off", null)).toBeNull();
   expect(calls).toEqual(["identify:usr_1", "reset", "reset"]);
+});
+
+test("a claim sends purchases only for the licenses it attached", () => {
+  const had = [{ plan: "desktop", orderId: "ord_1" }];
+  const now = [...had, { plan: "desktop", orderId: "ord_2" }];
+  expect(claimedPurchaseEvents("usr_1", had, now).map((e) => e.insertId)).toEqual([
+    "license_purchased:desktop:ord_2",
+  ]);
+  expect(claimedPurchaseEvents("usr_1", [], had)).toHaveLength(1);
 });

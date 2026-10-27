@@ -8,7 +8,8 @@ import { sql } from "drizzle-orm";
 import {
   desktopTrialStartedEvent,
   emitAnalytics,
-  purchaseEventsFromLicenses,
+  claimedPurchaseEvents,
+  type LicensePurchaseRef,
   type AnalyticsEvent,
 } from "./analytics";
 import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
@@ -891,37 +892,50 @@ export async function applyFacts(
     else if (s?.kind === "api") await convergeApi(ctx, tx, subId, now);
   }
   for (const u of users) touched.userIds.add(u);
-  for (const u of touched.userIds) {
-    const claimed = await one<{ claimed_licenses: number }>(
-      tx,
-      sql`select claimed_licenses from claim_purchases(${u})`,
-    );
-    if (!claimed || Number(claimed.claimed_licenses) === 0) continue;
-    const licenses = await rows<{
-      plan: string;
-      order_id: string | null;
-      subscription_id: string | null;
-    }>(
-      tx,
-      sql`select plan, order_id, subscription_id from licenses where user_id = ${u} and revoked_at is null`,
-    );
-    touched.events.push(
-      ...purchaseEventsFromLicenses(
-        u,
-        licenses.map((license) => ({
-          plan: license.plan,
-          orderId: license.order_id,
-          subscriptionId: license.subscription_id,
-        })),
-      ),
-    );
-  }
+  // Licenses converge already attached have their event; only the claim's are new.
+  for (const u of [...touched.userIds].sort())
+    touched.events.push(...(await claimUserPurchases(tx, u)).events);
   return {
     rejected: null,
     notes: touched.notes,
     userIds: [...touched.userIds],
     events: touched.events,
   };
+}
+
+/**
+ * Runs claim_purchases for one user inside `tx` and returns purchase events for the
+ * licenses it attached. The user lock comes first (claim_purchases takes it too), so
+ * no other writer can attach this user's licenses between the two reads.
+ */
+export async function claimUserPurchases(tx: Q, userId: string) {
+  await lockKeys(tx, [`user:${userId}`]);
+  const before = await licenseRefs(tx, userId);
+  const claimed = await one<{ claimed_orders: number; claimed_licenses: number }>(
+    tx,
+    sql`select claimed_orders, claimed_licenses from claim_purchases(${userId})`,
+  );
+  const orders = Number(claimed?.claimed_orders ?? 0);
+  const licenses = Number(claimed?.claimed_licenses ?? 0);
+  const events =
+    licenses > 0 ? claimedPurchaseEvents(userId, before, await licenseRefs(tx, userId)) : [];
+  return { orders, licenses, events };
+}
+
+async function licenseRefs(tx: Q, userId: string): Promise<LicensePurchaseRef[]> {
+  const licenses = await rows<{
+    plan: string;
+    order_id: string | null;
+    subscription_id: string | null;
+  }>(
+    tx,
+    sql`select plan, order_id, subscription_id from licenses where user_id = ${userId} and revoked_at is null`,
+  );
+  return licenses.map((license) => ({
+    plan: license.plan,
+    orderId: license.order_id,
+    subscriptionId: license.subscription_id,
+  }));
 }
 
 /**

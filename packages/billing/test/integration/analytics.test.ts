@@ -97,6 +97,32 @@ describe("Polar analytics", () => {
     expect(JSON.stringify(claimed[0])).not.toContain(u.email);
   });
 
+  test("a guest purchase to an account's address sends only its own event", async () => {
+    const u = await h.user(testMailbox("analytics-reclaim"));
+    await h.buy("desktop", u, { email: u.email });
+    await h.deliverAll();
+    const desktop = eventsNamed("license_purchased", u.id);
+    expect(desktop.length).toBe(1);
+
+    // Paid without signing in, with the account's address: ingest attaches it to u.
+    await h.buy("desktop", null, { email: u.email });
+    await h.deliverAll();
+    const [claimed] = await h.q<{ n: number }>(
+      sql`select count(*)::int as n from licenses where user_id = ${u.id} and revoked_at is null`,
+    );
+    expect(claimed.n).toBe(2);
+    const orders = await h.q<{ id: string }>(
+      sql`select id from orders where user_id = ${u.id} order by created_at`,
+    );
+    expect(orders.length).toBe(2);
+    // One event per order: the first is not sent again and the second is not dropped.
+    expect(
+      eventsNamed("license_purchased", u.id)
+        .map((e) => e.insertId)
+        .sort(),
+    ).toEqual(orders.map((o) => `license_purchased:desktop:${o.id}`).sort());
+  });
+
   test("the webhook returns events without calling PostHog before it replies", async () => {
     const u = await h.user(testMailbox("analytics-nowait"));
     await h.buy("desktop", u, { email: u.email });

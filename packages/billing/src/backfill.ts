@@ -8,7 +8,8 @@
 import { sql } from "drizzle-orm";
 
 import { type BillingContext, one } from "./context";
-import { ingestFacts } from "./ingest";
+import { emitAnalytics } from "./analytics";
+import { claimUserPurchases, ingestFacts } from "./ingest";
 import { emptyFacts, type DisputeFact, type OrderFact, type ScanKind } from "./provider";
 
 export type BackfillMissing = {
@@ -134,13 +135,11 @@ export async function backfillPolarOrders(
         sql`select id from users where email = ${email} and email_verified`,
       );
       if (!u) continue;
-      const claimed = await one<{
-        claimed_orders: number;
-        claimed_licenses: number;
-      }>(ctx.db, sql`select * from claim_purchases(${u.id})`);
+      const claimed = await ctx.db.transaction((tx) => claimUserPurchases(tx, u.id));
+      await emitAnalytics(ctx.captureAnalytics, claimed.events);
       out.claimedUsers++;
-      out.claimedOrders += Number(claimed?.claimed_orders ?? 0);
-      out.claimedLicenses += Number(claimed?.claimed_licenses ?? 0);
+      out.claimedOrders += claimed.orders;
+      out.claimedLicenses += claimed.licenses;
     }
   }
   return out;
