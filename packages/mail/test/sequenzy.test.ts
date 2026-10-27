@@ -59,6 +59,20 @@ describe("Sequenzy transport", () => {
     expect(body).not.toHaveProperty("trackingSettings.openTracking");
   });
 
+  test("a frozen license email without trackClicks still keeps its convt:// key untracked", async () => {
+    let body: unknown;
+    const transport = sequenzyTransport({
+      apiKey: "k",
+      fetch: fakeFetch(async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return Response.json({ success: true, emailSendId: "send_3" });
+      }),
+    });
+    const html = '<p><a href="convt://activate?key=abc">Open in convt</a></p>';
+    await transport.send({ ...email, html }, "eml_3");
+    expect(body).toMatchObject({ trackingSettings: { clickTracking: false } });
+  });
+
   const cases: Array<{ status: number; body: unknown; expected: SendResult }> = [
     {
       status: 400,
