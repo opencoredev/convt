@@ -18,7 +18,7 @@ export const llmsTxt = `# convt
 - The \`convt\` command-line tool ships in the same install: \`convt clip.mov --to mp4\`, \`convt photos/ --to webp -r\`, \`convt lease.pdf --to png --pages 1-3\`.
 - ${formats.formats.length} formats, converted with FFmpeg, PDFium, LibreOffice, libheif and native image libraries. Word, Excel and PowerPoint need a one-time document pack download.
 - Install on macOS with Homebrew: \`brew tap opencoredev/convt https://github.com/opencoredev/convt\` then \`brew install --cask convt\`.
-- Packaged builds start a 7-day trial on the first conversion; after that convt needs a paid Desktop license. There is no free tier. The source code is AGPL-3.0.
+- convt is paid. There is no free tier. The desktop app's trial is a 7-day convt Pro trial you start from your convt account; the \`convt\` command on its own starts a 7-day trial with its first conversion. After the trial you need a Desktop license (one payment) or a Pro subscription. The source code is AGPL-3.0.
 - Cloud conversions are separate and paid: the cloud API, and the app's Cloud option on the Pro plan, upload the file to convt's servers. The \`convt\` command never uploads a file, and the app uploads one only when you pick Cloud for a job.
 
 ## Pages

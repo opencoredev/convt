@@ -75,18 +75,19 @@ type IsoDate = `${number}-${number}-${number}`;
  * Pages listed in the sitemap, in order. /download asks for an account, so it isn't one,
  * and the docs (/docs, /docs/api) have their own sitemap on the convt-docs Worker.
  *
- * `lastmod` is the day the page's content last changed, taken from git (the route file and
- * the content or components it renders), never the build time. Move it when you change
- * what the page says, not for refactors that leave the page the same.
+ * `lastmod` is the day the page's content last changed, taken from git (the route file, the
+ * content or components it renders, and the shared site header and footer), never the build
+ * time. Move it when you change what the page says, not for refactors that leave the page
+ * the same.
  */
 export const sitemapPages = [
   { path: "/", lastmod: "2026-10-26" },
   { path: routes.formats, lastmod: "2026-10-26" },
   { path: routes.changelog, lastmod: "2026-10-26" },
-  { path: routes.contact, lastmod: "2026-10-09" },
-  { path: routes.brand, lastmod: "2026-10-09" },
+  { path: routes.contact, lastmod: "2026-10-23" },
+  { path: routes.brand, lastmod: "2026-10-23" },
   { path: routes.privacy, lastmod: "2026-10-27" },
-  { path: routes.terms, lastmod: "2026-10-09" },
+  { path: routes.terms, lastmod: "2026-10-23" },
 ] as const satisfies readonly { path: string; lastmod: IsoDate }[];
 
 /** The docs Worker's own sitemap, referenced from robots.txt. */
