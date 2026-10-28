@@ -11,7 +11,7 @@ const page = (title: string, path: string, about: string) =>
 
 export const llmsTxt = `# convt
 
-> convt converts images, video, audio and documents on your own computer. Right-click a file, pick a format, and the result is written next to the original. Nothing is uploaded.
+> convt converts images, video, audio and documents on your own computer. Right-click a file, pick a format, and the result is written next to the original, without uploading the file.
 
 - Desktop app for macOS (Apple silicon), Windows (x86_64) and Linux (x86_64: AppImage, .deb, .rpm and tarball).
 - A "Convert with convt" menu in Finder on macOS and in Linux file managers. The Windows Explorer menu is not in the installer yet.
@@ -19,7 +19,7 @@ export const llmsTxt = `# convt
 - ${formats.formats.length} formats, converted with FFmpeg, PDFium, LibreOffice, libheif and native image libraries. Word, Excel and PowerPoint need a one-time document pack download.
 - Install on macOS with Homebrew: \`brew tap opencoredev/convt https://github.com/opencoredev/convt\` then \`brew install --cask convt\`.
 - Packaged builds start a 7-day trial on the first conversion; after that convt needs a paid Desktop license. There is no free tier. The source code is AGPL-3.0.
-- A separate, paid cloud API converts files on convt's servers, so files sent to it are uploaded. The desktop app and CLI never upload files.
+- Cloud conversions are separate and paid: the cloud API, and the app's Cloud option on the Pro plan, upload the file to convt's servers. The \`convt\` command never uploads a file, and the app uploads one only when you pick Cloud for a job.
 
 ## Pages
 
