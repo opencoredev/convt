@@ -7,6 +7,7 @@ export const footerColumns = [
     links: [
       { label: "Download", href: routes.download },
       { label: "Formats", href: routes.formats },
+      { label: "Guides", href: routes.guides },
       { label: "Pricing", href: routes.pricing },
       { label: "Changelog", href: routes.changelog },
     ],

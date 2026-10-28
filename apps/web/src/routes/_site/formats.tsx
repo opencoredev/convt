@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { cx } from "#/components/app/ui";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
+import { guidePath, guides } from "#/lib/guides";
 import { routes, seo } from "#/lib/site";
 import data from "../../../content/formats.json";
 
@@ -92,6 +93,7 @@ function CategorySection({ category }: { category: Category }) {
         {title}
       </h2>
       {id === "documents" && <DocumentPack />}
+      <CategoryGuides category={category} />
       <div className="overflow-clip rounded-2xl bg-raised shadow-[inset_0_0_0_1px_var(--line)] dark:bg-panel">
         <div
           aria-hidden="true"
@@ -107,6 +109,20 @@ function CategorySection({ category }: { category: Category }) {
         </ul>
       </div>
     </section>
+  );
+}
+
+function CategoryGuides({ category }: { category: Category }) {
+  const related = guides.filter((g) => g.category === category.id);
+  if (related.length === 0) return null;
+  return (
+    <ul aria-label={`${category.title} guides`} className="-mt-1 flex flex-wrap gap-x-6 gap-y-2">
+      {related.map((guide) => (
+        <li key={guide.slug} className="text-sm/5 text-ink-2">
+          Guide: <TextLink href={guidePath(guide.slug)}>{guide.heading}</TextLink>
+        </li>
+      ))}
+    </ul>
   );
 }
 
