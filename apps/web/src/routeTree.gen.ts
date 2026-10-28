@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as SiteRouteImport } from './routes/_site'
 import { Route as BrandRouteImport } from './routes/brand'
+import { Route as Google14363a02f88d13faDothtmlRouteImport } from './routes/google14363a02f88d13fa[.]html'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
@@ -62,6 +64,17 @@ const SiteRoute = SiteRouteImport.update({
 const BrandRoute = BrandRouteImport.update({
   id: '/brand',
   path: '/brand',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Google14363a02f88d13faDothtmlRoute =
+  Google14363a02f88d13faDothtmlRouteImport.update({
+    id: '/google14363a02f88d13fa.html',
+    path: '/google14363a02f88d13fa.html',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PricingRoute = PricingRouteImport.update({
@@ -230,6 +243,8 @@ const AppShellDashboardApiConvertRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/brand': typeof BrandRoute
+  '/google14363a02f88d13fa.html': typeof Google14363a02f88d13faDothtmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/pricing': typeof PricingRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -265,6 +280,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/brand': typeof BrandRoute
+  '/google14363a02f88d13fa.html': typeof Google14363a02f88d13faDothtmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/pricing': typeof PricingRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -303,6 +320,8 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_site': typeof SiteRouteWithChildren
   '/brand': typeof BrandRoute
+  '/google14363a02f88d13fa.html': typeof Google14363a02f88d13faDothtmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/pricing': typeof PricingRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -341,6 +360,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/brand'
+    | '/google14363a02f88d13fa.html'
+    | '/llms.txt'
     | '/pricing'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -376,6 +397,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/brand'
+    | '/google14363a02f88d13fa.html'
+    | '/llms.txt'
     | '/pricing'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -413,6 +436,8 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_site'
     | '/brand'
+    | '/google14363a02f88d13fa.html'
+    | '/llms.txt'
     | '/pricing'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -452,6 +477,8 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   SiteRoute: typeof SiteRouteWithChildren
   BrandRoute: typeof BrandRoute
+  Google14363a02f88d13faDothtmlRoute: typeof Google14363a02f88d13faDothtmlRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   PricingRoute: typeof PricingRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -494,6 +521,20 @@ declare module '@tanstack/react-router' {
       path: '/brand'
       fullPath: '/brand'
       preLoaderRoute: typeof BrandRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/google14363a02f88d13fa.html': {
+      id: '/google14363a02f88d13fa.html'
+      path: '/google14363a02f88d13fa.html'
+      fullPath: '/google14363a02f88d13fa.html'
+      preLoaderRoute: typeof Google14363a02f88d13faDothtmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
@@ -794,6 +835,8 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   SiteRoute: SiteRouteWithChildren,
   BrandRoute: BrandRoute,
+  Google14363a02f88d13faDothtmlRoute: Google14363a02f88d13faDothtmlRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   PricingRoute: PricingRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
