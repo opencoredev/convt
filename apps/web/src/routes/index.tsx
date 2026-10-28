@@ -37,6 +37,13 @@ const structuredData = {
       url: `${SITE_ORIGIN}/`,
       logo: `${SITE_ORIGIN}/apple-touch-icon.png`,
     },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_ORIGIN}/#website`,
+      name: SITE_NAME,
+      url: `${SITE_ORIGIN}/`,
+      publisher: { "@id": `${SITE_ORIGIN}/#organization` },
+    },
   ],
 };
 
