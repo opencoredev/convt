@@ -282,6 +282,11 @@ function HeicToJpgMac() {
             same install. Nothing is uploaded. It's worth it when you convert photos often, have
             folders inside folders, or need every file under a size limit.
           </p>
+          <p>
+            Installing with Homebrew puts the <Code>convt</Code> command in Terminal. If you
+            installed from the disk image, type{" "}
+            <Code>/Applications/convt.app/Contents/MacOS/convt</Code> instead.
+          </p>
         </Prose>
         <Commands label="convt" commands={["convt photos/ --to jpg -r"]} />
         <Output label="Output">{`photos/IMG_3579.HEIC -> photos/IMG_3579.jpg
@@ -339,8 +344,9 @@ photos/trip/IMG_3616.HEIC -> photos/trip/IMG_3616.jpg
         </Checked>
         <Prose>
           <p>
-            Turn on convt's Finder extension once, in System Settings › General › Login Items &
-            Extensions › Finder. After that, Control-click your HEIC photos, choose{" "}
+            Open convt once so it can tell Finder which formats to offer, then turn on its Finder
+            extension in System Settings › General › Login Items & Extensions › Finder. After that,
+            Control-click your HEIC photos, choose{" "}
             <strong className="font-semibold">Convert with convt</strong>, then JPEG. The JPGs show
             up next to the originals without opening a window.
           </p>
