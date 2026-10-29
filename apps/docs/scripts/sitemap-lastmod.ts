@@ -5,6 +5,8 @@
 // build time. Runs after `blume build`. scripts/deploy.sh sets SITEMAP_LASTMOD_STRICT=1 so a
 // deploy fails instead of shipping undated URLs, or dates from a shallow clone, where git
 // reports the newest commit for every file.
+import { fileURLToPath } from "node:url";
+
 type GeneratedPages = {
   matches: (path: string) => boolean;
   sources: readonly string[];
@@ -26,7 +28,7 @@ const generated: readonly GeneratedPages[] = [
   },
 ];
 
-const docsRoot = new URL("..", import.meta.url).pathname;
+const docsRoot = fileURLToPath(new URL("..", import.meta.url));
 const sitemap = new URL("../dist/sitemap.xml", import.meta.url);
 
 const git = (args: readonly string[]) =>
