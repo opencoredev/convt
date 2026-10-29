@@ -202,7 +202,7 @@ export function GuideCta({ slug, children }: { slug: GuideSlug; children: ReactN
           focusRing,
         )}
       >
-        Try convt free for 7 days
+        Start a 7-day trial
       </a>
     </aside>
   );

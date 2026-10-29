@@ -279,8 +279,8 @@ function HeicToJpgMac() {
         <Prose>
           <p>
             convt is a Mac app that converts files on your computer, with a command-line tool in the
-            same install. Nothing is uploaded. It's worth it when you convert photos often, have
-            folders inside folders, or need every file under a size limit.
+            same install. Local conversions never upload your photos. It's worth it when you convert
+            photos often, have folders inside folders, or need every file under a size limit.
           </p>
           <p>
             Installing with Homebrew puts the <Code>convt</Code> command in Terminal. If you
@@ -357,8 +357,8 @@ photos/trip/IMG_3616.HEIC -> photos/trip/IMG_3616.jpg
             convt for Macs with Apple silicon, and for Windows
           </p>
           <p>
-            Free for 7 days, then a $29 Desktop license, paid once. Your photos never leave your
-            computer.
+            Start a 7-day convt Pro trial from your convt account, then buy a $29 Desktop license,
+            paid once. Local conversions never leave your computer.
           </p>
         </GuideCta>
       </GuideSection>
@@ -400,8 +400,10 @@ photos/trip/IMG_3616.HEIC -> photos/trip/IMG_3616.jpg
           <div className="flex flex-col gap-1.5">
             <dt className="text-[16px]/6 font-semibold">Does convt upload my photos?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
-              No. The app and the command-line tool convert on your Mac and work offline. See every
-              format it handles on the <TextLink href={routes.formats}>formats page</TextLink>.
+              Not for local conversions. The app and the command-line tool convert on your Mac. The
+              app uploads a file only if you pick Cloud for a job, which is part of convt Pro. See
+              every format it handles on the <TextLink href={routes.formats}>formats page</TextLink>
+              .
             </dd>
           </div>
         </dl>

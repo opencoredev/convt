@@ -11,6 +11,8 @@ export type Guide = {
   /** The page's h1 and its link text elsewhere on the site. */
   heading: string;
   description: string;
+  /** One plain line on what the guide covers, for /llms.txt. */
+  summary: string;
   /** The /formats section that links here. */
   category: "images" | "video" | "audio" | "documents";
   /** ISO dates. */
@@ -25,9 +27,11 @@ export const guides = [
     heading: "How to convert HEIC to JPG on a Mac",
     description:
       "Convert iPhone HEIC photos to JPG on a Mac for free with Finder, Preview or Photos, or batch-convert whole folders with sips in Terminal or the convt CLI.",
+    summary:
+      "Finder Quick Actions, Preview, Photos and sips, then folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
-    published: "2026-10-28",
-    updated: "2026-10-28",
+    published: "2026-10-29",
+    updated: "2026-10-29",
   },
 ] as const satisfies readonly Guide[];
 

@@ -1,5 +1,6 @@
 import formats from "../../content/formats.json";
 
+import { guidePath, guides } from "#/lib/guides";
 import { GITHUB_URL, RAYCAST_URL, SITE_ORIGIN, routes } from "#/lib/site";
 
 // /llms.txt (llmstxt.org): a plain summary of convt and its public pages for AI agents and
@@ -31,10 +32,15 @@ ${[
     routes.download,
     "installers for macOS, Windows and Linux (asks you to sign in first).",
   ),
+  page("Guides", routes.guides, "step-by-step conversion guides, built-in methods first."),
   page("Changelog", routes.changelog, "what changed in each release."),
   page("Contact and help", routes.contact, "support email, license keys, billing and bug reports."),
   page("Brand kit", routes.brand, "logo, wordmark, colors and type."),
 ].join("\n")}
+
+## Guides
+
+${guides.map((guide) => page(guide.heading, guidePath(guide.slug), guide.summary)).join("\n")}
 
 ## API docs
 
