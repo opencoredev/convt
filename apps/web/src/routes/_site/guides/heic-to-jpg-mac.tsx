@@ -60,7 +60,7 @@ const methods = [
   },
   {
     name: "convt",
-    bestFor: "Folders with subfolders, size limits, repeat jobs",
+    bestFor: "Folders with subfolders, resizing, repeat jobs",
     cost: "7-day trial, then paid",
     checked: "Run on iPhone photos",
   },
@@ -91,8 +91,8 @@ function HeicToJpgMac() {
         <p>
           For one photo or a handful, you don't need to install anything: macOS converts HEIC to JPG
           from Finder, Preview and Photos. For a whole folder, sips in Terminal does it for free.
-          convt adds subfolders, quality and size limits, and a right-click menu for when you do
-          this every week.
+          convt adds subfolders, quality and resizing options, and a right-click menu for when you
+          do this every week.
         </p>
       }
     >
@@ -280,7 +280,7 @@ function HeicToJpgMac() {
           <p>
             convt is a Mac app that converts files on your computer, with a command-line tool in the
             same install. Local conversions never upload your photos. It's worth it when you convert
-            photos often, have folders inside folders, or need every file under a size limit.
+            photos often, have folders inside folders, or want every photo resized to fit.
           </p>
           <p>
             Installing with Homebrew puts the <Code>convt</Code> command in Terminal. If you
@@ -310,10 +310,6 @@ photos/trip/IMG_3616.HEIC -> photos/trip/IMG_3616.jpg
             ],
             [<Code>-q 80</Code>, "Sets JPEG quality from 1 to 100. Without it, convt uses 90."],
             [<Code>--max-size 2048</Code>, "Limits the longest side to 2,048 pixels."],
-            [
-              <Code>--target-size 500KB</Code>,
-              "Lowers quality, and the size if it has to, until each file fits.",
-            ],
           ]}
         />
 
