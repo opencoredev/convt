@@ -8,6 +8,7 @@ export default defineConfig({
     "Convert files from your own code with the convt API: reserve a job, upload, start, poll and download.",
   logo: { image: "/logo.svg", text: "convt", href: "/" },
   content: { root: "content" },
+  lastModified: "git",
   variables: {
     api: apiBase,
     "final-api": finalApi,
