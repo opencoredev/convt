@@ -26,7 +26,7 @@ export const guides = [
     title: "How to convert HEIC to JPG on Mac: free, batch and Terminal",
     heading: "How to convert HEIC to JPG on a Mac",
     description:
-      "Convert iPhone HEIC photos to JPG on a Mac for free with Finder, Preview or Photos, or batch-convert whole folders with sips in Terminal or the convt CLI.",
+      "Convert iPhone HEIC photos to JPG on a Mac with free built-in tools (Finder, Preview, Photos and sips), or batch-convert folders with subfolders using the convt CLI.",
     summary:
       "Finder Quick Actions, Preview, Photos and sips, then folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
