@@ -78,7 +78,13 @@ function utmFromUrl(url: URL): SignupAttribution {
   for (const key of ["redirect", "next"]) {
     const target = url.searchParams.get(key);
     if (!target?.startsWith("/") || target.startsWith("//")) continue;
-    const nested = utmFromParams(new URL(target, url.origin).searchParams);
+    let nestedUrl: URL;
+    try {
+      nestedUrl = new URL(target, url.origin);
+    } catch {
+      continue;
+    }
+    const nested = utmFromParams(nestedUrl.searchParams);
     if (hasAttribution(nested)) return nested;
   }
   return {};

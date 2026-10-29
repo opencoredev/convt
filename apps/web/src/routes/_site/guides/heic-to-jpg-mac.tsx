@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { homebrewCommands } from "#/components/app/command-block";
 import { TextLink } from "#/components/site/layout";
 import {
   Checked,
@@ -14,7 +15,7 @@ import {
   Steps,
 } from "#/components/site/guide";
 import { guideBySlug, guideHead } from "#/lib/guides";
-import { routes } from "#/lib/site";
+import { GITHUB_URL, routes } from "#/lib/site";
 
 // Every convt command and result on this page comes from a run of the convt 0.5.0 CLI on
 // real iPhone XR and iPhone 13 Pro HEIC photos (CNVM-2). The Finder, Preview, Photos and
@@ -283,9 +284,16 @@ function HeicToJpgMac() {
             photos often, have folders inside folders, or want every photo resized to fit.
           </p>
           <p>
-            Installing with Homebrew puts the <Code>convt</Code> command in Terminal. If you
-            installed from the disk image, type{" "}
-            <Code>/Applications/convt.app/Contents/MacOS/convt</Code> instead.
+            Install it with Homebrew, which puts the <Code>convt</Code> command in Terminal, or from{" "}
+            <TextLink href={`${GITHUB_URL}/releases/latest`}>GitHub releases</TextLink>. Neither
+            asks you to sign in.
+          </p>
+        </Prose>
+        <Commands label="Homebrew" commands={homebrewCommands} />
+        <Prose>
+          <p>
+            If you installed from the disk image, type{" "}
+            <Code>/Applications/convt.app/Contents/MacOS/convt</Code> instead of <Code>convt</Code>.
           </p>
         </Prose>
         <Commands label="convt" commands={["convt photos/ --to jpg -r"]} />

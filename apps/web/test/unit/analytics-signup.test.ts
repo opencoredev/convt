@@ -190,6 +190,9 @@ test("a guide visit followed by its tagged download link keeps the path and the 
   // Only same-site paths count.
   const offsite = new URL("https://convt.app/sign-in?redirect=//evil.test/?utm_source=x");
   expect(nextAttribution(guide, offsite)).toBeNull();
+  // A redirect that isn't a valid URL is ignored instead of throwing.
+  const malformed = new URL("https://convt.app/sign-in?redirect=%2F%5C%5B");
+  expect(attributionFromSearch(malformed)).toEqual({ source: "/sign-in" });
 });
 
 test("identify sends only the user id and resets on sign-out or opt-out", () => {
