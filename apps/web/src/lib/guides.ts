@@ -33,6 +33,18 @@ export const guides = [
     published: "2026-10-29",
     updated: "2026-10-29",
   },
+  {
+    slug: "batch-heic-to-jpg-windows",
+    title: "How to batch convert HEIC to JPG on Windows 11, folders included",
+    heading: "How to batch convert HEIC to JPG on Windows",
+    description:
+      "Convert iPhone HEIC photos to JPG on Windows 11: one at a time in the Photos app, or whole folders with subfolders in one tested convt command.",
+    summary:
+      "The HEIF and HEVC extensions and Photos for single photos, then whole folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
+    category: "images",
+    published: "2026-10-29",
+    updated: "2026-10-29",
+  },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];
