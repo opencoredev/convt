@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { guidePath, guides } from "#/lib/guides";
 import { llmsTxt } from "#/lib/llms";
 import { SITE_ORIGIN, sitemapPages } from "#/lib/site";
 
@@ -33,6 +34,12 @@ describe("llms.txt", () => {
     expect(links.length).toBeGreaterThan(5);
     for (const link of links) expect(link).toMatch(/^https:\/\//);
     expect(links).toContain(`${SITE_ORIGIN}/formats`);
+  });
+
+  test("lists the guides index and every guide", () => {
+    expect(llmsTxt).toContain(`(${SITE_ORIGIN}/guides)`);
+    for (const guide of guides)
+      expect(llmsTxt).toContain(`(${SITE_ORIGIN}${guidePath(guide.slug)})`);
   });
 
   test("never claims a free tier or an Explorer menu in the installer", () => {

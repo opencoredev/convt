@@ -52,6 +52,7 @@ export const legal = {
 export const routes = {
   download: "/download",
   formats: "/formats",
+  guides: "/guides",
   pricing: "/#pricing",
   changelog: "/changelog",
   apiDocs: "/docs/api",
@@ -72,8 +73,9 @@ export const buyProUrl = (interval: "month" | "year") => `/checkout/pro?interval
 type IsoDate = `${number}-${number}-${number}`;
 
 /**
- * Pages listed in the sitemap, in order. /download asks for an account, so it isn't one,
- * and the docs (/docs, /docs/api) have their own sitemap on the convt-docs Worker.
+ * Pages listed in the sitemap, in order; the sitemap route adds /guides and each guide after
+ * these, dated from `guides`. /download asks for an account, so it isn't one, and the docs
+ * (/docs, /docs/api) have their own sitemap on the convt-docs Worker.
  *
  * `lastmod` is the day the page's content last changed, taken from git (the route file, the
  * content or components it renders, and the shared site header and footer), never the build
@@ -106,10 +108,12 @@ export function seo({
   title,
   description,
   path,
+  type = "website",
 }: {
   title: string;
   description: string;
   path: string;
+  type?: "website" | "article";
 }) {
   const url = `${SITE_ORIGIN}${path}`;
   return {
@@ -118,7 +122,7 @@ export function seo({
       { name: "description", content: description },
       { property: "og:title", content: title },
       { property: "og:description", content: description },
-      { property: "og:type", content: "website" },
+      { property: "og:type", content: type },
       { property: "og:url", content: url },
       { property: "og:site_name", content: SITE_NAME },
       { property: "og:image", content: OG_IMAGE.url },

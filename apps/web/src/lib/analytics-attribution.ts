@@ -61,14 +61,60 @@ function sanitizeSource(value: string): string | undefined {
 }
 
 export function attributionFromSearch(url: URL): SignupAttribution {
-  const out: SignupAttribution = {};
+  const out: SignupAttribution = { ...utmFromUrl(url) };
   const source = sanitizeSource(url.pathname);
   if (source && source !== "/") out.source = source;
+  return out;
+}
+
+/**
+ * UTM fields from the URL, else from the same-site path in its `redirect` or `next`
+ * parameter: a signed-out visit to a tagged /download link lands on
+ * /sign-in?redirect=/download?utm_..., so the tags arrive one level down.
+ */
+function utmFromUrl(url: URL): SignupAttribution {
+  const own = utmFromParams(url.searchParams);
+  if (hasAttribution(own)) return own;
+  for (const key of ["redirect", "next"]) {
+    const target = url.searchParams.get(key);
+    if (!target?.startsWith("/") || target.startsWith("//")) continue;
+    let nestedUrl: URL;
+    try {
+      nestedUrl = new URL(target, url.origin);
+    } catch {
+      continue;
+    }
+    const nested = utmFromParams(nestedUrl.searchParams);
+    if (hasAttribution(nested)) return nested;
+  }
+  return {};
+}
+
+function utmFromParams(params: URLSearchParams): SignupAttribution {
+  const out: SignupAttribution = {};
   for (const key of UTM_KEYS) {
-    const value = url.searchParams.get(key);
+    const value = params.get(key);
     if (value && isSafeAttributionValue(value)) out[key] = value;
   }
   return out;
+}
+
+/**
+ * The cookie value after a visit to `url`, or null to leave the cookie alone. The
+ * landing path is first touch. Campaign tags are the first ones seen, so a visitor who
+ * lands on a guide and then follows its tagged download link keeps both.
+ */
+export function nextAttribution(
+  saved: SignupAttribution | null,
+  url: URL,
+): SignupAttribution | null {
+  if (!saved) {
+    const first = attributionFromSearch(url);
+    return hasAttribution(first) ? first : null;
+  }
+  if (hasAttribution(utmFromAttribution(saved))) return null;
+  const utm = utmFromUrl(url);
+  return hasAttribution(utm) ? { ...saved, ...utm } : null;
 }
 
 export function hasAttribution(value: SignupAttribution | null | undefined): boolean {
@@ -119,10 +165,12 @@ function writeAttributionCookie(value: SignupAttribution) {
   document.cookie = `${ATTRIBUTION_COOKIE}=${encoded}; Path=/; Max-Age=${60 * 60 * 24 * 90}; SameSite=Lax`;
 }
 
-/** Client only. Records the first landing path and UTM fields for the signup event. */
+/** Client only. Records the first landing path and campaign tags for the signup event. */
 export function rememberAttribution() {
   if (typeof window === "undefined") return;
-  if (parseAttributionCookie(document.cookie)) return;
-  const next = attributionFromSearch(new URL(window.location.href));
-  if (hasAttribution(next)) writeAttributionCookie(next);
+  const next = nextAttribution(
+    parseAttributionCookie(document.cookie),
+    new URL(window.location.href),
+  );
+  if (next) writeAttributionCookie(next);
 }

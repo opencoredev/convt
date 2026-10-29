@@ -37,6 +37,8 @@ import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
 import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/check-email'
 import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
 import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/verify-email'
+import { Route as SiteGuidesIndexRouteImport } from './routes/_site/guides/index'
+import { Route as SiteGuidesHeicToJpgMacRouteImport } from './routes/_site/guides/heic-to-jpg-mac'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
@@ -186,6 +188,16 @@ const AppSignInVerifyEmailRoute = AppSignInVerifyEmailRouteImport.update({
   path: '/sign-in/verify-email',
   getParentRoute: () => AppRoute,
 } as any)
+const SiteGuidesIndexRoute = SiteGuidesIndexRouteImport.update({
+  id: '/guides/',
+  path: '/guides/',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteGuidesHeicToJpgMacRoute = SiteGuidesHeicToJpgMacRouteImport.update({
+  id: '/guides/heic-to-jpg-mac',
+  path: '/guides/heic-to-jpg-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -265,12 +277,14 @@ export interface FileRoutesByFullPath {
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
   '/sign-in/': typeof AppSignInIndexRoute
+  '/guides/': typeof SiteGuidesIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
@@ -302,12 +316,14 @@ export interface FileRoutesByTo {
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
   '/sign-in': typeof AppSignInIndexRoute
+  '/guides': typeof SiteGuidesIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
@@ -343,12 +359,14 @@ export interface FileRoutesById {
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/_app/sign-in/verify': typeof AppSignInVerifyRoute
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/_site/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
   '/_app/sign-in/': typeof AppSignInIndexRoute
+  '/_site/guides/': typeof SiteGuidesIndexRoute
   '/_app/_shell/dashboard/api': typeof AppShellDashboardApiRoute
   '/_app/_shell/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/_app/_shell/dashboard/licenses': typeof AppShellDashboardLicensesRoute
@@ -382,12 +400,14 @@ export interface FileRouteTypes {
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
+    | '/guides/heic-to-jpg-mac'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
     | '/sign-in/'
+    | '/guides/'
     | '/dashboard/api'
     | '/dashboard/billing'
     | '/dashboard/licenses'
@@ -419,12 +439,14 @@ export interface FileRouteTypes {
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
+    | '/guides/heic-to-jpg-mac'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
     | '/sign-in'
+    | '/guides'
     | '/dashboard/api'
     | '/dashboard/billing'
     | '/dashboard/licenses'
@@ -459,12 +481,14 @@ export interface FileRouteTypes {
     | '/_app/sign-in/check-email'
     | '/_app/sign-in/verify'
     | '/_app/sign-in/verify-email'
+    | '/_site/guides/heic-to-jpg-mac'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
     | '/_app/sign-in/'
+    | '/_site/guides/'
     | '/_app/_shell/dashboard/api'
     | '/_app/_shell/dashboard/billing'
     | '/_app/_shell/dashboard/licenses'
@@ -691,6 +715,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSignInVerifyEmailRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_site/guides/': {
+      id: '/_site/guides/'
+      path: '/guides'
+      fullPath: '/guides/'
+      preLoaderRoute: typeof SiteGuidesIndexRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/heic-to-jpg-mac': {
+      id: '/_site/guides/heic-to-jpg-mac'
+      path: '/guides/heic-to-jpg-mac'
+      fullPath: '/guides/heic-to-jpg-mac'
+      preLoaderRoute: typeof SiteGuidesHeicToJpgMacRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -817,6 +855,8 @@ interface SiteRouteChildren {
   SiteFormatsRoute: typeof SiteFormatsRoute
   SitePrivacyRoute: typeof SitePrivacyRoute
   SiteTermsRoute: typeof SiteTermsRoute
+  SiteGuidesHeicToJpgMacRoute: typeof SiteGuidesHeicToJpgMacRoute
+  SiteGuidesIndexRoute: typeof SiteGuidesIndexRoute
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
@@ -826,6 +866,8 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteFormatsRoute: SiteFormatsRoute,
   SitePrivacyRoute: SitePrivacyRoute,
   SiteTermsRoute: SiteTermsRoute,
+  SiteGuidesHeicToJpgMacRoute: SiteGuidesHeicToJpgMacRoute,
+  SiteGuidesIndexRoute: SiteGuidesIndexRoute,
 }
 
 const SiteRouteWithChildren = SiteRoute._addFileChildren(SiteRouteChildren)
