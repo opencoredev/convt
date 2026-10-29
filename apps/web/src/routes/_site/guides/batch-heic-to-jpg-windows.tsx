@@ -273,9 +273,9 @@ iPhone/IMG_0002.HEIC -> jpg/IMG_0002.jpg
           <p>
             The last row matters for photo libraries. convt 0.5.0 doesn't copy EXIF data from HEIC
             to JPG, so the date taken, the camera and the GPS location are missing from the copies.
-            Apps that sort by date taken will fall back to the file date. If you need that data,
-            keep the HEIC originals, or have the iPhone hand over JPGs in the first place (next
-            section).
+            Photo apps may sort the copies differently because the date taken is missing. If you
+            need that data, keep the HEIC originals, or have the iPhone hand over JPGs in the first
+            place (next section).
           </p>
         </Prose>
 
@@ -357,8 +357,8 @@ iPhone/IMG_0002.HEIC -> jpg/IMG_0002.jpg
             </dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not built into Windows. Photos converts one photo at a time. Free third-party tools
-              exist, and online converters do batches too, but they upload your photos to someone
-              else's server.
+              exist, and many online converters do batches too, but most of them upload your photos
+              to their servers.
             </dd>
           </div>
           <div className="flex flex-col gap-1.5">
