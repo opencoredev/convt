@@ -237,7 +237,7 @@ function BatchHeicToJpgWindows() {
           label="PowerShell"
           commands={["cd $HOME\\Pictures", String.raw`${convtExe} iPhone --to jpg -r -o jpg`]}
         />
-        <Output label="Output from our run (Windows prints backslashes)">{`iPhone/2024/IMG_0950.heic -> jpg/2024/IMG_0950.jpg
+        <Output label="Output from our Linux run">{`iPhone/2024/IMG_0950.heic -> jpg/2024/IMG_0950.jpg
 iPhone/2024/Summer trip/IMG_1040.HEIC -> jpg/2024/Summer trip/IMG_1040.jpg
 iPhone/2025/IMG_2001.HEIC -> jpg/2025/IMG_2001.jpg
 iPhone/IMG_0001.HEIC -> jpg/IMG_0001.jpg
@@ -252,9 +252,9 @@ iPhone/IMG_0002.HEIC -> jpg/IMG_0002.jpg
           </p>
           <p>
             One thing to know: convt converts every file in the folder that can become a JPG, not
-            just the HEICs. PNG screenshots get a JPG copy too, and so do plain text files. With{" "}
-            <Code>-o</Code> those copies end up in the output folder, where you can delete them, and
-            nothing in the original folder changes.
+            just the HEICs. PNG screenshots in the folder get a JPG copy too. With <Code>-o</Code>{" "}
+            those copies end up in the output folder, where you can delete them, and nothing in the
+            original folder changes.
           </p>
         </Prose>
         <FactList

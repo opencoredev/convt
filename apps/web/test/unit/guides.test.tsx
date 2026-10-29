@@ -58,6 +58,9 @@ test("the Windows HEIC guide tags its download links and prints the tested comma
   expect([...downloads]).toEqual([
     "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=batch-heic-to-jpg-windows",
   ]);
-  expect(html).toContain("iPhone --to jpg -r -o jpg");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; iPhone --to jpg -r -o jpg",
+  );
+  expect(html).toContain("cd $HOME\\Pictures");
   expect(html).toContain('href="/guides/heic-to-jpg-mac"');
 });
