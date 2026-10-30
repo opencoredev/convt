@@ -54,9 +54,20 @@ export async function startCheckout(
   const ip = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
   if (!(await allowCheckout(scope.db, ip, user?.id ?? null)))
     return to("/checkout/success?error=rate_limited");
-  const created = await billing().createCheckout({ product, user, fromApp });
+  // Pro is only ever a trial: billing refuses at creation time if the account
+  // can't start one, closing the race with a purchase after the check above.
+  const created = await billing().createCheckout({
+    product,
+    user,
+    fromApp,
+    trialOnly: kind === "pro",
+  });
   if (!created.ok) {
     if (created.refusal === "already_pro") return to("/dashboard/billing");
+    if (created.refusal === "trial_unavailable" && user) {
+      const entry = proTrialEntry(await billing().currentProAccess(user.id));
+      return to(entry === "checkout" ? "/#pricing" : entry);
+    }
     return to(`/checkout/success?error=${created.refusal}`);
   }
   return to(created.url, checkoutCookie(appEnv, created.cookieValue, nonceMaxAge));

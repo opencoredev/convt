@@ -23,6 +23,8 @@ export interface BillingRpc {
     spendCapCents?: number | null;
     /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
     fromApp?: boolean;
+    /** Pro only as a trial; refused with `trial_unavailable` otherwise (see checkout.ts). */
+    trialOnly?: boolean;
   }): Promise<
     | { ok: true; url: string; checkoutId: string; cookieValue: string }
     | { ok: false; refusal: CheckoutRefusal }

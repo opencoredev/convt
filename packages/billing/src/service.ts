@@ -86,6 +86,7 @@ export function createBillingService(deps: ServiceDeps) {
       user: { id: string; email: string } | null;
       spendCapCents?: number | null;
       fromApp?: boolean;
+      trialOnly?: boolean;
     }) => withCtx((c) => createCheckout(c, input)),
     checkoutResult: (input: {
       providerCheckoutId: string;

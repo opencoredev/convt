@@ -63,6 +63,27 @@ async function web() {
 }
 
 describe("Desktop + Cloud", () => {
+  test("the app's trial-only Pro checkout is refused, not sold paid, once the trial is gone", async () => {
+    // The race the site's eligibility check cannot close: a bundle lands between that
+    // check and checkout creation. Billing decides at creation time.
+    const u = await h.user(testMailbox("bundle-trial-race"));
+    await buyBundle(u);
+    const before = await h.q<{ n: number }>(
+      sql`select count(*)::int as n from checkouts where user_id = ${u.id} and product like 'pro_%'`,
+    );
+    const r = await h.service.createCheckout({
+      product: "pro_month",
+      user: u,
+      fromApp: true,
+      trialOnly: true,
+    });
+    expect(r).toEqual({ ok: false, refusal: "trial_unavailable" });
+    const after = await h.q<{ n: number }>(
+      sql`select count(*)::int as n from checkouts where user_id = ${u.id} and product like 'pro_%'`,
+    );
+    expect(after[0].n).toBe(before[0].n);
+  });
+
   test("needs an account: a signed-out checkout is refused", async () => {
     expect(await h.service.createCheckout({ product: "bundle", user: null })).toEqual({
       ok: false,

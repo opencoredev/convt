@@ -22,6 +22,7 @@ export const maxCapCents = 1_000_000;
 export type CheckoutRefusal =
   | "sign_in_required"
   | "already_pro"
+  | "trial_unavailable"
   | "already_enrolled"
   | "needs_multiple_subscriptions"
   | "bad_cap"
@@ -60,6 +61,12 @@ export async function createCheckout(
     spendCapCents?: number | null;
     /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
     fromApp?: boolean;
+    /**
+     * Pro only as a trial: refuse with `trial_unavailable` rather than sell a paid
+     * subscription when the account can't start its trial at creation time. The
+     * app's trial URL uses it; the site's own eligibility check can race a purchase.
+     */
+    trialOnly?: boolean;
   },
 ): Promise<CreatedCheckout> {
   const now = ctx.clock();
@@ -83,6 +90,7 @@ export async function createCheckout(
       if (live.length) return { ok: false, refusal: "already_pro" };
     }
     allowTrial = await canStartProTrial(ctx.db, user!.id, now);
+    if (input.trialOnly && !allowTrial) return { ok: false, refusal: "trial_unavailable" };
   }
   if (product === "api") {
     cap = input.spendCapCents ?? null;
