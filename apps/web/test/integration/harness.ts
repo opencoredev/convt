@@ -20,6 +20,8 @@ export type Harness = {
   env: AppEnv;
   mail: MailMessage[];
   analytics: AnalyticsEvent[];
+  /** Users whose sign-up claim asked billing to lay out their cloud years again. */
+  scheduledCloud: string[];
   mockUrl: string;
   close: () => Promise<void>;
   /** One auth request as a browser on `ip` with its cookie jar. */
