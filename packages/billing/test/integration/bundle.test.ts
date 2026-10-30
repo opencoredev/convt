@@ -8,6 +8,8 @@ import { claimPurchases, cloudAllowance } from "@convt/db/queries";
 import { sql } from "drizzle-orm";
 
 import { BUNDLE_CLOUD_DAYS } from "../../src/catalog";
+import { ingestFacts } from "../../src/ingest";
+import { emptyFacts } from "../../src/provider";
 import { createHarness, type Harness } from "../../src/testing";
 import { testMailbox } from "../mailbox";
 
@@ -307,6 +309,45 @@ describe("hosted Desktop + Cloud purchases", () => {
     expect(stacked(await cloudYearsOf(u.id))).toBe(false);
     await h.service.scheduleCloud(u.id);
     expect(stacked(await cloudYearsOf(u.id))).toBe(true);
+  });
+
+  test("a lost chargeback during the repair is never undone by it", async () => {
+    // Three guest bundles claimed together, so the repair re-lays all three. While
+    // it is paused between its read and its writes, a lost chargeback on the middle
+    // order arrives. The repair must not write from what it read before.
+    const email = testMailbox("hosted-race");
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      ids.push(await hostedBundle(email));
+      h.mock.advance(dayMs);
+    }
+    const u = await h.user(email);
+    await claimPurchases(h.owner, u.id);
+    const d = h.mock.openDispute(ids[1]);
+    h.mock.closeDispute(d.id, "lost");
+    h.mock.takeHeld();
+    let dispute: Promise<unknown> | null = null;
+    h.onFault("after-cloud-read", async () => {
+      if (dispute) return;
+      dispute = h.service.withCtx(async (c) =>
+        ingestFacts(c, { ...emptyFacts(), disputes: [await c.provider.getDispute(d.id)] }, "test"),
+      );
+      // Give the chargeback every chance to land before the repair writes. With the
+      // shared account lock it waits for the repair instead.
+      await Promise.race([dispute, new Promise((r) => setTimeout(r, 1500))]);
+    });
+    try {
+      await h.service.scheduleCloud(u.id);
+      await dispute;
+    } finally {
+      h.clearFaults();
+    }
+    const years = await cloudYearsOf(u.id);
+    expect(years.map((y) => y.status)).toEqual(["active", "canceled", "active"]);
+    // The charged-back year ended at the chargeback and covered nothing...
+    expect(years[1].ended_at.getTime()).toBeLessThanOrEqual(h.mock.now().getTime());
+    // ...so the third starts where the first ends: no gap, no overlap.
+    expect(years[2].current_period_start).toEqual(years[0].current_period_end);
   });
 
   test("the reconciler stacks overlapping years the site's request missed", async () => {

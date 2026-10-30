@@ -108,7 +108,7 @@ export async function scheduleCloudForUser(tx: Q, userId: string, now: Date) {
 export async function rescheduleCloud(ctx: BillingContext, userId: string) {
   await ctx.db.transaction(async (tx) => {
     await lockKeys(tx, [`user:${userId}`]);
-    await scheduleCloudForUser(tx, userId, ctx.clock());
+    await layOutCloudYears(tx, { userId }, ctx.clock(), () => fault(ctx, "after-cloud-read"));
   });
 }
 
@@ -131,7 +131,21 @@ export async function stackOverlappingCloudYears(ctx: BillingContext): Promise<n
   return users.length;
 }
 
-async function layOutCloudYears(tx: Q, owner: { userId: string } | { orderId: string }, now: Date) {
+async function layOutCloudYears(
+  tx: Q,
+  owner: { userId: string } | { orderId: string },
+  now: Date,
+  /** Tests pause here, between reading the years and writing them. */
+  afterRead?: () => Promise<void>,
+) {
+  const mine = "userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`;
+  // Lock the existing years first, in a fixed order, then read: the read below is a
+  // new statement, so it sees whatever a writer that held these rows committed.
+  // Callers also hold the account lock; this keeps a stale read from ever writing.
+  await tx.execute(sql`
+    select s.id from subscriptions s join orders o on o.id = s.order_id
+    where o.product = 'bundle' and ${mine}
+    order by s.id for update of s`);
   const orders = await rows<BundleRow>(
     tx,
     sql`
@@ -140,10 +154,10 @@ async function layOutCloudYears(tx: Q, owner: { userId: string } | { orderId: st
       s.id as sub_id, s.status as sub_status, s.current_period_start as sub_start,
       s.current_period_end as sub_end, s.ended_at as sub_ended_at
     from orders o left join subscriptions s on s.order_id = o.id
-    where o.product = 'bundle'
-      and ${"userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`}
+    where o.product = 'bundle' and ${mine}
     order by o.billed_at, o.id`,
   );
+  await afterRead?.();
   let end: number | null = null;
   for (const r of orders) {
     const good = (r.status === "paid" || r.status === "partially_refunded") && !r.lost;
@@ -164,10 +178,11 @@ async function layOutCloudYears(tx: Q, owner: { userId: string } | { orderId: st
         r.sub_start?.getTime() !== start.getTime() ||
         r.sub_end?.getTime() !== stop.getTime()
       ) {
+        // A refunded or charged-back year keeps its dates for good.
         await tx.execute(sql`
           update subscriptions set current_period_start = ${start}, current_period_end = ${stop},
             ended_at = ${stop}, updated_at = ${now}
-          where id = ${r.sub_id}`);
+          where id = ${r.sub_id} and status <> 'canceled'`);
       }
     } else if (r.sub_id) {
       let endedAt = r.sub_ended_at!;
@@ -175,7 +190,7 @@ async function layOutCloudYears(tx: Q, owner: { userId: string } | { orderId: st
         endedAt = new Date(Math.min(r.sub_end!.getTime(), now.getTime()));
         await tx.execute(sql`
           update subscriptions set status = 'canceled', canceled_at = ${now}, ended_at = ${endedAt}, updated_at = ${now}
-          where id = ${r.sub_id}`);
+          where id = ${r.sub_id} and status <> 'canceled'`);
       }
       // Only the time it actually covered holds later years back.
       if (endedAt.getTime() > r.sub_start!.getTime()) end = Math.max(end ?? 0, endedAt.getTime());

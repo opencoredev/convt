@@ -24,7 +24,8 @@ export type FaultPoint =
   | "before-checkout-store"
   | "after-send-before-mark"
   | "before-delete-user"
-  | "after-revoke";
+  | "after-revoke"
+  | "after-cloud-read";
 
 export type BillingConfig = {
   /** https://convt.app, or the local dev origin. */

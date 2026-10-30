@@ -845,6 +845,33 @@ export async function applyFacts(
     );
     if (u) users.add(u.id);
   }
+  // A refund or chargeback is a fact about a stored order, invoice or subscription
+  // and often names no account. Lock the account that row belongs to (for an
+  // unclaimed order, the verified account with its email), so its convergence and
+  // the cloud-year repair (converge.ts, rescheduleCloud) never interleave.
+  const storedIds = new Set([
+    ...facts.orders.map((o) => o.providerOrderId),
+    ...facts.disputes.map((d) => d.providerOrderId),
+  ]);
+  for (const id of storedIds) {
+    const r = await one<{ user_id: string | null }>(
+      tx,
+      sql`
+      select coalesce(o.user_id, (select u.id from users u where u.email = o.email and u.email_verified)) as user_id
+      from orders o where o.provider = 'polar' and o.provider_order_id = ${id}
+      union all
+      select i.user_id from invoices i where i.provider = 'polar' and i.provider_invoice_id = ${id} and i.order_id is null
+      limit 1`,
+    );
+    if (r?.user_id) users.add(r.user_id);
+  }
+  for (const s of subs) {
+    const r = await one<{ user_id: string | null }>(
+      tx,
+      sql`select user_id from subscriptions where provider = 'polar' and provider_subscription_id = ${s.providerSubscriptionId}`,
+    );
+    if (r?.user_id) users.add(r.user_id);
+  }
   // A dispute on a subscription invoice converges that subscription, so it takes
   // the subscription's lock like every other fact about it.
   const disputeSubs: string[] = [];
