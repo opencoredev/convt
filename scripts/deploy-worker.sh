@@ -43,18 +43,20 @@ if (process.argv[2] === "production" && raw.name === "convt-web" &&
 JS
 args=()
 [[ $environment == staging ]] && args=(--env staging)
-if [[ $worker == billing ]]; then
-  # The catalog this deploy sells from must have every provider id filled in
-  # (CNV-101 leaves PLACEHOLDER ids until the Polar products exist).
-  catalog=production
-  [[ $environment == staging ]] && catalog=sandbox
-  (cd "$ROOT/packages/billing" && bun -e '
+# The catalog this deploy sells from must have every provider id filled in
+# (CNV-101 leaves PLACEHOLDER ids until the Polar products exist). The web
+# Worker is checked too: its pricing page links to every product, and it is
+# deployed from main on its own (the SEO runs), ahead of billing.
+catalog=production
+[[ $environment == staging ]] && catalog=sandbox
+(cd "$ROOT/packages/billing" && bun -e '
 import { loadCatalog, placeholderIds } from "./src/catalog";
 const ids = placeholderIds(loadCatalog(process.argv[1]));
 if (ids.length) {
   console.error(`deploy: the ${process.argv[1]} catalog still has placeholder ids: ${ids.join(", ")}`);
   process.exit(1);
 }' "$catalog")
+if [[ $worker == billing ]]; then
   test -s "$ROOT/.convt-dev/license.pub" || {
     echo 'deploy: .convt-dev/license.pub is missing; the dev-key guard needs it' >&2
     exit 1
