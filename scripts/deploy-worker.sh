@@ -27,8 +27,16 @@ if (env.hyperdrive.some(h => /^0{30}/.test(h.id)) ||
 }
 // Production convt.app sells cloud conversion: without the API address the
 // dashboard converter and the desktop app's cloud jobs answer "not configured".
+const httpsOrigin = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.origin === value;
+  } catch {
+    return false;
+  }
+};
 if (process.argv[2] === "production" && raw.name === "convt-web" &&
-    !/^https:\/\/[^/]+$/.test(env.vars.CONVT_API_URL ?? "")) {
+    !httpsOrigin(env.vars.CONVT_API_URL ?? "")) {
   console.error("deploy: set vars.CONVT_API_URL to the cloud API's https origin first");
   process.exit(1);
 }
