@@ -87,9 +87,12 @@ OAUTH_MOCK_URL=$OAUTH_MOCK_URL
 OAUTH_MOCK_PUBLIC_URL=${MOCK_PUBLIC_URL:-$OAUTH_MOCK_URL}
 VARS
 # A local cloud API (test-convt-server): pass both to let the dashboard
-# converter and the desktop app's cloud jobs reach it.
+# converter and the desktop app's cloud jobs reach it. Otherwise write an empty
+# address, so the site never falls back to production's from wrangler.jsonc.
 if [[ -n ${CONVT_API_URL:-} && -n ${CONVT_WEB_TOKEN_SECRET:-} ]]; then
   printf 'CONVT_API_URL=%s\nCONVT_WEB_TOKEN_SECRET=%s\n' "$CONVT_API_URL" "$CONVT_WEB_TOKEN_SECRET" >>apps/web/.dev.vars
+else
+  printf 'CONVT_API_URL=\n' >>apps/web/.dev.vars
 fi
 cat >apps/billing/.dev.vars <<VARS
 # Written by scripts/dev-web.sh. Local billing mock and the dev signing key. Never commit.

@@ -23,3 +23,9 @@ OAUTH_MOCK_URL=http://127.0.0.1:4100
 # POSTHOG_FEEDBACK_SURVEY_ID=
 # POSTHOG_FEEDBACK_MESSAGE_QUESTION_ID=
 # POSTHOG_FEEDBACK_EMAIL_QUESTION_ID=
+
+# Optional: a local cloud API (test-convt-server) for the dashboard converter and
+# /api/device/cloud. Keep CONVT_API_URL empty otherwise, so the site never falls
+# back to production's address in wrangler.jsonc. The secret is the API's own.
+CONVT_API_URL=
+# CONVT_WEB_TOKEN_SECRET=at-least-32-characters
