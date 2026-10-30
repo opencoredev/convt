@@ -363,10 +363,62 @@ def sh_bytes(*args):
     return p.stdout
 
 
+# Leading bytes each target must start with, so a file of the wrong type under the
+# right name fails before any decoder (which reads the real bytes) can accept it.
+MAGIC = {
+    "png": [(0, b"\x89PNG\r\n\x1a\n")],
+    "jpeg": [(0, b"\xff\xd8\xff")],
+    "gif": [(0, b"GIF87a"), (0, b"GIF89a")],
+    "webp": [(8, b"WEBP")],
+    "bmp": [(0, b"BM")],
+    "tiff": [(0, b"II*\x00"), (0, b"MM\x00*")],
+    "qoi": [(0, b"qoif")],
+    "exr": [(0, b"\x76\x2f\x31\x01")],
+    "ico": [(0, b"\x00\x00\x01\x00")],
+    "ppm": [(0, b"P6"), (0, b"P3")],
+    "avif": [(4, b"ftypavi")],
+    "pdf": [(0, b"%PDF-")],
+    "mp4": [(4, b"ftyp")],
+    "mov": [(4, b"ftyp"), (4, b"wide"), (4, b"moov"), (4, b"mdat")],
+    "m4a": [(4, b"ftyp")],
+    "m4r": [(4, b"ftyp")],
+    "mkv": [(0, b"\x1a\x45\xdf\xa3")],
+    "webm": [(0, b"\x1a\x45\xdf\xa3")],
+    "avi": [(8, b"AVI ")],
+    "wav": [(8, b"WAVE")],
+    "aiff": [(8, b"AIFF"), (8, b"AIFC")],
+    "caf": [(0, b"caff")],
+    "flac": [(0, b"fLaC")],
+    "ogg": [(0, b"OggS")],
+    "opus": [(0, b"OggS")],
+    "mp3": [(0, b"ID3"), (0, b"\xff\xfb"), (0, b"\xff\xf3"), (0, b"\xff\xf2"), (0, b"\xff\xfa")],
+    "aac": [(0, b"\xff\xf1"), (0, b"\xff\xf9")],
+    "docx": [(0, b"PK\x03\x04")],
+    "xlsx": [(0, b"PK\x03\x04")],
+    "pptx": [(0, b"PK\x03\x04")],
+    "odt": [(0, b"PK\x03\x04")],
+    "ods": [(0, b"PK\x03\x04")],
+    "odp": [(0, b"PK\x03\x04")],
+    "doc": [(0, b"\xd0\xcf\x11\xe0")],
+    "xls": [(0, b"\xd0\xcf\x11\xe0")],
+    "ppt": [(0, b"\xd0\xcf\x11\xe0")],
+    "rtf": [(0, b"{\\rtf")],
+}
+
+
+def check_magic(to, files):
+    for f in files:
+        head = f.read_bytes()[:16]
+        sigs = MAGIC.get(to, [])
+        if sigs and not any(head[o : o + len(b)] == b for o, b in sigs):
+            raise Fail(f"{f.name} is not {to}: starts {head!r}")
+
+
 def check(src, to, files, tmp):
     for f in files:
         if f.stat().st_size == 0:
             raise Fail(f"{f.name} is empty")
+    check_magic(to, files)
     if to == "heic":
         check_heic_brand(files)
     to_cat = category(to)
@@ -448,6 +500,8 @@ def main():
         tally.setdefault(r["family"], {}).setdefault(r["result"], 0)
         tally[r["family"]][r["result"]] += 1
     print(json.dumps(tally, indent=1))
+    if any(r["result"] == "fail" for r in results):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

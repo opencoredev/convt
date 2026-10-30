@@ -129,6 +129,14 @@ that convt exited 0. What each family was checked for:
    reaches WebP through PDF. The test now uses an MP3 as the file to skip.
    The behavior behind it is listed below as a product question.
 
+6. **PPM output was PAM. Fixed.** Every conversion to PPM wrote a PAM file
+   (`P7` header) under a `.ppm` name, because `ImageFormat::Pnm` defaults to
+   PAM. Decoders that read the real bytes accepted it, so the first audit
+   passed; a byte-signature check against the requested target, added after
+   review, caught all 30 pairs. convt now writes a binary pixmap (`P6`).
+   Regression test: `image::tests::ppm_is_a_binary_pixmap_not_pam`, which
+   fails without the fix.
+
 ## Offered, working, but worth a decision
 
 These all pass, and none was changed, because each is a product choice rather
