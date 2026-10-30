@@ -163,8 +163,14 @@ describe("license_purchased on claim", () => {
       properties: { plan: "desktop", product: "desktop" },
     });
     expect(JSON.stringify(purchases[0])).not.toContain(address);
+    // The claim attached an order, so billing is asked to lay out cloud years again
+    // (guest Desktop + Cloud orders would otherwise overlap).
+    expect(h.scheduledCloud).toContain(user!.id);
+    const asked = h.scheduledCloud.length;
 
     await signInWithCode(h, address, new Jar(), nextIp());
+    // Nothing new to claim: billing is not asked again.
+    expect(h.scheduledCloud.length).toBe(asked);
     expect(
       h.analytics.filter((e) => e.event === "license_purchased" && e.distinctId === user!.id)
         .length,
