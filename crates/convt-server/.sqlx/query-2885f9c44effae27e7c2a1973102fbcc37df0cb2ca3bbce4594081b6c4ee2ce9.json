@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select coalesce(sum(case when $3='api' then e.amount_cents else e.quantity end),0)::bigint as \"value!\" from usage_events e left join usage_events original on original.id=e.corrects where (e.subscription_id=$1 or ($3='pro' and e.subscription_id in (select s.id from subscriptions s where s.user_id=$4 and s.kind='pro'))) and e.occurred_at >= $2 and (e.kind=case when $3='api' then 'api_conversion' else 'pro_bytes' end or (e.kind='correction' and original.kind=case when $3='api' then 'api_conversion' else 'pro_bytes' end))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2885f9c44effae27e7c2a1973102fbcc37df0cb2ca3bbce4594081b6c4ee2ce9"
+}

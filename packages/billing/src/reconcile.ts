@@ -136,7 +136,7 @@ export async function reconcileFrequent(ctx: BillingContext, only?: FrequentStep
           ctx.db,
           sql`
       select provider_subscription_id from subscriptions
-      where provider_subscription_id not like 'seed_%'
+      where order_id is null and provider_subscription_id not like 'seed_%'
         and (status in ('incomplete', 'trialing', 'active', 'past_due', 'paused', 'unpaid')
           or ended_at > ${new Date(started.getTime() - 35 * 86_400_000)})`,
         );
@@ -371,6 +371,15 @@ export async function reconcileDaily(ctx: BillingContext) {
   for (const r of await rows<{ id: string }>(
     ctx.db,
     sql`
+    select o.id from orders o join subscriptions s on s.order_id = o.id
+    where s.status <> 'canceled'
+      and (o.status = 'refunded' or exists (select 1 from disputes d where d.order_id = o.id and d.status = 'lost'))`,
+  )) {
+    note("invariant", r.id, "a refunded or lost Desktop + Cloud order has a live cloud year");
+  }
+  for (const r of await rows<{ id: string }>(
+    ctx.db,
+    sql`
     select s.id from subscriptions s
     where s.kind = 'pro' and exists (
       select 1 from payment_coverage c join invoices i on i.id = c.invoice_id
@@ -394,7 +403,7 @@ export async function reconcileDaily(ctx: BillingContext) {
     ctx.db,
     sql`
     select user_id, kind, count(*)::int as n from subscriptions
-    where user_id is not null and status in ('trialing', 'active', 'past_due') and (ended_at is null or ended_at > ${now})
+    where user_id is not null and order_id is null and status in ('trialing', 'active', 'past_due') and (ended_at is null or ended_at > ${now})
     group by user_id, kind having count(*) > 1`,
   )) {
     note("invariant", `${r.kind}:${r.user_id}`, `${r.n} live ${r.kind} subscriptions`);

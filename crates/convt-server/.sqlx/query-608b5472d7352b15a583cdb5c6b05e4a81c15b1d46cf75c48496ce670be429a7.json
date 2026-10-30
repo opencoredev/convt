@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select coalesce(sum(case when $2='api' then reserved_cents else reserved_bytes end),0)::bigint as \"value!\" from cloud_jobs where (subscription_id=$1 or ($2='pro' and subscription_id in (select s.id from subscriptions s where s.user_id=$3 and s.kind='pro'))) and reservation='open'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "608b5472d7352b15a583cdb5c6b05e4a81c15b1d46cf75c48496ce670be429a7"
+}

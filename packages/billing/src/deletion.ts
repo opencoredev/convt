@@ -6,7 +6,7 @@
 import { sql } from "drizzle-orm";
 import { newId } from "@convt/license";
 
-import { alert, type BillingContext, fault, one, rows } from "./context";
+import { alert, type BillingContext, fault, lockKeys, one, rows } from "./context";
 import { ingestFacts } from "./ingest";
 import { removeMarketingContact } from "./marketing";
 import { emptyFacts } from "./provider";
@@ -48,6 +48,16 @@ const liveSql = (userId: string, now: Date) => sql`
   where user_id = ${userId} and status not in ('canceled', 'incomplete_expired')
     and (ended_at is null or ended_at > ${now})`;
 
+/**
+ * Prepaid cloud years have no provider subscription to revoke: they end here, at
+ * once and with no refund, like a revoked subscription. The rows, their order and
+ * their usage stay.
+ */
+const endPrepaid = (userId: string, now: Date) => sql`
+  update subscriptions set status = 'canceled', canceled_at = ${now},
+    ended_at = least(ended_at, ${now}), updated_at = ${now}
+  where user_id = ${userId} and order_id is not null and status <> 'canceled'`;
+
 /** One step for one deletion. Returns its status afterwards. */
 export async function advanceDeletion(ctx: BillingContext, deletionId: string): Promise<string> {
   const now = ctx.clock();
@@ -82,6 +92,10 @@ export async function advanceDeletion(ctx: BillingContext, deletionId: string): 
       facts.subscriptions.push(...remote);
       await ingestFacts(ctx, facts, "deletion");
     }
+    await ctx.db.transaction(async (tx) => {
+      await lockKeys(tx, [`user:${userId}`]);
+      await tx.execute(endPrepaid(userId, now));
+    });
     const live = await rows<{ id: string; provider_subscription_id: string; kind: string }>(
       ctx.db,
       liveSql(userId, now),

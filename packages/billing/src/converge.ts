@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { LIFETIME_UPDATES_UNTIL, newId, sign } from "@convt/license";
 
 import { licensePurchasedEvent, type AnalyticsEvent } from "./analytics";
+import { BUNDLE_CLOUD_DAYS } from "./catalog";
 import { alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
 import { enqueueEmail } from "./outbox";
 
@@ -31,12 +32,120 @@ async function revoke(
     where revoked_at is null and ${where}`);
 }
 
+/**
+ * A one-time order: its Desktop key, and for Desktop + Cloud also the buyer's cloud
+ * years. Both run in the caller's transaction, under the user lock ingest holds.
+ */
+export async function convergeOrder(
+  ctx: BillingContext,
+  tx: Q,
+  orderId: string,
+  now: Date,
+  events: AnalyticsEvent[] = [],
+) {
+  const o = await one<{ product: string }>(
+    tx,
+    sql`select product from orders where id = ${orderId}`,
+  );
+  if (!o) return;
+  const bundle = o.product === "bundle";
+  await convergeDesktop(ctx, tx, orderId, now, events, bundle ? "bundle" : "desktop");
+  if (bundle) await scheduleCloud(tx, orderId, now);
+}
+
+const cloudMs = BUNDLE_CLOUD_DAYS * 86_400_000;
+
+type BundleRow = {
+  id: string;
+  status: string;
+  billed_at: Date;
+  email: string;
+  user_id: string | null;
+  provider_customer_id: string | null;
+  checkout_id: string | null;
+  lost: boolean;
+  sub_id: string | null;
+  sub_status: string | null;
+  sub_start: Date | null;
+  sub_end: Date | null;
+  sub_ended_at: Date | null;
+};
+
+/**
+ * Lays out the cloud years of a buyer's Desktop + Cloud orders as prepaid Pro rows
+ * (`subscriptions.order_id`). Orders are taken in purchase order with a running
+ * end: an order in good standing (paid or partly refunded, no lost dispute) covers
+ * 365 days from its purchase or from the running end, whichever is later, so a
+ * repeat purchase stacks. A refunded or lost order's row is canceled at
+ * least(its end, now) and keeps those dates; it adds only the time it covered, so
+ * later years move forward to fill the gap. Rows that already started never move
+ * back: everything before them ended before they began. A guest order (no account
+ * yet) is laid out on its own; bundle checkouts on convt.app require sign-in.
+ */
+export async function scheduleCloud(tx: Q, orderId: string, now: Date) {
+  const owner = await one<{ user_id: string | null }>(
+    tx,
+    sql`select user_id from orders where id = ${orderId}`,
+  );
+  if (!owner) return;
+  const orders = await rows<BundleRow>(
+    tx,
+    sql`
+    select o.id, o.status, o.billed_at, o.email, o.user_id, o.provider_customer_id, o.checkout_id,
+      exists (select 1 from disputes d where d.order_id = o.id and d.status = 'lost') as lost,
+      s.id as sub_id, s.status as sub_status, s.current_period_start as sub_start,
+      s.current_period_end as sub_end, s.ended_at as sub_ended_at
+    from orders o left join subscriptions s on s.order_id = o.id
+    where o.product = 'bundle'
+      and ${owner.user_id ? sql`o.user_id = ${owner.user_id}` : sql`o.id = ${orderId}`}
+    order by o.billed_at, o.id`,
+  );
+  let end: number | null = null;
+  for (const r of orders) {
+    const good = (r.status === "paid" || r.status === "partially_refunded") && !r.lost;
+    if (good) {
+      if (r.sub_status === "canceled") continue;
+      const billed = r.billed_at.getTime();
+      const start: Date = new Date(Math.max(billed, end ?? billed));
+      const stop: Date = new Date(start.getTime() + cloudMs);
+      end = stop.getTime();
+      if (!r.sub_id) {
+        await tx.execute(sql`
+          insert into subscriptions (id, provider, provider_subscription_id, provider_customer_id, user_id, email, kind,
+            interval, status, current_period_start, current_period_end, cancel_at_period_end, ended_at, checkout_id,
+            order_id, created_at, updated_at)
+          values (${newId("sub")}, 'polar', null, ${r.provider_customer_id}, ${r.user_id}, ${r.email}, 'pro',
+            'year', 'active', ${start}, ${stop}, true, ${stop}, ${r.checkout_id}, ${r.id}, ${now}, ${now})`);
+      } else if (
+        r.sub_start?.getTime() !== start.getTime() ||
+        r.sub_end?.getTime() !== stop.getTime()
+      ) {
+        await tx.execute(sql`
+          update subscriptions set current_period_start = ${start}, current_period_end = ${stop},
+            ended_at = ${stop}, updated_at = ${now}
+          where id = ${r.sub_id}`);
+      }
+    } else if (r.sub_id) {
+      let endedAt = r.sub_ended_at!;
+      if (r.sub_status !== "canceled") {
+        endedAt = new Date(Math.min(r.sub_end!.getTime(), now.getTime()));
+        await tx.execute(sql`
+          update subscriptions set status = 'canceled', canceled_at = ${now}, ended_at = ${endedAt}, updated_at = ${now}
+          where id = ${r.sub_id}`);
+      }
+      // Only the time it actually covered holds later years back.
+      if (endedAt.getTime() > r.sub_start!.getTime()) end = Math.max(end ?? 0, endedAt.getTime());
+    }
+  }
+}
+
 export async function convergeDesktop(
   ctx: BillingContext,
   tx: Q,
   orderId: string,
   now: Date,
   events: AnalyticsEvent[] = [],
+  product: "desktop" | "bundle" = "desktop",
 ) {
   const o = await one<{
     id: string;
@@ -84,7 +193,7 @@ export async function convergeDesktop(
     returning id`,
   );
   if (inserted.length === 0) return;
-  if (o.user_id) events.push(licensePurchasedEvent(o.user_id, "desktop", o.id));
+  if (o.user_id) events.push(licensePurchasedEvent(o.user_id, "desktop", o.id, product));
   await fault(ctx, "after-license-insert");
   await enqueueEmail(tx, {
     kind: "license_issued",

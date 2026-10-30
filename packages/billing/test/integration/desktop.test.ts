@@ -104,7 +104,7 @@ describe("Desktop", () => {
     const [o] = await h.q<{ status: string; refunded_cents: number }>(
       sql`select status, refunded_cents from orders where provider_order_id = ${orderId}`,
     );
-    expect(o).toEqual({ status: "refunded", refunded_cents: 2900 });
+    expect(o).toEqual({ status: "refunded", refunded_cents: 3900 });
   });
 
   test("a refund delivered before the paid event never issues", async () => {
@@ -239,7 +239,7 @@ describe("guest and complimentary Desktop", () => {
     const paid = held.find((d) => d.type === "order.paid")!;
     const env = JSON.parse(paid.body);
     env.data.discount_id = "disc_giveaway_100";
-    env.data.discount_amount = 2900;
+    env.data.discount_amount = 3900;
     env.data.net_amount = 0;
     env.data.total_amount = 0;
     const r = await h.deliver({

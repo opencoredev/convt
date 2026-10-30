@@ -9,7 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { base64urlDecode, base64urlEncode, newId, randomBytes } from "@convt/license";
 
-import { isPro, type CatalogProduct } from "./catalog";
+import { isOneTime, isPro, type CatalogProduct } from "./catalog";
 import { type BillingContext, fault, maskEmail, one, rows, type Q } from "./context";
 import { ingestFacts } from "./ingest";
 import { emptyFacts } from "./provider";
@@ -37,7 +37,7 @@ const sha256 = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update
 /** Live means the user cannot start another: trialing, active, past due, or a checkout still incomplete. */
 const liveSql = (kind: "pro" | "api", userId: string, now: Date) => sql`
   select id from subscriptions
-  where user_id = ${userId} and kind = ${kind}
+  where user_id = ${userId} and kind = ${kind} and order_id is null
     and status in ('incomplete', 'trialing', 'active', 'past_due', 'unpaid')
   and (ended_at is null or ended_at > ${now})`;
 
@@ -64,6 +64,7 @@ export async function createCheckout(
 ): Promise<CreatedCheckout> {
   const now = ctx.clock();
   const { product, user } = input;
+  // A Desktop + Cloud year belongs to an account, so only Desktop sells signed out.
   if (product !== "desktop" && !user) return { ok: false, refusal: "sign_in_required" };
   // No new purchases while the account is being deleted.
   if (
@@ -170,7 +171,9 @@ function parseCookie(value: string | null): { id: string; nonce: Uint8Array } | 
 
 async function stateOf(ctx: BillingContext, row: CheckoutRow) {
   const now = ctx.clock();
-  if (row.product === "desktop") {
+  // A one-time order's result is its own order and Desktop key, never another
+  // subscription of the account.
+  if (isOneTime(row.product)) {
     const lic = await one<{
       id: string;
       token: string;
@@ -204,7 +207,7 @@ async function stateOf(ctx: BillingContext, row: CheckoutRow) {
     sub = await one(
       ctx.db,
       sql`select id, status, card_seen_at from subscriptions
-          where user_id = ${row.user_id} and kind = ${kind}
+          where user_id = ${row.user_id} and kind = ${kind} and order_id is null
             and status in ('incomplete', 'trialing', 'active', 'past_due')
             and (ended_at is null or ended_at > ${now})
           order by created_at desc limit 1`,

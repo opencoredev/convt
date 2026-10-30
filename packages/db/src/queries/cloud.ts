@@ -34,6 +34,13 @@ export async function revokeApiKey(db: Db, userId: string, id: string): Promise<
     .returning({ id: apiKeys.id });
   return rows.length === 1;
 }
+/**
+ * Whether the account may start a cloud job of `kind`, and its allowance. The job
+ * goes on the newest usable subscription, as convt-server picks it. Pro is one
+ * monthly allowance per account: usage and open reservations are summed over every
+ * Pro subscription the account has (recurring and prepaid cloud years), so a second
+ * entitlement never adds a second allowance.
+ */
 export async function cloudAllowance(db: Db, userId: string, kind: "api" | "pro") {
   const sub = await db.execute<{
     id: string;
@@ -42,7 +49,7 @@ export async function cloudAllowance(db: Db, userId: string, kind: "api" | "pro"
     cap: number;
     period: string;
   }>(
-    sql`select id,status,coalesce((status='active' and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null)),false) as usable,coalesce(spend_cap_cents,0) as cap,case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as period from subscriptions where user_id=${userId} and kind=${kind} order by created_at desc limit 1`,
+    sql`select id,status,coalesce((status='active' and (ended_at is null or ended_at>now()) and (current_period_start is null or current_period_start<=now()) and (current_period_end>now() or (kind='api' and current_period_end is null)) and (kind='pro' or card_seen_at is not null)),false) as usable,coalesce(spend_cap_cents,0) as cap,case when kind='pro' then (date_trunc('month',now() at time zone 'UTC') at time zone 'UTC') else coalesce(current_period_start,(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')) end as period from subscriptions where user_id=${userId} and kind=${kind} order by usable desc, created_at desc limit 1`,
   );
   const row = sub.rows[0];
   if (!row)
@@ -54,11 +61,16 @@ export async function cloudAllowance(db: Db, userId: string, kind: "api" | "pro"
       limit: kind === "pro" ? 50_000_000_000 : 0,
       period: null,
     };
+  // API spend is per subscription; Pro bytes are per account.
+  const counted =
+    kind === "api"
+      ? sql`(${row.id})`
+      : sql`(select s.id from subscriptions s where s.user_id=${userId} and s.kind='pro')`;
   const usage = await db.execute<{ used: string }>(
-    sql`select coalesce(sum(case when ${kind}='api' then e.amount_cents else e.quantity end),0)::text as used from usage_events e left join usage_events original on original.id=e.corrects where e.subscription_id=${row.id} and e.occurred_at>=${row.period}::timestamptz and (e.kind=${kind === "api" ? "api_conversion" : "pro_bytes"} or (e.kind='correction' and original.kind=${kind === "api" ? "api_conversion" : "pro_bytes"}))`,
+    sql`select coalesce(sum(case when ${kind}='api' then e.amount_cents else e.quantity end),0)::text as used from usage_events e left join usage_events original on original.id=e.corrects where e.subscription_id in ${counted} and e.occurred_at>=${row.period}::timestamptz and (e.kind=${kind === "api" ? "api_conversion" : "pro_bytes"} or (e.kind='correction' and original.kind=${kind === "api" ? "api_conversion" : "pro_bytes"}))`,
   );
   const reservations = await db.execute<{ reserved: string }>(
-    sql`select coalesce(sum(case when ${kind}='api' then reserved_cents else reserved_bytes end),0)::text as reserved from cloud_jobs where subscription_id=${row.id} and reservation='open'`,
+    sql`select coalesce(sum(case when ${kind}='api' then reserved_cents else reserved_bytes end),0)::text as reserved from cloud_jobs where subscription_id in ${counted} and reservation='open'`,
   );
   return {
     allowed: row.usable,

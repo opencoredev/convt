@@ -12,9 +12,16 @@ import {
   type LicensePurchaseRef,
   type AnalyticsEvent,
 } from "./analytics";
-import { complimentaryDesktop, discountProblem, isPro, type CatalogProduct } from "./catalog";
+import {
+  complimentaryOrder,
+  discountProblem,
+  isOneTime,
+  isPro,
+  listPriceOf,
+  type CatalogProduct,
+} from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
-import { convergeDesktop, convergePro, convergeApi } from "./converge";
+import { convergeOrder, convergePro, convergeApi } from "./converge";
 import { emptyFacts } from "./provider";
 import type {
   CheckoutFact,
@@ -38,6 +45,7 @@ export class BudgetExceeded extends Error {
 }
 
 const paidStatuses = new Set(["paid", "partially_refunded", "refunded"]);
+const productNames = { desktop: "Desktop", bundle: "Desktop + Cloud" } as const;
 const terminalOrder = new Set(["refunded", "void"]);
 const endedSubscription = (s: { status: string; ended_at: Date | null }) =>
   s.status === "canceled" || s.status === "incomplete_expired" || s.ended_at !== null;
@@ -137,7 +145,7 @@ export async function checkFacts(
   const prices = new Map(
     Object.entries(catalog.products).map(([k, v]) => [v.priceId, k as CatalogProduct]),
   );
-  for (const legacy of catalog.legacyDesktop ?? []) prices.set(legacy.priceId, "desktop");
+  for (const legacy of catalog.legacyPrices) prices.set(legacy.priceId, legacy.product);
   const yearly = catalog.products.pro_year.amountCents!;
 
   const checkCheckout = async (
@@ -206,25 +214,25 @@ export async function checkFacts(
       if (i.priceId !== null && !prices.has(i.priceId)) return `unknown_price: ${i.priceId}`;
     }
     if (!o.email) return `no_email: order ${o.providerOrderId}`;
-    if (o.product === "desktop") {
-      const price = catalog.products.desktop;
-      if (o.reason !== "purchase") return `amount: a Desktop order with reason ${o.reason}`;
+    if (isOneTime(o.product)) {
+      if (o.reason !== "purchase")
+        return `amount: a ${productNames[o.product]} order with reason ${o.reason}`;
+      // The current price or a legacy one, each only at the amount it charged.
+      const price =
+        o.items.length === 1 ? listPriceOf(catalog, o.product, o.items[0].priceId) : null;
       const listPrice =
-        o.items.length === 1 &&
-        o.items[0].priceId === price.priceId &&
-        o.items[0].amountCents === price.amountCents &&
-        o.subtotalCents === price.amountCents;
-      if (!listPrice && !complimentaryDesktop(catalog, o))
-        return `amount: Desktop is ${price.amountCents}, the order is ${o.subtotalCents}`;
+        price !== null && o.items[0].amountCents === price && o.subtotalCents === price;
+      if (!listPrice && !complimentaryOrder(catalog, o.product, o))
+        return `amount: ${productNames[o.product]} is ${catalog.products[o.product].amountCents}, the order is ${o.subtotalCents}`;
       const r = await checkCheckout(
         "order",
-        "desktop",
+        o.product,
         o.providerCheckoutId,
         o.checkoutRef,
         o.userId,
       );
-      // Polar-hosted or guest Desktop checkouts we did not record still grant a
-      // license: the payload is Polar-signed for our product and has an email.
+      // Polar-hosted or guest checkouts we did not record still grant a license:
+      // the payload is Polar-signed for our product and has an email.
       if (r && !r.startsWith("foreign_checkout:")) return r;
     } else if (isPro(o.product)) {
       if (o.reason === "subscription_create" || o.reason === "subscription_cycle") {
@@ -521,7 +529,7 @@ async function duplicateCheck(tx: Q, userId: string | null, kind: string, now: D
     tx,
     sql`
     select provider_subscription_id from subscriptions
-    where user_id = ${userId} and kind = ${kind}
+    where user_id = ${userId} and kind = ${kind} and order_id is null
       and status in ('trialing', 'active', 'past_due') and (ended_at is null or ended_at > ${now})`,
   );
   if (live.length > 1)
@@ -536,6 +544,7 @@ async function duplicateCheck(tx: Q, userId: string | null, kind: string, now: D
 
 function describeOrder(o: OrderFact): string {
   if (o.product === "desktop") return "Desktop License, lifetime updates";
+  if (o.product === "bundle") return "Desktop + Cloud: Desktop License and a year of cloud";
   if (o.product === "api")
     return o.reason === "subscription_create" ? "API enrollment" : "API usage";
   const interval = o.product === "pro_year" ? "yearly" : "monthly";
@@ -553,7 +562,8 @@ async function applyOrder(
   now: Date,
 ) {
   let o = fact;
-  const desktop = o.product === "desktop";
+  // One-time orders (Desktop, Desktop + Cloud) are orders; the rest are invoices.
+  const desktop = isOneTime(o.product);
   const table = desktop ? "orders" : "invoices";
   const idColumn = desktop ? "provider_order_id" : "provider_invoice_id";
   const v = await versionOf(tx, table, idColumn, o.providerOrderId, o.version, o.hash);
@@ -590,7 +600,7 @@ async function applyOrder(
         sql`
         insert into orders (id, provider, provider_order_id, provider_customer_id, user_id, email, product, amount_cents, currency, status,
           paid_at, billed_at, refunded_cents, refunded_at, checkout_id, provider_version, provider_hash, created_at, updated_at)
-        values (${newId("ord")}, 'polar', ${o.providerOrderId}, ${o.providerCustomerId}, ${userId}, ${o.email}, 'desktop', ${o.netCents}, ${o.currency}, ${o.status},
+        values (${newId("ord")}, 'polar', ${o.providerOrderId}, ${o.providerCustomerId}, ${userId}, ${o.email}, ${o.product}, ${o.netCents}, ${o.currency}, ${o.status},
           ${paid ? now : null}, ${o.billedAt}::timestamptz, ${o.refundedCents}, ${refunding ? now : null}, ${co?.id ?? null},
           ${o.version}::timestamptz, ${o.hash}, ${now}, ${now})
         returning id`,
@@ -881,8 +891,7 @@ export async function applyFacts(
   }
   for (const d of facts.disputes) await applyDispute(ctx, tx, d, touched, now);
 
-  for (const orderId of touched.orders)
-    await convergeDesktop(ctx, tx, orderId, now, touched.events);
+  for (const orderId of touched.orders) await convergeOrder(ctx, tx, orderId, now, touched.events);
   for (const subId of touched.subscriptions) {
     const s = await one<{ kind: string }>(
       tx,
@@ -925,14 +934,18 @@ export async function claimUserPurchases(tx: Q, userId: string) {
 async function licenseRefs(tx: Q, userId: string): Promise<LicensePurchaseRef[]> {
   const licenses = await rows<{
     plan: string;
+    product: string | null;
     order_id: string | null;
     subscription_id: string | null;
   }>(
     tx,
-    sql`select plan, order_id, subscription_id from licenses where user_id = ${userId} and revoked_at is null`,
+    sql`select l.plan, o.product, l.order_id, l.subscription_id from licenses l
+        left join orders o on o.id = l.order_id
+        where l.user_id = ${userId} and l.revoked_at is null`,
   );
   return licenses.map((license) => ({
     plan: license.plan,
+    product: license.product,
     orderId: license.order_id,
     subscriptionId: license.subscription_id,
   }));

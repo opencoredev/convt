@@ -197,18 +197,18 @@ describe("business checks", () => {
     const code = (d: Record<string, unknown>, cents: number, id: string | null) => {
       d.discount_id = id;
       d.discount_amount = cents;
-      d.net_amount = 2900 - cents;
-      d.total_amount = 2900 - cents;
+      d.net_amount = 3900 - cents;
+      d.total_amount = 3900 - cents;
     };
-    const ok = await deliverOrder((d) => code(d, 870, "disc_local_producthunt"));
+    const ok = await deliverOrder((d) => code(d, 1170, "disc_local_producthunt"));
     expect({ event: ok.event.status, licenses: ok.licenses }).toEqual({
       event: "processed",
       licenses: 1,
     });
     const bad: Array<[number, string | null, RegExp]> = [
-      [1450, "disc_local_producthunt", /PRODUCTHUNT on 2900 is 870/],
-      [870, "disc_other", /unknown discount/],
-      [870, null, /without a code/],
+      [1950, "disc_local_producthunt", /PRODUCTHUNT on 3900 is 1170/],
+      [1170, "disc_other", /unknown discount/],
+      [1170, null, /without a code/],
     ];
     for (const [cents, id, reason] of bad) {
       const r = await deliverOrder((d) => code(d, cents, id));
@@ -496,7 +496,7 @@ describe("complimentary Desktop", () => {
   test("a 100% or $0 Desktop order issues a license, including an unknown Polar code", async () => {
     const fullOff = await deliverOrder((d) => {
       d.discount_id = "disc_giveaway_100";
-      d.discount_amount = 2900;
+      d.discount_amount = 3900;
       d.net_amount = 0;
       d.total_amount = 0;
     });

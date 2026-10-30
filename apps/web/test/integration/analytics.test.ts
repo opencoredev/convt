@@ -160,7 +160,7 @@ describe("license_purchased on claim", () => {
       event: "license_purchased",
       distinctId: user!.id,
       insertId: `license_purchased:desktop:${orderId}`,
-      properties: { plan: "desktop" },
+      properties: { plan: "desktop", product: "desktop" },
     });
     expect(JSON.stringify(purchases[0])).not.toContain(address);
 

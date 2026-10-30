@@ -159,13 +159,17 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
   const licenseRefs = async (q: Pick<typeof db, "execute">, userId: string) => {
     const licenses = await q.execute<{
       plan: string;
+      product: string | null;
       order_id: string | null;
       subscription_id: string | null;
     }>(
-      sql`select plan, order_id, subscription_id from licenses where user_id = ${userId} and revoked_at is null`,
+      sql`select l.plan, o.product, l.order_id, l.subscription_id from licenses l
+          left join orders o on o.id = l.order_id
+          where l.user_id = ${userId} and l.revoked_at is null`,
     );
     return licenses.rows.map((license) => ({
       plan: license.plan,
+      product: license.product,
       orderId: license.order_id,
       subscriptionId: license.subscription_id,
     }));

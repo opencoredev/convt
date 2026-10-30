@@ -80,7 +80,7 @@ export const orders = pgTable(
       .on(t.email)
       .where(sql`${t.userId} is null`),
     check("orders_status_check", inList(t.status, orderStatuses)),
-    check("orders_product_check", inList(t.product, ["desktop"])),
+    check("orders_product_check", inList(t.product, ["desktop", "bundle"])),
     check(
       "orders_paid_at_check",
       sql`${t.status} not in (${paidStatuses}) or ${t.paidAt} is not null`,
@@ -95,7 +95,8 @@ export const subscriptions = pgTable(
   {
     id: text().primaryKey(),
     provider: text().notNull().default("polar"),
-    providerSubscriptionId: text().notNull(),
+    /** Null for a prepaid cloud year, which no provider subscription backs. */
+    providerSubscriptionId: text(),
     providerCustomerId: text(),
     userId: text().references(() => users.id, { onDelete: "set null" }),
     email: text().notNull(),
@@ -122,6 +123,13 @@ export const subscriptions = pgTable(
     pendingUpdate: jsonb(),
     /** API: when ingest first saw the subscription active with a card on file. */
     cardSeenAt: tstz(),
+    // Added by migration 0008.
+    /**
+     * Set for a prepaid cloud year: the Desktop + Cloud order that paid for it. Such
+     * a row is Pro coverage that never renews and is never sent to the provider;
+     * billing schedules its dates (packages/billing/src/converge.ts, scheduleCloud).
+     */
+    orderId: text().references((): AnyPgColumn => orders.id),
   },
   (t) => [
     uniqueIndex("subscriptions_provider_subscription_key").on(t.provider, t.providerSubscriptionId),
@@ -142,6 +150,13 @@ export const subscriptions = pgTable(
       sql`(${t.kind} = 'pro' and ${t.spendCapCents} is null) or (${t.kind} = 'api' and ${t.spendCapCents} is not null and ${t.spendCapCents} > 0)`,
     ),
     index("subscriptions_status_idx").on(t.status),
+    uniqueIndex("subscriptions_order_key")
+      .on(t.orderId)
+      .where(sql`${t.orderId} is not null`),
+    check(
+      "subscriptions_prepaid_check",
+      sql`(${t.orderId} is null) = (${t.providerSubscriptionId} is not null) and (${t.orderId} is null or (${t.kind} = 'pro' and ${t.interval} = 'year' and ${t.cancelAtPeriodEnd} and ${t.currentPeriodStart} is not null and ${t.currentPeriodEnd} is not null and ${t.endedAt} is not null))`,
+    ),
   ],
 );
 
