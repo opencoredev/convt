@@ -255,7 +255,7 @@ function desktopBand(): HTMLElement {
     h("div", {}, [
       h("h2", { id: "desktop-title" }, ["Need more than images?"]),
       h("p", {}, [
-        "convt for desktop puts the same right-click on every file on your Mac or PC: video, audio, PDFs, documents, HEIC photos and whole folders. Free for 7 days, then $29 once.",
+        "convt for desktop puts the same right-click on every file on your Mac or PC: video, audio, PDFs, documents, HEIC photos and whole folders. $39 once, with every future update.",
       ]),
     ]),
     h("div", { class: "card-actions" }, [

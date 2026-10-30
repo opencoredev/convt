@@ -58,16 +58,24 @@ export function licensePurchasedEvent(
   userId: string,
   plan: "desktop" | "pro",
   subjectId: string,
+  /** What was bought: `bundle` for a Desktop + Cloud order's Desktop key. */
+  product: "desktop" | "bundle" | "pro" = plan,
 ): AnalyticsEvent {
   return {
     event: "license_purchased",
     distinctId: userId,
     insertId: `license_purchased:${plan}:${subjectId}`,
-    properties: { plan },
+    properties: { plan, product },
   };
 }
 
-type LicenseRef = { plan: string; orderId?: string | null; subscriptionId?: string | null };
+type LicenseRef = {
+  plan: string;
+  /** The order's product for a Desktop key: `desktop` or `bundle`. */
+  product?: string | null;
+  orderId?: string | null;
+  subscriptionId?: string | null;
+};
 
 export function purchaseEventsFromLicenses(
   userId: string,
@@ -78,7 +86,12 @@ export function purchaseEventsFromLicenses(
   for (const license of licenses) {
     const event =
       license.plan === "desktop" && license.orderId
-        ? licensePurchasedEvent(userId, "desktop", license.orderId)
+        ? licensePurchasedEvent(
+            userId,
+            "desktop",
+            license.orderId,
+            license.product === "bundle" ? "bundle" : "desktop",
+          )
         : license.plan === "pro" && license.subscriptionId
           ? licensePurchasedEvent(userId, "pro", license.subscriptionId)
           : null;

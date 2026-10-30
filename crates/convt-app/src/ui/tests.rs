@@ -124,6 +124,8 @@ struct TestApi {
     key: Mutex<Result<Option<String>, ApiError>>,
     /// What `current_key` says the account allows; `None` by default.
     access: Mutex<Option<convt_license::account::Access>>,
+    /// The account's Desktop key `current_key` returns; `None` by default.
+    desktop_key: Mutex<Option<String>>,
     /// The last code and verifier the app traded.
     traded: Mutex<Option<(String, String)>>,
     /// Keeps `exchange` from answering while set, to test what happens meanwhile.
@@ -141,6 +143,7 @@ impl Default for TestApi {
             exchange: Mutex::new(Err(ApiError::Rejected)),
             key: Mutex::new(Err(ApiError::Offline)),
             access: Mutex::new(None),
+            desktop_key: Mutex::new(None),
             traded: Mutex::new(None),
             hold_exchange: AtomicBool::new(false),
             hold_key: AtomicBool::new(false),
@@ -161,6 +164,9 @@ impl TestApi {
     }
     fn answer_access(&self, access: Option<convt_license::account::Access>) {
         *self.access.lock().unwrap() = access;
+    }
+    fn answer_desktop_key(&self, key: Option<String>) {
+        *self.desktop_key.lock().unwrap() = key;
     }
 }
 
@@ -188,6 +194,7 @@ impl Api for TestApi {
         }
         Ok(convt_license::account::LicenseReply {
             key: self.key.lock().unwrap().clone()?,
+            desktop_key: self.desktop_key.lock().unwrap().clone(),
             access: self.access.lock().unwrap().clone(),
         })
     }
@@ -2197,7 +2204,7 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
             "Start your 7-day free trial",
             "Start free trial",
         ),
-        (Access::Lapsed, "Your Pro plan has ended", "Get convt Pro"),
+        (Access::Lapsed, "Your Pro plan has ended", "See pricing"),
     ] {
         set(cx, Some(access.clone()));
         assert_eq!(
@@ -5374,6 +5381,35 @@ fn signing_in_from_settings_trades_the_code_and_fetches_the_pro_key(cx: &mut Tes
         label(cx, settings, "refresh-status").as_deref(),
         Some("Got your Pro key, with updates until 2026-11-01.")
     );
+    assert!(f.dir.path().join("license.key").exists());
+}
+
+#[gpui_kit::test]
+fn a_desktop_and_cloud_buyer_who_only_signs_in_converts_locally_and_in_the_cloud(
+    cx: &mut TestAppContext,
+) {
+    // Signed in, no key on this computer, and the trial long over: nothing converts.
+    let f = Fixture::signed_in(cx, None, "bundle-tester");
+    cx.read(|cx| assert!(!f.app.read(cx).license.allows_conversion()));
+    // The account has no Pro key, Pro access (its cloud year) and a Desktop key.
+    f.api.answer_key(Ok(None));
+    f.api
+        .answer_access(Some(convt_license::account::Access::Pro));
+    f.api
+        .answer_desktop_key(Some(license_key("bundle-tester", "9999-12-31")));
+    cx.update(|cx| f.app.update(cx, |s, cx| s.refresh_license(cx)));
+    wait_until(cx, "the refresh finished", |cx| {
+        matches!(
+            f.app.read(cx).account.refresh,
+            crate::account::Refresh::Done(_)
+        )
+    });
+    cx.read(|cx| {
+        let s = f.app.read(cx);
+        assert!(matches!(&s.license, client::State::Licensed(l) if l.plan == Plan::Desktop));
+        assert!(s.license.allows_conversion());
+        assert_eq!(s.cloud_access(), crate::cloud::CloudAccess::Ready);
+    });
     assert!(f.dir.path().join("license.key").exists());
 }
 

@@ -3,6 +3,7 @@
 
 import {
   activeApiSubscription,
+  cloudYears,
   currentProSubscription,
   deriveAccountState,
   type AccountState,
@@ -17,6 +18,7 @@ import type {
   ApiEnrollment,
   ApiKey,
   Billing,
+  CloudYear,
   Invoice,
   License,
   Mac,
@@ -42,11 +44,14 @@ export type SubscriptionRow = {
   interval: string | null;
   status: string;
   trialEndsAt: Date | null;
+  currentPeriodStart?: Date | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   endedAt: Date | null;
   spendCapCents: number | null;
   cardSeenAt?: Date | null;
+  /** Set for a prepaid Desktop + Cloud year (the order that paid for it). */
+  orderId?: string | null;
   createdAt: Date;
 };
 
@@ -59,6 +64,8 @@ export type LicenseRow = {
   revokedAt: Date | null;
   revokeReason?: string | null;
   orderPaidAt: Date | null;
+  /** `desktop` or `bundle` for a Desktop key; null for Pro. */
+  orderProduct?: string | null;
   subscriptionInterval: string | null;
 };
 
@@ -139,7 +146,11 @@ export function licenseView(row: LicenseRow, activeMacs: number, now: Date): Lic
     updatesLabel = covered ? "Updates included" : `Builds up to ${until}`;
   }
   if (row.plan === "desktop") {
-    detail = `Desktop License, bought ${formatDate(iso(row.orderPaidAt ?? new Date(`${row.issuedOn}T00:00:00Z`)))}`;
+    const bought = formatDate(iso(row.orderPaidAt ?? new Date(`${row.issuedOn}T00:00:00Z`)));
+    detail =
+      row.orderProduct === "bundle"
+        ? `Desktop + Cloud, bought ${bought}`
+        : `Desktop License, bought ${bought}`;
   } else if (row.trial) {
     detail = "Pro, free trial";
   } else {
@@ -170,6 +181,18 @@ const proPrice = {
   month: { per: "$12/mo", total: "$12 a month" },
   year: { per: "$8/mo, billed yearly", total: "$96 a year" },
 };
+
+/** The account's Desktop + Cloud years, for the overview and billing pages. */
+export function cloudYearView(subscriptions: SubscriptionRow[], now: Date): CloudYear | null {
+  const c = cloudYears(
+    subscriptions.map((s) => ({ ...s, currentPeriodStart: s.currentPeriodStart ?? null })),
+    now,
+  );
+  if (!c) return null;
+  return c.state === "active"
+    ? { state: "active", until: formatDate(iso(c.until)) }
+    : { state: "ended", on: formatDate(iso(c.on)) };
+}
 
 /** The license the app would use: the current Pro or trial key, else the newest Desktop key. */
 export function primaryLicense(state: AccountState, licenses: LicenseRow[]): LicenseRow | null {
@@ -212,9 +235,16 @@ export function planSummary(
     }
     case "desktop": {
       const desktop = licenses.find((l) => l.plan === "desktop" && !l.revokedAt);
+      const cloud = cloudYearView(subscriptions, now);
+      if (cloud?.state === "active")
+        return {
+          name: "Desktop + Cloud",
+          priceLabel: "Paid once",
+          meta: `Cloud until ${cloud.until}`,
+        };
       return {
         name: "Desktop",
-        priceLabel: "$29, paid once",
+        priceLabel: "Paid once",
         meta: desktop ? "Lifetime updates" : "Paid once",
       };
     }
@@ -248,6 +278,7 @@ export function overviewView(input: {
     account: accountView(input.user),
     state,
     plan: planSummary(state, subscriptions, licenses, now),
+    cloud: cloudYearView(subscriptions, now),
     license: license ? licenseView(license, devices.length, now) : null,
     api: api
       ? {
@@ -420,7 +451,8 @@ export function billingView(input: {
   }
   return {
     plan,
-    hadPro: subscriptions.some((s) => s.kind === "pro"),
+    cloud: cloudYearView(subscriptions, now),
+    hadPro: subscriptions.some((s) => s.kind === "pro" && !s.orderId),
     ownsDesktop,
     polarPortal,
     api: apiEnrollment(subscriptions, input.openApiCheckout, now),
@@ -439,12 +471,12 @@ export function billingView(input: {
 export type CheckoutView =
   | {
       state: "pending" | "trial" | "api_enrolled" | "failed" | "shown" | "not_found";
-      product: "desktop" | "pro" | "api" | null;
+      product: "desktop" | "bundle" | "pro" | "api" | null;
       allowTrial: boolean;
     }
   | {
       state: "ready";
-      product: "desktop" | "pro";
+      product: "desktop" | "bundle" | "pro";
       maskedEmail: string;
       /** "Oct 5, 2027" */
       updatesUntil: string;
@@ -466,14 +498,14 @@ export function checkoutGiveUp(
 }
 
 const productGroup = (p: string | undefined) =>
-  p === "desktop" ? "desktop" : p === "api" ? "api" : p ? "pro" : null;
+  p === "desktop" || p === "bundle" || p === "api" ? p : p ? "pro" : null;
 
 /** The success page's states. The token appears only in `ready`. */
 export function checkoutView(r: CheckoutResult): CheckoutView {
   if (r.state === "ready") {
     return {
       state: "ready",
-      product: r.product === "desktop" ? "desktop" : "pro",
+      product: r.product === "desktop" || r.product === "bundle" ? r.product : "pro",
       maskedEmail: r.maskedEmail,
       updatesUntil: formatDate(`${r.updatesUntil}T00:00:00Z`),
       token: r.token,

@@ -27,7 +27,7 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
   fromDriver: (value) => new Uint8Array(value),
 });
 
-export const catalogProducts = ["desktop", "pro_month", "pro_year", "api"] as const;
+export const catalogProducts = ["desktop", "bundle", "pro_month", "pro_year", "api"] as const;
 export const checkoutStatuses = [
   "created",
   "open",

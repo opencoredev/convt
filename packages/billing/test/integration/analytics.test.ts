@@ -28,7 +28,7 @@ describe("Polar analytics", () => {
     const events = eventsNamed("license_purchased", u.id).slice(before);
     expect(events.length).toBe(1);
     expect(events[0].distinctId).toBe(u.id);
-    expect(events[0].properties).toEqual({ plan: "desktop" });
+    expect(events[0].properties).toEqual({ plan: "desktop", product: "desktop" });
     expect(events[0].insertId?.startsWith("license_purchased:desktop:")).toBe(true);
     expect(JSON.stringify(events[0])).not.toContain(u.email);
     expect(events[0].properties).not.toHaveProperty("email");
@@ -60,7 +60,7 @@ describe("Polar analytics", () => {
     const purchases = eventsNamed("license_purchased", u.id);
     expect(purchases.length).toBe(1);
     expect(purchases[0].distinctId).toBe(u.id);
-    expect(purchases[0].properties).toEqual({ plan: "pro" });
+    expect(purchases[0].properties).toEqual({ plan: "pro", product: "pro" });
     expect(JSON.stringify(purchases[0])).not.toContain(u.email);
 
     h.mock.cycle(subId);
@@ -91,7 +91,7 @@ describe("Polar analytics", () => {
         event: "license_purchased",
         distinctId: u.id,
         insertId: `license_purchased:desktop:${order.id}`,
-        properties: { plan: "desktop" },
+        properties: { plan: "desktop", product: "desktop" },
       },
     ]);
     expect(JSON.stringify(claimed[0])).not.toContain(u.email);

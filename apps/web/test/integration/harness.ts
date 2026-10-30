@@ -20,6 +20,8 @@ export type Harness = {
   env: AppEnv;
   mail: MailMessage[];
   analytics: AnalyticsEvent[];
+  /** Users whose sign-up claim asked billing to lay out their cloud years again. */
+  scheduledCloud: string[];
   mockUrl: string;
   close: () => Promise<void>;
   /** One auth request as a browser on `ip` with its cookie jar. */
@@ -83,6 +85,8 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
   const pool = new pg.Pool({ connectionString: tdb.webUrl, max: 30 });
   const mail: MailMessage[] = [];
   const analytics: AnalyticsEvent[] = [];
+  /** Users whose sign-up claim asked billing to lay out their cloud years again. */
+  const scheduledCloud: string[] = [];
 
   async function request(
     path: string,
@@ -104,6 +108,7 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
         captureAnalytics: async (event) => {
           analytics.push(event);
         },
+        scheduleCloud: async (userId) => void scheduledCloud.push(userId),
       });
       const url = path.startsWith("http") ? path : `${env.authUrl}/api/auth${path}`;
       const headers: Record<string, string> = {
@@ -146,6 +151,7 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
           captureAnalytics: async (event) => {
             analytics.push(event);
           },
+          scheduleCloud: async (userId) => void scheduledCloud.push(userId),
         }),
       );
     } finally {
@@ -160,6 +166,7 @@ export async function startHarness(options: { production?: boolean } = {}): Prom
     env,
     mail,
     analytics,
+    scheduledCloud,
     mockUrl,
     request,
     codeFor,

@@ -24,6 +24,7 @@ import {
 } from "#/lib/billing-display";
 import { links } from "#/lib/config";
 import { formatDate, formatMoney } from "#/lib/format";
+import type { Billing } from "#/lib/types";
 import { openPortal, openReceipt, setPlanCancel, switchPlanInterval } from "#/server/billing-fns";
 
 export const Route = createFileRoute("/_app/_shell/dashboard/billing")({
@@ -66,6 +67,45 @@ function usePortal() {
 }
 
 type Confirm = "switch" | "cancel" | null;
+
+/**
+ * Desktop + Cloud coverage, apart from the plan: a Pro subscriber who also bought
+ * the bundle still manages the subscription above it.
+ */
+function CloudYearRow({
+  cloud,
+  ownsDesktop,
+}: {
+  cloud: NonNullable<Billing["cloud"]>;
+  ownsDesktop: boolean;
+}) {
+  const active = cloud.state === "active";
+  return (
+    <div
+      role="group"
+      aria-label="Desktop + Cloud"
+      className="mt-1 flex flex-col gap-1.5 border-t border-line pt-3.5"
+    >
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <span className="text-[13px]/4 font-medium">Cloud conversions</span>
+        <Badge size="sm" tone={active ? "green" : "neutral"}>
+          {active ? `UNTIL ${cloud.until.toUpperCase()}` : "ENDED"}
+        </Badge>
+        <a
+          href={links.buyBundle}
+          className="text-[13px]/4 font-medium text-green hover:underline hover:underline-offset-2"
+        >
+          {active ? "Buy another year" : "Buy a year"}
+        </a>
+      </div>
+      <p className="text-[13px]/5 text-ink-2">
+        {active
+          ? `From Desktop + Cloud, paid once. Convert from your phone or browser and send heavy video jobs to the cloud until ${cloud.until}. It doesn’t renew; another year starts when this one ends.`
+          : `Your Desktop + Cloud year ended ${cloud.on}.${ownsDesktop ? " Your Desktop license keeps working." : ""}`}
+      </p>
+    </div>
+  );
+}
 
 function BillingPage() {
   const billing = Route.useLoaderData();
@@ -147,9 +187,9 @@ function BillingPage() {
               <p className="text-[13px]/5 text-ink-2">{plan.summary}</p>
               {isDesktop ? (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <SecondaryLink href={links.buyPro}>
-                    {billing.hadPro ? "Start Pro" : "Start free trial"}
-                  </SecondaryLink>
+                  {billing.cloud?.state !== "active" ? (
+                    <SecondaryLink href={links.buyBundle}>Get Desktop + Cloud</SecondaryLink>
+                  ) : null}
                   <TextButton tone="muted" onClick={() => window.location.assign(links.pricing)}>
                     See pricing
                   </TextButton>
@@ -219,9 +259,8 @@ function BillingPage() {
               ) : (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   {plan.status === "canceled" ? (
-                    <SecondaryLink href={`/checkout/pro?interval=${plan.interval}`}>
-                      Restart Pro
-                    </SecondaryLink>
+                    // Pro is no longer sold; a lapsed subscriber buys once instead.
+                    <SecondaryLink href={links.buyBundle}>Get Desktop + Cloud</SecondaryLink>
                   ) : plan.status === "past_due" ? (
                     <PrimaryButton disabled={portal.busy} onClick={portal.open}>
                       Update card
@@ -262,14 +301,11 @@ function BillingPage() {
                 No plan
               </p>
               <p className="text-[13px]/5 text-ink-2">
-                {billing.hadPro
-                  ? "Pro is $12 a month or $96 a year. Desktop is $29 once and shows up under invoices."
-                  : "Pro is $12 a month or $96 a year, with a 7-day free trial. Desktop is $29 once and shows up under invoices."}
+                Desktop is $39 once. Desktop + Cloud is $69 once and adds a year of cloud
+                conversions; it doesn&rsquo;t renew. Both show up under invoices.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <SecondaryLink href={links.buyPro}>
-                  {billing.hadPro ? "Start Pro" : "Start free trial"}
-                </SecondaryLink>
+                <SecondaryLink href={links.buyBundle}>Get Desktop + Cloud</SecondaryLink>
                 {offerDesktop ? (
                   <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
                 ) : null}
@@ -292,9 +328,7 @@ function BillingPage() {
                 {apiLine}. Billed per conversion at the end of each month.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
-                <SecondaryLink href={links.buyPro}>
-                  {billing.hadPro ? "Start Pro" : "Start free trial"}
-                </SecondaryLink>
+                <SecondaryLink href={links.buyBundle}>Get Desktop + Cloud</SecondaryLink>
                 {offerDesktop ? (
                   <SecondaryLink href={links.buyDesktop}>Get Desktop</SecondaryLink>
                 ) : null}
@@ -316,6 +350,9 @@ function BillingPage() {
                 Manage
               </a>
             </div>
+          ) : null}
+          {billing.cloud ? (
+            <CloudYearRow cloud={billing.cloud} ownsDesktop={billing.ownsDesktop} />
           ) : null}
         </section>
         <section

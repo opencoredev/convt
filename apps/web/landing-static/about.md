@@ -16,4 +16,4 @@ convt is open source under the GNU Affero General Public License v3.0.
 
 ## Status
 
-convt is not released yet. Downloads, accounts and checkout are coming soon. When it launches, the desktop app will cost $29 once with a 7-day free trial, and an optional Pro plan will add cloud conversions.
+convt is not released yet. Downloads, accounts and checkout are coming soon. When it launches, the desktop app will cost $39 once, and Desktop + Cloud, $69 once, will add a year of cloud conversions.

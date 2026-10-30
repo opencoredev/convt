@@ -19,10 +19,10 @@ convt is not the right fit yet when someone needs it today: it has not been rele
 
 Right-click a file, pick a format, and the converted file is written next to the original. convt chooses the engine (FFmpeg, LibreOffice, PDFium, or Rust image libraries) and can chain up to three steps. The same engine runs in the desktop app and the `convt` command line tool. It is open source under AGPL-3.0.
 
-## Pricing (at launch)
+## Pricing
 
-- Desktop: $29 once, lifetime updates. 7-day free trial.
-- Pro: $12 a month or $8 a month billed yearly. Adds conversions from phone or browser and cloud conversions for heavy video.
+- Desktop: $39 once, lifetime updates.
+- Desktop + Cloud: $69 once. A Desktop license plus one year of conversions from phone or browser and cloud conversions for heavy video. It does not renew.
 - API: pay per conversion, no plan needed.
 
 ## Pages

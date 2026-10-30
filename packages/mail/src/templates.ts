@@ -5,7 +5,7 @@
 // so a later template change never alters an email that is already queued.
 
 /** Bump when any template's output changes. Stored with each frozen payload. */
-export const templateVersion = 4;
+export const templateVersion = 5;
 
 export type Rendered = {
   subject: string;
@@ -97,21 +97,34 @@ function render(subject: string, blocks: Block[]): Rendered {
 }
 
 export type LicenseIssuedInput = {
-  product: "desktop" | "pro";
   token: string;
   /** `YYYY-MM-DD`. */
   updatesUntil: string;
   siteUrl: string;
   downloadUrl: string;
-};
+} & (
+  | { product: "desktop" | "pro" }
+  /** A Desktop + Cloud order's Desktop key; `cloudUntil` is the day its cloud year ends. */
+  | { product: "bundle"; cloudUntil: string }
+);
 
 export function licenseIssued(input: LicenseIssuedInput): Rendered {
-  const product = input.product === "pro" ? "convt Pro" : "convt Desktop";
+  const product = { pro: "convt Pro", desktop: "convt Desktop", bundle: "convt Desktop + Cloud" }[
+    input.product
+  ];
   const until = formatDay(input.updatesUntil);
   const window =
     input.product === "pro"
       ? `This key covers every build released up to ${until}. While you're subscribed, a new key appears on your dashboard each billing period.`
       : "This key works forever and includes lifetime desktop updates.";
+  const cloud =
+    input.product === "bundle"
+      ? [
+          {
+            p: `Cloud conversions are on your convt.app account until ${formatDay(input.cloudUntil)}: convert from your phone or browser, or send a job to the cloud from the app. They don't renew.`,
+          },
+        ]
+      : [];
   return render(`Your ${product} license key`, [
     { p: `Thanks for buying ${product}. Here is your license key:` },
     { key: input.token },
@@ -120,6 +133,7 @@ export function licenseIssued(input: LicenseIssuedInput): Rendered {
       p: "That link opens the convt app and asks you to confirm. You can also paste the key in the app under Settings, or run convt license activate with it.",
     },
     { p: window },
+    ...cloud,
     { link: { href: input.downloadUrl, label: "Download convt" } },
     { link: { href: `${input.siteUrl}/dashboard/licenses`, label: "Your licenses" } },
     { p: "Keep this email. Anyone with the key can activate convt." },

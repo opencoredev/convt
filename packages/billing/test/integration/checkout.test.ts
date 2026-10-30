@@ -130,7 +130,7 @@ describe("checkout result", () => {
     const orderId = h.mock.state().orders.find((o) => o.checkout_id === b.providerCheckoutId)!.id;
     h.mock.mutateQuietly("order", orderId, (x) => {
       x.discountId = "disc_unknown";
-      x.discountAmount = 870;
+      x.discountAmount = 1170;
     });
     const rejected = await result(b.providerCheckoutId, b.cookieValue, null, true);
     expect(rejected.result.state).toBe("pending");
@@ -138,10 +138,11 @@ describe("checkout result", () => {
       sql`select synced_at from checkouts where id = ${b.checkoutId}`,
     );
     expect(row.synced_at).toBeNull();
-    // After the catalog would accept the code, a later sync can finish.
+    // Once the order is one the catalog accepts (here: without the unknown code), a
+    // later sync can finish.
     h.mock.mutateQuietly("order", orderId, (x) => {
-      x.discountId = "disc_local_producthunt";
-      x.discountAmount = 870;
+      x.discountId = null;
+      x.discountAmount = 0;
     });
     const ok = await result(b.providerCheckoutId, b.cookieValue, null, true);
     expect(ok.result.state).toBe("ready");

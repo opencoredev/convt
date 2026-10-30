@@ -31,7 +31,7 @@ export const guides = [
       "Finder Quick Actions, Preview, Photos and sips, then folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
     published: "2026-10-29",
-    updated: "2026-10-29",
+    updated: "2026-10-30",
   },
   {
     slug: "batch-heic-to-jpg-windows",
@@ -43,7 +43,7 @@ export const guides = [
       "The HEIF and HEVC extensions and Photos for single photos, then whole folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
     published: "2026-10-29",
-    updated: "2026-10-29",
+    updated: "2026-10-30",
   },
   {
     slug: "mov-to-mp4-mac",

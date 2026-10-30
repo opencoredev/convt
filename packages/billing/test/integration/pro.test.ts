@@ -422,7 +422,7 @@ describe("ordering and versions", () => {
     const [row] = await h.q<{ status: string; refunded_cents: number }>(
       sql`select status, refunded_cents from orders where provider_order_id = ${order.id}`,
     );
-    expect(row).toEqual({ status: "refunded", refunded_cents: 2900 });
+    expect(row).toEqual({ status: "refunded", refunded_cents: 3900 });
     const [ev] = await h.q<{ status: string; reason: string }>(
       sql`select status, reason from webhook_events where provider_event_id = 'msg_contra_1'`,
     );

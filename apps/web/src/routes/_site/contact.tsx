@@ -48,16 +48,16 @@ const questions: { q: string; a: ReactNode }[] = [
     q: "Does convt upload my files?",
     a: (
       <>
-        No. The app converts on your computer. With convt Pro you can choose to convert a file in
-        the cloud, one job at a time, and those files are deleted after 24 hours. The{" "}
+        No. The app converts on your computer. With Desktop + Cloud you can choose to convert a file
+        in the cloud, one job at a time, and those files are deleted after 24 hours. The{" "}
         <TextLink href={routes.privacy}>privacy policy</TextLink> lists every connection the app
         makes.
       </>
     ),
   },
   {
-    q: "How does the free trial work?",
-    a: "Sign in to the app with your convt.app account and start a 7-day trial of convt Pro. Checkout asks for a card, and you pay nothing if you cancel before the trial ends. Each account gets one trial.",
+    q: "Is there a subscription?",
+    a: "No. Desktop is $39 once. Desktop + Cloud is $69 once and adds a year of cloud conversions that doesn't renew; buy it again for another year. Existing convt Pro subscriptions keep working until you cancel them.",
   },
   {
     q: "Is the Desktop license lifetime?",

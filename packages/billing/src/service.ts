@@ -28,6 +28,7 @@ import {
 } from "./marketing";
 import { handleWebhook } from "./webhook";
 import { currentProAccess } from "./renewal";
+import { rescheduleCloud } from "./converge";
 
 export type ServiceDeps = {
   connect: () => Promise<{ db: Db; close: () => Promise<void> }>;
@@ -85,6 +86,7 @@ export function createBillingService(deps: ServiceDeps) {
       user: { id: string; email: string } | null;
       spendCapCents?: number | null;
       fromApp?: boolean;
+      trialOnly?: boolean;
     }) => withCtx((c) => createCheckout(c, input)),
     checkoutResult: (input: {
       providerCheckoutId: string;
@@ -118,6 +120,7 @@ export function createBillingService(deps: ServiceDeps) {
     advanceDeletion: (id: string) => withCtx((c) => advanceDeletion(c, id)),
     deletionStatus: (userId: string) => withCtx((c) => deletionStatus(c, userId)),
     currentProAccess: (userId: string) => withCtx((c) => currentProAccess(c, userId)),
+    scheduleCloud: (userId: string) => withCtx((c) => rescheduleCloud(c, userId)),
 
     syncMarketing: () => withCtx((c) => syncMarketing(c)),
     handleMarketingWebhook: (method: string, raw: Uint8Array, headers: Headers) =>

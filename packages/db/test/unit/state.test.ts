@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   activeApiSubscription,
+  cloudYears,
   currentProSubscription,
   deriveAccountState,
 } from "../../src/queries/state";
@@ -68,4 +69,47 @@ test("the billing page shows the live Pro subscription, else the newest ended on
   expect(currentProSubscription([incomplete], now)).toBeNull();
   expect(currentProSubscription([incomplete, live], now)).toBe(live);
   expect(activeApiSubscription([sub("api", "incomplete")], now)).toBeNull();
+});
+
+describe("Desktop + Cloud years", () => {
+  const day = 86_400_000;
+  const year = (status: string, start: number, end: number, endedAt = end) => ({
+    kind: "pro",
+    status,
+    orderId: `ord_${start}`,
+    currentPeriodStart: new Date(now.getTime() + start * day),
+    currentPeriodEnd: new Date(now.getTime() + end * day),
+    endedAt: new Date(now.getTime() + endedAt * day),
+    createdAt: now,
+  });
+
+  test("a cloud year is not a Pro plan: the account is a Desktop account", () => {
+    expect(deriveAccountState([year("active", -10, 355)], [desktop], now)).toBe("desktop");
+    expect(deriveAccountState([year("active", -400, -35)], [desktop], now)).toBe("desktop");
+    expect(currentProSubscription([year("active", -10, 355)], now)).toBeNull();
+  });
+
+  test("a subscription next to a cloud year is still the plan the billing page manages", () => {
+    const pro = { ...sub("pro", "active"), orderId: null };
+    expect(currentProSubscription([year("active", -10, 355), pro], now)).toBe(pro);
+    expect(deriveAccountState([year("active", -10, 355), pro], [desktop], now)).toBe("pro");
+  });
+
+  test("stacked years run to the last end; ended and canceled years show when they stopped", () => {
+    expect(cloudYears([], now)).toBeNull();
+    expect(cloudYears([year("active", -10, 355), year("active", 355, 720)], now)).toEqual({
+      state: "active",
+      until: new Date(now.getTime() + 720 * day),
+    });
+    expect(cloudYears([year("active", -400, -35)], now)).toEqual({
+      state: "ended",
+      on: new Date(now.getTime() - 35 * day),
+    });
+    expect(cloudYears([year("canceled", -10, 355, -2)], now)).toEqual({
+      state: "ended",
+      on: new Date(now.getTime() - 2 * day),
+    });
+    // A recurring subscription is never a cloud year.
+    expect(cloudYears([{ ...year("active", -10, 20), orderId: null }], now)).toBeNull();
+  });
 });

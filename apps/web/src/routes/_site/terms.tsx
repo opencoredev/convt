@@ -59,25 +59,33 @@ const sections: LegalSection[] = [
   },
   {
     id: "plans",
-    title: "Trials, licenses and subscriptions",
+    title: "Licenses, trials and subscriptions",
     body: (
       <List
         items={[
           <>
-            <span className={strong}>Trial.</span> The app works fully for 7 days from your first
-            conversion. convt Pro starts with a 7-day trial that needs a card and becomes a paid
-            subscription unless you cancel before it ends. Each account gets one Pro trial.
-          </>,
-          <>
-            <span className={strong}>Desktop license.</span> $29, paid once. It covers every desktop
+            <span className={strong}>Desktop license.</span> $39, paid once. It covers every desktop
             version released in the future, on macOS, Windows and Linux, and you can keep using it
-            for as long as you like.
+            for as long as you like. Licenses bought earlier at $29 cover the same.
           </>,
           <>
-            <span className={strong}>convt Pro.</span> $12 a month, or $96 a year ($8 a month). It
-            includes everything in Desktop, every update while you subscribe, and cloud conversions.
-            It renews until you cancel; cancelling takes effect at the end of the period you paid
-            for. After Pro ends, your last key keeps working for every version it covered.
+            <span className={strong}>Desktop + Cloud.</span> $69, paid once. It includes a Desktop
+            license and 365 days of cloud conversions on your account, starting when you buy it. It
+            does not renew. Buying it again adds another 365 days after the current ones end. A full
+            refund or a lost chargeback ends the cloud days and revokes the license.
+          </>,
+          <>
+            <span className={strong}>Trial.</span> The desktop app can start a 7-day trial of convt
+            Pro from your account. It needs a card and becomes a paid subscription unless you cancel
+            before it ends. Each account gets one Pro trial. The <code>convt</code> command line
+            tool works fully for 7 days from your first conversion.
+          </>,
+          <>
+            <span className={strong}>convt Pro.</span> No longer sold on its own; existing
+            subscriptions continue at $12 a month, or $96 a year ($8 a month). It includes
+            everything in Desktop, every update while you subscribe, and cloud conversions. It
+            renews until you cancel; cancelling takes effect at the end of the period you paid for.
+            After Pro ends, your last key keeps working for every version it covered.
           </>,
           <>
             <span className={strong}>API.</span> Billed monthly in arrears for the conversions you

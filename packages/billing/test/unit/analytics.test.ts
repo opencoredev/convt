@@ -17,11 +17,18 @@ test("license_purchased names Desktop or Pro and is idempotent by subject", () =
     event: "license_purchased",
     distinctId: "usr_1",
     insertId: "license_purchased:desktop:ord_1",
-    properties: { plan: "desktop" },
+    properties: { plan: "desktop", product: "desktop" },
   });
   expect(licensePurchasedEvent("usr_1", "pro", "sub_1").insertId).toBe(
     "license_purchased:pro:sub_1",
   );
+  // A Desktop + Cloud order is one purchase: its Desktop key, marked as a bundle.
+  expect(licensePurchasedEvent("usr_1", "desktop", "ord_2", "bundle")).toEqual({
+    event: "license_purchased",
+    distinctId: "usr_1",
+    insertId: "license_purchased:desktop:ord_2",
+    properties: { plan: "desktop", product: "bundle" },
+  });
 });
 
 test("desktop_trial_started uses the Polar subscription id", () => {
@@ -40,10 +47,12 @@ test("claimed licenses become one purchase event per order or subscription", () 
       { plan: "desktop", orderId: "ord_1" },
       { plan: "pro", subscriptionId: "sub_1" },
       { plan: "desktop" },
+      { plan: "desktop", product: "bundle", orderId: "ord_2" },
     ]),
   ).toEqual([
     licensePurchasedEvent("usr_1", "desktop", "ord_1"),
     licensePurchasedEvent("usr_1", "pro", "sub_1"),
+    licensePurchasedEvent("usr_1", "desktop", "ord_2", "bundle"),
   ]);
 });
 

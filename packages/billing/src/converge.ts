@@ -7,7 +7,8 @@ import { sql } from "drizzle-orm";
 import { LIFETIME_UPDATES_UNTIL, newId, sign } from "@convt/license";
 
 import { licensePurchasedEvent, type AnalyticsEvent } from "./analytics";
-import { alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
+import { BUNDLE_CLOUD_DAYS } from "./catalog";
+import { alert, type BillingContext, fault, isoDay, lockKeys, one, type Q, rows } from "./context";
 import { enqueueEmail } from "./outbox";
 
 /** The account's verified email when the purchase has a user, else the purchase's email. */
@@ -31,12 +32,232 @@ async function revoke(
     where revoked_at is null and ${where}`);
 }
 
+/**
+ * A one-time order: its Desktop key, and for Desktop + Cloud also the buyer's cloud
+ * years. Both run in the caller's transaction, under the user lock ingest holds.
+ */
+export async function convergeOrder(
+  ctx: BillingContext,
+  tx: Q,
+  orderId: string,
+  now: Date,
+  events: AnalyticsEvent[] = [],
+) {
+  const o = await one<{ product: string }>(
+    tx,
+    sql`select product from orders where id = ${orderId}`,
+  );
+  if (!o) return;
+  const bundle = o.product === "bundle";
+  await convergeDesktop(ctx, tx, orderId, now, events, bundle ? "bundle" : "desktop");
+  if (bundle) await scheduleCloud(tx, orderId, now);
+}
+
+const cloudMs = BUNDLE_CLOUD_DAYS * 86_400_000;
+
+export type BundleRow = {
+  id: string;
+  status: string;
+  billed_at: Date;
+  email: string;
+  user_id: string | null;
+  provider_customer_id: string | null;
+  checkout_id: string | null;
+  lost: boolean;
+  sub_id: string | null;
+  sub_status: string | null;
+  sub_start: Date | null;
+  sub_end: Date | null;
+  sub_ended_at: Date | null;
+};
+
+/**
+ * Lays out the cloud years of a buyer's Desktop + Cloud orders as prepaid Pro rows
+ * (`subscriptions.order_id`). Orders are taken in purchase order with a running
+ * end: an order in good standing (paid or partly refunded, no lost dispute) covers
+ * 365 days from its purchase or from the running end, whichever is later, so a
+ * repeat purchase stacks. A refunded or lost order's row is canceled at
+ * least(its end, now) and keeps those dates; it adds only the time it covered, so
+ * later years move forward to fill the gap. Rows that already started never move
+ * back: everything before them ended before they began. A guest order (no account
+ * yet) is laid out on its own; bundle checkouts on convt.app require sign-in.
+ */
+export async function scheduleCloud(tx: Q, orderId: string, now: Date) {
+  const owner = await one<{ user_id: string | null }>(
+    tx,
+    sql`select user_id from orders where id = ${orderId}`,
+  );
+  if (!owner) return;
+  await layOutCloudYears(tx, owner.user_id ? { userId: owner.user_id } : { orderId }, now);
+}
+
+/**
+ * Lays out every cloud year of an account again. Run after a claim attaches guest
+ * orders: each was laid out on its own when it arrived, so two bought before the
+ * account existed would otherwise overlap. The caller holds the user lock.
+ */
+export async function scheduleCloudForUser(tx: Q, userId: string, now: Date) {
+  await layOutCloudYears(tx, { userId }, now);
+}
+
+/**
+ * The same in a transaction of its own, under the user lock. The site calls it
+ * (BillingRpc.scheduleCloud) after its sign-up claim, which runs as convt_web and
+ * cannot write coverage.
+ */
+export async function rescheduleCloud(ctx: BillingContext, userId: string) {
+  await ctx.db.transaction(async (tx) => {
+    await lockKeys(tx, [`user:${userId}`]);
+    await layOutCloudYears(tx, { userId }, ctx.clock(), () => fault(ctx, "after-cloud-read"));
+  });
+}
+
+/**
+ * The reconciler's backstop for a claim whose rescheduling never ran (the site's
+ * call failed, and later sign-ins claim nothing). Every account with two or more
+ * bundle orders and a running year is planned read-only; one whose layout would
+ * change (overlapping years, or days a refund freed that a later year never took)
+ * is laid out again under its account lock. Every candidate's years come back in
+ * one read, so healthy accounts cost no query of their own. Returns how many were.
+ */
+export async function repairCloudYears(ctx: BillingContext): Promise<number> {
+  const now = ctx.clock();
+  const candidates = await rows<BundleRow>(
+    ctx.db,
+    sql`
+    ${cloudYearsSelect}
+    where o.product = 'bundle' and o.user_id in (
+      select b.user_id from orders b
+      where b.product = 'bundle' and b.user_id is not null
+      group by b.user_id having count(*) > 1
+        and exists (select 1 from subscriptions s where s.user_id = b.user_id and s.order_id is not null
+          and s.status = 'active' and s.ended_at > ${now}))
+    order by o.user_id, o.billed_at, o.id`,
+  );
+  const byUser = new Map<string, BundleRow[]>();
+  for (const r of candidates) {
+    const userId = r.user_id as string; // the subquery only returns claimed orders
+    byUser.set(userId, [...(byUser.get(userId) ?? []), r]);
+  }
+  let repaired = 0;
+  for (const [userId, years] of byUser) {
+    if (planCloudYears(years, now).length === 0) continue;
+    await rescheduleCloud(ctx, userId);
+    repaired++;
+  }
+  return repaired;
+}
+
+/** What laying out an account's cloud years would write: nothing when it is right. */
+export type CloudWrite =
+  | { kind: "insert"; order: BundleRow; start: Date; stop: Date }
+  | { kind: "move"; subId: string; start: Date; stop: Date }
+  | { kind: "cancel"; subId: string; endedAt: Date };
+
+const ownerFilter = (owner: { userId: string } | { orderId: string }) =>
+  "userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`;
+
+const cloudYearsSelect = sql`
+    select o.id, o.status, o.billed_at, o.email, o.user_id, o.provider_customer_id, o.checkout_id,
+      exists (select 1 from disputes d where d.order_id = o.id and d.status = 'lost') as lost,
+      s.id as sub_id, s.status as sub_status, s.current_period_start as sub_start,
+      s.current_period_end as sub_end, s.ended_at as sub_ended_at
+    from orders o left join subscriptions s on s.order_id = o.id`;
+
+function readCloudYears(q: Q, owner: { userId: string } | { orderId: string }) {
+  return rows<BundleRow>(
+    q,
+    sql`
+    ${cloudYearsSelect}
+    where o.product = 'bundle' and ${ownerFilter(owner)}
+    order by o.billed_at, o.id`,
+  );
+}
+
+/**
+ * The layout rule (see scheduleCloud) as a pure plan over an account's bundle
+ * orders in purchase order, so the reconciler can check an account without writing.
+ */
+export function planCloudYears(orders: BundleRow[], now: Date): CloudWrite[] {
+  const writes: CloudWrite[] = [];
+  let end: number | null = null;
+  for (const r of orders) {
+    const good = (r.status === "paid" || r.status === "partially_refunded") && !r.lost;
+    if (good) {
+      // Ended early (account deletion): it keeps its dates and holds nothing back.
+      if (r.sub_status === "canceled") continue;
+      const billed = r.billed_at.getTime();
+      const start: Date = new Date(Math.max(billed, end ?? billed));
+      const stop: Date = new Date(start.getTime() + cloudMs);
+      end = stop.getTime();
+      if (!r.sub_id) writes.push({ kind: "insert", order: r, start, stop });
+      else if (
+        r.sub_start?.getTime() !== start.getTime() ||
+        r.sub_end?.getTime() !== stop.getTime()
+      )
+        writes.push({ kind: "move", subId: r.sub_id, start, stop });
+    } else if (r.sub_id) {
+      // A prepaid row always has its dates (subscriptions_prepaid_check).
+      const scheduledEnd = r.sub_end ?? now;
+      let endedAt = r.sub_ended_at ?? scheduledEnd;
+      if (r.sub_status !== "canceled") {
+        endedAt = new Date(Math.min(scheduledEnd.getTime(), now.getTime()));
+        writes.push({ kind: "cancel", subId: r.sub_id, endedAt });
+      }
+      // Only the time it actually covered holds later years back.
+      if (endedAt.getTime() > (r.sub_start ?? endedAt).getTime())
+        end = Math.max(end ?? 0, endedAt.getTime());
+    }
+  }
+  return writes;
+}
+
+async function layOutCloudYears(
+  tx: Q,
+  owner: { userId: string } | { orderId: string },
+  now: Date,
+  /** Tests pause here, between reading the years and writing them. */
+  afterRead?: () => Promise<void>,
+) {
+  // Lock the existing years first, in a fixed order, then read: the read below is a
+  // new statement, so it sees whatever a writer that held these rows committed.
+  // Callers also hold the account lock; this keeps a stale read from ever writing.
+  await tx.execute(sql`
+    select s.id from subscriptions s join orders o on o.id = s.order_id
+    where o.product = 'bundle' and ${ownerFilter(owner)}
+    order by s.id for update of s`);
+  const orders = await readCloudYears(tx, owner);
+  await afterRead?.();
+  for (const w of planCloudYears(orders, now)) {
+    if (w.kind === "insert") {
+      const r = w.order;
+      await tx.execute(sql`
+        insert into subscriptions (id, provider, provider_subscription_id, provider_customer_id, user_id, email, kind,
+          interval, status, current_period_start, current_period_end, cancel_at_period_end, ended_at, checkout_id,
+          order_id, created_at, updated_at)
+        values (${newId("sub")}, 'polar', null, ${r.provider_customer_id}, ${r.user_id}, ${r.email}, 'pro',
+          'year', 'active', ${w.start}, ${w.stop}, true, ${w.stop}, ${r.checkout_id}, ${r.id}, ${now}, ${now})`);
+    } else if (w.kind === "move") {
+      // A refunded or charged-back year keeps its dates for good.
+      await tx.execute(sql`
+        update subscriptions set current_period_start = ${w.start}, current_period_end = ${w.stop},
+          ended_at = ${w.stop}, updated_at = ${now}
+        where id = ${w.subId} and status <> 'canceled'`);
+    } else {
+      await tx.execute(sql`
+        update subscriptions set status = 'canceled', canceled_at = ${now}, ended_at = ${w.endedAt}, updated_at = ${now}
+        where id = ${w.subId} and status <> 'canceled'`);
+    }
+  }
+}
+
 export async function convergeDesktop(
   ctx: BillingContext,
   tx: Q,
   orderId: string,
   now: Date,
   events: AnalyticsEvent[] = [],
+  product: "desktop" | "bundle" = "desktop",
 ) {
   const o = await one<{
     id: string;
@@ -84,7 +305,7 @@ export async function convergeDesktop(
     returning id`,
   );
   if (inserted.length === 0) return;
-  if (o.user_id) events.push(licensePurchasedEvent(o.user_id, "desktop", o.id));
+  if (o.user_id) events.push(licensePurchasedEvent(o.user_id, "desktop", o.id, product));
   await fault(ctx, "after-license-insert");
   await enqueueEmail(tx, {
     kind: "license_issued",

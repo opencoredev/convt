@@ -12,7 +12,7 @@ import { maxCapCents, minCapCents } from "./checkout";
 
 const liveSub = (kind: "pro" | "api", userId: string, now: Date) => sql`
   select id, provider_subscription_id, status, interval, cancel_at_period_end from subscriptions
-  where user_id = ${userId} and kind = ${kind}
+  where user_id = ${userId} and kind = ${kind} and order_id is null
     and status in ('trialing', 'active', 'past_due', 'unpaid', 'incomplete')
     and (ended_at is null or ended_at > ${now})
   order by created_at desc limit 1`;

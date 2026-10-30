@@ -58,6 +58,7 @@ export const fixtures = {
   pastdue: "pastdue@convt.test",
   disputed: "disputed@convt.test",
   apipending: "apipending@convt.test",
+  bundle: "bundle@convt.test",
 } as const;
 
 /**
@@ -65,7 +66,8 @@ export const fixtures = {
  * `local`, which the billing mock serves). A billing test checks they match.
  */
 export const localPriceIds = {
-  desktop: "price_local_desktop",
+  desktop: "price_local_desktop_39",
+  bundle: "price_local_bundle",
   pro_month: "price_local_pro_month",
   pro_year: "price_local_pro_year",
   api: "price_local_api",
@@ -170,6 +172,11 @@ export async function runSeed(db: Db, now: Date, signingKey?: CryptoKey): Promis
       email: string,
       paidDaysAgo: number,
       refund?: { status: "refunded" | "partially_refunded"; cents: number; daysAgo: number },
+      // Seeded Desktop orders are $29 ones, sold before CNV-101 (a legacy price).
+      sale: { product: "desktop" | "bundle"; amountCents: number } = {
+        product: "desktop",
+        amountCents: 2900,
+      },
     ) => {
       const id = fixtureId("ord", k);
       const values = {
@@ -179,8 +186,8 @@ export async function runSeed(db: Db, now: Date, signingKey?: CryptoKey): Promis
         providerCustomerId: userId ? fixtureCustomerId(k.split("-")[0]) : null,
         userId,
         email,
-        product: "desktop",
-        amountCents: 2900,
+        product: sale.product,
+        amountCents: sale.amountCents,
         currency: "usd",
         status: refund?.status ?? "paid",
         paidAt: at(-paidDaysAgo),
@@ -440,6 +447,58 @@ export async function runSeed(db: Db, now: Date, signingKey?: CryptoKey): Promis
         issuedAt: at(-45),
       });
       await device("desktop-mac", userId, "Dana's MacBook Air", "macOS 26.0", 1);
+    }
+
+    // bundle@: a Desktop + Cloud order 30 days ago: a Desktop key and a prepaid cloud
+    // year that has 335 days left (no Pro key; packages/billing scheduleCloud).
+    {
+      const userId = await user("bundle", "Bea", 31);
+      await customer("bundle", userId, fixtures.bundle);
+      const ord = await order("bundle", userId, fixtures.bundle, 30, undefined, {
+        product: "bundle",
+        amountCents: 6900,
+      });
+      await license({
+        key: "bundle",
+        email: fixtures.bundle,
+        userId,
+        plan: "desktop",
+        orderId: ord,
+        issuedOn: dateAt(-30),
+        updatesUntil: "9999-12-31",
+      });
+      await invoice("bundle", {
+        provider: "polar",
+        userId,
+        email: fixtures.bundle,
+        orderId: ord,
+        description: "Desktop + Cloud: Desktop License and a year of cloud",
+        amountCents: 6900,
+        status: "paid",
+        issuedAt: at(-30),
+      });
+      const values = {
+        id: fixtureId("sub", "bundle-cloud"),
+        provider: "polar",
+        providerSubscriptionId: null,
+        providerCustomerId: fixtureCustomerId("bundle"),
+        userId,
+        email: fixtures.bundle,
+        kind: "pro",
+        interval: "year",
+        status: "active",
+        currentPeriodStart: at(-30),
+        currentPeriodEnd: at(335),
+        cancelAtPeriodEnd: true,
+        endedAt: at(335),
+        orderId: ord,
+        updatedAt: now,
+      };
+      await tx
+        .insert(t.subscriptions)
+        .values(values)
+        .onConflictDoUpdate({ target: t.subscriptions.id, set: values });
+      await device("bundle-mac", userId, "Bea's MacBook Pro", "macOS 26.0", 0);
     }
 
     // pro@: the old sample data. Pro yearly, an older Desktop key, two Macs, API with

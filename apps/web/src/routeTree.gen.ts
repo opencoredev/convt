@@ -27,6 +27,7 @@ import { Route as SiteFormatsRouteImport } from './routes/_site/formats'
 import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
+import { Route as CheckoutBundleRouteImport } from './routes/checkout/bundle'
 import { Route as CheckoutDesktopRouteImport } from './routes/checkout/desktop'
 import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
 import { Route as UpdatesManifestDotjsonRouteImport } from './routes/updates/manifest[.]json'
@@ -139,6 +140,11 @@ const SiteTermsRoute = SiteTermsRouteImport.update({
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
   id: '/api/feedback',
   path: '/api/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutBundleRoute = CheckoutBundleRouteImport.update({
+  id: '/checkout/bundle',
+  path: '/checkout/bundle',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutDesktopRoute = CheckoutDesktopRouteImport.update({
@@ -287,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/checkout/bundle': typeof CheckoutBundleRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
@@ -329,6 +336,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/checkout/bundle': typeof CheckoutBundleRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
@@ -375,6 +383,7 @@ export interface FileRoutesById {
   '/_site/privacy': typeof SitePrivacyRoute
   '/_site/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/checkout/bundle': typeof CheckoutBundleRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
@@ -419,6 +428,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/feedback'
+    | '/checkout/bundle'
     | '/checkout/desktop'
     | '/checkout/pro'
     | '/updates/manifest.json'
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/feedback'
+    | '/checkout/bundle'
     | '/checkout/desktop'
     | '/checkout/pro'
     | '/updates/manifest.json'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/_site/privacy'
     | '/_site/terms'
     | '/api/feedback'
+    | '/checkout/bundle'
     | '/checkout/desktop'
     | '/checkout/pro'
     | '/updates/manifest.json'
@@ -544,6 +556,7 @@ export interface RootRouteChildren {
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
+  CheckoutBundleRoute: typeof CheckoutBundleRoute
   CheckoutDesktopRoute: typeof CheckoutDesktopRoute
   CheckoutProRoute: typeof CheckoutProRoute
   UpdatesManifestDotjsonRoute: typeof UpdatesManifestDotjsonRoute
@@ -680,6 +693,13 @@ declare module '@tanstack/react-router' {
       path: '/api/feedback'
       fullPath: '/api/feedback'
       preLoaderRoute: typeof ApiFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout/bundle': {
+      id: '/checkout/bundle'
+      path: '/checkout/bundle'
+      fullPath: '/checkout/bundle'
+      preLoaderRoute: typeof CheckoutBundleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout/desktop': {
@@ -947,6 +967,7 @@ const rootRouteChildren: RootRouteChildren = {
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
+  CheckoutBundleRoute: CheckoutBundleRoute,
   CheckoutDesktopRoute: CheckoutDesktopRoute,
   CheckoutProRoute: CheckoutProRoute,
   UpdatesManifestDotjsonRoute: UpdatesManifestDotjsonRoute,
