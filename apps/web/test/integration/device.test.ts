@@ -269,6 +269,45 @@ describe("cross-account isolation", () => {
   });
 });
 
+describe("the Desktop key on renewal", () => {
+  test("an account with a Desktop license gets it as desktop_key, beside its Pro key and access", async () => {
+    const desktopOf = async (email: string) =>
+      (
+        await h.owner.execute<{ token: string }>(sql`
+          select l.token from licenses l join users u on u.id = l.user_id
+          where u.email = ${email} and l.plan = 'desktop' and l.revoked_at is null`)
+      ).rows[0]?.token ?? null;
+    // Desktop + Cloud: no Pro key, Pro access, and the lifetime Desktop key to install.
+    const bundle = await signIn(fixture("bundle"));
+    const b = await renewDevice(web, proKey, bundle, {}, nextIp(), new Date(), async () => ({
+      kind: "pro",
+    }));
+    expect(b.status).toBe(200);
+    expect(b.body.key).toBeNull();
+    expect(b.body.desktop_key).toBe(await desktopOf(fixture("bundle")));
+    expect(b.body.desktop_key).toBeTruthy();
+    // A Desktop buyer gets theirs too; a refunded one gets nothing back.
+    const d = await renewDevice(
+      web,
+      proKey,
+      await signIn(fixture("desktop")),
+      {},
+      nextIp(),
+      new Date(),
+    );
+    expect(d.body.desktop_key).toBe(await desktopOf(fixture("desktop")));
+    const r = await renewDevice(
+      web,
+      proKey,
+      await signIn(fixture("refunded")),
+      {},
+      nextIp(),
+      new Date(),
+    );
+    expect(r.body.desktop_key).toBeNull();
+  });
+});
+
 describe("trial access", () => {
   test("renewal returns the exact end alongside its display day", async () => {
     const token = await signIn(fixture("pro"));

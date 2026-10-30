@@ -606,8 +606,20 @@ impl AppState {
                     self.account.awaiting_trial = false;
                     self.account.trial_poll_started = None;
                 }
-                match reply.key {
-                    Some(key) => match self.licensing.offer_key(&key) {
+                // The account's Desktop key first: a Desktop or Desktop + Cloud buyer
+                // who only signed in gets a working license without pasting a key.
+                let desktop = reply
+                    .desktop_key
+                    .as_deref()
+                    .map(|key| self.licensing.offer_desktop_key(key));
+                match (desktop, reply.key) {
+                    (Some(Err(ActivateError::Store(e))), _) => {
+                        Refresh::Failed(format!("The license couldn't be saved: {e}"))
+                    }
+                    (Some(Ok(Renewed::Stored(_))), _) => Refresh::Done(
+                        "Got your Desktop license. It covers every version of convt.".into(),
+                    ),
+                    (_, Some(key)) => match self.licensing.offer_key(&key) {
                         Ok(Renewed::Stored(l)) => Refresh::Done(format!(
                             "Got your Pro key, with updates until {}.",
                             l.updates_until
@@ -623,7 +635,12 @@ impl AppState {
                             "convt.app sent a key this build doesn't accept. {kept}"
                         )),
                     },
-                    None => {
+                    (Some(Ok(Renewed::Kept(l))), None)
+                        if l.plan == convt_license::Plan::Desktop =>
+                    {
+                        Refresh::Done("Your Desktop license is on this computer.".into())
+                    }
+                    (_, None) => {
                         Refresh::Done(format!("This account has no Pro key on convt.app. {kept}"))
                     }
                 }

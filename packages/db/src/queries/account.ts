@@ -61,6 +61,27 @@ export function activeDevices(db: Db, userId: string) {
     .orderBy(desc(t.devices.lastSeenAt));
 }
 
+/**
+ * The account's newest unrevoked Desktop key, for a signed-in desktop app to install
+ * (P8 renewal): a Desktop or Desktop + Cloud buyer who only signs in still converts.
+ */
+export async function currentDesktopKey(db: Db, userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ token: t.licenses.token })
+    .from(t.licenses)
+    .where(
+      and(
+        eq(t.licenses.userId, userId),
+        eq(t.licenses.plan, "desktop"),
+        eq(t.licenses.trial, false),
+        isNull(t.licenses.revokedAt),
+      ),
+    )
+    .orderBy(desc(t.licenses.issuedOn), desc(t.licenses.createdAt))
+    .limit(1);
+  return row?.token ?? null;
+}
+
 /** The full token for "Copy key" and "Activate", or null if it is not this user's or is revoked. */
 export async function getLicenseToken(
   db: Db,
