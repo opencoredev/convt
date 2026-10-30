@@ -1,8 +1,9 @@
-import { useState } from "react";
+// Two one-time products (CNV-101): Desktop, and Desktop + Cloud, which takes the
+// brand ring the Pro card had. No billing toggle and no trial line: both are paid
+// once, and the price line says what "once" covers. The API card is unchanged.
+import { BUY_BUNDLE_URL, BUY_DESKTOP_URL, LAUNCHED, routes } from "#/lib/site";
 
-import { BUY_DESKTOP_URL, LAUNCHED, buyProUrl, routes } from "#/lib/site";
-
-import { ButtonLink, ComingSoon, Container, cx, focusRing } from "./ui";
+import { ButtonLink, ComingSoon, Container, cx } from "./ui";
 
 export function Pricing({
   sales,
@@ -17,14 +18,16 @@ export function Pricing({
       className="flex scroll-mt-6 flex-col items-center gap-10 pt-16 pb-16 md:pt-[140px] md:pb-[120px]"
     >
       <div className="flex flex-col items-center gap-3.5 text-center">
-        <h2 className="text-[34px]/[40px] font-medium tracking-[-0.035em] text-ink md:text-[44px]/[48px]">
-          Buy it once, or go Pro.
+        <h2 className="text-[34px]/[40px] font-medium tracking-[-0.035em] text-balance text-ink md:text-[44px]/[48px]">
+          Pay once. Keep it.
         </h2>
-        <p className="text-[17px]/[26px] text-ink-2">convt Pro starts with a 7-day free trial.</p>
+        <p className="text-[17px]/[26px] text-pretty text-ink-2">
+          No subscription. Add the cloud for a year when you need it.
+        </p>
       </div>
       <div className="grid w-full max-w-[840px] gap-4 md:grid-cols-2">
         <DesktopPlan launched={launched} />
-        <ProPlan launched={launched} />
+        <BundlePlan launched={launched} />
       </div>
       <ApiCard available={sales === "all"} launched={launched} />
     </Container>
@@ -43,14 +46,16 @@ function PlanHeader({ name, description }: { name: string; description: string }
 function Price({ amount, unit, note }: { amount: string; unit: string; note: string }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-      <span className="text-[44px]/[54px] font-medium tracking-[-0.04em] text-ink">{amount}</span>
+      <span className="text-[44px]/[54px] font-medium tracking-[-0.04em] text-ink tabular-nums">
+        {amount}
+      </span>
       <span className="text-[14px]/[18px] text-ink-2">{unit}</span>
       <span className="w-full text-[13px]/[16px] text-ink-2">{note}</span>
     </div>
   );
 }
 
-// The design spaces the check mark by one space on Desktop and two on Pro.
+// The design spaces the check mark by one space on Desktop and two on the ringed card.
 function Features({ items, mark = "✓ " }: { items: string[]; mark?: string }) {
   return (
     <ul className="flex flex-col gap-2.5">
@@ -80,7 +85,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
           description="The app and the right-click menu, on your machine."
         />
       </div>
-      <Price amount="$29" unit="once" note="One payment. Every future desktop update." />
+      <Price amount="$39" unit="once" note="One payment. Every future desktop update." />
       <Features
         items={[
           "Every format, offline",
@@ -95,7 +100,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
           href={BUY_DESKTOP_URL}
           className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
         >
-          Get Desktop License
+          Get Desktop
         </ButtonLink>
       ) : (
         <ComingSoon className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]" />
@@ -104,8 +109,7 @@ function DesktopPlan({ launched }: { launched: boolean }) {
   );
 }
 
-function ProPlan({ launched }: { launched: boolean }) {
-  const [yearly, setYearly] = useState(false);
+function BundlePlan({ launched }: { launched: boolean }) {
   return (
     <div
       className={cx(
@@ -113,79 +117,36 @@ function ProPlan({ launched }: { launched: boolean }) {
         "shadow-[0_0_0_1px_#1fa463,0_8px_30px_#0a3c231f] dark:shadow-[0_0_0_1px_#1fa463,0_8px_30px_#00000080]",
       )}
     >
-      <div className="relative flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <PlanHeader
-          name="Pro"
-          description="Everything in Desktop, plus cloud conversions when you choose them."
+          name="Desktop + Cloud"
+          description="Everything in Desktop, plus a year of cloud conversions when you choose them."
         />
-        <div
-          role="group"
-          aria-label="Billing period"
-          className="absolute -top-0.5 right-0 flex items-center gap-0.5 rounded-lg bg-sunken p-0.5"
-        >
-          <PeriodButton active={!yearly} onClick={() => setYearly(false)}>
-            Monthly
-          </PeriodButton>
-          <PeriodButton active={yearly} onClick={() => setYearly(true)}>
-            Yearly
-          </PeriodButton>
-        </div>
       </div>
-      {yearly ? (
-        <Price amount="$8" unit="per month" note="Billed yearly. Save 33% over monthly." />
-      ) : (
-        <Price amount="$12" unit="per month" note="$8 a month if you pay yearly. Save 33%." />
-      )}
+      <Price amount="$69" unit="once" note="Cloud for one year. It doesn't renew." />
       <Features
         mark="✓  "
         items={[
           "Everything in Desktop",
           "Convert from phone or browser",
           "Send heavy video jobs to the cloud",
-          "Every future update included",
+          "50 GB of cloud input a month",
         ]}
       />
       {launched ? (
         <ButtonLink
           variant="primary"
-          href={buyProUrl(yearly ? "year" : "month")}
+          href={BUY_BUNDLE_URL}
           className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]"
         >
-          Get convt Pro
+          Get Desktop + Cloud
         </ButtonLink>
       ) : (
         <ComingSoon className="mt-auto h-10 w-full rounded-[10px] text-[14px]/[18px]">
-          Pro is not on sale yet
+          Desktop + Cloud is not on sale yet
         </ComingSoon>
       )}
     </div>
-  );
-}
-
-function PeriodButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cx(
-        "flex h-6 cursor-pointer items-center rounded-md px-2.5 text-[12px]/[16px] font-medium transition-colors",
-        active
-          ? "bg-raised text-ink shadow-[0_0_0_1px_var(--line-strong),0_1px_1px_#0000000f] dark:bg-hover dark:shadow-[inset_0_1px_0_#ffffff0f,0_0_0_1px_#2e3331,0_1px_1px_#00000066]"
-          : "text-land-muted hover:text-ink-2",
-        focusRing,
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

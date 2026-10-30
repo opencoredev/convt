@@ -64,10 +64,10 @@ export const routes = {
   dashboard: "/dashboard",
 } as const;
 
-/** Checkout for the $29 Desktop License; works signed out. */
+/** Checkout for the $39 Desktop License; works signed out. */
 export const BUY_DESKTOP_URL = "/checkout/desktop";
-/** Checkout for Pro; signs in first. */
-export const buyProUrl = (interval: "month" | "year") => `/checkout/pro?interval=${interval}`;
+/** Checkout for Desktop + Cloud ($69 once); signs in first, since the cloud year is the account's. */
+export const BUY_BUNDLE_URL = "/checkout/bundle";
 
 /** A calendar day, `YYYY-MM-DD`, as the sitemap's `lastmod` expects. */
 type IsoDate = `${number}-${number}-${number}`;
@@ -86,10 +86,10 @@ export const sitemapPages = [
   { path: "/", lastmod: "2026-10-30" },
   { path: routes.formats, lastmod: "2026-10-30" },
   { path: routes.changelog, lastmod: "2026-10-26" },
-  { path: routes.contact, lastmod: "2026-10-23" },
+  { path: routes.contact, lastmod: "2026-10-30" },
   { path: routes.brand, lastmod: "2026-10-23" },
   { path: routes.privacy, lastmod: "2026-10-27" },
-  { path: routes.terms, lastmod: "2026-10-23" },
+  { path: routes.terms, lastmod: "2026-10-30" },
 ] as const satisfies readonly { path: string; lastmod: IsoDate }[];
 
 /** The docs Worker's own sitemap, referenced from robots.txt. */

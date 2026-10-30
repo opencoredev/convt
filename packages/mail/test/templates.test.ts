@@ -44,6 +44,21 @@ describe("templates", () => {
     expect(m.text).toMatchSnapshot();
   });
 
+  test("license_issued for Desktop + Cloud names the day the cloud year ends", () => {
+    const m = licenseIssued({
+      product: "bundle",
+      cloudUntil: "2027-10-30",
+      token: "c.d",
+      updatesUntil: "9999-12-31",
+      siteUrl: site,
+      downloadUrl: `${site}/download/mac`,
+    });
+    expect(m.subject).toBe("Your convt Desktop + Cloud license key");
+    expect(m.text).toContain("lifetime desktop updates");
+    expect(m.text).toContain("Oct 30, 2027");
+    expect(m.text).toMatchSnapshot();
+  });
+
   test("trial_ending, renewal_failed and the digest", () => {
     expect(
       trialEnding({
@@ -106,7 +121,7 @@ describe("templates", () => {
       renewalFailed({ kind: "pro", periodStart: "2026-10-05T00:00:00Z", siteUrl: site }),
     ];
     for (const m of all) expect(`${m.subject}${m.text}`).not.toContain("—");
-    expect(templateVersion).toBe(4);
+    expect(templateVersion).toBe(5);
   });
 });
 

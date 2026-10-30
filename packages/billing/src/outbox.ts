@@ -76,13 +76,18 @@ async function freeze(ctx: BillingContext, q: Q, row: Row): Promise<Rendered | n
       plan: "desktop" | "pro";
       updates_until: string;
       revoked_at: Date | null;
+      cloud_until: Date | null;
     }>(
       q,
-      sql`select token, plan, updates_until::text, revoked_at from licenses where id = ${row.subject_id}`,
+      sql`select l.token, l.plan, l.updates_until::text, l.revoked_at,
+            (select s.current_period_end from subscriptions s where s.order_id = l.order_id) as cloud_until
+          from licenses l where l.id = ${row.subject_id}`,
     );
     if (!lic || lic.revoked_at) return null;
     return licenseIssued({
-      product: lic.plan,
+      ...(lic.cloud_until
+        ? { product: "bundle", cloudUntil: lic.cloud_until.toISOString().slice(0, 10) }
+        : { product: lic.plan }),
       token: lic.token,
       updatesUntil: lic.updates_until,
       siteUrl: site,

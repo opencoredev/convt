@@ -190,7 +190,7 @@ export function Code({ children }: { children: string }) {
   );
 }
 
-/** Closing call to action: the trial, with the guide's campaign tags on the link. */
+/** Closing call to action: the download, with the guide's campaign tags on the link. */
 export function GuideCta({ slug, children }: { slug: GuideSlug; children: ReactNode }) {
   return (
     <aside className="flex flex-col gap-5 rounded-2xl bg-panel p-6 shadow-[inset_0_0_0_1px_var(--line)] sm:flex-row sm:items-center sm:justify-between sm:gap-8">
@@ -202,7 +202,7 @@ export function GuideCta({ slug, children }: { slug: GuideSlug; children: ReactN
           focusRing,
         )}
       >
-        Start a 7-day trial
+        Get convt
       </a>
     </aside>
   );

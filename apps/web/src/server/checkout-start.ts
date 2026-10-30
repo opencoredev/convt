@@ -16,7 +16,11 @@ function to(url: string, cookie?: string) {
   return new Response(null, { status: 303, headers });
 }
 
-export async function startCheckout(request: Request, context: unknown, kind: "desktop" | "pro") {
+export async function startCheckout(
+  request: Request,
+  context: unknown,
+  kind: "desktop" | "bundle" | "pro",
+) {
   const { scope, appEnv } = requestContext(context);
   const url = new URL(request.url);
   const session = await createAuth(scope, appEnv).api.getSession({ headers: request.headers });
@@ -26,7 +30,13 @@ export async function startCheckout(request: Request, context: unknown, kind: "d
   // The desktop app's Start free trial opens /checkout/pro?from=app (convt-billing's
   // checkout_url), so the success page can send the buyer back to the app.
   const fromApp = url.searchParams.get("from") === "app";
-  let product: CatalogProduct = "desktop";
+  // Pro is sold only through the app's trial; old links and bookmarks go to pricing.
+  if (kind === "pro" && !fromApp) return to("/#pricing");
+  let product: CatalogProduct = kind === "bundle" ? "bundle" : "desktop";
+  if (kind === "bundle" && !user)
+    return to(
+      `/sign-in?redirect=${encodeURIComponent(`/checkout/bundle${fromApp ? "?from=app" : ""}`)}`,
+    );
   if (kind === "pro") {
     const p = productForPro(url.searchParams.get("interval") ?? "month");
     if (!p) return new Response("Unknown interval", { status: 400 });

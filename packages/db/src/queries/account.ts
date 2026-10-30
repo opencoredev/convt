@@ -43,6 +43,7 @@ export function userLicenses(db: Db, userId: string) {
       revokeReason: t.licenses.revokeReason,
       createdAt: t.licenses.createdAt,
       orderPaidAt: t.orders.paidAt,
+      orderProduct: t.orders.product,
       subscriptionInterval: t.subscriptions.interval,
     })
     .from(t.licenses)

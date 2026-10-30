@@ -206,7 +206,7 @@ describe("overview per state", () => {
     expect(o.state).toBe("desktop");
     expect(o.plan).toEqual({
       name: "Desktop",
-      priceLabel: "$29, paid once",
+      priceLabel: "Paid once",
       meta: "Lifetime updates",
     });
     expect(o.license?.activeMacs).toBe(1);
@@ -753,5 +753,91 @@ describe("Desktop ownership and Polar portal", () => {
     expect(b.ownsDesktop).toBe(true);
     expect(b.hadPro).toBe(true);
     expect(showGetDesktop(b)).toBe(false);
+  });
+});
+
+describe("Desktop + Cloud", () => {
+  const cloudYear = (v: Partial<SubscriptionRow> = {}) =>
+    sub({
+      id: "sub_cloud",
+      orderId: "ord_bundle",
+      cancelAtPeriodEnd: true,
+      currentPeriodStart: days(-30),
+      currentPeriodEnd: days(335),
+      endedAt: days(335),
+      ...v,
+    });
+  const bundleKey = lic({
+    id: "lic_000000000000000000000b4nd",
+    plan: "desktop",
+    orderProduct: "bundle",
+    updatesUntil: "9999-12-31",
+    orderPaidAt: days(-30),
+    subscriptionInterval: null,
+  });
+  const billing = (subscriptions: SubscriptionRow[], licenses: LicenseRow[] = [bundleKey]) =>
+    billingView({
+      user,
+      subscriptions,
+      licenses,
+      invoices: [],
+      card: null,
+      openApiCheckout: false,
+      now,
+      polarCustomerId: "cus_1",
+    });
+
+  test("an owner is a Desktop account whose plan names the cloud year", () => {
+    const o = overviewView({
+      user,
+      subscriptions: [cloudYear()],
+      licenses: [bundleKey],
+      devices: [],
+      apiMonth: { count: 0, since: now },
+      apiKeyCount: 0,
+      now,
+    });
+    expect(o.state).toBe("desktop");
+    expect(o.plan).toEqual({
+      name: "Desktop + Cloud",
+      priceLabel: "Paid once",
+      meta: "Cloud until Sep 4, 2027",
+    });
+    expect(o.cloud).toEqual({ state: "active", until: "Sep 4, 2027" });
+    // The app gets the lifetime Desktop key, never a Pro key.
+    expect(o.license?.detail).toBe("Desktop + Cloud, bought Sep 4, 2026");
+    expect(o.license?.updatesLabel).toBe("Lifetime updates");
+  });
+
+  test("billing shows the cloud year apart from the plan, and its end after it ends", () => {
+    const b = billing([cloudYear()]);
+    expect(b.plan).toMatchObject({ kind: "desktop" });
+    expect(b.cloud).toEqual({ state: "active", until: "Sep 4, 2027" });
+    expect(b.hadPro).toBe(false);
+    const ended = billing([cloudYear({ currentPeriodEnd: days(-5), endedAt: days(-5) })]);
+    expect(ended.cloud).toEqual({ state: "ended", on: "Sep 29, 2026" });
+  });
+
+  test("a monthly subscriber who bought the bundle still manages the subscription", () => {
+    const monthly = sub({ id: "sub_month", interval: "month", createdAt: days(-60) });
+    const b = billing([cloudYear({ createdAt: days(-1) }), monthly]);
+    expect(b.plan).toMatchObject({ kind: "pro", name: "Pro, monthly", status: "active" });
+    expect(b.cloud?.state).toBe("active");
+  });
+
+  test("the success page names the bundle", () => {
+    expect(
+      checkoutView({
+        state: "ready",
+        product: "bundle",
+        maskedEmail: "d***@convt.test",
+        updatesUntil: "9999-12-31",
+        token: "a.b",
+        licenseId: "lic_1",
+      }),
+    ).toMatchObject({ state: "ready", product: "bundle" });
+    expect(checkoutView({ state: "pending", product: "bundle" })).toMatchObject({
+      product: "bundle",
+    });
   });
 });
