@@ -128,6 +128,18 @@ test("every guide links to every other guide, same kind of file first", () => {
       expect(html).toContain(`href="/guides/${other.slug}"`);
     }
   }
+  // The Mac HEIC guide lists the other image guides before the video one, unlike catalog order.
+  expect(relatedGuides(guides[0]).map((g) => g.slug)).toEqual([
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+    "mov-to-mp4-mac",
+  ]);
+  const related = renderGuide(HeicToJpgMac).split("Related guides")[1] ?? "";
+  expect([...related.matchAll(/href="\/guides\/([^"]+)"/g)].map((m) => m[1])).toEqual([
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+    "mov-to-mp4-mac",
+  ]);
   expect(relatedGuides(guides[2]).map((g) => g.slug)).toEqual([
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
