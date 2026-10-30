@@ -6,6 +6,7 @@ import type { CatalogProduct } from "@convt/billing/rpc";
 
 import { billing, allowCheckout, checkoutCookie, productForPro } from "./billing";
 import { createAuth } from "./auth";
+import { proTrialEntry } from "./pro-trial";
 import { requestContext } from "./context";
 
 const nonceMaxAge = 2 * 60 * 60;
@@ -45,6 +46,10 @@ export async function startCheckout(
       const back = `/checkout/pro?interval=${p === "pro_year" ? "year" : "month"}${fromApp ? "&from=app" : ""}`;
       return to(`/sign-in?redirect=${encodeURIComponent(back)}`);
     }
+    // Only a trial: billing would otherwise sell a paid subscription to an
+    // account that already used its trial.
+    const entry = proTrialEntry(await billing().currentProAccess(user.id));
+    if (entry !== "checkout") return to(entry);
   }
   const ip = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
   if (!(await allowCheckout(scope.db, ip, user?.id ?? null)))

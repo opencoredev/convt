@@ -67,6 +67,19 @@ years() { # years email -> the status of each cloud year, by purchase
   owner_sql "select string_agg(s.status, ',' order by o.billed_at) from subscriptions s join orders o on o.id = s.order_id where o.email = '$1'"
 }
 
+trial_route() { # trial_route email -> where the app's trial URL sends that account
+  local before
+  sign_in_code "$1"
+  before=$(owner_sql "select count(*) from checkouts c join users u on u.id = c.user_id where u.email = '$1' and c.product like 'pro_%'")
+  ab open "$E2E_URL/checkout/pro?interval=month&from=app" >/dev/null
+  sleep 2
+  local url
+  url=$(url_now)
+  local after
+  after=$(owner_sql "select count(*) from checkouts c join users u on u.id = c.user_id where u.email = '$1' and c.product like 'pro_%'")
+  echo "${url#"$E2E_URL"} +$((after - before))"
+}
+
 width desktop
 theme light
 open_page /sign-in || true
@@ -153,6 +166,14 @@ shots overview-bundle
 check "the overview names Desktop + Cloud" grep -q "Desktop + Cloud" <<<"$(page_text)"
 open_page /dashboard/api/convert
 check "the browser converter lets the bundle owner in" bash -c '[[ $1 != *"needs Desktop + Cloud"* ]]' _ "$(page_text)"
+
+# 4b. The app's trial URL starts only a trial: an account that can't start one gets
+# no Pro checkout. A cloud-year owner goes to billing, a lapsed one to pricing.
+check "a Desktop + Cloud owner's trial URL goes to billing, with no Pro checkout" test "$(trial_route "$bundle")" = "/dashboard/billing +0"
+check "a lapsed Pro account's trial URL goes to pricing, with no Pro checkout" test "$(trial_route lapsed@convt.test)" = "/#pricing +0"
+fresh_trial=$(trial_route "trial-$RANDOM@convt.test")
+check "a new account's trial URL still opens the trial checkout" bash -c '[[ $1 == "$2/checkout/"*" +1" ]]' _ "$fresh_trial" "$MOCK"
+sign_in_code "$bundle"
 
 # 5. A second bundle stacks; refunding the first moves it to the refund.
 ab open "$E2E_URL/checkout/bundle" >/dev/null
