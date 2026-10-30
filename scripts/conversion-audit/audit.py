@@ -331,8 +331,9 @@ def check_text(src, to, files, tmp):
         check_words(json.dumps(data, default=str), words, "yaml")
     elif to in ("csv", "tsv"):
         rows = list(csv.reader(io.StringIO(text), delimiter="," if to == "csv" else "\t"))
-        flat = [c for r in rows for c in r]
-        if not {"Apple", "42"} <= set(flat):
+        # Every data row of the fixture sheet must survive, cell for cell.
+        found = {tuple(c.strip() for c in r[:2]) for r in rows}
+        if not {("Apple", "42"), ("Pear", "7")} <= found:
             raise Fail(f"cells {rows[:4]}")
     elif to == "srt":
         if not re.search(r"\d\d:\d\d:\d\d,\d\d\d --> ", text):
