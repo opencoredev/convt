@@ -322,8 +322,11 @@ def office_check(path, kind, pages=''):
             assert info['pages'] == 1, info
             text = info['text']
         else:
-            out = path if ext == 'txt' else office_convert(path, 'txt:Text (encoded):UTF8', Path(tmp))
+            out = path if ext in ['txt', 'md'] else office_convert(path, 'txt:Text (encoded):UTF8', Path(tmp))
             text = out.read_text(encoding='utf-8-sig')
+            if ext == 'md':
+                # Markdown escapes punctuation such as the marker's underscores.
+                text = text.replace('\\', '')
         assert MARKER in text, 'Marker lost: ' + repr(text)
         if kind == 'Document':
             assert 'Known document text 12345' in text, 'Document text lost'

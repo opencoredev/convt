@@ -222,11 +222,29 @@ impl Fixture {
                         "lavfi",
                         "-i",
                         "sine=frequency=440:sample_rate=48000:duration=1",
-                        "-t",
-                        "1",
-                        "-r",
-                        "12",
                     ]);
+                // A text subtitle track for the TXT, SRT and VTT targets,
+                // which extract it. AVI can't hold one and isn't offered them.
+                let subtitles = match format.id {
+                    "mp4" | "mov" => Some("mov_text"),
+                    "mkv" => Some("srt"),
+                    "webm" => Some("webvtt"),
+                    _ => None,
+                };
+                if let Some(codec) = subtitles {
+                    let srt = dir.join("subtitles.srt");
+                    std::fs::write(
+                        &srt,
+                        format!(
+                            "1\n00:00:00,000 --> 00:00:00,900\n{MARKER} Known document text 12345\n"
+                        ),
+                    )
+                    .map_err(|e| e.to_string())?;
+                    cmd.arg("-i")
+                        .arg(&srt)
+                        .args(["-map", "0:v", "-map", "1:a", "-map", "2:s", "-c:s", codec]);
+                }
+                cmd.args(["-t", "1", "-r", "12"]);
                 if av1 {
                     cmd.args([
                         "-c:v",
@@ -292,10 +310,18 @@ impl Fixture {
                     "mp3" => "libmp3lame",
                     "wav" => "pcm_s16le",
                     "flac" => "flac",
-                    "aac" | "m4a" => "aac",
+                    "aac" | "m4a" | "m4r" => "aac",
                     "ogg" => "libvorbis",
                     "opus" => "libopus",
+                    "aiff" => "pcm_s16be",
+                    "caf" => "alac",
                     _ => unreachable!(),
+                };
+                // FFmpeg doesn't know the ringtone extension; it's an iPod MP4.
+                let muxer: &[&str] = if format.id == "m4r" {
+                    &["-f", "ipod"]
+                } else {
+                    &[]
                 };
                 command(
                     Command::new(tool("ffmpeg").ok_or("ffmpeg missing")?)
@@ -312,6 +338,7 @@ impl Fixture {
                             "-threads",
                             "1",
                         ])
+                        .args(muxer)
                         .arg(&fixture.path),
                 )?;
                 fixture.duration = Some(1.0);
@@ -813,7 +840,7 @@ fn validate_media(fixture: &Fixture, to: &Format, path: &Path, options: &Options
         ));
     }
     let expected_container = match to.id {
-        "mp4" | "mov" | "m4a" => "mov",
+        "mp4" | "mov" | "m4a" | "m4r" => "mov",
         "webm" | "mkv" => "matroska",
         "opus" => "ogg",
         id => id,
@@ -882,10 +909,12 @@ fn validate_media(fixture: &Fixture, to: &Format, path: &Path, options: &Options
         let expected = match to.id {
             "wav" => "pcm_s16le",
             "flac" => "flac",
-            "aac" | "m4a" | "mp4" | "mov" | "mkv" => "aac",
+            "aac" | "m4a" | "m4r" | "mp4" | "mov" | "mkv" => "aac",
             "mp3" | "avi" => "mp3",
             "ogg" => "vorbis",
             "opus" | "webm" => "opus",
+            "aiff" => "pcm_s16be",
+            "caf" => "alac",
             _ => unreachable!(),
         };
         if audio["codec_name"] != expected {
@@ -1011,9 +1040,13 @@ const TABULAR: &[&str] = &["csv", "tsv", "json", "yaml"];
 
 /// Text outputs of the native text engines, checked here rather than by
 /// reopening them in LibreOffice.
+/// Text from a PDF holds the PDF fixture's words, not the text fixtures', so
+/// it is checked page by page like the other documents made from a PDF.
 pub fn natively_checked(from: &Format, to: &Format) -> bool {
     let native = |id: &str| TEXT_FIXTURES.contains(&id) || id == "csv";
-    (native(from.id) || native(to.id)) && TEXT_TARGETS.contains(&to.id)
+    from.category != Category::Pdf
+        && (native(from.id) || native(to.id))
+        && TEXT_TARGETS.contains(&to.id)
 }
 
 fn check_text(from: &Format, to: &Format, path: &Path) -> Check<()> {

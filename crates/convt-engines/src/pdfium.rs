@@ -30,6 +30,24 @@ fn failed(e: impl std::fmt::Display) -> Error {
     }
 }
 
+/// Opens `input`. pdfium-render's errors print as a multi-line debug dump,
+/// so the two a user can act on, a password and a damaged file, get words.
+fn open<'a>(pdfium: &'a Pdfium, input: &Path) -> Result<PdfDocument<'a>> {
+    pdfium.load_pdf_from_file(input, None).map_err(open_error)
+}
+
+fn open_error(e: PdfiumError) -> Error {
+    match e {
+        PdfiumError::PdfiumLibraryInternalError(
+            PdfiumInternalError::PasswordError | PdfiumInternalError::SecurityError,
+        ) => failed("the PDF is password-protected; remove the password and try again"),
+        PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::FormatError) => {
+            failed("the file is damaged or is not a PDF")
+        }
+        e => failed(e),
+    }
+}
+
 /// Images PDFium embeds; everything the `image` crate decodes. HEIC, AVIF
 /// and SVG reach PDF through PNG.
 const IMAGE_INPUTS: &[&str] = crate::image::INPUTS;
@@ -152,7 +170,7 @@ fn selected_pages(count: u32, ctx: &Ctx) -> Result<Vec<u32>> {
 }
 
 fn render(pdfium: &Pdfium, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
-    let doc = pdfium.load_pdf_from_file(input, None).map_err(failed)?;
+    let doc = open(pdfium, input)?;
     let pages = doc.pages();
     let wanted = selected_pages(pages.len() as u32, ctx)?;
     let mut config = match ctx.options.dpi {
@@ -201,7 +219,7 @@ fn render(pdfium: &Pdfium, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Ve
 
 /// Writes the text of the selected pages as one TXT or HTML file.
 fn extract_text(pdfium: &Pdfium, ctx: &Ctx, input: &Path, out_dir: &Path) -> Result<Vec<PathBuf>> {
-    let doc = pdfium.load_pdf_from_file(input, None).map_err(failed)?;
+    let doc = open(pdfium, input)?;
     let pages = doc.pages();
     let wanted = selected_pages(pages.len() as u32, ctx)?;
     let html = ctx.step.to.id == "html";
@@ -497,6 +515,30 @@ fn jpeg_as_is(ctx: &Ctx, input: &Path) -> Result<Option<(u32, u32)>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn open_errors_are_plain_words() {
+        let password = PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::PasswordError);
+        assert_eq!(
+            open_error(password).to_string(),
+            "pdfium failed: the PDF is password-protected; remove the password and try again"
+        );
+        let engine = PdfiumEngine::new();
+        let Ok(pdfium) = engine.pdfium() else {
+            eprintln!("SKIP damaged PDF: PDFium unavailable");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("damaged.pdf");
+        std::fs::write(&input, b"%PDF-1.4\nnot really").unwrap();
+        let Err(e) = open(pdfium, &input) else {
+            panic!("a damaged PDF opened");
+        };
+        assert_eq!(
+            e.to_string(),
+            "pdfium failed: the file is damaged or is not a PDF"
+        );
+    }
 
     #[test]
     #[ignore]
