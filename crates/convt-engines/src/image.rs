@@ -560,6 +560,7 @@ fn encode_into<W: Write + std::io::Seek>(
             DynamicImage::ImageRgba32F(img.to_rgba32f()).write_to(&mut w, ImageFormat::OpenExr)
         }
         "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut w, ImageFormat::Pnm),
+        "gif" => return gif(img, w),
         "png" => {
             let mut encoder = image::codecs::png::PngEncoder::new(&mut w);
             with_icc(&mut encoder);
@@ -582,6 +583,31 @@ fn encode_into<W: Write + std::io::Seek>(
         }
     }
     .map_err(failed)?;
+    Ok(())
+}
+
+/// Writes a still GIF with its palette as the global color table.
+///
+/// `image`'s encoder passes no global palette, and the `gif` crate then still
+/// sets the table flag and pads two black entries, putting the real palette
+/// on the frame. Pillow treats a frame palette that is exactly the 0-255 gray
+/// ramp as no palette and falls back to that black table, so any grayscale
+/// image using every gray level (a rendered page of text, a scan) opened as
+/// solid black.
+fn gif(img: &DynamicImage, w: &mut impl Write) -> Result<()> {
+    let (Ok(width), Ok(height)) = (u16::try_from(img.width()), u16::try_from(img.height())) else {
+        return Err(failed(format!(
+            "GIF images can be at most 65535 pixels wide and tall, and this one is {}×{}",
+            img.width(),
+            img.height()
+        )));
+    };
+    let mut rgba = img.to_rgba8().into_raw();
+    // Speed 1, the best palette, as `image`'s encoder used.
+    let mut frame = gif::Frame::from_rgba_speed(width, height, &mut rgba, 1);
+    let palette = frame.palette.take().unwrap_or_default();
+    let mut encoder = gif::Encoder::new(w, width, height, &palette).map_err(failed)?;
+    encoder.write_frame(&frame).map_err(failed)?;
     Ok(())
 }
 
@@ -1296,6 +1322,38 @@ mod tests {
         // An impossible target is an error, not an oversized file.
         let err = fit_target(10_000, "png", None, 4000, |_, _| Ok(50_000_000)).unwrap_err();
         assert!(err.to_string().contains("10KB"), "{err}");
+    }
+
+    #[test]
+    fn gif_palette_is_global_so_full_gray_ramps_stay_gray() {
+        // Every gray level once, as a rendered page of anti-aliased text has.
+        // Pillow reads a frame palette that is exactly this ramp as "no
+        // palette" and used the padded black global table instead.
+        let ramp = image::GrayImage::from_fn(256, 2, |x, _| image::Luma([x as u8]));
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("ramp.gif");
+        encode(
+            DynamicImage::ImageLuma8(ramp.clone()),
+            "gif",
+            &Options::default(),
+            &out,
+        )
+        .unwrap();
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::Indexed);
+        let mut decoder = options.read_info(File::open(&out).unwrap()).unwrap();
+        let global = decoder.global_palette().unwrap().to_vec();
+        let frame = decoder.read_next_frame().unwrap().unwrap();
+        assert!(frame.palette.is_none(), "palette written on the frame");
+        assert_eq!(global.len(), 256 * 3);
+        assert!(
+            frame
+                .buffer
+                .iter()
+                .any(|&i| global[i as usize * 3..][..3] != [0, 0, 0]),
+            "global table is padding"
+        );
+        assert_eq!(image::open(&out).unwrap().to_luma8(), ramp);
     }
 
     #[test]
