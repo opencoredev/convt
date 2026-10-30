@@ -288,6 +288,52 @@ async fn annual_pro_has_monthly_bytes_and_rejects_trial_and_oversized_files() {
     db.drop().await;
 }
 #[tokio::test]
+async fn a_desktop_and_cloud_year_shares_the_accounts_monthly_allowance() {
+    let Some(db) = test_db().await else { return };
+    // A Pro subscriber who also bought Desktop + Cloud: two usable Pro rows.
+    setup(&db.owner, "usr_b", "pro", 0).await;
+    sqlx::query("insert into orders (id,provider,provider_order_id,user_id,email,product,amount_cents,currency,status,paid_at,billed_at) values ('ord_b','polar','polar_ord_b','usr_b','usr_b@convt.test','bundle',6900,'usd','paid',now(),now())").execute(&db.owner).await.unwrap();
+    sqlx::query("insert into subscriptions (id,user_id,email,kind,interval,status,provider_subscription_id,current_period_start,current_period_end,cancel_at_period_end,ended_at,order_id,created_at) values ('cloud_b','usr_b','usr_b@convt.test','pro','year','active',null,now()-interval '1 day',now()+interval '364 days',true,now()+interval '364 days','ord_b',now()+interval '1 second')").execute(&db.owner).await.unwrap();
+    // Usage on the subscription counts against the job that lands on the newer year.
+    sqlx::query("insert into usage_events (id,user_id,subscription_id,job_id,kind,quantity,amount_cents,occurred_at) values ('use_b','usr_b','sub_usr_b','old_b','pro_bytes',49999999999,0,now())").execute(&db.owner).await.unwrap();
+    assert!(
+        jobs::create(&db.server, &who("usr_b", false), &data(2))
+            .await
+            .is_err()
+    );
+    let job = jobs::create(&db.server, &who("usr_b", false), &data(1))
+        .await
+        .unwrap();
+    assert_eq!(job.subscription_id.as_deref(), Some("cloud_b"));
+    // An open reservation on the year counts once the job lands on the subscription.
+    setup(&db.owner, "usr_c", "pro", 0).await;
+    sqlx::query("insert into orders (id,provider,provider_order_id,user_id,email,product,amount_cents,currency,status,paid_at,billed_at) values ('ord_c','polar','polar_ord_c','usr_c','usr_c@convt.test','bundle',6900,'usd','paid',now(),now())").execute(&db.owner).await.unwrap();
+    sqlx::query("insert into subscriptions (id,user_id,email,kind,interval,status,provider_subscription_id,current_period_start,current_period_end,cancel_at_period_end,ended_at,order_id,created_at) values ('cloud_c','usr_c','usr_c@convt.test','pro','year','active',null,now()-interval '1 day',now()+interval '364 days',true,now()+interval '364 days','ord_c',now()+interval '1 second')").execute(&db.owner).await.unwrap();
+    let held = jobs::create(&db.server, &who("usr_c", false), &data(1))
+        .await
+        .unwrap();
+    assert_eq!(held.subscription_id.as_deref(), Some("cloud_c"));
+    sqlx::query("update cloud_jobs set reserved_bytes=49999999999 where id=$1")
+        .bind(&held.id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    sqlx::query("update subscriptions set status='canceled' where id='cloud_c'")
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    assert!(
+        jobs::create(&db.server, &who("usr_c", false), &data(2))
+            .await
+            .is_err()
+    );
+    let next = jobs::create(&db.server, &who("usr_c", false), &data(1))
+        .await
+        .unwrap();
+    assert_eq!(next.subscription_id.as_deref(), Some("sub_usr_c"));
+    db.drop().await;
+}
+#[tokio::test]
 async fn actual_size_mismatch_releases_reservation_and_expiry_fences_completion() {
     let Some(db) = test_db().await else { return };
     setup(&db.owner, "usr_a", "api", 100).await;
