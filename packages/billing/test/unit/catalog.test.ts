@@ -45,11 +45,8 @@ describe("catalog", () => {
     const local = loadCatalog("local");
     for (const env of ["sandbox", "production"] as const) {
       const c = loadCatalog(env);
-      // The only problem allowed is ids still waiting for the provider, and only for
-      // the products CNV-101 adds; the deploy refuses them (scripts/deploy-worker.sh).
-      expect(validateCatalog(c).filter((p) => !p.includes("placeholders"))).toEqual([]);
-      for (const id of placeholderIds(c))
-        expect(id).toMatch(/^PLACEHOLDER_[A-Z]+_(DESKTOP_39_PRICE|BUNDLE_PRODUCT|BUNDLE_PRICE)$/);
+      expect(validateCatalog(c)).toEqual([]);
+      expect(placeholderIds(c)).toEqual([]);
       const ids = Object.values(c.products).flatMap((e) => [e.productId, e.priceId]);
       expect(new Set(ids).size).toBe(ids.length);
       for (const [name, e] of Object.entries(c.products)) {

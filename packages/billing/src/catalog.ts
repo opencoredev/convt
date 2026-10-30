@@ -154,15 +154,13 @@ const withIds = (
 const sandbox = withIds(
   "sandbox",
   {
-    // PLACEHOLDER until the sandbox org has the $39 price and the bundle product
-    // (docs/plans/cnv-101-one-time-pricing.md, "Production rollout").
     desktop: {
       productId: "31a1a071-bec9-4b7e-a5dd-e9a52eb7d3ab",
-      priceId: "PLACEHOLDER_SANDBOX_DESKTOP_39_PRICE",
+      priceId: "6de98f13-5bae-4034-8765-f503c5d59fb7",
     },
     bundle: {
-      productId: "PLACEHOLDER_SANDBOX_BUNDLE_PRODUCT",
-      priceId: "PLACEHOLDER_SANDBOX_BUNDLE_PRICE",
+      productId: "54d08177-51c3-46de-8625-8e757ae345c1",
+      priceId: "8c635bd5-84df-4abb-ab40-712b1d324fa0",
     },
     pro_month: {
       productId: "274ac0a7-b561-4a2b-a378-cbefc994e558",
@@ -202,15 +200,13 @@ const productHuntProduction = productHunt([
 const production = withIds(
   "production",
   {
-    // PLACEHOLDER until Leo creates the $39 price and the bundle product in the
-    // production org after CNV-101 merges; the billing deploy refuses placeholders.
     desktop: {
       productId: "9d3028c1-1e4f-4d12-9641-59960eb58679",
-      priceId: "PLACEHOLDER_PRODUCTION_DESKTOP_39_PRICE",
+      priceId: "8cf0428e-22a8-4788-a240-6be39da64c91",
     },
     bundle: {
-      productId: "PLACEHOLDER_PRODUCTION_BUNDLE_PRODUCT",
-      priceId: "PLACEHOLDER_PRODUCTION_BUNDLE_PRICE",
+      productId: "524c7687-97e4-4b9a-a505-e2dbad9f1bac",
+      priceId: "d8f9a8ee-f157-41f1-bb77-0dd15c197f01",
     },
     pro_month: {
       productId: "366bad05-07e3-41ca-b620-ce3d1ae5db3c",
