@@ -559,7 +559,12 @@ fn encode_into<W: Write + std::io::Seek>(
         "exr" => {
             DynamicImage::ImageRgba32F(img.to_rgba32f()).write_to(&mut w, ImageFormat::OpenExr)
         }
-        "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut w, ImageFormat::Pnm),
+        // `ImageFormat::Pnm` writes PAM (P7); a .ppm must be a binary pixmap (P6).
+        "ppm" => DynamicImage::ImageRgb8(img.to_rgb8()).write_with_encoder(
+            image::codecs::pnm::PnmEncoder::new(&mut w).with_subtype(
+                image::codecs::pnm::PnmSubtype::Pixmap(image::codecs::pnm::SampleEncoding::Binary),
+            ),
+        ),
         "gif" => return gif(img, w),
         "png" => {
             let mut encoder = image::codecs::png::PngEncoder::new(&mut w);
@@ -794,6 +799,38 @@ mod tests {
             image::open(&png).unwrap().to_rgba8().get_pixel(0, 0).0,
             [255; 4]
         );
+    }
+
+    #[test]
+    fn ppm_is_a_binary_pixmap_not_pam() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("a.png");
+        image::RgbaImage::from_pixel(3, 2, image::Rgba([200, 100, 50, 255]))
+            .save(&png)
+            .unwrap();
+        let step = Step {
+            from: format_by_id("png").unwrap(),
+            to: format_by_id("ppm").unwrap(),
+        };
+        let (cancel, options) = (Cancel::new(), Options::default());
+        let ctx = Ctx::new(step, &options, &|_| {}, &cancel);
+        let out = tempfile::tempdir().unwrap();
+        let files = ImageEngine.convert(&ctx, &png, out.path()).unwrap();
+        let bytes = std::fs::read(&files[0]).unwrap();
+        // P6, then whitespace-separated width, height and maximum value.
+        assert!(
+            bytes.starts_with(b"P6"),
+            "{:?}",
+            &bytes[..bytes.len().min(16)]
+        );
+        let header: Vec<&[u8]> = bytes[2..]
+            .split(u8::is_ascii_whitespace)
+            .filter(|t| !t.is_empty())
+            .take(3)
+            .collect();
+        assert_eq!(header, [&b"3"[..], b"2", b"255"]);
+        let back = image::open(&files[0]).unwrap().to_rgb8();
+        assert_eq!(back.get_pixel(2, 1).0, [200, 100, 50]);
     }
 
     #[test]
