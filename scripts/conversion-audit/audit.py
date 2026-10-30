@@ -30,7 +30,9 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from proctree import run as run_tree  # noqa: E402
 
-CONVT, FIX, WORK, REPORT = (Path(a) for a in sys.argv[1:5])
+# `Path("./convt")` prints as "convt", which subprocess would look up on PATH.
+CONVT = Path(sys.argv[1]).resolve() if os.sep in sys.argv[1] else Path(shutil.which(sys.argv[1]) or sys.argv[1])
+FIX, WORK, REPORT = (Path(a) for a in sys.argv[2:5])
 # Each convt case can start FFmpeg or LibreOffice; keep the shared server calm.
 JOBS = min(int(sys.argv[5]) if len(sys.argv) > 5 else 4, 4)
 FFMPEG = os.environ.get("AUDIT_FFMPEG", "ffmpeg")
@@ -478,6 +480,11 @@ def run_pair(src, to, path):
 
 
 def main():
+    if not FIX.is_dir():
+        sys.exit(f"audit: fixtures directory {FIX} does not exist")
+    # Each pair gets a fresh directory; a reused workspace would stop the run.
+    if WORK.exists() and any(WORK.iterdir()):
+        sys.exit(f"audit: {WORK} is not empty; pass a new work directory")
     only = os.environ.get("AUDIT_ONLY")
     cases, skipped, menus = [], [], {}
     for fid in FORMATS:
@@ -491,6 +498,8 @@ def main():
         menus[fid] = {"targets": targets, "menu": sh(CONVT, "targets", "--menu", path).stdout.split()}
         for to in targets:
             cases.append((fid, to, path))
+    if not cases:
+        sys.exit("audit: no conversion ran; every format lacks a fixture")
     WORK.mkdir(exist_ok=True)
     with ThreadPoolExecutor(JOBS) as pool:
         results = list(pool.map(lambda c: run_pair(*c), cases))
