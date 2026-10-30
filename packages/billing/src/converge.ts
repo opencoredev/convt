@@ -117,24 +117,32 @@ export async function rescheduleCloud(ctx: BillingContext, userId: string) {
  * call failed, and later sign-ins claim nothing). Every account with two or more
  * bundle orders and a running year is planned read-only; one whose layout would
  * change (overlapping years, or days a refund freed that a later year never took)
- * is laid out again under its account lock. Returns how many were.
+ * is laid out again under its account lock. Every candidate's years come back in
+ * one read, so healthy accounts cost no query of their own. Returns how many were.
  */
 export async function repairCloudYears(ctx: BillingContext): Promise<number> {
   const now = ctx.clock();
-  const users = await rows<{ user_id: string }>(
+  const candidates = await rows<BundleRow>(
     ctx.db,
     sql`
-    select o.user_id from orders o
-    where o.product = 'bundle' and o.user_id is not null
-    group by o.user_id having count(*) > 1
-      and exists (select 1 from subscriptions s where s.user_id = o.user_id and s.order_id is not null
-        and s.status = 'active' and s.ended_at > ${now})`,
+    ${cloudYearsSelect}
+    where o.product = 'bundle' and o.user_id in (
+      select b.user_id from orders b
+      where b.product = 'bundle' and b.user_id is not null
+      group by b.user_id having count(*) > 1
+        and exists (select 1 from subscriptions s where s.user_id = b.user_id and s.order_id is not null
+          and s.status = 'active' and s.ended_at > ${now}))
+    order by o.user_id, o.billed_at, o.id`,
   );
+  const byUser = new Map<string, BundleRow[]>();
+  for (const r of candidates) {
+    const userId = r.user_id as string; // the subquery only returns claimed orders
+    byUser.set(userId, [...(byUser.get(userId) ?? []), r]);
+  }
   let repaired = 0;
-  for (const u of users) {
-    const plan = planCloudYears(await readCloudYears(ctx.db, { userId: u.user_id }), now);
-    if (plan.length === 0) continue;
-    await rescheduleCloud(ctx, u.user_id);
+  for (const [userId, years] of byUser) {
+    if (planCloudYears(years, now).length === 0) continue;
+    await rescheduleCloud(ctx, userId);
     repaired++;
   }
   return repaired;
@@ -149,15 +157,18 @@ export type CloudWrite =
 const ownerFilter = (owner: { userId: string } | { orderId: string }) =>
   "userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`;
 
-function readCloudYears(q: Q, owner: { userId: string } | { orderId: string }) {
-  return rows<BundleRow>(
-    q,
-    sql`
+const cloudYearsSelect = sql`
     select o.id, o.status, o.billed_at, o.email, o.user_id, o.provider_customer_id, o.checkout_id,
       exists (select 1 from disputes d where d.order_id = o.id and d.status = 'lost') as lost,
       s.id as sub_id, s.status as sub_status, s.current_period_start as sub_start,
       s.current_period_end as sub_end, s.ended_at as sub_ended_at
-    from orders o left join subscriptions s on s.order_id = o.id
+    from orders o left join subscriptions s on s.order_id = o.id`;
+
+function readCloudYears(q: Q, owner: { userId: string } | { orderId: string }) {
+  return rows<BundleRow>(
+    q,
+    sql`
+    ${cloudYearsSelect}
     where o.product = 'bundle' and ${ownerFilter(owner)}
     order by o.billed_at, o.id`,
   );
