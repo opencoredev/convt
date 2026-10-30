@@ -1,6 +1,6 @@
 # CNV-101: one-time pricing (Desktop $39, Desktop + Cloud $69)
 
-Status: revision 2, implemented on this branch. Revision 2 followed Leo's decisions and a GPT-6.1 Sol review of revision 1. Not done: the Polar sandbox products (see "Polar sandbox" below), so the sandbox catalog still has placeholders and no sandbox checkout has run. Branch `leoplayz317/cnv-101-sell-one-time-products-only-desktop-at-39-and-a-desktop`.
+Status: revision 2, implemented on this branch. Revision 2 followed Leo's decisions and a GPT-6.1 Sol review of revision 1. The sandbox and production Polar products were created on 2026-10-30 and their ids are in the catalog. A sandbox bundle checkout passed the same day (see "Polar sandbox" below). Branch `leoplayz317/cnv-101-sell-one-time-products-only-desktop-at-39-and-a-desktop`.
 
 Goal: the pricing page sells two one-time products, Desktop at $39 and Desktop + Cloud at $69 (a Desktop license plus 365 days of the cloud features Pro has). Pro monthly and yearly stop being sold, but keep working for current subscribers: renewals, the monthly/yearly switch, cancel, the dashboard and their keys. Old $29 orders keep granting what they did. Products go into the Polar sandbox now. Production Polar products and the deploy come after Leo merges.
 
@@ -68,9 +68,9 @@ The catalog is edited directly and the old price is recorded as legacy. The `POL
 - `listPriceOf(catalog, product, priceId)` returns the current or legacy amount for that (product, price) pair. The one-time order check in `checkFacts` and `complimentaryOrder` (renamed from `complimentaryDesktop`, now for any one-time product) use it.
 - Local: Desktop moves to `price_local_desktop_39` at 3900, `price_local_desktop` stays as legacy at 2900, and the bundle is `prod_local_bundle` / `price_local_bundle` at 6900.
 - Sandbox: real ids from the sandbox org.
-- Production: the bundle and the new Desktop price are `PLACEHOLDER_…`; the current Desktop price is recorded as legacy at 2900.
+- Production: real ids from the production org; the $29 Desktop price is recorded as legacy at 2900.
 - `pro_month` and `pro_year` stay in the catalog and stay unarchived in Polar. The reconciler's drift check needs them, and switching intervals updates a subscription to the other product's price. New sales stop in our checkout code, not in Polar.
-- `scripts/deploy-worker.sh billing` refuses to deploy while the target catalog has a `PLACEHOLDER` id. That is the production gate for this PR.
+- `scripts/deploy-worker.sh` refuses to deploy web or billing while the target catalog has a `PLACEHOLDER` id. Both catalogs are now filled, so this guard only catches a future product added without ids.
 
 ## 5. Readers of `subscriptions`
 
@@ -164,18 +164,20 @@ Screenshots with `agent-browser`: the pricing page and the billing page at 1280 
 
 ## Polar sandbox
 
-The only sandbox token on ms-a2 (`~/.config/convt/secrets/polar-sandbox-billing-oat`) is scoped for billing. Creating a product answers `403 insufficient_scope`. Before staging, someone with access to the sandbox org "convt" (`c9b2ccbd-…`) needs to do one of these:
+The sandbox token on ms-a2 (`~/.config/convt/secrets/polar-sandbox-billing-oat`) can't create products (`403 insufficient_scope`), so both orgs' products were made in the Polar dashboard on 2026-10-30: "convt Desktop" moved to a $39 one-time price and "convt Desktop + Cloud" was created at $69.
 
-- Create a sandbox token with `products:write`.
-- Do the same two steps by hand: add a $39 one-time price to "convt Desktop" (`31a1a071-…`) and archive the $29 price `20024212-…`; create "convt Desktop + Cloud" with one $69 one-time USD price.
-
-Then replace the `PLACEHOLDER_SANDBOX_*` ids in `packages/billing/src/catalog.ts` and run one bundle checkout against the sandbox: `dev:web` with `BILLING_CATALOG=sandbox`, the sandbox API URL and token, and Stripe's test card.
+The sandbox check ran `dev:web` with billing pointed at the sandbox (`BILLING_CATALOG=sandbox`, the sandbox API URL and token) and bought the bundle with Stripe's test card. The success page showed the Desktop key, the order row was `bundle` at 6900 (Polar adds sales tax on top; the list-price check uses the subtotal), the prepaid row lasted 365 days with no Polar subscription, and the billing page showed the cloud year. Polar refuses `.test` addresses, so sign in with a real domain for this check.
 
 ## 12. Production rollout (after merge, by Leo or with his go-ahead)
 
+Steps 1 to 3 were done on 2026-10-30:
+
 1. CNV-103 is deployed and a real cloud job has run. The sandbox products exist and a sandbox bundle checkout has passed (above).
-2. In the production Polar org "convt": add a $39 one-time price to "convt Desktop" (`9d3028c1-…`) and archive the $29 price `a68e7412-…`. Create the product "convt Desktop + Cloud" with one $69 one-time USD price. Confirm PRODUCTHUNT has expired (the catalog refuses it on $39 either way). Leave Pro monthly, Pro yearly and the API product as they are.
-3. A follow-up commit replaces the `PLACEHOLDER_…` ids in the production catalog with the new price and product ids.
+2. In the production Polar org "convt", "convt Desktop" (`9d3028c1-…`) moved to a $39 one-time price, replacing `a68e7412-…`, and "convt Desktop + Cloud" was created with one $69 one-time USD price. Pro monthly, Pro yearly and the API product are unchanged. PRODUCTHUNT ends 31 Oct 2026 and the catalog refuses it on $39 either way.
+3. The production catalog has the new price and product ids.
+
+Polar starts charging $39 as soon as step 2 is done, but production billing only knows the $29 price until step 4 is deployed. Do steps 2 to 4 together.
+
 4. Run migration 0008 on production (forward-only), then deploy convt-billing, then convt-web. The order matters because web's `/checkout/bundle` calls billing's new product.
 5. Release the desktop app with the Cloud fix.
 
@@ -188,4 +190,3 @@ Then replace the `PLACEHOLDER_SANDBOX_*` ids in `packages/billing/src/catalog.ts
 
 - A future reader of `subscriptions` that calls Polar must skip prepaid rows. The nullable `provider_subscription_id` makes Drizzle-typed readers handle the null, and the reconcile and deletion tests cover the raw SQL ones.
 - Bundle buyers on app 0.5.0 or older have no in-app Cloud until they update. The browser converter works for them.
-- The production catalog carries placeholders until step 3 of the rollout. The deploy guard is what keeps them out of production.

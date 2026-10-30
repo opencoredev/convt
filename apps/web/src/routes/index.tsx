@@ -27,7 +27,7 @@ const structuredData = {
       operatingSystem: "macOS, Windows, Linux",
       license: "https://www.gnu.org/licenses/agpl-3.0.html",
       image: `${SITE_ORIGIN}/og.png`,
-      offers: { "@type": "Offer", price: "29", priceCurrency: "USD" },
+      offers: { "@type": "Offer", price: "39", priceCurrency: "USD" },
       publisher: { "@id": `${SITE_ORIGIN}/#organization` },
     },
     {

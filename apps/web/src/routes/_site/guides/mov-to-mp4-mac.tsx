@@ -60,7 +60,7 @@ const methods = [
   {
     name: "convt",
     bestFor: "Folders with subfolders, smaller files",
-    cost: "7-day trial, then paid",
+    cost: "$39 once",
     checked: "Run on test clips",
   },
 ];
@@ -439,8 +439,8 @@ videos/a.MOV -> mp4/a.mp4
             convt for Macs with Apple silicon, and for Windows
           </p>
           <p>
-            Start a 7-day convt Pro trial from your convt account, then buy a $29 Desktop license,
-            paid once. Local conversions never leave your computer.
+            A Desktop license is $39, paid once, with every future update. Local conversions never
+            leave your computer.
           </p>
         </GuideCta>
       </GuideSection>
