@@ -29,6 +29,12 @@ export type CatalogDiscount = {
   code: string;
   basisPoints: number;
   products: CatalogProduct[];
+  /**
+   * When set, an order's priced items must all be one of these prices. A code made
+   * for a price that has since changed stays valid for the orders it discounted,
+   * and never applies to the new price.
+   */
+  priceIds?: string[];
 };
 
 export type Catalog = {
@@ -57,11 +63,14 @@ export type LegacyPrice = {
 // The Product Hunt launch offer: 30% off Desktop, or off the first 3 months of Pro
 // monthly, until the end of 31 October 2026 Pacific time (the code's ends_at in Polar).
 // It stays listed so the launch orders it discounted still validate when refetched.
-const productHunt: CatalogDiscount = {
+// Limited to the $29 Desktop price and Pro monthly's price: Polar restricts a code by
+// product, so it would otherwise discount the $39 price too (CNV-101).
+const productHunt = (priceIds: [desktop29: string, proMonth: string]): CatalogDiscount => ({
   code: "PRODUCTHUNT",
   basisPoints: 3000,
   products: ["desktop", "pro_month"],
-};
+  priceIds,
+});
 
 const local: Catalog = {
   env: "local",
@@ -111,7 +120,9 @@ const local: Catalog = {
   },
   switchPolicy: { pro_month: "invoice", pro_year: "invoice" },
   meterName: "api_conversion",
-  discounts: { disc_local_producthunt: productHunt },
+  discounts: {
+    disc_local_producthunt: productHunt(["price_local_desktop", "price_local_pro_month"]),
+  },
   // The $29 Desktop price, sold until CNV-101.
   legacyPrices: [
     {
@@ -166,7 +177,12 @@ const sandbox = withIds(
       priceId: "4922ee3c-ee15-46fd-9aaa-bc25922fb9a9",
     },
   },
-  { "cbc510ac-177c-450b-b5ca-26bcd8a345a7": productHunt },
+  {
+    "cbc510ac-177c-450b-b5ca-26bcd8a345a7": productHunt([
+      "20024212-c2be-4d23-819e-151b704a3a3e",
+      "4f9c498a-7c19-468e-b40a-99c77a6de2dc",
+    ]),
+  },
   [
     {
       product: "desktop",
@@ -176,6 +192,11 @@ const sandbox = withIds(
     },
   ],
 );
+
+const productHuntProduction = productHunt([
+  "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
+  "ba25c579-8e8d-4e90-9536-02e291822979",
+]);
 
 // The production organization "convt" (6098e410-4ea7-48fd-b677-7b261b8e0f7c).
 const production = withIds(
@@ -208,8 +229,8 @@ const production = withIds(
     // Recorded when the catalog was filled. Polar also issues
     // 8d401db5-… for the same PRODUCTHUNT code; both must be accepted or
     // launch checkouts hang on /checkout/success and never grant Pro.
-    "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt,
-    "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHunt,
+    "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHuntProduction,
+    "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHuntProduction,
     "17bb47c4-8b7b-4fb5-b013-31ad52a0e909": {
       code: "FAMILY",
       basisPoints: 10000,
@@ -263,6 +284,12 @@ export function validateCatalog(c: Catalog): string[] {
     if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints > 10000)
       problems.push(`discount ${id}: basis points must be between 1 and 10000`);
     if (d.products.includes("api")) problems.push(`discount ${id}: the API is never discounted`);
+    const known = new Set([
+      ...Object.values(c.products).map((e) => e.priceId),
+      ...c.legacyPrices.map((l) => l.priceId),
+    ]);
+    for (const p of d.priceIds ?? [])
+      if (!known.has(p)) problems.push(`discount ${id}: ${p} is not a price in the catalog`);
   }
   const current = new Set(Object.values(c.products).map((e) => e.priceId));
   for (const l of c.legacyPrices) {
@@ -373,6 +400,9 @@ export function discountProblem(
   const d = c.discounts[discountId];
   if (!d) return `unknown discount ${discountId}`;
   if (!d.products.includes(product)) return `${d.code} does not apply to ${product}`;
+  const allowed = d.priceIds;
+  if (allowed && amounts?.items.some((i) => i.priceId !== null && !allowed.includes(i.priceId)))
+    return `${d.code} does not apply to this price`;
   if (amounts) {
     const expected = Math.round((amounts.subtotalCents * d.basisPoints) / 10000);
     if (Math.abs(amounts.discountCents - expected) > 1)

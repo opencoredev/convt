@@ -120,7 +120,7 @@ Unchanged: Raycast, the CLI's local trial, README and the docs site (no prices),
 
 ## 8. Discounts
 
-- **PRODUCTHUNT:** both production ids stay, so refetches of discounted launch orders validate. Products stay `desktop` and `pro_month`. It ends 31 Oct 2026 in Polar. The rollout step for production restricts it to the old $29 price, or confirms it expired, before the $39 price goes live.
+- **PRODUCTHUNT:** both production ids stay, so refetches of discounted launch orders validate. Products stay `desktop` and `pro_month`. Polar restricts a code by product, not by price, so the catalog also lists the prices it applies to (`priceIds`): the $29 Desktop price and Pro monthly's price. An order at $39 with the code is rejected. It ends 31 Oct 2026 in Polar.
 - **FAMILY:** Pro monthly only, unchanged.
 - **ZORTOS_DISCORD:** 100% off Desktop; it works at $39 through `complimentaryOrder`.
 - A 100% giveaway code on a bundle is accepted the same way a complimentary Desktop order is. Both representations (a 100% discount, or an item Polar zeroed) grant the key and the cloud year, because neither depends on money funding a key.
@@ -174,7 +174,7 @@ Then replace the `PLACEHOLDER_SANDBOX_*` ids in `packages/billing/src/catalog.ts
 ## 12. Production rollout (after merge, by Leo or with his go-ahead)
 
 1. CNV-103 is deployed and a real cloud job has run. The sandbox products exist and a sandbox bundle checkout has passed (above).
-2. In the production Polar org "convt": add a $39 one-time price to "convt Desktop" (`9d3028c1-…`) and archive the $29 price `a68e7412-…`. Create the product "convt Desktop + Cloud" with one $69 one-time USD price. Restrict PRODUCTHUNT to the $29 price, or confirm it has expired. Leave Pro monthly, Pro yearly and the API product as they are.
+2. In the production Polar org "convt": add a $39 one-time price to "convt Desktop" (`9d3028c1-…`) and archive the $29 price `a68e7412-…`. Create the product "convt Desktop + Cloud" with one $69 one-time USD price. Confirm PRODUCTHUNT has expired (the catalog refuses it on $39 either way). Leave Pro monthly, Pro yearly and the API product as they are.
 3. A follow-up commit replaces the `PLACEHOLDER_…` ids in the production catalog with the new price and product ids.
 4. Run migration 0008 on production (forward-only), then deploy convt-billing, then convt-web. The order matters because web's `/checkout/bundle` calls billing's new product.
 5. Release the desktop app with the Cloud fix.

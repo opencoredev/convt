@@ -193,25 +193,37 @@ describe("business checks", () => {
     }
   });
 
-  test("the PRODUCTHUNT code on Desktop issues a license; other discounts do not", async () => {
-    const code = (d: Record<string, unknown>, cents: number, id: string | null) => {
+  test("PRODUCTHUNT on a $29 launch order issues a license; on $39 or other discounts it does not", async () => {
+    // A launch order: the $29 price the code was made for (a legacy price now).
+    const code = (
+      d: Record<string, unknown>,
+      cents: number,
+      id: string | null,
+      price: { id: string; amount: number } = { id: "price_local_desktop", amount: 2900 },
+    ) => {
+      const items = d.items as Array<Record<string, unknown>>;
+      items[0].product_price_id = price.id;
+      items[0].amount = price.amount;
+      d.subtotal_amount = price.amount;
       d.discount_id = id;
       d.discount_amount = cents;
-      d.net_amount = 3900 - cents;
-      d.total_amount = 3900 - cents;
+      d.net_amount = price.amount - cents;
+      d.total_amount = price.amount - cents;
     };
-    const ok = await deliverOrder((d) => code(d, 1170, "disc_local_producthunt"));
+    const ok = await deliverOrder((d) => code(d, 870, "disc_local_producthunt"));
     expect({ event: ok.event.status, licenses: ok.licenses }).toEqual({
       event: "processed",
       licenses: 1,
     });
-    const bad: Array<[number, string | null, RegExp]> = [
-      [1950, "disc_local_producthunt", /PRODUCTHUNT on 3900 is 1170/],
-      [1170, "disc_other", /unknown discount/],
-      [1170, null, /without a code/],
+    const at39 = { id: "price_local_desktop_39", amount: 3900 };
+    const bad: Array<[number, string | null, RegExp, typeof at39 | undefined]> = [
+      [1170, "disc_local_producthunt", /PRODUCTHUNT does not apply to this price/, at39],
+      [1450, "disc_local_producthunt", /PRODUCTHUNT on 2900 is 870/, undefined],
+      [870, "disc_other", /unknown discount/, undefined],
+      [870, null, /without a code/, undefined],
     ];
-    for (const [cents, id, reason] of bad) {
-      const r = await deliverOrder((d) => code(d, cents, id));
+    for (const [cents, id, reason, price] of bad) {
+      const r = await deliverOrder((d) => code(d, cents, id, price));
       expect({ event: r.event.status, licenses: r.licenses }).toEqual({
         event: "rejected",
         licenses: 0,

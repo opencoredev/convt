@@ -101,6 +101,43 @@ describe("catalog", () => {
     expect(a?.products).toEqual(["desktop", "pro_month"]);
   });
 
+  test("PRODUCTHUNT discounts only the $29 Desktop price it launched with, never $39", () => {
+    for (const [c, code] of [
+      [loadCatalog("production"), "64641dd4-73ae-4704-8fbf-450bed2b2aa4"],
+      [loadCatalog("production"), "8d401db5-99d3-44c2-82e9-6483dec9ced7"],
+      [loadCatalog("local"), "disc_local_producthunt"],
+    ] as const) {
+      const legacy = c.legacyPrices.find((p) => p.product === "desktop")!.priceId;
+      // A launch order at $29, 30% off: still valid when refetched.
+      expect(
+        discountProblem(c, code, "desktop", {
+          netCents: 2030,
+          subtotalCents: 2900,
+          discountCents: 870,
+          items: [{ priceId: legacy, amountCents: 2900 }],
+        }),
+      ).toBeNull();
+      // $39 at 30% off ($27.30) is refused.
+      expect(
+        discountProblem(c, code, "desktop", {
+          netCents: 2730,
+          subtotalCents: 3900,
+          discountCents: 1170,
+          items: [{ priceId: c.products.desktop.priceId, amountCents: 3900 }],
+        }),
+      ).toMatch(/PRODUCTHUNT does not apply to this price/);
+      // Pro monthly keeps it, on its own price.
+      expect(
+        discountProblem(c, code, "pro_month", {
+          netCents: 840,
+          subtotalCents: 1200,
+          discountCents: 360,
+          items: [{ priceId: c.products.pro_month.priceId, amountCents: 1200 }],
+        }),
+      ).toBeNull();
+    }
+  });
+
   test("production accepts the two 100% launch discounts only on their products", () => {
     const c = loadCatalog("production");
     const family = c.discounts["17bb47c4-8b7b-4fb5-b013-31ad52a0e909"];

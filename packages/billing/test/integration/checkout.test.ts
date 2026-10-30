@@ -138,10 +138,11 @@ describe("checkout result", () => {
       sql`select synced_at from checkouts where id = ${b.checkoutId}`,
     );
     expect(row.synced_at).toBeNull();
-    // After the catalog would accept the code, a later sync can finish.
+    // Once the order is one the catalog accepts (here: without the unknown code), a
+    // later sync can finish.
     h.mock.mutateQuietly("order", orderId, (x) => {
-      x.discountId = "disc_local_producthunt";
-      x.discountAmount = 1170;
+      x.discountId = null;
+      x.discountAmount = 0;
     });
     const ok = await result(b.providerCheckoutId, b.cookieValue, null, true);
     expect(ok.result.state).toBe("ready");
