@@ -8,7 +8,7 @@ import { LIFETIME_UPDATES_UNTIL, newId, sign } from "@convt/license";
 
 import { licensePurchasedEvent, type AnalyticsEvent } from "./analytics";
 import { BUNDLE_CLOUD_DAYS } from "./catalog";
-import { alert, type BillingContext, fault, isoDay, one, type Q, rows } from "./context";
+import { alert, type BillingContext, fault, isoDay, lockKeys, one, type Q, rows } from "./context";
 import { enqueueEmail } from "./outbox";
 
 /** The account's verified email when the purchase has a user, else the purchase's email. */
@@ -88,6 +88,50 @@ export async function scheduleCloud(tx: Q, orderId: string, now: Date) {
     sql`select user_id from orders where id = ${orderId}`,
   );
   if (!owner) return;
+  await layOutCloudYears(tx, owner.user_id ? { userId: owner.user_id } : { orderId }, now);
+}
+
+/**
+ * Lays out every cloud year of an account again. Run after a claim attaches guest
+ * orders: each was laid out on its own when it arrived, so two bought before the
+ * account existed would otherwise overlap. The caller holds the user lock.
+ */
+export async function scheduleCloudForUser(tx: Q, userId: string, now: Date) {
+  await layOutCloudYears(tx, { userId }, now);
+}
+
+/**
+ * The same in a transaction of its own, under the user lock. The site calls it
+ * (BillingRpc.scheduleCloud) after its sign-up claim, which runs as convt_web and
+ * cannot write coverage.
+ */
+export async function rescheduleCloud(ctx: BillingContext, userId: string) {
+  await ctx.db.transaction(async (tx) => {
+    await lockKeys(tx, [`user:${userId}`]);
+    await scheduleCloudForUser(tx, userId, ctx.clock());
+  });
+}
+
+/**
+ * The reconciler's backstop for a claim whose rescheduling never ran: accounts with
+ * two live cloud years that overlap get theirs laid out again. Returns how many.
+ */
+export async function stackOverlappingCloudYears(ctx: BillingContext): Promise<number> {
+  const users = await rows<{ user_id: string }>(
+    ctx.db,
+    sql`
+    select distinct a.user_id from subscriptions a
+    join subscriptions b on b.user_id = a.user_id and b.id <> a.id
+    where a.order_id is not null and b.order_id is not null
+      and a.status = 'active' and b.status = 'active'
+      and a.current_period_start < b.current_period_end
+      and b.current_period_start < a.current_period_end`,
+  );
+  for (const u of users) await rescheduleCloud(ctx, u.user_id);
+  return users.length;
+}
+
+async function layOutCloudYears(tx: Q, owner: { userId: string } | { orderId: string }, now: Date) {
   const orders = await rows<BundleRow>(
     tx,
     sql`
@@ -97,7 +141,7 @@ export async function scheduleCloud(tx: Q, orderId: string, now: Date) {
       s.current_period_end as sub_end, s.ended_at as sub_ended_at
     from orders o left join subscriptions s on s.order_id = o.id
     where o.product = 'bundle'
-      and ${owner.user_id ? sql`o.user_id = ${owner.user_id}` : sql`o.id = ${orderId}`}
+      and ${"userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`}
     order by o.billed_at, o.id`,
   );
   let end: number | null = null;

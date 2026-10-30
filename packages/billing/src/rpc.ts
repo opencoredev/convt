@@ -64,6 +64,11 @@ export interface BillingRpc {
     | { kind: "can_start_trial"; checkoutUrl: string }
     | { kind: "lapsed" }
   >;
+  /**
+   * Lays out the account's Desktop + Cloud years again. The site calls it after its
+   * sign-up claim attaches guest orders, which it cannot schedule as convt_web.
+   */
+  scheduleCloud(userId: string): Promise<void>;
   /** Whether the signed-in account gets campaign email. */
   marketingPreference(userId: string): Promise<MarketingPreference>;
   setMarketingPreference(userId: string, subscribed: boolean): Promise<MarketingPreference>;

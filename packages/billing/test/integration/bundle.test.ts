@@ -4,7 +4,7 @@
 // account deletion, and $29 orders sold before the price change.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { cloudAllowance } from "@convt/db/queries";
+import { claimPurchases, cloudAllowance } from "@convt/db/queries";
 import { sql } from "drizzle-orm";
 
 import { BUNDLE_CLOUD_DAYS } from "../../src/catalog";
@@ -261,6 +261,63 @@ describe("Desktop + Cloud", () => {
       sql`select status from orders where provider_order_id = ${b.orderId}`,
     );
     expect(order.status).toBe("paid");
+  });
+});
+
+describe("hosted Desktop + Cloud purchases", () => {
+  const dayMs = 86_400_000;
+  /** A bundle bought on Polar's own page: no checkout of ours, no account id. */
+  async function hostedBundle(email: string) {
+    const raw = h.mock.craftOrder({
+      externalCustomerId: null,
+      email,
+      product: "bundle",
+      reason: "purchase",
+      checkoutId: null,
+      items: [{ amount: 6900, priceId: "price_local_bundle" }],
+    });
+    const paid = h.mock.takeHeld().find((d) => d.type === "order.paid")!;
+    expect((await h.deliver(paid)).status).toBe(200);
+    return raw.id;
+  }
+  const stacked = (years: Year[]) =>
+    years.length === 2 &&
+    years[1].current_period_start.getTime() === years[0].current_period_end.getTime() &&
+    years[1].current_period_end.getTime() - years[0].current_period_start.getTime() === 2 * yearMs;
+
+  test("two bought a day apart by an existing account stack once claimed", async () => {
+    const u = await h.user(testMailbox("hosted-existing"));
+    await hostedBundle(u.email);
+    h.mock.advance(dayMs);
+    await hostedBundle(u.email);
+    const years = await cloudYearsOf(u.id);
+    expect(years.map((y) => y.status)).toEqual(["active", "active"]);
+    expect(stacked(years)).toBe(true);
+  });
+
+  test("two bought before sign-up stack after the site's claim, through billing", async () => {
+    const email = testMailbox("hosted-signup");
+    await hostedBundle(email);
+    h.mock.advance(dayMs);
+    await hostedBundle(email);
+    // The site claims at sign-up as convt_web, which cannot write coverage; it
+    // then asks billing to lay the years out again.
+    const u = await h.user(email);
+    expect((await claimPurchases(h.owner, u.id)).orders).toBe(2);
+    expect(stacked(await cloudYearsOf(u.id))).toBe(false);
+    await h.service.scheduleCloud(u.id);
+    expect(stacked(await cloudYearsOf(u.id))).toBe(true);
+  });
+
+  test("the reconciler stacks overlapping years the site's request missed", async () => {
+    const email = testMailbox("hosted-sweep");
+    await hostedBundle(email);
+    h.mock.advance(dayMs);
+    await hostedBundle(email);
+    const u = await h.user(email);
+    await claimPurchases(h.owner, u.id);
+    await h.service.reconcileFrequent();
+    expect(stacked(await cloudYearsOf(u.id))).toBe(true);
   });
 });
 

@@ -10,6 +10,7 @@ import { newId } from "@convt/license";
 import { meteredPriceProblem, validateCatalog } from "./catalog";
 import { alert, type BillingContext, isoDay, one, rows } from "./context";
 import { ingestFacts } from "./ingest";
+import { stackOverlappingCloudYears } from "./converge";
 import { drainOutbox, enqueueEmail, outboxRetention } from "./outbox";
 import { emptyFacts, type ProviderFacts, type ScanKind } from "./provider";
 import { replayFailedEvents } from "./webhook";
@@ -30,6 +31,7 @@ export type FrequentStep =
   | "replay"
   | "trials"
   | "sweep"
+  | "cloud"
   | "outbox";
 
 async function cursor(ctx: BillingContext, name: string) {
@@ -202,6 +204,7 @@ export async function reconcileFrequent(ctx: BillingContext, only?: FrequentStep
     if (run("replay")) summary.replayed = await replayFailedEvents(ctx);
     if (run("trials")) summary.trialEnding = await trialEndingScan(ctx);
     if (run("sweep")) summary.sweep = await sweep(ctx);
+    if (run("cloud")) summary.cloudStacked = await stackOverlappingCloudYears(ctx);
     if (run("outbox")) summary.outbox = await drainOutbox(ctx);
     await finishRun(ctx, runId, "ok", summary);
   } catch (e) {

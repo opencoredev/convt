@@ -21,7 +21,7 @@ import {
   type CatalogProduct,
 } from "./catalog";
 import { alert, type BillingContext, lockKeys, one, type Q, rows } from "./context";
-import { convergeOrder, convergePro, convergeApi } from "./converge";
+import { convergeOrder, convergePro, convergeApi, scheduleCloudForUser } from "./converge";
 import { emptyFacts } from "./provider";
 import type {
   CheckoutFact,
@@ -903,7 +903,7 @@ export async function applyFacts(
   for (const u of users) touched.userIds.add(u);
   // Licenses converge already attached have their event; only the claim's are new.
   for (const u of [...touched.userIds].sort())
-    touched.events.push(...(await claimUserPurchases(tx, u)).events);
+    touched.events.push(...(await claimUserPurchases(tx, u, now)).events);
   return {
     rejected: null,
     notes: touched.notes,
@@ -915,9 +915,11 @@ export async function applyFacts(
 /**
  * Runs claim_purchases for one user inside `tx` and returns purchase events for the
  * licenses it attached. The user lock comes first (claim_purchases takes it too), so
- * no other writer can attach this user's licenses between the two reads.
+ * no other writer can attach this user's licenses between the two reads. Attached
+ * Desktop + Cloud orders were each laid out alone, so the account's cloud years are
+ * laid out again under the same lock.
  */
-export async function claimUserPurchases(tx: Q, userId: string) {
+export async function claimUserPurchases(tx: Q, userId: string, now: Date) {
   await lockKeys(tx, [`user:${userId}`]);
   const before = await licenseRefs(tx, userId);
   const claimed = await one<{ claimed_orders: number; claimed_licenses: number }>(
@@ -926,6 +928,7 @@ export async function claimUserPurchases(tx: Q, userId: string) {
   );
   const orders = Number(claimed?.claimed_orders ?? 0);
   const licenses = Number(claimed?.claimed_licenses ?? 0);
+  if (orders > 0) await scheduleCloudForUser(tx, userId, now);
   const events =
     licenses > 0 ? claimedPurchaseEvents(userId, before, await licenseRefs(tx, userId)) : [];
   return { orders, licenses, events };

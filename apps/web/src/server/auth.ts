@@ -55,7 +55,13 @@ export type AuthDeps = {
   startCookies?: boolean;
   /** Replaces PostHog capture (tests record signup events this way). */
   captureAnalytics?: CaptureAnalytics;
+  /** Replaces billing's BillingRpc.scheduleCloud, called after a claim attaches orders. */
+  scheduleCloud?: (userId: string) => Promise<void>;
 };
+
+/** Billing's binding is imported lazily: it exists only inside the Worker. */
+const billingScheduleCloud = async (userId: string) =>
+  (await import("./billing")).billing().scheduleCloud(userId);
 
 const idPrefixes: Record<string, IdPrefix> = {
   user: "usr",
@@ -178,13 +184,27 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
     // Licenses the account already had were counted when they were attached. The
     // user lock (claim_purchases and billing ingest take it before writing this
     // user's rows) keeps anything but this claim from landing between the reads.
-    const events = await db.transaction(async (tx) => {
+    const { events, orders } = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`user:${userId}`}, 0))`);
       const before = await licenseRefs(tx, userId);
       const claimed = await claimPurchases(tx, userId);
-      if (claimed.licenses === 0) return [];
-      return claimedPurchaseEvents(userId, before, await licenseRefs(tx, userId));
+      if (claimed.licenses === 0) return { events: [], orders: claimed.orders };
+      return {
+        events: claimedPurchaseEvents(userId, before, await licenseRefs(tx, userId)),
+        orders: claimed.orders,
+      };
     });
+    // Desktop + Cloud orders bought before the account each got a cloud year of their
+    // own; billing lays them out again (the reconciler catches a miss).
+    if (orders > 0)
+      scope.background(
+        (deps.scheduleCloud ?? billingScheduleCloud)(userId).catch((e) =>
+          console.error(
+            "[auth] scheduleCloud after claim failed",
+            e instanceof Error ? e.message : e,
+          ),
+        ),
+      );
     if (events.length === 0 || (headers && !analyticsAllowedFromHeaders(headers))) return;
     for (const event of events) scope.background(capture(event));
   };

@@ -228,6 +228,9 @@ export class BillingRpc extends WorkerEntrypoint<Env> implements Rpc {
   async currentProAccess(userId: string) {
     return this.service.withCtx((c) => currentProAccess(c, userId));
   }
+  scheduleCloud(userId: string) {
+    return this.service.scheduleCloud(userId);
+  }
   marketingPreference(userId: string) {
     return this.service.marketingPreference(userId);
   }

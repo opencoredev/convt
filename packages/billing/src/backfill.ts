@@ -135,7 +135,7 @@ export async function backfillPolarOrders(
         sql`select id from users where email = ${email} and email_verified`,
       );
       if (!u) continue;
-      const claimed = await ctx.db.transaction((tx) => claimUserPurchases(tx, u.id));
+      const claimed = await ctx.db.transaction((tx) => claimUserPurchases(tx, u.id, ctx.clock()));
       await emitAnalytics(ctx.captureAnalytics, claimed.events);
       out.claimedUsers++;
       out.claimedOrders += claimed.orders;
