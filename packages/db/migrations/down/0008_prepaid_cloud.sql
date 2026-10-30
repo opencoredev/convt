@@ -1,17 +1,12 @@
--- Refuses while prepaid cloud years or bundle orders exist: dropping them would
--- delete financial rows, and production migrations are forward-only.
-do $$
-begin
-  if exists (select 1 from subscriptions where order_id is not null)
-    or exists (select 1 from orders where product <> 'desktop')
-    or exists (select 1 from checkouts where product = 'bundle') then
-    raise exception '0008 down: bundle orders or prepaid cloud years exist';
-  end if;
-end
-$$;
---> statement-breakpoint
-ALTER TABLE "checkouts" DROP CONSTRAINT "checkouts_product_check";--> statement-breakpoint
+-- Down files run only in development and CI (production migrations are
+-- forward-only). Rows written under 0008 are converted to shapes 0007 accepts
+-- rather than deleted: usage_events is append-only and references subscriptions,
+-- and db:reset must work on a database that has seen a Desktop + Cloud purchase.
 ALTER TABLE "subscriptions" DROP CONSTRAINT "subscriptions_prepaid_check";--> statement-breakpoint
+UPDATE "subscriptions" SET "provider_subscription_id" = 'prepaid:' || "order_id" WHERE "order_id" IS NOT NULL;--> statement-breakpoint
+UPDATE "orders" SET "product" = 'desktop' WHERE "product" = 'bundle';--> statement-breakpoint
+UPDATE "checkouts" SET "product" = 'desktop' WHERE "product" = 'bundle';--> statement-breakpoint
+ALTER TABLE "checkouts" DROP CONSTRAINT "checkouts_product_check";--> statement-breakpoint
 ALTER TABLE "orders" DROP CONSTRAINT "orders_product_check";--> statement-breakpoint
 DROP INDEX "subscriptions_order_key";--> statement-breakpoint
 ALTER TABLE "subscriptions" DROP CONSTRAINT "subscriptions_order_id_orders_id_fk";--> statement-breakpoint
