@@ -371,6 +371,30 @@ describe("hosted Desktop + Cloud purchases", () => {
     expect(years[2].current_period_start).toEqual(years[0].current_period_end);
   });
 
+  test("the reconciler restores days a missed reschedule would lose, without any overlap", async () => {
+    // Guest bundles on day 0 and day 10; the first is refunded on day 20, while
+    // both are unclaimed, so each is laid out alone. Claimed on day 30 with no
+    // reschedule: the second year should start at the refund, not on day 10.
+    const email = testMailbox("hosted-gap");
+    const first = await hostedBundle(email);
+    h.mock.advance(10 * dayMs);
+    await hostedBundle(email);
+    h.mock.advance(10 * dayMs);
+    h.mock.refund(first);
+    await h.deliverAll();
+    h.mock.advance(10 * dayMs);
+    const u = await h.user(email);
+    await claimPurchases(h.owner, u.id);
+    let years = await cloudYearsOf(u.id);
+    expect(years.map((y) => y.status)).toEqual(["canceled", "active"]);
+    // Laid out alone, the surviving year still starts on its own purchase day.
+    expect(years[1].current_period_start.getTime()).toBeLessThan(years[0].ended_at.getTime());
+    await h.service.reconcileFrequent();
+    years = await cloudYearsOf(u.id);
+    expect(years[1].current_period_start).toEqual(years[0].ended_at);
+    expect(years[1].current_period_end.getTime() - years[0].ended_at.getTime()).toBe(yearMs);
+  });
+
   test("the reconciler stacks overlapping years the site's request missed", async () => {
     const email = testMailbox("hosted-sweep");
     await hostedBundle(email);

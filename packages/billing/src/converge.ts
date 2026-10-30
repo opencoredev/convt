@@ -55,7 +55,7 @@ export async function convergeOrder(
 
 const cloudMs = BUNDLE_CLOUD_DAYS * 86_400_000;
 
-type BundleRow = {
+export type BundleRow = {
   id: string;
   status: string;
   billed_at: Date;
@@ -113,22 +113,92 @@ export async function rescheduleCloud(ctx: BillingContext, userId: string) {
 }
 
 /**
- * The reconciler's backstop for a claim whose rescheduling never ran: accounts with
- * two live cloud years that overlap get theirs laid out again. Returns how many.
+ * The reconciler's backstop for a claim whose rescheduling never ran (the site's
+ * call failed, and later sign-ins claim nothing). Every account with two or more
+ * bundle orders and a running year is planned read-only; one whose layout would
+ * change (overlapping years, or days a refund freed that a later year never took)
+ * is laid out again under its account lock. Returns how many were.
  */
-export async function stackOverlappingCloudYears(ctx: BillingContext): Promise<number> {
+export async function repairCloudYears(ctx: BillingContext): Promise<number> {
+  const now = ctx.clock();
   const users = await rows<{ user_id: string }>(
     ctx.db,
     sql`
-    select distinct a.user_id from subscriptions a
-    join subscriptions b on b.user_id = a.user_id and b.id <> a.id
-    where a.order_id is not null and b.order_id is not null
-      and a.status = 'active' and b.status = 'active'
-      and a.current_period_start < b.current_period_end
-      and b.current_period_start < a.current_period_end`,
+    select o.user_id from orders o
+    where o.product = 'bundle' and o.user_id is not null
+    group by o.user_id having count(*) > 1
+      and exists (select 1 from subscriptions s where s.user_id = o.user_id and s.order_id is not null
+        and s.status = 'active' and s.ended_at > ${now})`,
   );
-  for (const u of users) await rescheduleCloud(ctx, u.user_id);
-  return users.length;
+  let repaired = 0;
+  for (const u of users) {
+    const plan = planCloudYears(await readCloudYears(ctx.db, { userId: u.user_id }), now);
+    if (plan.length === 0) continue;
+    await rescheduleCloud(ctx, u.user_id);
+    repaired++;
+  }
+  return repaired;
+}
+
+/** What laying out an account's cloud years would write: nothing when it is right. */
+export type CloudWrite =
+  | { kind: "insert"; order: BundleRow; start: Date; stop: Date }
+  | { kind: "move"; subId: string; start: Date; stop: Date }
+  | { kind: "cancel"; subId: string; endedAt: Date };
+
+const ownerFilter = (owner: { userId: string } | { orderId: string }) =>
+  "userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`;
+
+function readCloudYears(q: Q, owner: { userId: string } | { orderId: string }) {
+  return rows<BundleRow>(
+    q,
+    sql`
+    select o.id, o.status, o.billed_at, o.email, o.user_id, o.provider_customer_id, o.checkout_id,
+      exists (select 1 from disputes d where d.order_id = o.id and d.status = 'lost') as lost,
+      s.id as sub_id, s.status as sub_status, s.current_period_start as sub_start,
+      s.current_period_end as sub_end, s.ended_at as sub_ended_at
+    from orders o left join subscriptions s on s.order_id = o.id
+    where o.product = 'bundle' and ${ownerFilter(owner)}
+    order by o.billed_at, o.id`,
+  );
+}
+
+/**
+ * The layout rule (see scheduleCloud) as a pure plan over an account's bundle
+ * orders in purchase order, so the reconciler can check an account without writing.
+ */
+export function planCloudYears(orders: BundleRow[], now: Date): CloudWrite[] {
+  const writes: CloudWrite[] = [];
+  let end: number | null = null;
+  for (const r of orders) {
+    const good = (r.status === "paid" || r.status === "partially_refunded") && !r.lost;
+    if (good) {
+      // Ended early (account deletion): it keeps its dates and holds nothing back.
+      if (r.sub_status === "canceled") continue;
+      const billed = r.billed_at.getTime();
+      const start: Date = new Date(Math.max(billed, end ?? billed));
+      const stop: Date = new Date(start.getTime() + cloudMs);
+      end = stop.getTime();
+      if (!r.sub_id) writes.push({ kind: "insert", order: r, start, stop });
+      else if (
+        r.sub_start?.getTime() !== start.getTime() ||
+        r.sub_end?.getTime() !== stop.getTime()
+      )
+        writes.push({ kind: "move", subId: r.sub_id, start, stop });
+    } else if (r.sub_id) {
+      // A prepaid row always has its dates (subscriptions_prepaid_check).
+      const scheduledEnd = r.sub_end ?? now;
+      let endedAt = r.sub_ended_at ?? scheduledEnd;
+      if (r.sub_status !== "canceled") {
+        endedAt = new Date(Math.min(scheduledEnd.getTime(), now.getTime()));
+        writes.push({ kind: "cancel", subId: r.sub_id, endedAt });
+      }
+      // Only the time it actually covered holds later years back.
+      if (endedAt.getTime() > (r.sub_start ?? endedAt).getTime())
+        end = Math.max(end ?? 0, endedAt.getTime());
+    }
+  }
+  return writes;
 }
 
 async function layOutCloudYears(
@@ -138,62 +208,34 @@ async function layOutCloudYears(
   /** Tests pause here, between reading the years and writing them. */
   afterRead?: () => Promise<void>,
 ) {
-  const mine = "userId" in owner ? sql`o.user_id = ${owner.userId}` : sql`o.id = ${owner.orderId}`;
   // Lock the existing years first, in a fixed order, then read: the read below is a
   // new statement, so it sees whatever a writer that held these rows committed.
   // Callers also hold the account lock; this keeps a stale read from ever writing.
   await tx.execute(sql`
     select s.id from subscriptions s join orders o on o.id = s.order_id
-    where o.product = 'bundle' and ${mine}
+    where o.product = 'bundle' and ${ownerFilter(owner)}
     order by s.id for update of s`);
-  const orders = await rows<BundleRow>(
-    tx,
-    sql`
-    select o.id, o.status, o.billed_at, o.email, o.user_id, o.provider_customer_id, o.checkout_id,
-      exists (select 1 from disputes d where d.order_id = o.id and d.status = 'lost') as lost,
-      s.id as sub_id, s.status as sub_status, s.current_period_start as sub_start,
-      s.current_period_end as sub_end, s.ended_at as sub_ended_at
-    from orders o left join subscriptions s on s.order_id = o.id
-    where o.product = 'bundle' and ${mine}
-    order by o.billed_at, o.id`,
-  );
+  const orders = await readCloudYears(tx, owner);
   await afterRead?.();
-  let end: number | null = null;
-  for (const r of orders) {
-    const good = (r.status === "paid" || r.status === "partially_refunded") && !r.lost;
-    if (good) {
-      if (r.sub_status === "canceled") continue;
-      const billed = r.billed_at.getTime();
-      const start: Date = new Date(Math.max(billed, end ?? billed));
-      const stop: Date = new Date(start.getTime() + cloudMs);
-      end = stop.getTime();
-      if (!r.sub_id) {
-        await tx.execute(sql`
-          insert into subscriptions (id, provider, provider_subscription_id, provider_customer_id, user_id, email, kind,
-            interval, status, current_period_start, current_period_end, cancel_at_period_end, ended_at, checkout_id,
-            order_id, created_at, updated_at)
-          values (${newId("sub")}, 'polar', null, ${r.provider_customer_id}, ${r.user_id}, ${r.email}, 'pro',
-            'year', 'active', ${start}, ${stop}, true, ${stop}, ${r.checkout_id}, ${r.id}, ${now}, ${now})`);
-      } else if (
-        r.sub_start?.getTime() !== start.getTime() ||
-        r.sub_end?.getTime() !== stop.getTime()
-      ) {
-        // A refunded or charged-back year keeps its dates for good.
-        await tx.execute(sql`
-          update subscriptions set current_period_start = ${start}, current_period_end = ${stop},
-            ended_at = ${stop}, updated_at = ${now}
-          where id = ${r.sub_id} and status <> 'canceled'`);
-      }
-    } else if (r.sub_id) {
-      let endedAt = r.sub_ended_at!;
-      if (r.sub_status !== "canceled") {
-        endedAt = new Date(Math.min(r.sub_end!.getTime(), now.getTime()));
-        await tx.execute(sql`
-          update subscriptions set status = 'canceled', canceled_at = ${now}, ended_at = ${endedAt}, updated_at = ${now}
-          where id = ${r.sub_id} and status <> 'canceled'`);
-      }
-      // Only the time it actually covered holds later years back.
-      if (endedAt.getTime() > r.sub_start!.getTime()) end = Math.max(end ?? 0, endedAt.getTime());
+  for (const w of planCloudYears(orders, now)) {
+    if (w.kind === "insert") {
+      const r = w.order;
+      await tx.execute(sql`
+        insert into subscriptions (id, provider, provider_subscription_id, provider_customer_id, user_id, email, kind,
+          interval, status, current_period_start, current_period_end, cancel_at_period_end, ended_at, checkout_id,
+          order_id, created_at, updated_at)
+        values (${newId("sub")}, 'polar', null, ${r.provider_customer_id}, ${r.user_id}, ${r.email}, 'pro',
+          'year', 'active', ${w.start}, ${w.stop}, true, ${w.stop}, ${r.checkout_id}, ${r.id}, ${now}, ${now})`);
+    } else if (w.kind === "move") {
+      // A refunded or charged-back year keeps its dates for good.
+      await tx.execute(sql`
+        update subscriptions set current_period_start = ${w.start}, current_period_end = ${w.stop},
+          ended_at = ${w.stop}, updated_at = ${now}
+        where id = ${w.subId} and status <> 'canceled'`);
+    } else {
+      await tx.execute(sql`
+        update subscriptions set status = 'canceled', canceled_at = ${now}, ended_at = ${w.endedAt}, updated_at = ${now}
+        where id = ${w.subId} and status <> 'canceled'`);
     }
   }
 }
