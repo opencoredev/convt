@@ -1,6 +1,6 @@
 # CNV-101: one-time pricing (Desktop $39, Desktop + Cloud $69)
 
-Status: revision 2, after Leo's decisions and a GPT-6.1 Sol review of revision 1. Branch `leoplayz317/cnv-101-sell-one-time-products-only-desktop-at-39-and-a-desktop`.
+Status: revision 2, implemented on this branch. Revision 2 followed Leo's decisions and a GPT-6.1 Sol review of revision 1. Not done: the Polar sandbox products (see "Polar sandbox" below), so the sandbox catalog still has placeholders and no sandbox checkout has run. Branch `leoplayz317/cnv-101-sell-one-time-products-only-desktop-at-39-and-a-desktop`.
 
 Goal: the pricing page sells two one-time products, Desktop at $39 and Desktop + Cloud at $69 (a Desktop license plus 365 days of the cloud features Pro has). Pro monthly and yearly stop being sold, but keep working for current subscribers: renewals, the monthly/yearly switch, cancel, the dashboard and their keys. Old $29 orders keep granting what they did. Products go into the Polar sandbox now. Production Polar products and the deploy come after Leo merges.
 
@@ -162,13 +162,27 @@ Polar sandbox: one bundle checkout with Stripe's test card, ingested through the
 
 Screenshots with `agent-browser`: the pricing page and the billing page at 1280 and 390 px.
 
+## Polar sandbox
+
+The only sandbox token on ms-a2 (`~/.config/convt/secrets/polar-sandbox-billing-oat`) is scoped for billing. Creating a product answers `403 insufficient_scope`. Before staging, someone with access to the sandbox org "convt" (`c9b2ccbd-…`) needs to do one of these:
+
+- Create a sandbox token with `products:write`.
+- Do the same two steps by hand: add a $39 one-time price to "convt Desktop" (`31a1a071-…`) and archive the $29 price `20024212-…`; create "convt Desktop + Cloud" with one $69 one-time USD price.
+
+Then replace the `PLACEHOLDER_SANDBOX_*` ids in `packages/billing/src/catalog.ts` and run one bundle checkout against the sandbox: `dev:web` with `BILLING_CATALOG=sandbox`, the sandbox API URL and token, and Stripe's test card.
+
 ## 12. Production rollout (after merge, by Leo or with his go-ahead)
 
-1. CNV-103 is deployed and a real cloud job has run.
+1. CNV-103 is deployed and a real cloud job has run. The sandbox products exist and a sandbox bundle checkout has passed (above).
 2. In the production Polar org "convt": add a $39 one-time price to "convt Desktop" (`9d3028c1-…`) and archive the $29 price `a68e7412-…`. Create the product "convt Desktop + Cloud" with one $69 one-time USD price. Restrict PRODUCTHUNT to the $29 price, or confirm it has expired. Leave Pro monthly, Pro yearly and the API product as they are.
 3. A follow-up commit replaces the `PLACEHOLDER_…` ids in the production catalog with the new price and product ids.
 4. Run migration 0008 on production (forward-only), then deploy convt-billing, then convt-web. The order matters because web's `/checkout/bundle` calls billing's new product.
 5. Release the desktop app with the Cloud fix.
+
+## Notes from implementation
+
+- The terms keep a short clause on the Pro trial, because the app still starts it (decision 2). Marketing pages, guides, llms.txt and the dashboard dropped the trial copy.
+- `apps/web/e2e/sales.sh` already expected "Pro is coming soon", which no code renders anymore. It was stale before this branch and is left as it was.
 
 ## Risks
 
