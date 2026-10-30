@@ -423,9 +423,15 @@ fn full_matrix() {
                 .lines()
                 .map(str::to_owned)
                 .collect();
+            // `convt targets` leaves out the file's own format, which the
+            // registry offers for recompression.
             assert_eq!(
                 actual,
-                targets.iter().map(|f| f.id.to_owned()).collect::<Vec<_>>(),
+                targets
+                    .iter()
+                    .filter(|f| *f != from)
+                    .map(|f| f.id.to_owned())
+                    .collect::<Vec<_>>(),
                 "CLI and registry targets differ for {}",
                 from.id
             );
