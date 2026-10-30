@@ -70,7 +70,7 @@ const remuxResults: [string, string][] = [
   ["HEVC MOV, 10.8 MB", "Remuxed to a 10.8 MB MP4, still HEVC and tagged hvc1."],
   [
     "ProRes 422 MOV, 59.5 MB",
-    "Remux failed: MP4 can't hold ProRes. Re-encoding to H.264 made a 6.4 MB MP4.",
+    "Remux failed: MP4 can't hold ProRes. Re-encoding to H.264 made a 5.8 MB MP4.",
   ],
 ];
 
@@ -269,14 +269,16 @@ function MovToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            "ffmpeg -i input.mov -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 160k -movflags +faststart output.mp4",
+            "ffmpeg -i input.mov -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 160k -movflags +faststart output.mp4",
           ]}
         />
         <Prose>
           <p>
             This makes a new H.264 video, which plays almost everywhere. <Code>-crf</Code> sets the
             quality: lower numbers look better and make bigger files, and 18 to 28 is the usual
-            range. It takes longer than a remux, because every frame is encoded again.
+            range. <Code>-pix_fmt yuv420p</Code> keeps the video in the 8-bit format every player
+            expects; without it, a ProRes source stays 10-bit 4:2:2, which many players can't play.
+            It takes longer than a remux, because every frame is encoded again.
           </p>
         </Prose>
 
@@ -291,10 +293,20 @@ function MovToMp4Mac() {
 Could not write header (incorrect codec parameters ?): Invalid argument`}</Output>
         <Prose>
           <p>
-            To convert every MOV in a folder with FFmpeg, loop over them in Terminal:{" "}
-            <Code>{'for f in *.mov; do ffmpeg -i "$f" -c copy "${f%.mov}.mp4"; done'}</Code>. That
-            loop doesn't look inside subfolders and stops making sense once some files need
-            re-encoding; that's where convt helps.
+            To remux every MOV in a folder with FFmpeg, whether it ends in .mov or .MOV, run this in
+            Terminal from that folder:
+          </p>
+        </Prose>
+        <Commands
+          label="FFmpeg"
+          commands={[
+            `find . -maxdepth 1 -iname "*.mov" -exec sh -c 'ffmpeg -i "$1" -c copy "\${1%.*}.mp4"' _ {} \\;`,
+          ]}
+        />
+        <Prose>
+          <p>
+            It skips subfolders, and it stops with an error on any file that needs re-encoding;
+            that's where convt helps.
           </p>
         </Prose>
       </GuideSection>
@@ -480,7 +492,7 @@ videos/a.MOV -> mp4/a.mp4
             <dt className="text-[16px]/6 font-semibold">Is MP4 smaller than MOV?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not by itself. A remux is the same size, because the video is the same. A re-encode is
-              smaller or bigger depending on the settings: our ProRes clip went from 59.5 MB to 6.4
+              smaller or bigger depending on the settings: our ProRes clip went from 59.5 MB to 5.8
               MB, while an already-compressed H.264 clip barely changed until we lowered the
               resolution or quality.
             </dd>

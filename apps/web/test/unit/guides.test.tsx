@@ -86,6 +86,10 @@ test("the MOV to MP4 guide prints the tested remux and folder commands", () => {
   expect(html).toContain("ffmpeg -i input.mov -c copy -movflags +faststart output.mp4");
   expect(html).toContain("convt videos --to mp4 -r -o mp4");
   expect(html).toContain("convt clip.mov --to mp4 --video-height 720 -q 60");
+  expect(html).toContain("-preset medium -pix_fmt yuv420p -c:a aac");
+  expect(html).toContain(
+    `find . -maxdepth 1 -iname &quot;*.mov&quot; -exec sh -c &#x27;ffmpeg -i &quot;$1&quot; -c copy &quot;\${1%.*}.mp4&quot;&#x27; _ {} \\;`,
+  );
 });
 
 test("the WebP guide tags its download link and prints the tested folder commands", () => {
