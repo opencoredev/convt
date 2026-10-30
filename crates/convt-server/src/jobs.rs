@@ -187,7 +187,16 @@ pub async fn finish(
     error: Option<&str>,
 ) -> sqlx::Result<bool> {
     let mut tx = pool.begin().await?;
-    // Serialize completion with new reservations and P7 cap changes.
+    // Serialize completion with new reservations and P7 cap changes. Pro is one
+    // allowance across every Pro row, so a job settling on an older row must take
+    // the account lock `create` takes (in the same order: account, then row), or
+    // its bytes can fall between `create`'s settled and reserved reads.
+    sqlx::query!(
+        r#"select pg_advisory_xact_lock(hashtextextended($1, 9))::text as "locked!""#,
+        &job.user_id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
     sqlx::query!(
         r#"select id from subscriptions where id=$1 for update"#,
         job.subscription_id.as_deref()

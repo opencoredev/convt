@@ -334,6 +334,42 @@ async fn a_desktop_and_cloud_year_shares_the_accounts_monthly_allowance() {
     db.drop().await;
 }
 #[tokio::test]
+async fn finishing_on_an_older_pro_row_waits_for_the_account_lock() {
+    let Some(db) = test_db().await else { return };
+    // A job reserved on the subscription, then a newer Desktop + Cloud year:
+    // `create` now locks the year's row, `finish` the subscription's.
+    setup(&db.owner, "usr_d", "pro", 0).await;
+    let job = jobs::create(&db.server, &who("usr_d", false), &data(1))
+        .await
+        .unwrap();
+    assert_eq!(job.subscription_id.as_deref(), Some("sub_usr_d"));
+    sqlx::query("update cloud_jobs set status='queued',queued_at=now() where id=$1")
+        .bind(&job.id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let running = jobs::claim(&db.server, "worker").await.unwrap().unwrap();
+    sqlx::query("insert into orders (id,provider,provider_order_id,user_id,email,product,amount_cents,currency,status,paid_at,billed_at) values ('ord_d','polar','polar_ord_d','usr_d','usr_d@convt.test','bundle',6900,'usd','paid',now(),now())").execute(&db.owner).await.unwrap();
+    sqlx::query("insert into subscriptions (id,user_id,email,kind,interval,status,provider_subscription_id,current_period_start,current_period_end,cancel_at_period_end,ended_at,order_id,created_at) values ('cloud_d','usr_d','usr_d@convt.test','pro','year','active',null,now()-interval '1 day',now()+interval '364 days',true,now()+interval '364 days','ord_d',now()+interval '1 second')").execute(&db.owner).await.unwrap();
+    // Hold the account lock as `create` does between its settled and reserved reads.
+    let mut held = db.owner.begin().await.unwrap();
+    sqlx::query("select pg_advisory_xact_lock(hashtextextended('usr_d', 9))")
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    let server = db.server.clone();
+    let keys = vec![format!("{}/attempt-{}/output.png", job.id, running.attempt)];
+    let finishing = tokio::spawn(async move { jobs::finish(&server, &running, &keys, None).await });
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        !finishing.is_finished(),
+        "finish settled while create held the account lock"
+    );
+    held.commit().await.unwrap();
+    assert!(finishing.await.unwrap().unwrap());
+    db.drop().await;
+}
+#[tokio::test]
 async fn actual_size_mismatch_releases_reservation_and_expiry_fences_completion() {
     let Some(db) = test_db().await else { return };
     setup(&db.owner, "usr_a", "api", 100).await;
