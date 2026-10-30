@@ -16,6 +16,10 @@ from pathlib import Path
 
 from PIL import Image
 
+# -I leaves this directory off sys.path; proctree.py lives next to this file.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from proctree import run as run_tree  # noqa: E402
+
 W, H = 64, 48
 # Quadrant colors: top-left, top-right, bottom-left, bottom-right.
 QUADS = [(255, 0, 0), (0, 200, 0), (0, 0, 255), (255, 255, 0)]
@@ -29,11 +33,13 @@ SRT = "1\n00:00:00,500 --> 00:00:01,000\nALPHAPAGE subtitle line\n\n2\n00:00:01,
 
 
 def run(*args, **kw):
-    subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180, **kw)
+    run_tree(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180, **kw)
 
 
 def ffmpeg(*args):
-    run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args)
+    # Decoder and filter threads go before the inputs, encoder threads before the output.
+    *opts, output = args
+    run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-filter_threads", "1", "-threads", "2", *opts, "-threads", "2", output)
 
 
 def soffice(src: Path, to: str, outdir: Path):

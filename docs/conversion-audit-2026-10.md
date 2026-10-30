@@ -199,7 +199,7 @@ python3 -I scripts/conversion-audit/fixtures.py "$work/in"
 python3 -I -c 'import sys; from PIL import Image; open(sys.argv[2], "wb").write(Image.open(sys.argv[1]).convert("RGBA").tobytes())' \
   "$work/in/sample.png" "$work/pattern.rgba"
 python3 -I scripts/matrix-fixtures.py heic "$work" && mv "$work/sample.heic" "$work/in/"
-python3 -I scripts/conversion-audit/audit.py "$PWD/target/debug/convt" "$work/in" "$work/run" "$work/report.json" 8
+python3 -I scripts/conversion-audit/audit.py "$PWD/target/debug/convt" "$work/in" "$work/run" "$work/report.json" 4
 python3 -I scripts/conversion-audit/report.py "$work/report.json"   # the tables below
 bun run test:matrix                                                  # the repository's matrix
 ```

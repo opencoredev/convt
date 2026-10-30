@@ -26,9 +26,16 @@ from pathlib import Path
 import yaml
 from PIL import Image
 
+# -I leaves this directory off sys.path; proctree.py lives next to this file.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from proctree import run as run_tree  # noqa: E402
+
 CONVT, FIX, WORK, REPORT = (Path(a) for a in sys.argv[1:5])
-JOBS = int(sys.argv[5]) if len(sys.argv) > 5 else 4
+# Each convt case can start FFmpeg or LibreOffice; keep the shared server calm.
+JOBS = min(int(sys.argv[5]) if len(sys.argv) > 5 else 4, 4)
 FFMPEG = os.environ.get("AUDIT_FFMPEG", "ffmpeg")
+# Validation decodes run JOBS at a time; without a cap each sizes its pools to every CPU.
+FF_THREADS = ("-threads", "2", "-filter_threads", "1")
 HEIF_HELPER = Path(__file__).resolve().parents[1] / "matrix-fixtures.py"
 FFPROBE = os.environ.get("AUDIT_FFPROBE", "ffprobe")
 
@@ -45,7 +52,7 @@ class Fail(Exception):
 
 
 def sh(*args, timeout=180, check=True):
-    p = subprocess.run([str(a) for a in args], capture_output=True, text=True, timeout=timeout)
+    p = run_tree([str(a) for a in args], capture_output=True, text=True, timeout=timeout)
     if check and p.returncode:
         raise Fail(f"{Path(str(args[0])).name} exit {p.returncode}: {(p.stderr or p.stdout).strip()[-600:]}")
     return p
@@ -105,7 +112,7 @@ def decode_image(path: Path, tmp: Path) -> Image.Image:
         if path.suffix == ".tiff":
             return libtiff_decode(path)
         png = tmp / (path.stem + ".decoded.png")
-        sh(FFMPEG, "-v", "error", "-y", "-i", path, "-frames:v", "1", png)
+        sh(FFMPEG, "-v", "error", "-y", *FF_THREADS, "-i", path, "-frames:v", "1", png)
         return Image.open(png)
 
 
@@ -231,7 +238,7 @@ def check_media(src, to, files, tmp):
     kinds = {s["codec_type"] for s in streams}
     dur = float(info.get("format", {}).get("duration") or 0)
     # A full decode catches truncated or corrupt output that probes fine.
-    dec = sh(FFMPEG, "-v", "error", "-xerror", "-i", f, "-f", "null", "-", check=False)
+    dec = sh(FFMPEG, "-v", "error", "-xerror", *FF_THREADS, "-i", f, "-f", "null", "-", check=False)
     if dec.returncode:
         raise Fail(f"decode error: {dec.stderr.strip()[-300:]}")
     to_cat = category(to)
@@ -350,7 +357,7 @@ def check_heic_brand(files):
 
 
 def sh_bytes(*args):
-    p = subprocess.run([str(a) for a in args], capture_output=True, timeout=120)
+    p = run_tree([str(a) for a in args], capture_output=True, timeout=120)
     if p.returncode:
         raise Fail(f"{args[2] if len(args) > 2 else args[0]} exit {p.returncode}: {p.stderr.decode()[-400:]}")
     return p.stdout
@@ -394,7 +401,7 @@ def run_pair(src, to, path):
     out.mkdir()
     rec = {"from": src, "to": to, "family": category(src)}
     try:
-        p = subprocess.run([str(CONVT), str(path), "--to", to, "-o", str(out)], capture_output=True, text=True, timeout=300)
+        p = run_tree([str(CONVT), str(path), "--to", to, "-o", str(out)], capture_output=True, text=True, timeout=300)
         rec["exit"] = p.returncode
         if p.returncode:
             raise Fail(f"convt exit {p.returncode}: {(p.stderr or p.stdout).strip()[-800:]}")
