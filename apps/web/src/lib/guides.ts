@@ -81,6 +81,15 @@ export function guideBySlug(slug: GuideSlug): Guide {
   return guide;
 }
 
+/** Every other guide, the ones about the same kind of file first, for a guide's "Related guides" list. */
+export function relatedGuides(guide: Guide): Guide[] {
+  const others: Guide[] = guides.filter((g) => g.slug !== guide.slug);
+  return [
+    ...others.filter((g) => g.category === guide.category),
+    ...others.filter((g) => g.category !== guide.category),
+  ];
+}
+
 /**
  * The download page with the guide's campaign tags, so a signup that starts from a
  * guide can be told apart from one that starts on the landing page.

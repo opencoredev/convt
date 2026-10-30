@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { guideDownloadUrl, guideHead, guidePath, guides } from "#/lib/guides";
+import { guideDownloadUrl, guideHead, guidePath, guides, relatedGuides } from "#/lib/guides";
 import { Route as BatchHeicToJpgWindows } from "../../src/routes/_site/guides/batch-heic-to-jpg-windows";
 import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg-mac";
 import { Route as MovToMp4Mac } from "../../src/routes/_site/guides/mov-to-mp4-mac";
@@ -67,7 +67,13 @@ test("the Windows HEIC guide tags its download links and prints the tested comma
   expect(html).toContain('href="/guides/heic-to-jpg-mac"');
 });
 
-function renderGuide(route: typeof MovToMp4Mac | typeof WebpToPngJpg) {
+function renderGuide(
+  route:
+    | typeof HeicToJpgMac
+    | typeof BatchHeicToJpgWindows
+    | typeof MovToMp4Mac
+    | typeof WebpToPngJpg,
+) {
   const Page = route.options.component;
   if (!Page) throw new Error("guide route has no component");
   return renderToStaticMarkup(<Page />);
@@ -105,4 +111,43 @@ test("the WebP guide tags its download link and prints the tested folder command
   expect(html).toContain("convt images --to png -r -o png");
   expect(html).toContain("convt images --to jpg -r -o jpg");
   expect(html).toContain('href="/guides/heic-to-jpg-mac"');
+});
+
+test("every guide links to every other guide, same kind of file first", () => {
+  const routes = {
+    "heic-to-jpg-mac": HeicToJpgMac,
+    "batch-heic-to-jpg-windows": BatchHeicToJpgWindows,
+    "mov-to-mp4-mac": MovToMp4Mac,
+    "webp-to-png-jpg": WebpToPngJpg,
+  } satisfies Record<(typeof guides)[number]["slug"], unknown>;
+  for (const guide of guides) {
+    const html = renderGuide(routes[guide.slug]);
+    expect(html).toContain("Related guides");
+    for (const other of guides) {
+      if (other.slug === guide.slug) continue;
+      expect(html).toContain(`href="/guides/${other.slug}"`);
+    }
+  }
+  // The Mac HEIC guide lists the other image guides before the video one, unlike catalog order.
+  expect(relatedGuides(guides[0]).map((g) => g.slug)).toEqual([
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+    "mov-to-mp4-mac",
+  ]);
+  const related = renderGuide(HeicToJpgMac).split("Related guides")[1] ?? "";
+  expect([...related.matchAll(/href="\/guides\/([^"]+)"/g)].map((m) => m[1])).toEqual([
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+    "mov-to-mp4-mac",
+  ]);
+  expect(relatedGuides(guides[2]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+  ]);
+  expect(relatedGuides(guides[3]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "mov-to-mp4-mac",
+  ]);
 });

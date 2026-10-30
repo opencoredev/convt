@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { CommandBlock } from "#/components/app/command-block";
 import { cx, focusRing } from "#/components/app/ui";
-import { guideDownloadUrl, type Guide, type GuideSlug } from "#/lib/guides";
+import { guideDownloadUrl, relatedGuides, type Guide, type GuideSlug } from "#/lib/guides";
 import { routes } from "#/lib/site";
 
 import { siteColumn } from "./layout";
@@ -48,7 +48,10 @@ export function GuideArticle({
         </p>
       </header>
       <div className="mt-12 grid gap-12 lg:grid-cols-[minmax(0,720px)_220px] lg:justify-between">
-        <div className="flex min-w-0 flex-col gap-16">{children}</div>
+        <div className="flex min-w-0 flex-col gap-16">
+          {children}
+          <RelatedGuides guide={guide} />
+        </div>
         <nav aria-label="On this page" className="max-lg:hidden">
           <div className="sticky top-8 flex flex-col gap-3">
             <p className="font-mono text-[11px]/4 text-ink-2 uppercase">On this page</p>
@@ -71,6 +74,34 @@ export function GuideArticle({
         </nav>
       </div>
     </article>
+  );
+}
+
+/** The other guides, linked at the end of every guide. */
+function RelatedGuides({ guide }: { guide: Guide }) {
+  const related = relatedGuides(guide);
+  if (related.length === 0) return null;
+  return (
+    <nav aria-labelledby="related-guides-title" className="flex flex-col gap-4">
+      <h2 id="related-guides-title" className="font-mono text-[11px]/4 text-ink-2 uppercase">
+        Related guides
+      </h2>
+      <ul className="flex flex-col divide-y divide-divider border-y border-line">
+        {related.map((g) => (
+          <li key={g.slug}>
+            <a
+              href={`${routes.guides}/${g.slug}`}
+              className={cx("group flex flex-col gap-1 rounded-sm py-4", focusRing)}
+            >
+              <span className="text-[16px]/6 font-semibold tracking-[-0.01em] group-hover:text-green">
+                {g.heading}
+              </span>
+              <span className="text-[14px]/[22px] text-ink-2">{g.description}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
