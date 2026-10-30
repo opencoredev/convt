@@ -12,7 +12,7 @@ import { SITE_NAME, SITE_ORIGIN, seo } from "#/lib/site";
 
 const title = "convt: convert any file with a right-click";
 const description =
-  "Images, video, audio and documents, converted on your own computer. Nothing gets uploaded.";
+  "Images, video, audio and documents, converted on your own computer. Local conversions never leave your machine.";
 
 // Lets search engines and agents read what convt is without parsing the page.
 const structuredData = {

@@ -45,6 +45,30 @@ export const guides = [
     published: "2026-10-29",
     updated: "2026-10-29",
   },
+  {
+    slug: "mov-to-mp4-mac",
+    title: "How to convert MOV to MP4 on Mac: rename, iMovie, FFmpeg or batch",
+    heading: "How to convert MOV to MP4 on a Mac",
+    description:
+      "Convert MOV videos to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg without losing quality, or batch-convert and shrink folders with convt.",
+    summary:
+      "When renaming works, iMovie, FFmpeg remux vs re-encode with tested commands, and whole folders plus smaller files with the convt CLI. Covers Windows too.",
+    category: "video",
+    published: "2026-10-30",
+    updated: "2026-10-30",
+  },
+  {
+    slug: "webp-to-png-jpg",
+    title: "How to convert WebP to PNG or JPG on Mac and Windows",
+    heading: "How to convert WebP to PNG or JPG",
+    description:
+      "Save WebP images as PNG or JPG with Preview on a Mac or Paint on Windows, or convert whole folders at once with convt, keeping transparency in PNG.",
+    summary:
+      "Preview and Paint for one image, then whole folders with the convt CLI. Covers transparency, JPG backgrounds and animated WebP.",
+    category: "images",
+    published: "2026-10-30",
+    updated: "2026-10-30",
+  },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];

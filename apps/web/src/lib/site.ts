@@ -83,8 +83,8 @@ type IsoDate = `${number}-${number}-${number}`;
  * the same.
  */
 export const sitemapPages = [
-  { path: "/", lastmod: "2026-10-26" },
-  { path: routes.formats, lastmod: "2026-10-26" },
+  { path: "/", lastmod: "2026-10-30" },
+  { path: routes.formats, lastmod: "2026-10-30" },
   { path: routes.changelog, lastmod: "2026-10-26" },
   { path: routes.contact, lastmod: "2026-10-23" },
   { path: routes.brand, lastmod: "2026-10-23" },
