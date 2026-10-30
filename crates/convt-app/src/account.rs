@@ -521,9 +521,12 @@ impl AppState {
     /// offers, so a trial skipped earlier today is offered again.
     pub fn renew_if_due(&mut self, cx: &mut Context<Self>) {
         let today = date::from_days(today());
+        // A Desktop key converts on its own, but whether Cloud is on comes from
+        // the account (a Desktop + Cloud year), so ask once per run for that too.
+        let desktop_key = matches!(&self.license, convt_license::client::State::Licensed(l) if l.plan == convt_license::Plan::Desktop);
         let unknown_offer = self.account.access.is_none()
             && self.account.refresh == Refresh::Idle
-            && !self.license.allows_conversion();
+            && (!self.license.allows_conversion() || desktop_key);
         if self.account.session.is_some()
             && (unknown_offer || self.settings.license_checked.as_deref() != Some(today.as_str()))
         {

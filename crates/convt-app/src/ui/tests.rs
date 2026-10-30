@@ -2197,7 +2197,7 @@ fn each_account_state_offers_its_own_next_step(cx: &mut TestAppContext) {
             "Start your 7-day free trial",
             "Start free trial",
         ),
-        (Access::Lapsed, "Your Pro plan has ended", "Get convt Pro"),
+        (Access::Lapsed, "Your Pro plan has ended", "See pricing"),
     ] {
         set(cx, Some(access.clone()));
         assert_eq!(

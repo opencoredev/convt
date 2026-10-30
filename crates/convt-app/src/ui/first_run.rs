@@ -519,9 +519,9 @@ impl FirstRunView {
                 ),
             Stage::Lapsed => column()
                 .child(heading("Your Pro plan has ended", p))
-                .child(line("Get convt Pro to keep converting, or use a license key.", p))
+                .child(line("Buy convt once to keep converting, or use a license key.", p))
                 .child(
-                    pill("onboarding-primary", "Get convt Pro", Look::Brand, p)
+                    pill("onboarding-primary", "See pricing", Look::Brand, p)
                         .on_click(|_, _, cx| cx.open_url(BUY_URL)),
                 )
                 .child(self.secondary_links(p, cx))

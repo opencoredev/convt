@@ -527,18 +527,27 @@ fn access_needs_a_sign_in_and_current_pro() {
     };
     let url = "https://convt.app";
     let pro = license(Plan::Pro, "2026-11-01");
-    assert_eq!(access(url, true, &pro, today), CloudAccess::Ready);
-    assert_eq!(access(url, false, &pro, today), CloudAccess::SignedOut);
+    assert_eq!(access(url, true, &pro, today, false), CloudAccess::Ready);
     assert_eq!(
-        access(url, true, &license(Plan::Pro, "2026-10-07"), today),
+        access(url, false, &pro, today, false),
+        CloudAccess::SignedOut
+    );
+    assert_eq!(
+        access(url, true, &license(Plan::Pro, "2026-10-07"), today, false),
         CloudAccess::NeedsPro
     );
     assert_eq!(
-        access(url, true, &license(Plan::Pro, "2026-10-08"), today),
+        access(url, true, &license(Plan::Pro, "2026-10-08"), today, false),
         CloudAccess::Ready
     );
     assert_eq!(
-        access(url, true, &license(Plan::Desktop, "2030-01-01"), today),
+        access(
+            url,
+            true,
+            &license(Plan::Desktop, "2030-01-01"),
+            today,
+            false
+        ),
         CloudAccess::NeedsPro
     );
     for state in [
@@ -548,18 +557,42 @@ fn access_needs_a_sign_in_and_current_pro() {
             started: None,
         },
     ] {
-        assert_eq!(access(url, true, &state, today), CloudAccess::NeedsPro);
+        assert_eq!(
+            access(url, true, &state, today, false),
+            CloudAccess::NeedsPro
+        );
     }
     // Builds from source check no license; convt.app still checks Pro.
     assert_eq!(
-        access(url, true, &State::Unrestricted, today),
+        access(url, true, &State::Unrestricted, today, false),
         CloudAccess::Ready
     );
     assert!(matches!(
-        access("", true, &pro, today),
+        access("", true, &pro, today, false),
         CloudAccess::Unavailable(_)
     ));
-    assert!(CloudAccess::NeedsPro.reason().unwrap().contains("Pro"));
+    assert!(
+        CloudAccess::NeedsPro
+            .reason()
+            .unwrap()
+            .contains("Desktop + Cloud")
+    );
+    // convt.app saying the account has paid cloud access (a Desktop + Cloud year)
+    // is enough with a Desktop key, or with no key at all; still not signed out.
+    let desktop = license(Plan::Desktop, "9999-12-31");
+    assert_eq!(access(url, true, &desktop, today, true), CloudAccess::Ready);
+    assert_eq!(
+        access(url, true, &State::TrialEnded, today, true),
+        CloudAccess::Ready
+    );
+    assert_eq!(
+        access(url, false, &desktop, today, true),
+        CloudAccess::SignedOut
+    );
+    assert!(matches!(
+        access("", true, &desktop, today, true),
+        CloudAccess::Unavailable(_)
+    ));
     assert_eq!(CloudAccess::Ready.reason(), None);
 }
 
@@ -819,6 +852,15 @@ mod app {
         let (_d, app) = app(cx, Some(key(Plan::Pro)), false, fake.clone());
         cx.read(|cx| assert_eq!(app.read(cx).cloud_access(), CloudAccess::SignedOut));
         let (_d, app) = app_signed_in(cx, Some(key(Plan::Desktop)), fake.clone());
+        cx.read(|cx| assert_eq!(app.read(cx).cloud_access(), CloudAccess::NeedsPro));
+        // A Desktop key whose account has a Desktop + Cloud year: convt.app says Pro.
+        app.update(cx, |s, _| {
+            s.account.access = Some(crate::account::Access::Pro)
+        });
+        cx.read(|cx| assert_eq!(app.read(cx).cloud_access(), CloudAccess::Ready));
+        app.update(cx, |s, _| {
+            s.account.access = Some(crate::account::Access::Lapsed)
+        });
         cx.read(|cx| assert_eq!(app.read(cx).cloud_access(), CloudAccess::NeedsPro));
         let (dir, app) = app_signed_in(cx, None, fake.clone());
         cx.read(|cx| assert_eq!(app.read(cx).cloud_access(), CloudAccess::NeedsPro));
