@@ -72,7 +72,13 @@ type Confirm = "switch" | "cancel" | null;
  * Desktop + Cloud coverage, apart from the plan: a Pro subscriber who also bought
  * the bundle still manages the subscription above it.
  */
-function CloudYearRow({ cloud }: { cloud: NonNullable<Billing["cloud"]> }) {
+function CloudYearRow({
+  cloud,
+  ownsDesktop,
+}: {
+  cloud: NonNullable<Billing["cloud"]>;
+  ownsDesktop: boolean;
+}) {
   const active = cloud.state === "active";
   return (
     <div
@@ -95,7 +101,7 @@ function CloudYearRow({ cloud }: { cloud: NonNullable<Billing["cloud"]> }) {
       <p className="text-[13px]/5 text-ink-2">
         {active
           ? `From Desktop + Cloud, paid once. Convert from your phone or browser and send heavy video jobs to the cloud until ${cloud.until}. It doesn’t renew; another year starts when this one ends.`
-          : `Your Desktop + Cloud year ended ${cloud.on}. Your Desktop license keeps working.`}
+          : `Your Desktop + Cloud year ended ${cloud.on}.${ownsDesktop ? " Your Desktop license keeps working." : ""}`}
       </p>
     </div>
   );
@@ -345,7 +351,9 @@ function BillingPage() {
               </a>
             </div>
           ) : null}
-          {billing.cloud ? <CloudYearRow cloud={billing.cloud} /> : null}
+          {billing.cloud ? (
+            <CloudYearRow cloud={billing.cloud} ownsDesktop={billing.ownsDesktop} />
+          ) : null}
         </section>
         <section
           aria-labelledby="card-title"

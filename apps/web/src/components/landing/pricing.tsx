@@ -120,7 +120,7 @@ function BundlePlan({ launched }: { launched: boolean }) {
       <div className="flex flex-col gap-2">
         <PlanHeader
           name="Desktop + Cloud"
-          description="Everything in Desktop, plus a year of cloud conversions when you choose them."
+          description="Desktop, plus a year of cloud conversions."
         />
       </div>
       <Price amount="$69" unit="once" note="Cloud for one year. It doesn't renew." />
