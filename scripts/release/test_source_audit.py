@@ -1,8 +1,12 @@
 import hashlib
+import http.server
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
+from unittest import mock
 
 spec=importlib.util.spec_from_file_location('source_audit',Path(__file__).with_name('source-audit.py'))
 audit=importlib.util.module_from_spec(spec);spec.loader.exec_module(audit)
@@ -39,6 +43,68 @@ class Sources(unittest.TestCase):
    with self.assertRaisesRegex(ValueError,'Downloaded source hash mismatch'):
     audit.retain(tree,cache,tree/'sources',item)
    self.assertFalse((cache/'source.tar').exists())
+
+class SourceMirrorDownloads(unittest.TestCase):
+    def setUp(self):
+        work = tempfile.TemporaryDirectory(prefix='convt-source-mirrors-')
+        self.addCleanup(work.cleanup)
+        self.tree = Path(work.name)
+        self.cache = self.tree / 'cache'
+        self.requests = []
+        self.payload = b'exact locked source bytes'
+        requests, payload = self.requests, self.payload
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                requests.append(self.path)
+                if self.path == '/truncated.tar':
+                    self.send_response(200)
+                    self.send_header('Transfer-Encoding', 'chunked')
+                    self.end_headers()
+                    # End the connection before the declared chunk is complete.
+                    self.wfile.write(b'10\r\nshort')
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return
+                if self.path not in ('/wrong.tar', '/valid.tar'):
+                    self.send_error(404)
+                    return
+                body = payload if self.path == '/valid.tar' else b'wrong mirror bytes'
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base_url = f'http://127.0.0.1:{self.server.server_port}'
+        # Requests must stay on loopback even when a proxy is configured.
+        self.enterContext(mock.patch.dict(os.environ, {'no_proxy': '*', 'NO_PROXY': '*'}))
+
+    def item(self, *paths):
+        return {'name': 'source.tar', 'url': self.base_url + paths[0],
+                'mirrors': [self.base_url + path for path in paths[1:]],
+                'sha256': hashlib.sha256(self.payload).hexdigest()}
+
+    def test_truncated_download_tries_mirrors_until_locked_bytes_are_retained(self):
+        item = self.item('/truncated.tar', '/wrong.tar', '/valid.tar')
+        record = audit.retain(self.tree, self.cache, self.tree / 'sources', item)
+        self.assertEqual(self.requests, ['/truncated.tar', '/wrong.tar', '/valid.tar'])
+        self.assertEqual((self.cache / 'source.tar').read_bytes(), self.payload)
+        self.assertEqual((self.tree / record['path']).read_bytes(), self.payload)
+        self.assertEqual(sorted(path.name for path in self.cache.iterdir()), ['source.tar'])
+
+    def test_failed_mirrors_leave_no_cache_file_or_partial_download(self):
+        item = self.item('/wrong.tar', '/truncated.tar')
+        with self.assertRaises(ValueError):
+            audit.ensure_url(self.cache, item)
+        self.assertEqual(self.requests, ['/wrong.tar', '/truncated.tar'])
+        self.assertEqual(list(self.cache.iterdir()), [])
 
 class CrateGraphLines(unittest.TestCase):
     def identities(self, *lines):
