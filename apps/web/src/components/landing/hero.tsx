@@ -15,7 +15,8 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
           <br className="hidden sm:inline" /> with a right-click.
         </h1>
         <p className="max-w-[560px] text-[17px]/[26px] text-ink-2 sm:text-[18px]/[28px]">
-          Images, video, audio and documents, converted on your own computer. Nothing gets uploaded.
+          Images, video, audio and documents, converted on your own computer. Local conversions
+          never leave your machine.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1.5">
           {LAUNCHED ? (

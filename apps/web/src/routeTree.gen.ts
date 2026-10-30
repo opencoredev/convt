@@ -40,6 +40,8 @@ import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/
 import { Route as SiteGuidesIndexRouteImport } from './routes/_site/guides/index'
 import { Route as SiteGuidesBatchHeicToJpgWindowsRouteImport } from './routes/_site/guides/batch-heic-to-jpg-windows'
 import { Route as SiteGuidesHeicToJpgMacRouteImport } from './routes/_site/guides/heic-to-jpg-mac'
+import { Route as SiteGuidesMovToMp4MacRouteImport } from './routes/_site/guides/mov-to-mp4-mac'
+import { Route as SiteGuidesWebpToPngJpgRouteImport } from './routes/_site/guides/webp-to-png-jpg'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
@@ -205,6 +207,16 @@ const SiteGuidesHeicToJpgMacRoute = SiteGuidesHeicToJpgMacRouteImport.update({
   path: '/guides/heic-to-jpg-mac',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteGuidesMovToMp4MacRoute = SiteGuidesMovToMp4MacRouteImport.update({
+  id: '/guides/mov-to-mp4-mac',
+  path: '/guides/mov-to-mp4-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteGuidesWebpToPngJpgRoute = SiteGuidesWebpToPngJpgRouteImport.update({
+  id: '/guides/webp-to-png-jpg',
+  path: '/guides/webp-to-png-jpg',
+  getParentRoute: () => SiteRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -286,6 +298,8 @@ export interface FileRoutesByFullPath {
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
@@ -326,6 +340,8 @@ export interface FileRoutesByTo {
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
@@ -370,6 +386,8 @@ export interface FileRoutesById {
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/_site/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/_site/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/_site/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/_site/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
@@ -412,6 +430,8 @@ export interface FileRouteTypes {
     | '/sign-in/verify-email'
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
+    | '/guides/mov-to-mp4-mac'
+    | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
@@ -452,6 +472,8 @@ export interface FileRouteTypes {
     | '/sign-in/verify-email'
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
+    | '/guides/mov-to-mp4-mac'
+    | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
@@ -495,6 +517,8 @@ export interface FileRouteTypes {
     | '/_app/sign-in/verify-email'
     | '/_site/guides/batch-heic-to-jpg-windows'
     | '/_site/guides/heic-to-jpg-mac'
+    | '/_site/guides/mov-to-mp4-mac'
+    | '/_site/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
@@ -749,6 +773,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteGuidesHeicToJpgMacRouteImport
       parentRoute: typeof SiteRoute
     }
+    '/_site/guides/mov-to-mp4-mac': {
+      id: '/_site/guides/mov-to-mp4-mac'
+      path: '/guides/mov-to-mp4-mac'
+      fullPath: '/guides/mov-to-mp4-mac'
+      preLoaderRoute: typeof SiteGuidesMovToMp4MacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/webp-to-png-jpg': {
+      id: '/_site/guides/webp-to-png-jpg'
+      path: '/guides/webp-to-png-jpg'
+      fullPath: '/guides/webp-to-png-jpg'
+      preLoaderRoute: typeof SiteGuidesWebpToPngJpgRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -877,6 +915,8 @@ interface SiteRouteChildren {
   SiteTermsRoute: typeof SiteTermsRoute
   SiteGuidesBatchHeicToJpgWindowsRoute: typeof SiteGuidesBatchHeicToJpgWindowsRoute
   SiteGuidesHeicToJpgMacRoute: typeof SiteGuidesHeicToJpgMacRoute
+  SiteGuidesMovToMp4MacRoute: typeof SiteGuidesMovToMp4MacRoute
+  SiteGuidesWebpToPngJpgRoute: typeof SiteGuidesWebpToPngJpgRoute
   SiteGuidesIndexRoute: typeof SiteGuidesIndexRoute
 }
 
@@ -889,6 +929,8 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteTermsRoute: SiteTermsRoute,
   SiteGuidesBatchHeicToJpgWindowsRoute: SiteGuidesBatchHeicToJpgWindowsRoute,
   SiteGuidesHeicToJpgMacRoute: SiteGuidesHeicToJpgMacRoute,
+  SiteGuidesMovToMp4MacRoute: SiteGuidesMovToMp4MacRoute,
+  SiteGuidesWebpToPngJpgRoute: SiteGuidesWebpToPngJpgRoute,
   SiteGuidesIndexRoute: SiteGuidesIndexRoute,
 }
 
