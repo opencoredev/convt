@@ -3,10 +3,14 @@ import { localPriceIds } from "@convt/db/seed";
 import { localProducts } from "@convt/billing-mock";
 
 import {
-  complimentaryDesktop,
+  complimentaryOrder,
   discountProblem,
+  listPriceOf,
   loadCatalog,
   meteredPriceProblem,
+  placeholderIds,
+  productByPriceId,
+  productByProviderId,
   validateCatalog,
 } from "../../src/catalog";
 import { addYears } from "../../src/context";
@@ -28,7 +32,7 @@ describe("catalog", () => {
 
   test("the local catalog, the seed and the mock agree on ids and prices", () => {
     const c = loadCatalog("local");
-    for (const k of ["desktop", "pro_month", "pro_year", "api"] as const) {
+    for (const k of ["desktop", "bundle", "pro_month", "pro_year", "api"] as const) {
       expect(c.products[k].priceId).toBe(localPriceIds[k]);
       expect(c.products[k].productId).toBe(localProducts[k].productId);
       expect(c.products[k].priceId).toBe(localProducts[k].priceId);
@@ -37,11 +41,15 @@ describe("catalog", () => {
     expect(c.switchPolicy).toEqual({ pro_month: "invoice", pro_year: "invoice" });
   });
 
-  test("sandbox and production have real, distinct ids and the same prices as local", () => {
+  test("sandbox and production have distinct ids and the same prices as local", () => {
     const local = loadCatalog("local");
     for (const env of ["sandbox", "production"] as const) {
       const c = loadCatalog(env);
-      expect(validateCatalog(c)).toEqual([]);
+      // The only problem allowed is ids still waiting for the provider, and only for
+      // the products CNV-101 adds; the deploy refuses them (scripts/deploy-worker.sh).
+      expect(validateCatalog(c).filter((p) => !p.includes("placeholders"))).toEqual([]);
+      for (const id of placeholderIds(c))
+        expect(id).toMatch(/^PLACEHOLDER_[A-Z]+_(DESKTOP_39_PRICE|BUNDLE_PRODUCT|BUNDLE_PRICE)$/);
       const ids = Object.values(c.products).flatMap((e) => [e.productId, e.priceId]);
       expect(new Set(ids).size).toBe(ids.length);
       for (const [name, e] of Object.entries(c.products)) {
@@ -53,10 +61,35 @@ describe("catalog", () => {
         } = local.products[name as keyof typeof local.products];
         expect(terms).toEqual(localTerms);
       }
+      expect(c.legacyPrices.map((l) => [l.product, l.amountCents])).toEqual([["desktop", 2900]]);
     }
     expect(loadCatalog("sandbox").products.desktop.productId).not.toBe(
       loadCatalog("production").products.desktop.productId,
     );
+    // The production $29 price stays recognized for every order sold at it.
+    const prod = loadCatalog("production");
+    expect(productByPriceId(prod, "a68e7412-964d-4dfc-bd9b-7aa6353ae37f")).toBe("desktop");
+    expect(productByProviderId(prod, "9d3028c1-1e4f-4d12-9641-59960eb58679")).toBe("desktop");
+  });
+
+  test("Desktop is $39 and Desktop + Cloud $69; the old $29 price is legacy at its own amount", () => {
+    const c = loadCatalog("local");
+    expect(c.products.desktop.amountCents).toBe(3900);
+    expect(c.products.bundle.amountCents).toBe(6900);
+    expect(listPriceOf(c, "desktop", "price_local_desktop_39")).toBe(3900);
+    expect(listPriceOf(c, "desktop", "price_local_desktop")).toBe(2900);
+    expect(listPriceOf(c, "bundle", "price_local_bundle")).toBe(6900);
+    // A price belongs to one product only.
+    expect(listPriceOf(c, "bundle", "price_local_desktop")).toBeNull();
+    expect(listPriceOf(c, "desktop", "price_local_bundle")).toBeNull();
+    expect(listPriceOf(c, "desktop", "price_unknown")).toBeNull();
+    expect(productByPriceId(c, "price_local_desktop")).toBe("desktop");
+    expect(productByProviderId(c, "prod_local_bundle")).toBe("bundle");
+    const broken = {
+      ...c,
+      legacyPrices: [{ ...c.legacyPrices[0], priceId: "price_local_desktop_39" }],
+    };
+    expect(validateCatalog(broken).join()).toMatch(/still a current price/);
   });
 
   test("production lists both Polar ids for the PRODUCTHUNT launch code", () => {
@@ -127,7 +160,7 @@ describe("catalog", () => {
 
   test("a 100% Polar Desktop write-off is complimentary; a partial unknown discount is not", () => {
     const c = loadCatalog("local");
-    const price = c.products.desktop.priceId;
+    const price = "price_local_desktop"; // The legacy $29 price, at its own amount.
     const full = {
       netCents: 0,
       subtotalCents: 2900,
@@ -140,8 +173,8 @@ describe("catalog", () => {
       discountCents: 0,
       items: [{ priceId: price, amountCents: 0 }],
     };
-    expect(complimentaryDesktop(c, full)).toBe(true);
-    expect(complimentaryDesktop(c, zeroed)).toBe(true);
+    expect(complimentaryOrder(c, "desktop", full)).toBe(true);
+    expect(complimentaryOrder(c, "desktop", zeroed)).toBe(true);
     expect(discountProblem(c, "disc_giveaway", "desktop", full)).toBeNull();
     expect(discountProblem(c, null, "desktop", full)).toBeNull();
     expect(discountProblem(c, "disc_giveaway", "desktop", zeroed)).toBeNull();
@@ -154,13 +187,53 @@ describe("catalog", () => {
       }),
     ).toMatch(/unknown discount/);
     expect(
-      complimentaryDesktop(c, {
+      complimentaryOrder(c, "desktop", {
         netCents: 2030,
         subtotalCents: 2900,
         discountCents: 870,
         items: [{ priceId: price, amountCents: 2900 }],
       }),
     ).toBe(false);
+  });
+
+  test("complimentary one-time orders: both Polar shapes, at the current prices only", () => {
+    const c = loadCatalog("local");
+    const shapes = (priceId: string, amount: number) => ({
+      full: {
+        netCents: 0,
+        subtotalCents: amount,
+        discountCents: amount,
+        items: [{ priceId, amountCents: amount }],
+      },
+      zeroed: {
+        netCents: 0,
+        subtotalCents: 0,
+        discountCents: 0,
+        items: [{ priceId, amountCents: 0 }],
+      },
+    });
+    for (const [product, priceId, amount] of [
+      ["desktop", "price_local_desktop_39", 3900],
+      ["bundle", "price_local_bundle", 6900],
+    ] as const) {
+      const { full, zeroed } = shapes(priceId, amount);
+      expect(complimentaryOrder(c, product, full)).toBe(true);
+      expect(complimentaryOrder(c, product, zeroed)).toBe(true);
+      expect(discountProblem(c, "disc_giveaway", product, full)).toBeNull();
+      // $29 on the $39 price is neither the list price nor zero.
+      expect(complimentaryOrder(c, product, shapes(priceId, 2900).full)).toBe(false);
+    }
+    // The bundle's price is not the Desktop product's, and the reverse.
+    expect(complimentaryOrder(c, "desktop", shapes("price_local_bundle", 6900).full)).toBe(false);
+    // PRODUCTHUNT never applied to Desktop + Cloud.
+    expect(
+      discountProblem(c, "disc_local_producthunt", "bundle", {
+        netCents: 4830,
+        subtotalCents: 6900,
+        discountCents: 2070,
+        items: [{ priceId: "price_local_bundle", amountCents: 6900 }],
+      }),
+    ).toMatch(/does not apply to bundle/);
   });
 
   test("updates_until is the same day a year later; 29 February becomes 28 February", () => {
