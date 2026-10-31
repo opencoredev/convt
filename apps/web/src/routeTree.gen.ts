@@ -42,6 +42,7 @@ import { Route as SiteGuidesIndexRouteImport } from './routes/_site/guides/index
 import { Route as SiteGuidesBatchHeicToJpgWindowsRouteImport } from './routes/_site/guides/batch-heic-to-jpg-windows'
 import { Route as SiteGuidesHeicToJpgMacRouteImport } from './routes/_site/guides/heic-to-jpg-mac'
 import { Route as SiteGuidesMovToMp4MacRouteImport } from './routes/_site/guides/mov-to-mp4-mac'
+import { Route as SiteGuidesPdfToPngMacWindowsRouteImport } from './routes/_site/guides/pdf-to-png-mac-windows'
 import { Route as SiteGuidesWebpToPngJpgRouteImport } from './routes/_site/guides/webp-to-png-jpg'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
@@ -218,6 +219,12 @@ const SiteGuidesMovToMp4MacRoute = SiteGuidesMovToMp4MacRouteImport.update({
   path: '/guides/mov-to-mp4-mac',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteGuidesPdfToPngMacWindowsRoute =
+  SiteGuidesPdfToPngMacWindowsRouteImport.update({
+    id: '/guides/pdf-to-png-mac-windows',
+    path: '/guides/pdf-to-png-mac-windows',
+    getParentRoute: () => SiteRoute,
+  } as any)
 const SiteGuidesWebpToPngJpgRoute = SiteGuidesWebpToPngJpgRouteImport.update({
   id: '/guides/webp-to-png-jpg',
   path: '/guides/webp-to-png-jpg',
@@ -306,6 +313,7 @@ export interface FileRoutesByFullPath {
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
   '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
@@ -349,6 +357,7 @@ export interface FileRoutesByTo {
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
   '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
@@ -396,6 +405,7 @@ export interface FileRoutesById {
   '/_site/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/_site/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/_site/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/_site/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
   '/_site/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
@@ -441,6 +451,7 @@ export interface FileRouteTypes {
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
     | '/guides/mov-to-mp4-mac'
+    | '/guides/pdf-to-png-mac-windows'
     | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
@@ -484,6 +495,7 @@ export interface FileRouteTypes {
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
     | '/guides/mov-to-mp4-mac'
+    | '/guides/pdf-to-png-mac-windows'
     | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
@@ -530,6 +542,7 @@ export interface FileRouteTypes {
     | '/_site/guides/batch-heic-to-jpg-windows'
     | '/_site/guides/heic-to-jpg-mac'
     | '/_site/guides/mov-to-mp4-mac'
+    | '/_site/guides/pdf-to-png-mac-windows'
     | '/_site/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
@@ -800,6 +813,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteGuidesMovToMp4MacRouteImport
       parentRoute: typeof SiteRoute
     }
+    '/_site/guides/pdf-to-png-mac-windows': {
+      id: '/_site/guides/pdf-to-png-mac-windows'
+      path: '/guides/pdf-to-png-mac-windows'
+      fullPath: '/guides/pdf-to-png-mac-windows'
+      preLoaderRoute: typeof SiteGuidesPdfToPngMacWindowsRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/_site/guides/webp-to-png-jpg': {
       id: '/_site/guides/webp-to-png-jpg'
       path: '/guides/webp-to-png-jpg'
@@ -936,6 +956,7 @@ interface SiteRouteChildren {
   SiteGuidesBatchHeicToJpgWindowsRoute: typeof SiteGuidesBatchHeicToJpgWindowsRoute
   SiteGuidesHeicToJpgMacRoute: typeof SiteGuidesHeicToJpgMacRoute
   SiteGuidesMovToMp4MacRoute: typeof SiteGuidesMovToMp4MacRoute
+  SiteGuidesPdfToPngMacWindowsRoute: typeof SiteGuidesPdfToPngMacWindowsRoute
   SiteGuidesWebpToPngJpgRoute: typeof SiteGuidesWebpToPngJpgRoute
   SiteGuidesIndexRoute: typeof SiteGuidesIndexRoute
 }
@@ -950,6 +971,7 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteGuidesBatchHeicToJpgWindowsRoute: SiteGuidesBatchHeicToJpgWindowsRoute,
   SiteGuidesHeicToJpgMacRoute: SiteGuidesHeicToJpgMacRoute,
   SiteGuidesMovToMp4MacRoute: SiteGuidesMovToMp4MacRoute,
+  SiteGuidesPdfToPngMacWindowsRoute: SiteGuidesPdfToPngMacWindowsRoute,
   SiteGuidesWebpToPngJpgRoute: SiteGuidesWebpToPngJpgRoute,
   SiteGuidesIndexRoute: SiteGuidesIndexRoute,
 }
