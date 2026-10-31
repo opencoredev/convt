@@ -173,6 +173,9 @@ test("the PDF guide tags its download link and prints the tested page and folder
   expect(html).toContain("convt report.pdf --to png --pages 2 --dpi 300");
   expect(html).toContain("convt docs --to png -r -o png");
   expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; docs --to png -r -o png",
+  );
+  expect(html).toContain(
     "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; report.pdf --to png",
   );
   // A documents guide lists the other guides after it, in catalog order.

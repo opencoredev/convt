@@ -76,7 +76,8 @@ function PdfToPngMacWindows() {
           <strong className="font-semibold">Mac:</strong> open the PDF in Preview, choose File ›
           Export, set Format to PNG and click Save.{" "}
           <strong className="font-semibold">Every page, Mac or Windows:</strong>{" "}
-          <Code>convt report.pdf --to png</Code> writes one PNG per page.
+          <Code>convt report.pdf --to png</Code> writes one PNG per page. On Windows, type{" "}
+          <TextLink href="#convt">convt's full path</TextLink> instead of <Code>convt</Code>.
         </p>
       </div>
 
@@ -207,10 +208,12 @@ function PdfToPngMacWindows() {
             Give convt a folder instead of a file. <Code>-r</Code> includes subfolders and{" "}
             <Code>-o png</Code> writes the images into a new folder with the same subfolders. A
             folder input converts every file convt can turn into PNG, so a JPG in it gets a PNG copy
-            too. Files that are already PNG are skipped.
+            too. Files that are already PNG are skipped. The first command is for a Mac, the second
+            for PowerShell on Windows.
           </p>
         </Prose>
-        <Commands label="convt" commands={["convt docs --to png -r -o png"]} />
+        <Commands label="Mac" commands={["convt docs --to png -r -o png"]} />
+        <Commands label="PowerShell" commands={[String.raw`${convtExe} docs --to png -r -o png`]} />
         <Output label="Output">{`docs/report.pdf -> png/report.png, png/report-2.png, png/report-3.png
 docs/2026/invoice.pdf -> png/2026/invoice.png, png/2026/invoice-2.png, png/2026/invoice-3.png
 2 converted, 0 failed`}</Output>
@@ -245,6 +248,12 @@ docs/2026/invoice.pdf -> png/2026/invoice.png, png/2026/invoice-2.png, png/2026/
           ]}
         />
         <Commands label="convt" commands={["convt report.pdf --to png --pages 2 --dpi 300"]} />
+        <Prose>
+          <p>
+            On Windows, put the same options after{" "}
+            <Code>{String.raw`${convtExe} report.pdf --to png`}</Code>.
+          </p>
+        </Prose>
         <Output label="Output">{`report.pdf -> report-2.png`}</Output>
 
         <h3 className="mt-4 text-[19px]/7 font-semibold tracking-[-0.01em]">
