@@ -69,6 +69,18 @@ export const guides = [
     published: "2026-10-30",
     updated: "2026-10-30",
   },
+  {
+    slug: "pdf-to-png-mac-windows",
+    title: "How to convert PDF to PNG on Mac and Windows: every page or one",
+    heading: "How to convert a PDF to PNG on Mac or Windows",
+    description:
+      "Save PDF pages as PNG images with Preview on a Mac or a screenshot on Windows, or convert every page, chosen pages or whole folders at a set DPI with convt.",
+    summary:
+      "Preview on a Mac and the Snipping Tool workaround on Windows, then every page, page ranges, DPI and folders of PDFs with the convt CLI.",
+    category: "documents",
+    published: "2026-10-31",
+    updated: "2026-10-31",
+  },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];
