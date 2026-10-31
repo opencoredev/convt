@@ -89,6 +89,7 @@
     "qs": "6.16.1",
     "seroval": "1.6.11",
     "sharp": "0.35.5",
+    "solid-js": "1.9.18",
     "undici": "8.12.2"
   },
   "packageManager": "bun@1.4.2"
