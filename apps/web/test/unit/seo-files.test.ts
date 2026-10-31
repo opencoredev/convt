@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { guidePath, guides } from "#/lib/guides";
 import { llmsTxt } from "#/lib/llms";
-import { SITE_ORIGIN, sitemapPages } from "#/lib/site";
+import { guidesLastmod, sitemapEntries } from "#/lib/sitemap";
+import { SITE_ORIGIN, routes, sitemapPages } from "#/lib/site";
 
 describe("sitemap pages", () => {
   test("every lastmod is a real past calendar day", () => {
@@ -18,6 +19,29 @@ describe("sitemap pages", () => {
     const paths = sitemapPages.map((p) => p.path);
     expect(new Set(paths).size).toBe(paths.length);
     expect(paths.some((p) => p.startsWith("/docs"))).toBe(false);
+  });
+
+  test("pages that list guides are never dated before the newest guide", () => {
+    const formats = sitemapEntries.find((e) => e.path === routes.formats);
+    const index = sitemapEntries.find((e) => e.path === routes.guides);
+    expect(guidesLastmod).toBe(
+      guides
+        .map((g) => g.updated)
+        .sort()
+        .at(-1) ?? "",
+    );
+    expect((formats?.lastmod ?? "") >= guidesLastmod).toBe(true);
+    expect(index?.lastmod).toBe(guidesLastmod);
+  });
+
+  test("lists every fixed page, /guides and each guide once", () => {
+    const paths = sitemapEntries.map((e) => e.path);
+    expect(new Set(paths).size).toBe(paths.length);
+    expect(paths).toEqual([
+      ...sitemapPages.map((p) => p.path),
+      routes.guides,
+      ...guides.map((g) => guidePath(g.slug)),
+    ]);
   });
 });
 
