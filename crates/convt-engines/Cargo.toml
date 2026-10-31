@@ -25,7 +25,7 @@ tracing.workspace = true
 anyhow.workspace = true
 sha2 = "=0.10.9"
 flate2 = "=1.1.10"
-tar = "=0.4.44"
+tar = "=0.4.45"
 ureq = { version = "=3.1.4", default-features = false, features = ["rustls"] }
 which.workspace = true
 url = "=2.5.8"
