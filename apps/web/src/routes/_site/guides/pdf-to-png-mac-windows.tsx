@@ -95,7 +95,10 @@ function PdfToPngMacWindows() {
       >
         <Steps>
           {[
-            <>Double-click the PDF. It opens in Preview.</>,
+            <>
+              Open the PDF in Preview: right-click it and choose{" "}
+              <strong className="font-semibold">Open With › Preview</strong>.
+            </>,
             <>
               Choose <strong className="font-semibold">File › Export</strong>.
             </>,
@@ -203,8 +206,8 @@ function PdfToPngMacWindows() {
           <p>
             Give convt a folder instead of a file. <Code>-r</Code> includes subfolders and{" "}
             <Code>-o png</Code> writes the images into a new folder with the same subfolders. A
-            folder input converts every file convt can turn into PNG, so other images in it get
-            copies too.
+            folder input converts every file convt can turn into PNG, so a JPG in it gets a PNG copy
+            too. Files that are already PNG are skipped.
           </p>
         </Prose>
         <Commands label="convt" commands={["convt docs --to png -r -o png"]} />
