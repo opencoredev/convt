@@ -46,7 +46,7 @@ function SiteFooter() {
   return (
     <footer className="border-t border-line">
       <div className={cx(siteColumn, "flex flex-col gap-12 pt-14 pb-10")}>
-        <div className="flex flex-col gap-10 md:flex-row md:justify-between">
+        <div className="flex flex-col gap-10 lg:flex-row lg:justify-between">
           <div className="flex max-w-[320px] flex-col gap-2.5">
             <p className="flex items-center gap-2 text-lg/5.5 font-semibold tracking-[-0.02em]">
               <Mark />

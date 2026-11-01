@@ -10,6 +10,8 @@ export type Guide = {
   title: string;
   /** The page's h1 and its link text elsewhere on the site. */
   heading: string;
+  /** A short link label for the site footer's Guides column. */
+  footerLabel: string;
   description: string;
   /** One plain line on what the guide covers, for /llms.txt. */
   summary: string;
@@ -25,6 +27,7 @@ export const guides = [
     slug: "heic-to-jpg-mac",
     title: "How to convert HEIC to JPG on Mac: free, batch and Terminal",
     heading: "How to convert HEIC to JPG on a Mac",
+    footerLabel: "HEIC to JPG on Mac",
     description:
       "Convert iPhone HEIC photos to JPG on a Mac with free built-in tools (Finder, Preview, Photos and sips), or batch-convert folders with subfolders using the convt CLI.",
     summary:
@@ -37,6 +40,7 @@ export const guides = [
     slug: "batch-heic-to-jpg-windows",
     title: "How to batch convert HEIC to JPG on Windows 11, folders included",
     heading: "How to batch convert HEIC to JPG on Windows",
+    footerLabel: "HEIC to JPG on Windows",
     description:
       "Convert iPhone HEIC photos to JPG on Windows 11: one at a time in the Photos app, or whole folders with subfolders in one tested convt command.",
     summary:
@@ -49,6 +53,7 @@ export const guides = [
     slug: "mov-to-mp4-mac",
     title: "How to convert MOV to MP4 on Mac: rename, iMovie, FFmpeg or batch",
     heading: "How to convert MOV to MP4 on a Mac",
+    footerLabel: "MOV to MP4 on Mac",
     description:
       "Convert MOV videos to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg without losing quality, or batch-convert and shrink folders with convt.",
     summary:
@@ -61,6 +66,7 @@ export const guides = [
     slug: "webp-to-png-jpg",
     title: "How to convert WebP to PNG or JPG on Mac and Windows",
     heading: "How to convert WebP to PNG or JPG",
+    footerLabel: "WebP to PNG or JPG",
     description:
       "Save WebP images as PNG or JPG with Preview on a Mac or Paint on Windows, or convert whole folders at once with convt, keeping transparency in PNG.",
     summary:
@@ -73,6 +79,7 @@ export const guides = [
     slug: "pdf-to-png-mac-windows",
     title: "How to convert PDF to PNG on Mac and Windows: every page or one",
     heading: "How to convert a PDF to PNG on Mac or Windows",
+    footerLabel: "PDF to PNG",
     description:
       "Save PDF pages as PNG images with Preview on a Mac or a screenshot on Windows, or convert every page, chosen pages or whole folders at a set DPI with convt.",
     summary:
@@ -85,6 +92,7 @@ export const guides = [
     slug: "mp4-flac-wav-to-mp3-mac",
     title: "How to convert MP4, FLAC or WAV to MP3 on Mac, folders included",
     heading: "How to convert MP4, FLAC and WAV to MP3 on a Mac",
+    footerLabel: "MP4, FLAC and WAV to MP3",
     description:
       "Turn an MP4 or WAV into MP3 on a Mac with QuickTime and the Music app, or use convt for FLAC files and whole folders, at the bitrate you pick.",
     summary:
