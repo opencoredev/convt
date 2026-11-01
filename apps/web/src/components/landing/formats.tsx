@@ -28,7 +28,7 @@ const groups = [
   },
   {
     name: "Video",
-    formats: ["MP4", "MOV", "WEBM", "MKV", "AVI"],
+    formats: ["MP4", "MOV", "WEBM", "MKV", "AVI", "MPEG", "MPG4"],
     preview: <VideoPreview />,
   },
   {
@@ -69,7 +69,7 @@ export function Formats() {
     <Container id="formats" className="scroll-mt-6 md:pb-[140px]">
       <div className="flex flex-col items-center gap-3.5 pt-20 pb-10 text-center md:pt-[140px] md:pb-12">
         <h2 className="text-[34px]/[40px] font-medium tracking-[-0.035em] text-ink md:text-[44px]/[48px]">
-          49 formats, one menu.
+          51 formats, one menu.
         </h2>
         <p className="max-w-[520px] text-[17px]/[26px] text-ink-2">
           Images, video, audio and documents. Right-click a file, pick what you want, done.

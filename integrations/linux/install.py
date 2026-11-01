@@ -115,9 +115,21 @@ def dolphin_menus(groups):
     """Service menu files by name. KIO sorts a submenu's actions by their
     IDs, not their labels, so each ID starts with the target's place in the
     menu, and "options" sorts after every "convert_" ID."""
+    # Dolphin picks a menu by MIME type alone, and formats can share one (MP4
+    # and MPG4 are both video/mp4). A shared type offers only the targets
+    # every format with it reaches, in the first one's order, so no menu
+    # holds an action its file cannot take.
+    by_mime = {}
+    for sources, targets in groups:
+        for s in sources:
+            seen = by_mime.get(s["mime"])
+            by_mime[s["mime"]] = list(targets) if seen is None else [t for t in seen if t in targets]
+    regrouped = defaultdict(list)
+    for mime, targets in by_mime.items():
+        regrouped[tuple(targets)].append(mime)
     menus = {}
-    for i, (sources, targets) in enumerate(groups):
-        mimes = ";".join(sorted({s["mime"] for s in sources})) + ";"
+    for i, (targets, mime_list) in enumerate(regrouped.items()):
+        mimes = ";".join(sorted(mime_list)) + ";"
         ids = [f"convert_{i:02}_{t}" for i, t in enumerate(targets)]
         actions = ";".join([*ids, "options"]) + ";"
         lines = [
