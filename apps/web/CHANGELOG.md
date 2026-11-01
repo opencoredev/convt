@@ -1,5 +1,23 @@
 # @convt/web
 
+## 0.6.0
+
+### Minor Changes
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Cloud conversions now use your conversion options. In the desktop app, Quick convert shows the same quality, size, codec and background controls in the cloud as on your computer. The cloud converter on convt.app lets you pick a quality and a size, and the API takes an optional `options` object when you create a job.
+
+- [#141](https://github.com/opencoredev/convt/pull/141) [`64037a1`](https://github.com/opencoredev/convt/commit/64037a1c68aa5776fa84df5d43ecf40484def34b) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Compress a file without changing its format (`convt clip.mp4 --to mp4 --quality 60`, or the file's own format in Quick convert), and fit output under a size with `--target-size 10MB` or the new Max file size control. WebP is now lossy by default and follows `--quality` (100 stays lossless), so photos no longer come out larger than their JPEG. New `--strip-metadata`, `--trim-start`, `--trim-end` and `--fps` options, and a Strip metadata checkbox in Quick convert. Photos with an EXIF rotation now keep it.
+
+- [#150](https://github.com/opencoredev/convt/pull/150) [`6cf388c`](https://github.com/opencoredev/convt/commit/6cf388c580763da1f76827da3b3dfc66355ea22f) Thanks [@leoisadev1](https://github.com/leoisadev1)! - convt is now sold once, with no subscription. Desktop is $39 once, and Desktop + Cloud is $69 once: a Desktop license plus a year of cloud conversions from your phone, your browser or the app, which doesn't renew. Buying it again adds another year. Licenses bought at $29 keep working, and existing Pro subscriptions keep renewing, switching and canceling as before. In the desktop app, signing in installs your Desktop license, so there is no key to paste, and Cloud works while the account has cloud conversions.
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Nine new formats. Markdown converts to HTML and plain text, and HTML, Word and other documents convert to Markdown. CSV, TSV, JSON and YAML convert between each other, and CSV and TSV become HTML, Markdown or text tables, all without the document pack. SRT and WebVTT subtitles convert to each other and to plain text, and MP4, MOV, MKV and WebM videos give up their subtitle track as SRT or VTT. AIFF, CAF and M4R (iPhone ringtone) audio join the audio formats.
+
+### Patch Changes
+
+- [#148](https://github.com/opencoredev/convt/pull/148) [`2d4bbd6`](https://github.com/opencoredev/convt/commit/2d4bbd660928f31d411f74ef55e7235f6b1ff12e) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Cloud conversion works on convt.app. Pro subscribers can convert files from the cloud converter on the dashboard and from the desktop app, which used to say cloud conversion was still being connected.
+
+- [#134](https://github.com/opencoredev/convt/pull/134) [`7e7bba3`](https://github.com/opencoredev/convt/commit/7e7bba38f9c9e39c21464d09d080266dda9cccab) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The email code boxes on convt.app submit as soon as the last digit is typed or pasted, show when the code is being checked, and shake and clear on a wrong code.
+
 ## 0.5.0
 
 ### Patch Changes
