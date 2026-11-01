@@ -81,6 +81,18 @@ export const guides = [
     published: "2026-10-31",
     updated: "2026-10-31",
   },
+  {
+    slug: "mp4-flac-wav-to-mp3-mac",
+    title: "How to convert MP4, FLAC or WAV to MP3 on Mac, folders included",
+    heading: "How to convert MP4, FLAC and WAV to MP3 on a Mac",
+    description:
+      "Turn a video, FLAC or WAV file into MP3 on a Mac with QuickTime and the Music app, or convert whole folders of music to MP3 at the bitrate you pick with convt.",
+    summary:
+      "QuickTime Audio Only and Music's MP3 Encoder (no FLAC), then single files and folders with subfolders in the convt CLI, with bitrate options. Tags carry over; cover art is dropped.",
+    category: "audio",
+    published: "2026-11-01",
+    updated: "2026-11-01",
+  },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];

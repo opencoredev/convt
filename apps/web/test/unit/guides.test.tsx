@@ -6,6 +6,7 @@ import { guideDownloadUrl, guideHead, guidePath, guides, relatedGuides } from "#
 import { Route as BatchHeicToJpgWindows } from "../../src/routes/_site/guides/batch-heic-to-jpg-windows";
 import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg-mac";
 import { Route as MovToMp4Mac } from "../../src/routes/_site/guides/mov-to-mp4-mac";
+import { Route as Mp4FlacWavToMp3Mac } from "../../src/routes/_site/guides/mp4-flac-wav-to-mp3-mac";
 import { Route as PdfToPngMacWindows } from "../../src/routes/_site/guides/pdf-to-png-mac-windows";
 import { Route as WebpToPngJpg } from "../../src/routes/_site/guides/webp-to-png-jpg";
 
@@ -74,7 +75,8 @@ function renderGuide(
     | typeof BatchHeicToJpgWindows
     | typeof MovToMp4Mac
     | typeof WebpToPngJpg
-    | typeof PdfToPngMacWindows,
+    | typeof PdfToPngMacWindows
+    | typeof Mp4FlacWavToMp3Mac,
 ) {
   const Page = route.options.component;
   if (!Page) throw new Error("guide route has no component");
@@ -122,6 +124,7 @@ test("every guide links to every other guide, same kind of file first", () => {
     "mov-to-mp4-mac": MovToMp4Mac,
     "webp-to-png-jpg": WebpToPngJpg,
     "pdf-to-png-mac-windows": PdfToPngMacWindows,
+    "mp4-flac-wav-to-mp3-mac": Mp4FlacWavToMp3Mac,
   } satisfies Record<(typeof guides)[number]["slug"], unknown>;
   for (const guide of guides) {
     const html = renderGuide(routes[guide.slug]);
@@ -137,6 +140,7 @@ test("every guide links to every other guide, same kind of file first", () => {
     "webp-to-png-jpg",
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
   const related = renderGuide(HeicToJpgMac).split("Related guides")[1] ?? "";
   expect([...related.matchAll(/href="\/guides\/([^"]+)"/g)].map((m) => m[1])).toEqual([
@@ -144,18 +148,21 @@ test("every guide links to every other guide, same kind of file first", () => {
     "webp-to-png-jpg",
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
   expect(relatedGuides(guides[2]).map((g) => g.slug)).toEqual([
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
     "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
   expect(relatedGuides(guides[3]).map((g) => g.slug)).toEqual([
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
 });
 
@@ -184,5 +191,32 @@ test("the PDF guide tags its download link and prints the tested page and folder
     "batch-heic-to-jpg-windows",
     "mov-to-mp4-mac",
     "webp-to-png-jpg",
+    "mp4-flac-wav-to-mp3-mac",
+  ]);
+});
+
+test("the MP3 guide tags its download link and prints the tested file, folder and bitrate commands", () => {
+  expect(guideHead("mp4-flac-wav-to-mp3-mac").links).toContainEqual({
+    rel: "canonical",
+    href: "https://convt.app/guides/mp4-flac-wav-to-mp3-mac",
+  });
+  const html = renderGuide(Mp4FlacWavToMp3Mac);
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
+    "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=mp4-flac-wav-to-mp3-mac",
+  ]);
+  expect(html).toContain("convt talk.mp4 --to mp3");
+  expect(html).toContain("convt Music --to mp3 -r -o mp3");
+  expect(html).toContain("convt demo.wav --to mp3 --audio-bitrate 320");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; Music --to mp3 -r -o mp3",
+  );
+  // The only audio guide: every other guide comes after it, in catalog order.
+  expect(relatedGuides(guides[5]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "mov-to-mp4-mac",
+    "webp-to-png-jpg",
+    "pdf-to-png-mac-windows",
   ]);
 });
