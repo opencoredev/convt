@@ -86,7 +86,7 @@ export const guides = [
     title: "How to convert MP4, FLAC or WAV to MP3 on Mac, folders included",
     heading: "How to convert MP4, FLAC and WAV to MP3 on a Mac",
     description:
-      "Turn a video, FLAC or WAV file into MP3 on a Mac with QuickTime and the Music app, or convert whole folders of music to MP3 at the bitrate you pick with convt.",
+      "Turn an MP4 or WAV into MP3 on a Mac with QuickTime and the Music app, or use convt for FLAC files and whole folders, at the bitrate you pick.",
     summary:
       "QuickTime Audio Only and Music's MP3 Encoder (no FLAC), then single files and folders with subfolders in the convt CLI, with bitrate options. Tags carry over; cover art is dropped.",
     category: "audio",
