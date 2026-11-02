@@ -24,6 +24,7 @@ import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDownloadRouteImport } from './routes/_site/download'
 import { Route as SiteFormatsRouteImport } from './routes/_site/formats'
+import { Route as SiteMacFileConverterRouteImport } from './routes/_site/mac-file-converter'
 import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
@@ -127,6 +128,11 @@ const SiteDownloadRoute = SiteDownloadRouteImport.update({
 const SiteFormatsRoute = SiteFormatsRouteImport.update({
   id: '/formats',
   path: '/formats',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteMacFileConverterRoute = SiteMacFileConverterRouteImport.update({
+  id: '/mac-file-converter',
+  path: '/mac-file-converter',
   getParentRoute: () => SiteRoute,
 } as any)
 const SitePrivacyRoute = SitePrivacyRouteImport.update({
@@ -304,6 +310,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -349,6 +356,7 @@ export interface FileRoutesByTo {
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -398,6 +406,7 @@ export interface FileRoutesById {
   '/_site/contact': typeof SiteContactRoute
   '/_site/download': typeof SiteDownloadRoute
   '/_site/formats': typeof SiteFormatsRoute
+  '/_site/mac-file-converter': typeof SiteMacFileConverterRoute
   '/_site/privacy': typeof SitePrivacyRoute
   '/_site/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -445,6 +454,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/download'
     | '/formats'
+    | '/mac-file-converter'
     | '/privacy'
     | '/terms'
     | '/api/feedback'
@@ -490,6 +500,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/download'
     | '/formats'
+    | '/mac-file-converter'
     | '/privacy'
     | '/terms'
     | '/api/feedback'
@@ -538,6 +549,7 @@ export interface FileRouteTypes {
     | '/_site/contact'
     | '/_site/download'
     | '/_site/formats'
+    | '/_site/mac-file-converter'
     | '/_site/privacy'
     | '/_site/terms'
     | '/api/feedback'
@@ -698,6 +710,13 @@ declare module '@tanstack/react-router' {
       path: '/formats'
       fullPath: '/formats'
       preLoaderRoute: typeof SiteFormatsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/mac-file-converter': {
+      id: '/_site/mac-file-converter'
+      path: '/mac-file-converter'
+      fullPath: '/mac-file-converter'
+      preLoaderRoute: typeof SiteMacFileConverterRouteImport
       parentRoute: typeof SiteRoute
     }
     '/_site/privacy': {
@@ -971,6 +990,7 @@ interface SiteRouteChildren {
   SiteContactRoute: typeof SiteContactRoute
   SiteDownloadRoute: typeof SiteDownloadRoute
   SiteFormatsRoute: typeof SiteFormatsRoute
+  SiteMacFileConverterRoute: typeof SiteMacFileConverterRoute
   SitePrivacyRoute: typeof SitePrivacyRoute
   SiteTermsRoute: typeof SiteTermsRoute
   SiteGuidesBatchHeicToJpgWindowsRoute: typeof SiteGuidesBatchHeicToJpgWindowsRoute
@@ -987,6 +1007,7 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteContactRoute: SiteContactRoute,
   SiteDownloadRoute: SiteDownloadRoute,
   SiteFormatsRoute: SiteFormatsRoute,
+  SiteMacFileConverterRoute: SiteMacFileConverterRoute,
   SitePrivacyRoute: SitePrivacyRoute,
   SiteTermsRoute: SiteTermsRoute,
   SiteGuidesBatchHeicToJpgWindowsRoute: SiteGuidesBatchHeicToJpgWindowsRoute,

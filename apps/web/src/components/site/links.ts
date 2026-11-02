@@ -1,4 +1,5 @@
 import { guidePath, guides } from "#/lib/guides";
+import { macFileConverter } from "#/lib/landing-pages";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 /** Footer columns, shared by the landing page and the other public pages. */
@@ -8,6 +9,7 @@ export const footerColumns = [
     links: [
       { label: "Download", href: routes.download },
       { label: "Formats", href: routes.formats },
+      { label: macFileConverter.footerLabel, href: macFileConverter.path },
       { label: "Pricing", href: routes.pricing },
       { label: "Changelog", href: routes.changelog },
     ],
