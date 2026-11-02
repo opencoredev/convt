@@ -140,3 +140,14 @@ export function seo({
     links: [{ rel: "canonical", href: url }],
   };
 }
+
+/** BreadcrumbList JSON-LD for a public page one level below the homepage, like /formats. */
+export function topLevelBreadcrumb({ name, path }: { name: string; path: string }) {
+  return {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: SITE_NAME, item: `${SITE_ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name, item: `${SITE_ORIGIN}${path}` },
+    ],
+  };
+}
