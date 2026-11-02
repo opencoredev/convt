@@ -245,8 +245,8 @@ function MacFileConverter() {
             <Prose>
               <p>
                 convt adds a <strong className="font-semibold">Convert with convt</strong> menu to
-                Finder. Select one file or several, Control-click, and the menu lists the formats
-                they can all become, grouped by kind. Pick one and convt writes the new file next to
+                Finder. Select one file or several, Control-click, and the menu lists a short set of
+                common formats they can all become. Pick one and convt writes the new file next to
                 the original without opening a window.{" "}
                 <strong className="font-semibold">More options…</strong> opens convt's Quick convert
                 window for quality, size and the output folder.
