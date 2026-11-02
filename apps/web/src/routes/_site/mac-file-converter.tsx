@@ -50,7 +50,7 @@ const comparison: [string, string, string][] = [
   ],
   [
     "WebP, AVIF or SVG to PNG or JPEG",
-    "Preview exports seven formats, one file at a time",
+    "Preview exports seven formats, for the images you open",
     "Any of them, to a dozen image formats",
   ],
   ["MOV to MP4", "QuickTime exports MOV, not MP4", "MP4, WebM, MKV, AVI or GIF, with a size cap"],
@@ -65,7 +65,11 @@ const comparison: [string, string, string][] = [
     "Open each file and print or export",
     "One command per file or folder",
   ],
-  ["A folder with subfolders", "Select files by hand", "-r converts every subfolder in one go"],
+  [
+    "A folder with subfolders",
+    "Music imports a folder of songs; others take open files",
+    "-r converts every subfolder in one go",
+  ],
 ];
 
 const formatFacts: [ReactNode, ReactNode][] = [
@@ -93,7 +97,7 @@ const formatFacts: [ReactNode, ReactNode][] = [
   [
     "PDF",
     <>
-      Pages to PNG or JPEG (<Code>--pages</Code>, <Code>--dpi</Code>), or a PDF to DOCX.
+      Pages to PNG, JPEG or another image format (<Code>--pages</Code>, <Code>--dpi</Code>).
     </>,
   ],
   [
@@ -194,8 +198,8 @@ function MacFileConverter() {
                 </li>
               </ul>
               <p>
-                Each app covers one kind of file, and none of them takes a folder. convt fills those
-                gaps:
+                Each app covers one kind of file, and only Music imports a whole folder. convt fills
+                those gaps:
               </p>
             </Prose>
             <div className="overflow-x-auto rounded-2xl shadow-[inset_0_0_0_1px_var(--line)] [scrollbar-width:thin]">
@@ -420,8 +424,8 @@ Photos/2026/b.png -> webp/2026/b.webp
               <Question q="How is it different from Permute or HandBrake?">
                 HandBrake is a free video encoder with many settings. It makes video files only, not
                 images, audio files or documents. Permute is a paid Mac app that converts video,
-                audio and images. convt covers PDFs and Office documents as well, works from a
-                Finder right-click and from Terminal, and runs on Windows and Linux too.
+                audio, images and PDFs. convt also converts Office documents, has a command-line
+                tool for folders and scripts, and runs on Windows and Linux too.
               </Question>
               <Question q="Does it work on Windows?">
                 Yes, the app and the <Code>convt</Code> command run on Windows. The Explorer
