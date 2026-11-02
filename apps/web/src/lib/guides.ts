@@ -2,7 +2,7 @@
 // this list feeds the /guides index, the sitemap, the links on /formats and the head
 // tags. Add a guide here and give it a route file under routes/_site/guides.
 
-import { SITE_NAME, SITE_ORIGIN, routes, seo } from "./site";
+import { SITE_NAME, SITE_ORIGIN, routes, seo, topLevelBreadcrumb } from "./site";
 
 export type Guide = {
   slug: string;
@@ -181,6 +181,62 @@ export function guideHead(slug: GuideSlug) {
       { property: "article:published_time", content: guide.published },
       { property: "article:modified_time", content: guide.updated },
     ],
+    scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
+  };
+}
+
+const guidesIndex = {
+  title: "Guides · convt",
+  heading: "Guides",
+  description: "Step-by-step guides to converting files on your own computer, free methods first.",
+};
+
+/**
+ * Head tags for /guides: SEO and Open Graph, plus CollectionPage JSON-LD whose ItemList
+ * names every guide in the order the page lists them, and a breadcrumb.
+ */
+export function guidesIndexHead() {
+  const url = `${SITE_ORIGIN}${routes.guides}`;
+  const tags = seo({
+    title: guidesIndex.title,
+    description: guidesIndex.description,
+    path: routes.guides,
+  });
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${url}#page`,
+        name: guidesIndex.title,
+        description: guidesIndex.description,
+        url,
+        inLanguage: "en",
+        isPartOf: { "@type": "WebSite", name: SITE_NAME, url: `${SITE_ORIGIN}/` },
+        publisher: { "@id": `${SITE_ORIGIN}/#organization` },
+        mainEntity: {
+          "@type": "ItemList",
+          numberOfItems: guides.length,
+          itemListElement: guides.map((guide, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            name: guide.heading,
+            url: `${SITE_ORIGIN}${guidePath(guide.slug)}`,
+          })),
+        },
+      },
+      topLevelBreadcrumb({ name: guidesIndex.heading, path: routes.guides }),
+      {
+        "@type": "Organization",
+        "@id": `${SITE_ORIGIN}/#organization`,
+        name: SITE_NAME,
+        url: `${SITE_ORIGIN}/`,
+        logo: `${SITE_ORIGIN}/apple-touch-icon.png`,
+      },
+    ],
+  };
+  return {
+    ...tags,
     scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
   };
 }
