@@ -283,8 +283,8 @@ icons/sub/b.svg -> png/sub/b.png
             <dt className="text-[16px]/6 font-semibold">Does convt upload my files?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not for local conversions. The app and the command-line tool convert on your computer.
-              The app uploads a file only if you pick Cloud for a job, which is part of convt Pro.
-              For scripts and the other commands, see the{" "}
+              The app uploads a file only if you pick Cloud for a job, which is part of Desktop +
+              Cloud. For scripts and the other commands, see the{" "}
               <TextLink href={commandLineConverter.path}>command-line page</TextLink> and the{" "}
               <TextLink href={routes.formats}>formats page</TextLink>.
             </dd>
