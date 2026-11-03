@@ -1,5 +1,5 @@
 import { guidePath, guides } from "#/lib/guides";
-import { macFileConverter } from "#/lib/landing-pages";
+import { commandLineConverter, macFileConverter } from "#/lib/landing-pages";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 /** Footer columns, shared by the landing page and the other public pages. */
@@ -25,6 +25,7 @@ export const footerColumns = [
   {
     title: "Developers",
     links: [
+      { label: commandLineConverter.footerLabel, href: commandLineConverter.path },
       { label: "API docs", href: routes.apiDocs },
       { label: "GitHub", href: GITHUB_URL },
     ],

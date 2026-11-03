@@ -15,6 +15,7 @@ import {
 import { TextLink, siteColumn } from "#/components/site/layout";
 import { guidePath, guides } from "#/lib/guides";
 import {
+  commandLineConverter,
   macFileConverter,
   macFileConverterDownloadUrl,
   macFileConverterHead,
@@ -332,7 +333,9 @@ Photos/2026/b.png -> webp/2026/b.webp
                 convt converts several files at once (<Code>-j</Code> sets how many) and runs videos
                 one at a time. Files already in the target format are skipped. Add{" "}
                 <Code>--json</Code> to get one progress event per line for a script, and run{" "}
-                <Code>convt --help</Code> for every option.
+                <Code>convt --help</Code> for every option. The{" "}
+                <TextLink href={commandLineConverter.path}>command-line page</TextLink> covers
+                presets, scripts and the other commands.
               </p>
               <p>
                 Homebrew puts <Code>convt</Code> in Terminal for you. If you installed from the disk
@@ -358,8 +361,11 @@ Photos/2026/b.png -> webp/2026/b.webp
                 </li>
                 <li>An animated WebP becomes one still image, the first frame.</li>
                 <li>
-                  Word, Excel and PowerPoint files need the document pack, a one-time download the
-                  app offers during setup (<Code>convt pack install documents</Code> in Terminal).
+                  Word, Excel and PowerPoint files need LibreOffice. Install it from{" "}
+                  <TextLink href="https://www.libreoffice.org/download/download-libreoffice/">
+                    libreoffice.org
+                  </TextLink>{" "}
+                  into Applications and convt finds it.
                 </li>
               </ul>
             </Prose>

@@ -17,6 +17,8 @@ export type LandingPage = {
   summary: string;
   /** `utm_campaign` on the page's download links. */
   campaign: string;
+  /** `operatingSystem` in the page's SoftwareApplication JSON-LD: only systems with a release. */
+  operatingSystem: string;
 };
 
 export const macFileConverter = {
@@ -29,14 +31,31 @@ export const macFileConverter = {
   summary:
     "What Finder, Preview, QuickTime and Music convert on a Mac, then what convt adds: the Finder menu, every format, folders in Terminal, limits and price.",
   campaign: "mac-file-converter",
+  operatingSystem: "macOS 13 or later (Apple silicon)",
 } as const satisfies LandingPage;
 
-/** The download page with this page's campaign tags. */
-export const macFileConverterDownloadUrl = `${routes.download}?utm_source=convt_guides&utm_medium=organic&utm_campaign=${macFileConverter.campaign}`;
+export const commandLineConverter = {
+  path: routes.commandLineConverter,
+  title: "Command-line file converter for images, video, audio and documents · convt",
+  heading: "One command-line tool for every kind of file",
+  footerLabel: "Command-line converter",
+  description:
+    "convt is a command-line file converter for images, video, audio, PDFs and Office documents: one command for every kind of file, whole folders, presets and JSON progress, run locally.",
+  summary:
+    "The convt command: one pattern for images, video, audio, PDFs and documents, folders, options, presets, JSON progress for scripts, the SKILL.md for AI agents, and how it compares with FFmpeg, ImageMagick, LibreOffice and Pandoc.",
+  campaign: "command-line-file-converter",
+  operatingSystem: "macOS (Apple silicon), Windows (x86_64), Linux (x86_64)",
+} as const satisfies LandingPage;
 
-/** Head tags for /mac-file-converter: SEO and Open Graph, plus WebPage, app and breadcrumb JSON-LD. */
-export function macFileConverterHead() {
-  const page = macFileConverter;
+/** The download page with a landing page's campaign tags. */
+const landingDownloadUrl = (page: LandingPage) =>
+  `${routes.download}?utm_source=convt_guides&utm_medium=organic&utm_campaign=${page.campaign}`;
+
+export const macFileConverterDownloadUrl = landingDownloadUrl(macFileConverter);
+export const commandLineConverterDownloadUrl = landingDownloadUrl(commandLineConverter);
+
+/** Head tags for a landing page: SEO and Open Graph, plus WebPage, app and breadcrumb JSON-LD. */
+function landingPageHead(page: LandingPage) {
   const url = `${SITE_ORIGIN}${page.path}`;
   const tags = seo({ title: page.title, description: page.description, path: page.path });
   const structuredData = {
@@ -58,7 +77,7 @@ export function macFileConverterHead() {
         name: SITE_NAME,
         url: `${SITE_ORIGIN}/`,
         applicationCategory: "UtilitiesApplication",
-        operatingSystem: "macOS 13 or later (Apple silicon)",
+        operatingSystem: page.operatingSystem,
         offers: { "@type": "Offer", price: "39", priceCurrency: "USD" },
         publisher: { "@id": `${SITE_ORIGIN}/#organization` },
       },
@@ -83,3 +102,9 @@ export function macFileConverterHead() {
     scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
   };
 }
+
+/** Head tags for /mac-file-converter. */
+export const macFileConverterHead = () => landingPageHead(macFileConverter);
+
+/** Head tags for /command-line-file-converter. */
+export const commandLineConverterHead = () => landingPageHead(commandLineConverter);
