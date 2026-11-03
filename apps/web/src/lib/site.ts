@@ -54,6 +54,7 @@ export const routes = {
   formats: "/formats",
   guides: "/guides",
   macFileConverter: "/mac-file-converter",
+  commandLineConverter: "/command-line-file-converter",
   pricing: "/#pricing",
   changelog: "/changelog",
   apiDocs: "/docs/api",
@@ -91,6 +92,7 @@ export const sitemapPages = [
   { path: routes.contact, lastmod: "2026-10-30" },
   { path: routes.brand, lastmod: "2026-10-23" },
   { path: routes.macFileConverter, lastmod: "2026-11-02", listsGuides: true },
+  { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: true },
   { path: routes.privacy, lastmod: "2026-10-27" },
   { path: routes.terms, lastmod: "2026-10-30" },
 ] as const satisfies readonly { path: string; lastmod: IsoDate; listsGuides?: true }[];

@@ -8,6 +8,7 @@ import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg
 import { Route as MovToMp4Mac } from "../../src/routes/_site/guides/mov-to-mp4-mac";
 import { Route as Mp4FlacWavToMp3Mac } from "../../src/routes/_site/guides/mp4-flac-wav-to-mp3-mac";
 import { Route as PdfToPngMacWindows } from "../../src/routes/_site/guides/pdf-to-png-mac-windows";
+import { Route as SvgToPngMac } from "../../src/routes/_site/guides/svg-to-png-mac";
 import { Route as WebpToPngJpg } from "../../src/routes/_site/guides/webp-to-png-jpg";
 
 test("every listed guide has a route file", () => {
@@ -76,7 +77,8 @@ function renderGuide(
     | typeof MovToMp4Mac
     | typeof WebpToPngJpg
     | typeof PdfToPngMacWindows
-    | typeof Mp4FlacWavToMp3Mac,
+    | typeof Mp4FlacWavToMp3Mac
+    | typeof SvgToPngMac,
 ) {
   const Page = route.options.component;
   if (!Page) throw new Error("guide route has no component");
@@ -125,6 +127,7 @@ test("every guide links to every other guide, same kind of file first", () => {
     "webp-to-png-jpg": WebpToPngJpg,
     "pdf-to-png-mac-windows": PdfToPngMacWindows,
     "mp4-flac-wav-to-mp3-mac": Mp4FlacWavToMp3Mac,
+    "svg-to-png-mac": SvgToPngMac,
   } satisfies Record<(typeof guides)[number]["slug"], unknown>;
   for (const guide of guides) {
     const html = renderGuide(routes[guide.slug]);
@@ -138,6 +141,7 @@ test("every guide links to every other guide, same kind of file first", () => {
   expect(relatedGuides(guides[0]).map((g) => g.slug)).toEqual([
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
+    "svg-to-png-mac",
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
@@ -146,6 +150,7 @@ test("every guide links to every other guide, same kind of file first", () => {
   expect([...related.matchAll(/href="\/guides\/([^"]+)"/g)].map((m) => m[1])).toEqual([
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
+    "svg-to-png-mac",
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
@@ -156,10 +161,12 @@ test("every guide links to every other guide, same kind of file first", () => {
     "webp-to-png-jpg",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
+    "svg-to-png-mac",
   ]);
   expect(relatedGuides(guides[3]).map((g) => g.slug)).toEqual([
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
+    "svg-to-png-mac",
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
@@ -192,6 +199,7 @@ test("the PDF guide tags its download link and prints the tested page and folder
     "mov-to-mp4-mac",
     "webp-to-png-jpg",
     "mp4-flac-wav-to-mp3-mac",
+    "svg-to-png-mac",
   ]);
 });
 
@@ -218,5 +226,35 @@ test("the MP3 guide tags its download link and prints the tested file, folder an
     "mov-to-mp4-mac",
     "webp-to-png-jpg",
     "pdf-to-png-mac-windows",
+    "svg-to-png-mac",
+  ]);
+});
+
+test("the SVG guide tags its download link and prints the tested size, background and folder commands", () => {
+  expect(guideHead("svg-to-png-mac").links).toContainEqual({
+    rel: "canonical",
+    href: "https://convt.app/guides/svg-to-png-mac",
+  });
+  const html = renderGuide(SvgToPngMac);
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
+    "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=svg-to-png-mac",
+  ]);
+  expect(html).toContain("convt logo.svg --to png");
+  expect(html).toContain("convt icon.svg --to png --dpi 1200 --max-size 256");
+  expect(html).toContain("convt icons --to png -r -o png --dpi 192");
+  expect(html).toContain("qlmanage -t -s 1000 -o . logo.svg");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; icons --to png -r -o png --dpi 192",
+  );
+  expect(html).toContain('href="/command-line-file-converter"');
+  // An image guide: the other image guides first, then the rest in catalog order.
+  expect(relatedGuides(guides[6]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+    "mov-to-mp4-mac",
+    "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
 });

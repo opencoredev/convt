@@ -101,6 +101,19 @@ export const guides = [
     published: "2026-11-01",
     updated: "2026-11-01",
   },
+  {
+    slug: "svg-to-png-mac",
+    title: "How to convert SVG to PNG on Mac: any size, folders included",
+    heading: "How to convert SVG to PNG on a Mac",
+    footerLabel: "SVG to PNG on Mac",
+    description:
+      "Convert SVG files to PNG on a Mac with the built-in qlmanage command, or use convt to pick the size, keep transparency and convert whole folders of icons.",
+    summary:
+      "The built-in qlmanage thumbnail command, then convt for size (--dpi, --max-size), transparent or solid backgrounds and folders with subfolders. Notes the font and size limits.",
+    category: "images",
+    published: "2026-11-03",
+    updated: "2026-11-03",
+  },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];
