@@ -361,6 +361,7 @@ max_size = 1200`}
 
           <GuideSection id="limits" title="What convt doesn't do yet">
             <Prose>
+              <p>As of convt 0.5.0, the current release:</p>
               <ul className="flex list-disc flex-col gap-2 pl-5">
                 <li>
                   It can't shrink a file without changing its format: MP4 to a smaller MP4 or JPEG
