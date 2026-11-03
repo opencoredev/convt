@@ -361,8 +361,11 @@ Photos/2026/b.png -> webp/2026/b.webp
                 </li>
                 <li>An animated WebP becomes one still image, the first frame.</li>
                 <li>
-                  Word, Excel and PowerPoint files need the document pack, a one-time download the
-                  app offers during setup (<Code>convt pack install documents</Code> in Terminal).
+                  Word, Excel and PowerPoint files need LibreOffice. Install it from{" "}
+                  <TextLink href="https://www.libreoffice.org/download/download-libreoffice/">
+                    libreoffice.org
+                  </TextLink>{" "}
+                  into Applications and convt finds it.
                 </li>
               </ul>
             </Prose>

@@ -26,7 +26,7 @@ import { GITHUB_URL, RAYCAST_URL, routes } from "#/lib/site";
 // Linux CLI (CNVM-16) on files we made: a 3-second 1080p ProRes MOV with a tone (FFmpeg), a WAV,
 // a 1600 × 1200 PNG, PNGs in a folder with a subfolder, a DOCX made from a text file, and the
 // PDF that came out of it. The DOCX to PDF run used a system LibreOffice, which is what the
-// document pack installs. `--json`, `--skill`, presets and exit codes were run the same way.
+// Windows document pack installs; Mac and Linux builds use a system LibreOffice in 0.5.0. `--json`, `--skill`, presets and exit codes were run the same way.
 
 const page = commandLineConverter;
 const downloadUrl = commandLineConverterDownloadUrl;
@@ -198,9 +198,15 @@ notes.pdf -> ./notes.png`}
                 tarball has <Code>convt</Code> next to the FFmpeg and libraries it uses.
               </p>
               <p>
-                Word, Excel and PowerPoint files need the document pack, a one-time download:{" "}
-                <Code>convt pack install documents</Code>. Run <Code>convt engines</Code> to see
-                which engines are ready on your machine.
+                Word, Excel and PowerPoint files need LibreOffice. On Windows,{" "}
+                <Code>convt pack install documents</Code> downloads it once as convt's document
+                pack. On a Mac, install LibreOffice from{" "}
+                <TextLink href="https://www.libreoffice.org/download/download-libreoffice/">
+                  libreoffice.org
+                </TextLink>{" "}
+                into Applications and convt finds it; on Linux, install it from your package
+                manager. Run <Code>convt engines</Code> to see which engines are ready on your
+                machine.
               </p>
             </Prose>
           </GuideSection>
@@ -405,8 +411,9 @@ max_size = 1200`}
               </Question>
               <Question q="Does the convt command upload my files?">
                 No. It converts on your computer and makes no network calls, except{" "}
-                <Code>convt pack install</Code>, which downloads the document pack when you ask for
-                it. convt's paid cloud API is a separate service that does receive files.
+                <Code>convt pack install</Code> on Windows, which downloads the document pack when
+                you ask for it. convt's paid cloud API is a separate service that does receive
+                files.
               </Question>
               <Question q="Is it a wrapper around FFmpeg?">
                 For video and audio, yes: it runs the FFmpeg that ships with it. Images, SVG, PDFs,
