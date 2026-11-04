@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { CommandBlock } from "#/components/app/command-block";
 import { cx, focusRing } from "#/components/app/ui";
 import { guideDownloadUrl, relatedGuides, type Guide, type GuideSlug } from "#/lib/guides";
+import { commandLineConverter, macFileConverter, type LandingPage } from "#/lib/landing-pages";
 import { routes } from "#/lib/site";
 
 import { siteColumn } from "./layout";
@@ -77,7 +78,9 @@ export function GuideArticle({
   );
 }
 
-/** The other guides, linked at the end of every guide. */
+const landingPages: readonly LandingPage[] = [macFileConverter, commandLineConverter];
+
+/** The other guides, then the landing pages, linked at the end of every guide. */
 function RelatedGuides({ guide }: { guide: Guide }) {
   const related = relatedGuides(guide);
   if (related.length === 0) return null;
@@ -97,6 +100,19 @@ function RelatedGuides({ guide }: { guide: Guide }) {
                 {g.heading}
               </span>
               <span className="text-[14px]/[22px] text-ink-2">{g.description}</span>
+            </a>
+          </li>
+        ))}
+        {landingPages.map((page) => (
+          <li key={page.path}>
+            <a
+              href={page.path}
+              className={cx("group flex flex-col gap-1 rounded-sm py-4", focusRing)}
+            >
+              <span className="text-[16px]/6 font-semibold tracking-[-0.01em] group-hover:text-green">
+                {page.heading}
+              </span>
+              <span className="text-[14px]/[22px] text-ink-2">{page.description}</span>
             </a>
           </li>
         ))}

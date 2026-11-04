@@ -21,9 +21,11 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AppShellRouteImport } from './routes/_app/_shell'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
+import { Route as SiteCommandLineFileConverterRouteImport } from './routes/_site/command-line-file-converter'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDownloadRouteImport } from './routes/_site/download'
 import { Route as SiteFormatsRouteImport } from './routes/_site/formats'
+import { Route as SiteMacFileConverterRouteImport } from './routes/_site/mac-file-converter'
 import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
@@ -42,6 +44,9 @@ import { Route as SiteGuidesIndexRouteImport } from './routes/_site/guides/index
 import { Route as SiteGuidesBatchHeicToJpgWindowsRouteImport } from './routes/_site/guides/batch-heic-to-jpg-windows'
 import { Route as SiteGuidesHeicToJpgMacRouteImport } from './routes/_site/guides/heic-to-jpg-mac'
 import { Route as SiteGuidesMovToMp4MacRouteImport } from './routes/_site/guides/mov-to-mp4-mac'
+import { Route as SiteGuidesMp4FlacWavToMp3MacRouteImport } from './routes/_site/guides/mp4-flac-wav-to-mp3-mac'
+import { Route as SiteGuidesPdfToPngMacWindowsRouteImport } from './routes/_site/guides/pdf-to-png-mac-windows'
+import { Route as SiteGuidesSvgToPngMacRouteImport } from './routes/_site/guides/svg-to-png-mac'
 import { Route as SiteGuidesWebpToPngJpgRouteImport } from './routes/_site/guides/webp-to-png-jpg'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
@@ -112,6 +117,12 @@ const SiteChangelogRoute = SiteChangelogRouteImport.update({
   path: '/changelog',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteCommandLineFileConverterRoute =
+  SiteCommandLineFileConverterRouteImport.update({
+    id: '/command-line-file-converter',
+    path: '/command-line-file-converter',
+    getParentRoute: () => SiteRoute,
+  } as any)
 const SiteContactRoute = SiteContactRouteImport.update({
   id: '/contact',
   path: '/contact',
@@ -125,6 +136,11 @@ const SiteDownloadRoute = SiteDownloadRouteImport.update({
 const SiteFormatsRoute = SiteFormatsRouteImport.update({
   id: '/formats',
   path: '/formats',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteMacFileConverterRoute = SiteMacFileConverterRouteImport.update({
+  id: '/mac-file-converter',
+  path: '/mac-file-converter',
   getParentRoute: () => SiteRoute,
 } as any)
 const SitePrivacyRoute = SitePrivacyRouteImport.update({
@@ -218,6 +234,23 @@ const SiteGuidesMovToMp4MacRoute = SiteGuidesMovToMp4MacRouteImport.update({
   path: '/guides/mov-to-mp4-mac',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteGuidesMp4FlacWavToMp3MacRoute =
+  SiteGuidesMp4FlacWavToMp3MacRouteImport.update({
+    id: '/guides/mp4-flac-wav-to-mp3-mac',
+    path: '/guides/mp4-flac-wav-to-mp3-mac',
+    getParentRoute: () => SiteRoute,
+  } as any)
+const SiteGuidesPdfToPngMacWindowsRoute =
+  SiteGuidesPdfToPngMacWindowsRouteImport.update({
+    id: '/guides/pdf-to-png-mac-windows',
+    path: '/guides/pdf-to-png-mac-windows',
+    getParentRoute: () => SiteRoute,
+  } as any)
+const SiteGuidesSvgToPngMacRoute = SiteGuidesSvgToPngMacRouteImport.update({
+  id: '/guides/svg-to-png-mac',
+  path: '/guides/svg-to-png-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
 const SiteGuidesWebpToPngJpgRoute = SiteGuidesWebpToPngJpgRouteImport.update({
   id: '/guides/webp-to-png-jpg',
   path: '/guides/webp-to-png-jpg',
@@ -287,9 +320,11 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
   '/changelog': typeof SiteChangelogRoute
+  '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -306,6 +341,9 @@ export interface FileRoutesByFullPath {
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
+  '/guides/svg-to-png-mac': typeof SiteGuidesSvgToPngMacRoute
   '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
@@ -330,9 +368,11 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
   '/changelog': typeof SiteChangelogRoute
+  '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -349,6 +389,9 @@ export interface FileRoutesByTo {
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
+  '/guides/svg-to-png-mac': typeof SiteGuidesSvgToPngMacRoute
   '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
@@ -377,9 +420,11 @@ export interface FileRoutesById {
   '/_app/_shell': typeof AppShellRouteWithChildren
   '/_app/device': typeof AppDeviceRoute
   '/_site/changelog': typeof SiteChangelogRoute
+  '/_site/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/_site/contact': typeof SiteContactRoute
   '/_site/download': typeof SiteDownloadRoute
   '/_site/formats': typeof SiteFormatsRoute
+  '/_site/mac-file-converter': typeof SiteMacFileConverterRoute
   '/_site/privacy': typeof SitePrivacyRoute
   '/_site/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -396,6 +441,9 @@ export interface FileRoutesById {
   '/_site/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/_site/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
   '/_site/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/_site/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  '/_site/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
+  '/_site/guides/svg-to-png-mac': typeof SiteGuidesSvgToPngMacRoute
   '/_site/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
@@ -422,9 +470,11 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/device'
     | '/changelog'
+    | '/command-line-file-converter'
     | '/contact'
     | '/download'
     | '/formats'
+    | '/mac-file-converter'
     | '/privacy'
     | '/terms'
     | '/api/feedback'
@@ -441,6 +491,9 @@ export interface FileRouteTypes {
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
     | '/guides/mov-to-mp4-mac'
+    | '/guides/mp4-flac-wav-to-mp3-mac'
+    | '/guides/pdf-to-png-mac-windows'
+    | '/guides/svg-to-png-mac'
     | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
@@ -465,9 +518,11 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/device'
     | '/changelog'
+    | '/command-line-file-converter'
     | '/contact'
     | '/download'
     | '/formats'
+    | '/mac-file-converter'
     | '/privacy'
     | '/terms'
     | '/api/feedback'
@@ -484,6 +539,9 @@ export interface FileRouteTypes {
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
     | '/guides/mov-to-mp4-mac'
+    | '/guides/mp4-flac-wav-to-mp3-mac'
+    | '/guides/pdf-to-png-mac-windows'
+    | '/guides/svg-to-png-mac'
     | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
@@ -511,9 +569,11 @@ export interface FileRouteTypes {
     | '/_app/_shell'
     | '/_app/device'
     | '/_site/changelog'
+    | '/_site/command-line-file-converter'
     | '/_site/contact'
     | '/_site/download'
     | '/_site/formats'
+    | '/_site/mac-file-converter'
     | '/_site/privacy'
     | '/_site/terms'
     | '/api/feedback'
@@ -530,6 +590,9 @@ export interface FileRouteTypes {
     | '/_site/guides/batch-heic-to-jpg-windows'
     | '/_site/guides/heic-to-jpg-mac'
     | '/_site/guides/mov-to-mp4-mac'
+    | '/_site/guides/mp4-flac-wav-to-mp3-mac'
+    | '/_site/guides/pdf-to-png-mac-windows'
+    | '/_site/guides/svg-to-png-mac'
     | '/_site/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
@@ -653,6 +716,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteChangelogRouteImport
       parentRoute: typeof SiteRoute
     }
+    '/_site/command-line-file-converter': {
+      id: '/_site/command-line-file-converter'
+      path: '/command-line-file-converter'
+      fullPath: '/command-line-file-converter'
+      preLoaderRoute: typeof SiteCommandLineFileConverterRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/_site/contact': {
       id: '/_site/contact'
       path: '/contact'
@@ -672,6 +742,13 @@ declare module '@tanstack/react-router' {
       path: '/formats'
       fullPath: '/formats'
       preLoaderRoute: typeof SiteFormatsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/mac-file-converter': {
+      id: '/_site/mac-file-converter'
+      path: '/mac-file-converter'
+      fullPath: '/mac-file-converter'
+      preLoaderRoute: typeof SiteMacFileConverterRouteImport
       parentRoute: typeof SiteRoute
     }
     '/_site/privacy': {
@@ -798,6 +875,27 @@ declare module '@tanstack/react-router' {
       path: '/guides/mov-to-mp4-mac'
       fullPath: '/guides/mov-to-mp4-mac'
       preLoaderRoute: typeof SiteGuidesMovToMp4MacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/mp4-flac-wav-to-mp3-mac': {
+      id: '/_site/guides/mp4-flac-wav-to-mp3-mac'
+      path: '/guides/mp4-flac-wav-to-mp3-mac'
+      fullPath: '/guides/mp4-flac-wav-to-mp3-mac'
+      preLoaderRoute: typeof SiteGuidesMp4FlacWavToMp3MacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/pdf-to-png-mac-windows': {
+      id: '/_site/guides/pdf-to-png-mac-windows'
+      path: '/guides/pdf-to-png-mac-windows'
+      fullPath: '/guides/pdf-to-png-mac-windows'
+      preLoaderRoute: typeof SiteGuidesPdfToPngMacWindowsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/svg-to-png-mac': {
+      id: '/_site/guides/svg-to-png-mac'
+      path: '/guides/svg-to-png-mac'
+      fullPath: '/guides/svg-to-png-mac'
+      preLoaderRoute: typeof SiteGuidesSvgToPngMacRouteImport
       parentRoute: typeof SiteRoute
     }
     '/_site/guides/webp-to-png-jpg': {
@@ -928,28 +1026,38 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface SiteRouteChildren {
   SiteChangelogRoute: typeof SiteChangelogRoute
+  SiteCommandLineFileConverterRoute: typeof SiteCommandLineFileConverterRoute
   SiteContactRoute: typeof SiteContactRoute
   SiteDownloadRoute: typeof SiteDownloadRoute
   SiteFormatsRoute: typeof SiteFormatsRoute
+  SiteMacFileConverterRoute: typeof SiteMacFileConverterRoute
   SitePrivacyRoute: typeof SitePrivacyRoute
   SiteTermsRoute: typeof SiteTermsRoute
   SiteGuidesBatchHeicToJpgWindowsRoute: typeof SiteGuidesBatchHeicToJpgWindowsRoute
   SiteGuidesHeicToJpgMacRoute: typeof SiteGuidesHeicToJpgMacRoute
   SiteGuidesMovToMp4MacRoute: typeof SiteGuidesMovToMp4MacRoute
+  SiteGuidesMp4FlacWavToMp3MacRoute: typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  SiteGuidesPdfToPngMacWindowsRoute: typeof SiteGuidesPdfToPngMacWindowsRoute
+  SiteGuidesSvgToPngMacRoute: typeof SiteGuidesSvgToPngMacRoute
   SiteGuidesWebpToPngJpgRoute: typeof SiteGuidesWebpToPngJpgRoute
   SiteGuidesIndexRoute: typeof SiteGuidesIndexRoute
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
   SiteChangelogRoute: SiteChangelogRoute,
+  SiteCommandLineFileConverterRoute: SiteCommandLineFileConverterRoute,
   SiteContactRoute: SiteContactRoute,
   SiteDownloadRoute: SiteDownloadRoute,
   SiteFormatsRoute: SiteFormatsRoute,
+  SiteMacFileConverterRoute: SiteMacFileConverterRoute,
   SitePrivacyRoute: SitePrivacyRoute,
   SiteTermsRoute: SiteTermsRoute,
   SiteGuidesBatchHeicToJpgWindowsRoute: SiteGuidesBatchHeicToJpgWindowsRoute,
   SiteGuidesHeicToJpgMacRoute: SiteGuidesHeicToJpgMacRoute,
   SiteGuidesMovToMp4MacRoute: SiteGuidesMovToMp4MacRoute,
+  SiteGuidesMp4FlacWavToMp3MacRoute: SiteGuidesMp4FlacWavToMp3MacRoute,
+  SiteGuidesPdfToPngMacWindowsRoute: SiteGuidesPdfToPngMacWindowsRoute,
+  SiteGuidesSvgToPngMacRoute: SiteGuidesSvgToPngMacRoute,
   SiteGuidesWebpToPngJpgRoute: SiteGuidesWebpToPngJpgRoute,
   SiteGuidesIndexRoute: SiteGuidesIndexRoute,
 }

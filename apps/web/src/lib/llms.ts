@@ -1,6 +1,7 @@
 import formats from "../../content/formats.json";
 
 import { guidePath, guides } from "#/lib/guides";
+import { commandLineConverter, macFileConverter } from "#/lib/landing-pages";
 import { GITHUB_URL, RAYCAST_URL, SITE_ORIGIN, routes } from "#/lib/site";
 
 // /llms.txt (llmstxt.org): a plain summary of convt and its public pages for AI agents and
@@ -17,7 +18,7 @@ export const llmsTxt = `# convt
 - Desktop app for macOS (Apple silicon), Windows (x86_64) and Linux (x86_64: AppImage, .deb, .rpm and tarball).
 - A "Convert with convt" menu in Finder on macOS and in Linux file managers. The Windows Explorer menu is not in the installer yet.
 - The \`convt\` command-line tool ships in the same install: \`convt clip.mov --to mp4\`, \`convt photos/ --to webp -r\`, \`convt lease.pdf --to png --pages 1-3\`.
-- ${formats.formats.length} formats, converted with FFmpeg, PDFium, LibreOffice, libheif and native image libraries. Word, Excel and PowerPoint need a one-time document pack download.
+- ${formats.formats.length} formats, converted with FFmpeg, PDFium, LibreOffice, libheif and native image libraries. Word, Excel and PowerPoint need LibreOffice: a one-time document pack download on Windows, or a LibreOffice install on macOS and Linux.
 - Install on macOS with Homebrew: \`brew tap opencoredev/convt https://github.com/opencoredev/convt\` then \`brew install --cask convt\`.
 - convt is paid, once. There is no free tier. There is no subscription either: Desktop is $39 once with lifetime updates, and Desktop + Cloud is $69 once, a Desktop license plus a year of cloud conversions that does not renew. The source code is AGPL-3.0.
 - Cloud conversions are separate and paid: the cloud API, and the app's Cloud option with Desktop + Cloud, upload the file to convt's servers. The \`convt\` command never uploads a file, and the app uploads one only when you pick Cloud for a job.
@@ -32,6 +33,8 @@ ${[
     routes.download,
     "installers for macOS, Windows and Linux (asks you to sign in first).",
   ),
+  page(macFileConverter.heading, macFileConverter.path, macFileConverter.summary),
+  page(commandLineConverter.heading, commandLineConverter.path, commandLineConverter.summary),
   page("Guides", routes.guides, "step-by-step conversion guides, built-in methods first."),
   page("Changelog", routes.changelog, "what changed in each release."),
   page("Contact and help", routes.contact, "support email, license keys, billing and bug reports."),

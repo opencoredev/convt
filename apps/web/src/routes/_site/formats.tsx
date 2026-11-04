@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { cx } from "#/components/app/ui";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
 import { guidePath, guides } from "#/lib/guides";
-import { routes, seo } from "#/lib/site";
+import { routes, seo, topLevelBreadcrumb } from "#/lib/site";
 import data from "../../../content/formats.json";
 
 // content/formats.json is regenerated from the convt CLI by scripts/generate-content.ts
@@ -50,7 +50,18 @@ const packFormats = new Set([
 const description = `All ${data.formats.length} formats convt converts between: images, video, audio and documents, and the targets each one reaches.`;
 
 export const Route = createFileRoute("/_site/formats")({
-  head: () => seo({ title: "Supported formats · convt", description, path: routes.formats }),
+  head: () => ({
+    ...seo({ title: "Supported formats · convt", description, path: routes.formats }),
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          ...topLevelBreadcrumb({ name: "Formats", path: routes.formats }),
+        }),
+      },
+    ],
+  }),
   component: FormatsPage,
 });
 

@@ -92,11 +92,28 @@ jobs:
       - name: Test (desktop)
         if: matrix.suite == 'desktop'
         run: cargo test -p convt-app
-      - name: Windows GUI subsystem
-        if: runner.os == 'Windows' && matrix.suite == 'desktop'
-        run: |
-          cargo build -p convt-app --release
-          ./packaging/windows/smoke.ps1 -AppExe target/release/convt-app.exe
+
+  # The release build takes about as long as the Windows desktop tests, so it
+  # runs beside them instead of after them.
+  windows-gui:
+    name: Windows GUI subsystem
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-gui-release
+      - name: Build convt-app (release)
+        run: cargo build -p convt-app --release
+      - name: Check the GUI subsystem
+        run: ./packaging/windows/smoke.ps1 -AppExe target/release/convt-app.exe
 
   release-scripts:
     name: Release scripts

@@ -929,10 +929,12 @@ describe("changing the email", () => {
     });
     expect(res.status).toBe(200); // Same answer as for a free address: no account is revealed.
     expect(mailsTo(taken)).toBe(before);
-    // Even with a code for that identifier, confirmation is refused.
+    // Even with a code for that identifier, confirmation is refused. Better Auth
+    // binds change-email codes to the requesting user's id.
+    const grabber = (await userByEmail("grabber@convt.test"))!;
     await h.owner.insert(t.verifications).values({
       id: "ver_forged_change",
-      identifier: `change-email-otp-grabber@convt.test-${taken}`,
+      identifier: `change-email-otp-${grabber.id}:${taken}`,
       value: `${await sha256b64("424242")}:0`,
       expiresAt: new Date(Date.now() + 600_000),
     });
@@ -942,6 +944,7 @@ describe("changing the email", () => {
       ip,
     });
     expect(confirm.status).toBe(400);
+    expect((await json(confirm)).message).toBe("Email already in use");
     expect(await userByEmail("grabber@convt.test")).not.toBeNull();
   });
 });

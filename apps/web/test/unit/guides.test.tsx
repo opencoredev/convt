@@ -6,6 +6,9 @@ import { guideDownloadUrl, guideHead, guidePath, guides, relatedGuides } from "#
 import { Route as BatchHeicToJpgWindows } from "../../src/routes/_site/guides/batch-heic-to-jpg-windows";
 import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg-mac";
 import { Route as MovToMp4Mac } from "../../src/routes/_site/guides/mov-to-mp4-mac";
+import { Route as Mp4FlacWavToMp3Mac } from "../../src/routes/_site/guides/mp4-flac-wav-to-mp3-mac";
+import { Route as PdfToPngMacWindows } from "../../src/routes/_site/guides/pdf-to-png-mac-windows";
+import { Route as SvgToPngMac } from "../../src/routes/_site/guides/svg-to-png-mac";
 import { Route as WebpToPngJpg } from "../../src/routes/_site/guides/webp-to-png-jpg";
 
 test("every listed guide has a route file", () => {
@@ -72,7 +75,10 @@ function renderGuide(
     | typeof HeicToJpgMac
     | typeof BatchHeicToJpgWindows
     | typeof MovToMp4Mac
-    | typeof WebpToPngJpg,
+    | typeof WebpToPngJpg
+    | typeof PdfToPngMacWindows
+    | typeof Mp4FlacWavToMp3Mac
+    | typeof SvgToPngMac,
 ) {
   const Page = route.options.component;
   if (!Page) throw new Error("guide route has no component");
@@ -119,6 +125,9 @@ test("every guide links to every other guide, same kind of file first", () => {
     "batch-heic-to-jpg-windows": BatchHeicToJpgWindows,
     "mov-to-mp4-mac": MovToMp4Mac,
     "webp-to-png-jpg": WebpToPngJpg,
+    "pdf-to-png-mac-windows": PdfToPngMacWindows,
+    "mp4-flac-wav-to-mp3-mac": Mp4FlacWavToMp3Mac,
+    "svg-to-png-mac": SvgToPngMac,
   } satisfies Record<(typeof guides)[number]["slug"], unknown>;
   for (const guide of guides) {
     const html = renderGuide(routes[guide.slug]);
@@ -132,22 +141,120 @@ test("every guide links to every other guide, same kind of file first", () => {
   expect(relatedGuides(guides[0]).map((g) => g.slug)).toEqual([
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
+    "svg-to-png-mac",
     "mov-to-mp4-mac",
+    "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
   const related = renderGuide(HeicToJpgMac).split("Related guides")[1] ?? "";
   expect([...related.matchAll(/href="\/guides\/([^"]+)"/g)].map((m) => m[1])).toEqual([
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
+    "svg-to-png-mac",
     "mov-to-mp4-mac",
+    "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
   expect(relatedGuides(guides[2]).map((g) => g.slug)).toEqual([
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
+    "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
+    "svg-to-png-mac",
   ]);
   expect(relatedGuides(guides[3]).map((g) => g.slug)).toEqual([
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
+    "svg-to-png-mac",
     "mov-to-mp4-mac",
+    "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
+  ]);
+});
+
+test("the PDF guide tags its download link and prints the tested page and folder commands", () => {
+  const head = guideHead("pdf-to-png-mac-windows");
+  expect(head.links).toContainEqual({
+    rel: "canonical",
+    href: "https://convt.app/guides/pdf-to-png-mac-windows",
+  });
+  const html = renderGuide(PdfToPngMacWindows);
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
+    "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=pdf-to-png-mac-windows",
+  ]);
+  expect(html).toContain("convt report.pdf --to png --pages 2 --dpi 300");
+  expect(html).toContain("convt docs --to png -r -o png");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; docs --to png -r -o png",
+  );
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; report.pdf --to png",
+  );
+  // A documents guide lists the other guides after it, in catalog order.
+  expect(relatedGuides(guides[4]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "mov-to-mp4-mac",
+    "webp-to-png-jpg",
+    "mp4-flac-wav-to-mp3-mac",
+    "svg-to-png-mac",
+  ]);
+});
+
+test("the MP3 guide tags its download link and prints the tested file, folder and bitrate commands", () => {
+  expect(guideHead("mp4-flac-wav-to-mp3-mac").links).toContainEqual({
+    rel: "canonical",
+    href: "https://convt.app/guides/mp4-flac-wav-to-mp3-mac",
+  });
+  const html = renderGuide(Mp4FlacWavToMp3Mac);
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
+    "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=mp4-flac-wav-to-mp3-mac",
+  ]);
+  expect(html).toContain("convt talk.mp4 --to mp3");
+  expect(html).toContain("convt Music --to mp3 -r -o mp3");
+  expect(html).toContain("convt demo.wav --to mp3 --audio-bitrate 320");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; Music --to mp3 -r -o mp3",
+  );
+  // The only audio guide: every other guide comes after it, in catalog order.
+  expect(relatedGuides(guides[5]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "mov-to-mp4-mac",
+    "webp-to-png-jpg",
+    "pdf-to-png-mac-windows",
+    "svg-to-png-mac",
+  ]);
+});
+
+test("the SVG guide tags its download link and prints the tested size, background and folder commands", () => {
+  expect(guideHead("svg-to-png-mac").links).toContainEqual({
+    rel: "canonical",
+    href: "https://convt.app/guides/svg-to-png-mac",
+  });
+  const html = renderGuide(SvgToPngMac);
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
+    "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=svg-to-png-mac",
+  ]);
+  expect(html).toContain("convt logo.svg --to png");
+  expect(html).toContain("convt icon.svg --to png --dpi 1200 --max-size 256");
+  expect(html).toContain("convt icons --to png -r -o png --dpi 192");
+  expect(html).toContain("qlmanage -t -s 1000 -o . logo.svg");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; icons --to png -r -o png --dpi 192",
+  );
+  expect(html).toContain('href="/command-line-file-converter"');
+  // An image guide: the other image guides first, then the rest in catalog order.
+  expect(relatedGuides(guides[6]).map((g) => g.slug)).toEqual([
+    "heic-to-jpg-mac",
+    "batch-heic-to-jpg-windows",
+    "webp-to-png-jpg",
+    "mov-to-mp4-mac",
+    "pdf-to-png-mac-windows",
+    "mp4-flac-wav-to-mp3-mac",
   ]);
 });

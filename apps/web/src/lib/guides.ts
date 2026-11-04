@@ -2,7 +2,7 @@
 // this list feeds the /guides index, the sitemap, the links on /formats and the head
 // tags. Add a guide here and give it a route file under routes/_site/guides.
 
-import { SITE_NAME, SITE_ORIGIN, routes, seo } from "./site";
+import { SITE_NAME, SITE_ORIGIN, routes, seo, topLevelBreadcrumb } from "./site";
 
 export type Guide = {
   slug: string;
@@ -10,6 +10,8 @@ export type Guide = {
   title: string;
   /** The page's h1 and its link text elsewhere on the site. */
   heading: string;
+  /** A short link label for the site footer's Guides column. */
+  footerLabel: string;
   description: string;
   /** One plain line on what the guide covers, for /llms.txt. */
   summary: string;
@@ -25,6 +27,7 @@ export const guides = [
     slug: "heic-to-jpg-mac",
     title: "How to convert HEIC to JPG on Mac: free, batch and Terminal",
     heading: "How to convert HEIC to JPG on a Mac",
+    footerLabel: "HEIC to JPG on Mac",
     description:
       "Convert iPhone HEIC photos to JPG on a Mac with free built-in tools (Finder, Preview, Photos and sips), or batch-convert folders with subfolders using the convt CLI.",
     summary:
@@ -37,6 +40,7 @@ export const guides = [
     slug: "batch-heic-to-jpg-windows",
     title: "How to batch convert HEIC to JPG on Windows 11, folders included",
     heading: "How to batch convert HEIC to JPG on Windows",
+    footerLabel: "HEIC to JPG on Windows",
     description:
       "Convert iPhone HEIC photos to JPG on Windows 11: one at a time in the Photos app, or whole folders with subfolders in one tested convt command.",
     summary:
@@ -49,6 +53,7 @@ export const guides = [
     slug: "mov-to-mp4-mac",
     title: "How to convert MOV to MP4 on Mac: rename, iMovie, FFmpeg or batch",
     heading: "How to convert MOV to MP4 on a Mac",
+    footerLabel: "MOV to MP4 on Mac",
     description:
       "Convert MOV videos to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg without losing quality, or batch-convert and shrink folders with convt.",
     summary:
@@ -61,6 +66,7 @@ export const guides = [
     slug: "webp-to-png-jpg",
     title: "How to convert WebP to PNG or JPG on Mac and Windows",
     heading: "How to convert WebP to PNG or JPG",
+    footerLabel: "WebP to PNG or JPG",
     description:
       "Save WebP images as PNG or JPG with Preview on a Mac or Paint on Windows, or convert whole folders at once with convt, keeping transparency in PNG.",
     summary:
@@ -68,6 +74,45 @@ export const guides = [
     category: "images",
     published: "2026-10-30",
     updated: "2026-10-30",
+  },
+  {
+    slug: "pdf-to-png-mac-windows",
+    title: "How to convert PDF to PNG on Mac and Windows: every page or one",
+    heading: "How to convert a PDF to PNG on Mac or Windows",
+    footerLabel: "PDF to PNG",
+    description:
+      "Save PDF pages as PNG images with Preview on a Mac or a screenshot on Windows, or convert every page, chosen pages or whole folders at a set DPI with convt.",
+    summary:
+      "Preview on a Mac and the Snipping Tool workaround on Windows, then every page, page ranges, DPI and folders of PDFs with the convt CLI.",
+    category: "documents",
+    published: "2026-10-31",
+    updated: "2026-10-31",
+  },
+  {
+    slug: "mp4-flac-wav-to-mp3-mac",
+    title: "How to convert MP4, FLAC or WAV to MP3 on Mac, folders included",
+    heading: "How to convert MP4, FLAC and WAV to MP3 on a Mac",
+    footerLabel: "MP4, FLAC and WAV to MP3",
+    description:
+      "Turn an MP4 or WAV into MP3 on a Mac with QuickTime and the Music app, or use convt for FLAC files and whole folders, at the bitrate you pick.",
+    summary:
+      "QuickTime Audio Only and Music's MP3 Encoder (no FLAC), then single files and folders with subfolders in the convt CLI, with bitrate options. Tags carry over; cover art is dropped.",
+    category: "audio",
+    published: "2026-11-01",
+    updated: "2026-11-01",
+  },
+  {
+    slug: "svg-to-png-mac",
+    title: "How to convert SVG to PNG on Mac: any size, folders included",
+    heading: "How to convert SVG to PNG on a Mac",
+    footerLabel: "SVG to PNG on Mac",
+    description:
+      "Convert SVG files to PNG on a Mac with the built-in qlmanage command, or use convt to pick the size, keep transparency and convert whole folders of icons.",
+    summary:
+      "The built-in qlmanage thumbnail command, then convt for size (--dpi, --max-size), transparent or solid backgrounds and folders with subfolders. Notes the font and size limits.",
+    category: "images",
+    published: "2026-11-03",
+    updated: "2026-11-03",
   },
 ] as const satisfies readonly Guide[];
 
@@ -149,6 +194,62 @@ export function guideHead(slug: GuideSlug) {
       { property: "article:published_time", content: guide.published },
       { property: "article:modified_time", content: guide.updated },
     ],
+    scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
+  };
+}
+
+const guidesIndex = {
+  title: "Guides · convt",
+  heading: "Guides",
+  description: "Step-by-step guides to converting files on your own computer, free methods first.",
+};
+
+/**
+ * Head tags for /guides: SEO and Open Graph, plus CollectionPage JSON-LD whose ItemList
+ * names every guide in the order the page lists them, and a breadcrumb.
+ */
+export function guidesIndexHead() {
+  const url = `${SITE_ORIGIN}${routes.guides}`;
+  const tags = seo({
+    title: guidesIndex.title,
+    description: guidesIndex.description,
+    path: routes.guides,
+  });
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${url}#page`,
+        name: guidesIndex.title,
+        description: guidesIndex.description,
+        url,
+        inLanguage: "en",
+        isPartOf: { "@type": "WebSite", name: SITE_NAME, url: `${SITE_ORIGIN}/` },
+        publisher: { "@id": `${SITE_ORIGIN}/#organization` },
+        mainEntity: {
+          "@type": "ItemList",
+          numberOfItems: guides.length,
+          itemListElement: guides.map((guide, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            name: guide.heading,
+            url: `${SITE_ORIGIN}${guidePath(guide.slug)}`,
+          })),
+        },
+      },
+      topLevelBreadcrumb({ name: guidesIndex.heading, path: routes.guides }),
+      {
+        "@type": "Organization",
+        "@id": `${SITE_ORIGIN}/#organization`,
+        name: SITE_NAME,
+        url: `${SITE_ORIGIN}/`,
+        logo: `${SITE_ORIGIN}/apple-touch-icon.png`,
+      },
+    ],
+  };
+  return {
+    ...tags,
     scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
   };
 }

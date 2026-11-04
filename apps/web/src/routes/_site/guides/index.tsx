@@ -2,17 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { cx, focusRing } from "#/components/app/ui";
 import { PageHeader, siteColumn } from "#/components/site/layout";
-import { guidePath, guides } from "#/lib/guides";
-import { routes, seo } from "#/lib/site";
+import { guidePath, guides, guidesIndexHead } from "#/lib/guides";
 
 export const Route = createFileRoute("/_site/guides/")({
-  head: () =>
-    seo({
-      title: "Guides · convt",
-      description:
-        "Step-by-step guides to converting files on your own computer, free methods first.",
-      path: routes.guides,
-    }),
+  head: guidesIndexHead,
   component: GuidesPage,
 });
 
