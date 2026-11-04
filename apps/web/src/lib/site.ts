@@ -153,3 +153,14 @@ export function topLevelBreadcrumb({ name, path }: { name: string; path: string 
     ],
   };
 }
+
+/** The head `scripts` entry carrying `topLevelBreadcrumb` as JSON-LD, for pages with no other structured data. */
+export function topLevelBreadcrumbScript({ name, path }: { name: string; path: string }) {
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify({
+      "@context": "https://schema.org",
+      ...topLevelBreadcrumb({ name, path }),
+    }),
+  };
+}
