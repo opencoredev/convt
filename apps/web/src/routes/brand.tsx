@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { BrandPage } from "#/components/brand/brand-page";
 import { accountFromSession } from "#/lib/account";
-import { seo } from "#/lib/site";
+import { routes, seo, topLevelBreadcrumbScript } from "#/lib/site";
 import { getSession } from "#/server/session";
 
 export const Route = createFileRoute("/brand")({
@@ -13,9 +13,13 @@ export const Route = createFileRoute("/brand")({
       title: "Brand kit · convt",
       description:
         "The convt logo, wordmark, colors and type. Copy any logo as SVG or download the whole kit.",
-      path: "/brand",
+      path: routes.brand,
     });
-    return { ...tags, meta: [...tags.meta, { name: "theme-color", content: "#0a0b0b" }] };
+    return {
+      ...tags,
+      meta: [...tags.meta, { name: "theme-color", content: "#0a0b0b" }],
+      scripts: [topLevelBreadcrumbScript({ name: "Brand kit", path: routes.brand })],
+    };
   },
   loader: async () => {
     const session = await getSession();

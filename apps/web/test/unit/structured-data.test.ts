@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { guidePath, guides, guidesIndexHead } from "#/lib/guides";
-import { topLevelBreadcrumb } from "#/lib/site";
+import { topLevelBreadcrumb, topLevelBreadcrumbScript } from "#/lib/site";
 
 test("/guides keeps its title and canonical and lists every guide in its ItemList", () => {
   const head = guidesIndexHead();
@@ -44,5 +44,15 @@ test("a top-level breadcrumb runs from the homepage to the page", () => {
       { "@type": "ListItem", position: 1, name: "convt", item: "https://convt.app/" },
       { "@type": "ListItem", position: 2, name: "Formats", item: "https://convt.app/formats" },
     ],
+  });
+});
+
+test("a top-level breadcrumb script is JSON-LD with the schema.org context", () => {
+  const script = topLevelBreadcrumbScript({ name: "Changelog", path: "/changelog" });
+  expect(script.type).toBe("application/ld+json");
+  const data: unknown = JSON.parse(script.children);
+  expect(data).toEqual({
+    "@context": "https://schema.org",
+    ...topLevelBreadcrumb({ name: "Changelog", path: "/changelog" }),
   });
 });

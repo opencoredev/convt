@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { cx } from "#/components/app/ui";
 import { PageHeader, siteColumn } from "#/components/site/layout";
 import { Blocks, Inline, parseMarkdown, splitAtLevel2 } from "#/components/site/markdown";
-import { routes, seo } from "#/lib/site";
+import { routes, seo, topLevelBreadcrumbScript } from "#/lib/site";
 import source from "../../../content/changelog.md?raw";
 
 // Edit content/changelog.md; the page is built from it. Each "## " heading is a release.
@@ -12,12 +12,15 @@ const title = blocks.find((b) => b.type === "heading" && b.level === 1);
 const { intro, sections } = splitAtLevel2(blocks.filter((b) => b !== title));
 
 export const Route = createFileRoute("/_site/changelog")({
-  head: () =>
-    seo({
+  head: () => ({
+    ...seo({
       title: "Changelog · convt",
-      description: "What changed in each convt release.",
+      description:
+        "Release notes for every convt version, newest first: what was added, changed and fixed in the desktop app, the CLI and the right-click menus.",
       path: routes.changelog,
     }),
+    scripts: [topLevelBreadcrumbScript({ name: "Changelog", path: routes.changelog })],
+  }),
   component: ChangelogPage,
 });
 
