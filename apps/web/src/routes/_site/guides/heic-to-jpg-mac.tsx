@@ -405,9 +405,9 @@ photos/trip/IMG_3616.HEIC -> photos/trip/IMG_3616.jpg
             <dt className="text-[16px]/6 font-semibold">Does convt upload my photos?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not for local conversions. The app and the command-line tool convert on your Mac. The
-              app uploads a file only if you pick Cloud for a job, which is part of convt Pro. See
-              every format it handles on the <TextLink href={routes.formats}>formats page</TextLink>
-              .
+              app uploads a file only if you pick Cloud for a job, which is part of Desktop + Cloud.
+              See every format it handles on the{" "}
+              <TextLink href={routes.formats}>formats page</TextLink>.
             </dd>
           </div>
         </dl>

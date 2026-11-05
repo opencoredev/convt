@@ -303,8 +303,8 @@ Music/demo.wav -> mp3/demo.mp3
             <dt className="text-[16px]/6 font-semibold">Does convt upload my files?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not for local conversions. The app and the command-line tool convert on your computer.
-              The app uploads a file only if you pick Cloud for a job, which is part of convt Pro.
-              For video, see{" "}
+              The app uploads a file only if you pick Cloud for a job, which is part of Desktop +
+              Cloud. For video, see{" "}
               <TextLink href={guidePath("mov-to-mp4-mac")}>MOV to MP4 on a Mac</TextLink>.
             </dd>
           </div>

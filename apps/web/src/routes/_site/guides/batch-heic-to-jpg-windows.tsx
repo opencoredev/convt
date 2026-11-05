@@ -374,9 +374,10 @@ iPhone/IMG_0002.HEIC -> jpg/IMG_0002.jpg
             <dt className="text-[16px]/6 font-semibold">Does convt upload my photos?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not for local conversions. The app and the command-line tool convert on your PC. The
-              app uploads a file only if you pick Cloud for a job, which is part of convt Pro. On a
-              Mac? See <TextLink href={guidePath("heic-to-jpg-mac")}>HEIC to JPG on a Mac</TextLink>
-              , or every format convt handles on the{" "}
+              app uploads a file only if you pick Cloud for a job, which is part of Desktop + Cloud.
+              On a Mac? See{" "}
+              <TextLink href={guidePath("heic-to-jpg-mac")}>HEIC to JPG on a Mac</TextLink>, or
+              every format convt handles on the{" "}
               <TextLink href={routes.formats}>formats page</TextLink>.
             </dd>
           </div>
