@@ -13,7 +13,7 @@ convt-engines.workspace = true
 convt-server = { path = "../convt-server" }
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "json"] }
-tar = { version = "=0.4.44", default-features = false }
+tar = { version = "=0.4.45", default-features = false }
 tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
