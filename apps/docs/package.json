@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun scripts/generate.ts && blume dev",
-    "build": "bun scripts/generate.ts && blume build",
+    "build": "bun scripts/generate.ts && blume build && bun scripts/sitemap-lastmod.ts",
     "preview": "blume preview",
     "doctor": "blume doctor",
     "validate": "bun scripts/generate.ts && blume validate",

@@ -4,7 +4,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-bun run build
+# Fail rather than ship a sitemap with missing or shallow-clone lastmod dates.
+SITEMAP_LASTMOD_STRICT=1 bun run build
 # Blume writes a /docs-based site to dist/. Workers serve assets by request path, so
 # the pages move under docs/, while _headers and _redirects stay at the asset root.
 rm -rf .deploy

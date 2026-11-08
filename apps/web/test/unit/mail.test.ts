@@ -19,7 +19,8 @@ test("sign-in mail uses Sequenzy HTML, preserves its key on retry, and escapes t
       expect(body.body).toContain("123456");
       expect(body.body).toContain("&lt;script&gt;");
       expect(body.body).not.toContain("<script>");
-      expect(body.trackingSettings).toEqual({ clickTracking: false, openTracking: false });
+      // The sign-in link carries the code: no click-tracking redirect, but opens are counted.
+      expect(body.trackingSettings).toEqual({ clickTracking: false });
       expect(body).not.toHaveProperty("text");
       return Response.json({ success: true, emailSendId: "seq_1" });
     },
@@ -58,4 +59,26 @@ test("the sign-in code email has an HTML part with the code and the sign-in link
   expect(
     codeEmail("email-verification", address, "222222", "https://convt.app", 15).html,
   ).toContain(`confirm ${address} for your convt account`);
+});
+
+test("confirmation codes have no link, so Sequenzy's open and click tracking both apply", async () => {
+  const originalFetch = globalThis.fetch;
+  let body: unknown;
+  globalThis.fetch = Object.assign(
+    async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return Response.json({ success: true, emailSendId: "seq_2" });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  try {
+    await sendMail(
+      { transport: "sequenzy", from: sender, apiKey: "sq_fake" },
+      codeEmail("email-verification", address, "222222", "https://convt.app", 15),
+    );
+    expect(body).toMatchObject({ emailType: "transactional" });
+    expect(body).not.toHaveProperty("trackingSettings");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

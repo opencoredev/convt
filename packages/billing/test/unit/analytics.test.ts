@@ -5,6 +5,7 @@ import {
   analyticsAllowedFromHeaders,
   analyticsEventsToCapture,
   captureEvent,
+  claimedPurchaseEvents,
   desktopTrialStartedEvent,
   emitAnalytics,
   licensePurchasedEvent,
@@ -16,11 +17,18 @@ test("license_purchased names Desktop or Pro and is idempotent by subject", () =
     event: "license_purchased",
     distinctId: "usr_1",
     insertId: "license_purchased:desktop:ord_1",
-    properties: { plan: "desktop" },
+    properties: { plan: "desktop", product: "desktop" },
   });
   expect(licensePurchasedEvent("usr_1", "pro", "sub_1").insertId).toBe(
     "license_purchased:pro:sub_1",
   );
+  // A Desktop + Cloud order is one purchase: its Desktop key, marked as a bundle.
+  expect(licensePurchasedEvent("usr_1", "desktop", "ord_2", "bundle")).toEqual({
+    event: "license_purchased",
+    distinctId: "usr_1",
+    insertId: "license_purchased:desktop:ord_2",
+    properties: { plan: "desktop", product: "bundle" },
+  });
 });
 
 test("desktop_trial_started uses the Polar subscription id", () => {
@@ -39,10 +47,12 @@ test("claimed licenses become one purchase event per order or subscription", () 
       { plan: "desktop", orderId: "ord_1" },
       { plan: "pro", subscriptionId: "sub_1" },
       { plan: "desktop" },
+      { plan: "desktop", product: "bundle", orderId: "ord_2" },
     ]),
   ).toEqual([
     licensePurchasedEvent("usr_1", "desktop", "ord_1"),
     licensePurchasedEvent("usr_1", "pro", "sub_1"),
+    licensePurchasedEvent("usr_1", "desktop", "ord_2", "bundle"),
   ]);
 });
 
@@ -88,4 +98,17 @@ test("emitAnalytics is a no-op without a sink and swallows capture errors", asyn
     ],
   );
   expect(seen).toEqual(["a", "b"]);
+});
+
+test("a claim's purchase events cover only the licenses it attached", () => {
+  const had = [{ plan: "desktop", orderId: "ord_1" }];
+  const now = [
+    ...had,
+    { plan: "pro", subscriptionId: "sub_1" },
+    { plan: "pro", subscriptionId: "sub_1" },
+  ];
+  expect(claimedPurchaseEvents("usr_1", had, now).map((e) => e.insertId)).toEqual([
+    "license_purchased:pro:sub_1",
+  ]);
+  expect(claimedPurchaseEvents("usr_1", had, had)).toEqual([]);
 });

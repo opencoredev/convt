@@ -99,3 +99,24 @@ Or sign in with this link: https://convt.app/sign-in/verify#code=123456
 It works once and expires in 15 minutes. If you didn't ask for it, ignore this email.
 "
 `;
+
+exports[`templates license_issued for Desktop + Cloud names the day the cloud year ends 1`] = `
+"Thanks for buying convt Desktop + Cloud. Here is your license key:
+
+c.d
+
+Open in convt: convt://activate?key=c.d
+
+That link opens the convt app and asks you to confirm. You can also paste the key in the app under Settings, or run convt license activate with it.
+
+This key works forever and includes lifetime desktop updates.
+
+Cloud conversions are on your convt.app account until Oct 30, 2027: convert from your phone or browser, or send a job to the cloud from the app. They don't renew.
+
+Download convt: https://convt.app/download/mac
+
+Your licenses: https://convt.app/dashboard/licenses
+
+Keep this email. Anyone with the key can activate convt.
+"
+`;

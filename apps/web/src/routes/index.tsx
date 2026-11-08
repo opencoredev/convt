@@ -12,7 +12,7 @@ import { SITE_NAME, SITE_ORIGIN, seo } from "#/lib/site";
 
 const title = "convt: convert any file with a right-click";
 const description =
-  "Images, video, audio and documents, converted on your own computer. Nothing gets uploaded.";
+  "Images, video, audio and documents, converted on your own computer. Local conversions never leave your machine.";
 
 // Lets search engines and agents read what convt is without parsing the page.
 const structuredData = {
@@ -27,7 +27,7 @@ const structuredData = {
       operatingSystem: "macOS, Windows, Linux",
       license: "https://www.gnu.org/licenses/agpl-3.0.html",
       image: `${SITE_ORIGIN}/og.png`,
-      offers: { "@type": "Offer", price: "29", priceCurrency: "USD" },
+      offers: { "@type": "Offer", price: "39", priceCurrency: "USD" },
       publisher: { "@id": `${SITE_ORIGIN}/#organization` },
     },
     {
@@ -36,6 +36,13 @@ const structuredData = {
       name: SITE_NAME,
       url: `${SITE_ORIGIN}/`,
       logo: `${SITE_ORIGIN}/apple-touch-icon.png`,
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_ORIGIN}/#website`,
+      name: SITE_NAME,
+      url: `${SITE_ORIGIN}/`,
+      publisher: { "@id": `${SITE_ORIGIN}/#organization` },
     },
   ],
 };

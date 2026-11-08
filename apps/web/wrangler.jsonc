@@ -6,7 +6,8 @@
   "main": "@tanstack/react-start/server-entry",
   // Production values. POSTHOG_KEY is the public project API key (safe in the
   // client bundle). Secrets (BETTER_AUTH_SECRET, GITHUB_CLIENT_SECRET,
-  // GOOGLE_CLIENT_SECRET, SEQUENZY_API_KEY) are set with `wrangler secret put`.
+  // GOOGLE_CLIENT_SECRET, SEQUENZY_API_KEY, CONVT_WEB_TOKEN_SECRET) are set with
+  // `wrangler secret put`.
   // Local development overrides these from apps/web/.dev.vars (scripts/dev-web.sh).
   "vars": {
     "ENV": "production",
@@ -21,6 +22,11 @@
     "BETTER_AUTH_URL": "https://convt.app",
     "MAIL_TRANSPORT": "sequenzy",
     "MAIL_FROM": "convt <hello@convt.app>",
+    // The cloud API (convt-api on Railway) the dashboard converter and the desktop
+    // app's /api/device/cloud credentials point at. It must hold the same
+    // CONVT_WEB_TOKEN_SECRET as this Worker (a secret on both). Without both,
+    // cloud conversion answers "not configured".
+    "CONVT_API_URL": "https://api.convt.app",
   },
   // Hyperdrive "convt-web-production": Railway Postgres as convt_web, caching disabled,
   // Railway's certificate verified. Locally, Wrangler and the Vite plugin read
@@ -50,6 +56,9 @@
         "BETTER_AUTH_URL": "https://convt-web-staging.leoisadev.workers.dev",
         "MAIL_TRANSPORT": "sequenzy",
         "MAIL_FROM": "convt <hello@convt.app>",
+        // No CONVT_API_URL: Railway has no staging convt-api or worker yet, and
+        // staging accounts don't exist in production's database. Add the staging
+        // API's address here, and CONVT_WEB_TOKEN_SECRET as a secret, once it does.
       },
       // Hyperdrive "convt-web-staging", caching disabled.
       "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "0ba8c3fa16c14bfaa15cc18f78c54995" }],

@@ -558,6 +558,7 @@ impl AppState {
             self.account.session.is_some(),
             &self.license,
             client::today(),
+            matches!(self.account.access, Some(crate::account::Access::Pro)),
         )
     }
 

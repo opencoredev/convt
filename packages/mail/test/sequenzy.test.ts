@@ -14,7 +14,7 @@ const fakeFetch = (
 ): typeof fetch => Object.assign(handler, { preconnect: fetch.preconnect });
 
 describe("Sequenzy transport", () => {
-  test("sends the documented payload and stable key, with tracking off", async () => {
+  test("sends the documented payload and stable key, leaving tracking to the dashboard", async () => {
     const requests: string[] = [];
     const transport = sequenzyTransport({
       apiKey: "fake-key",
@@ -31,7 +31,6 @@ describe("Sequenzy transport", () => {
           subject: email.subject,
           body: email.html,
           emailType: "transactional",
-          trackingSettings: { clickTracking: false, openTracking: false },
         });
         requests.push(String(init?.body));
         return Response.json(
@@ -43,6 +42,35 @@ describe("Sequenzy transport", () => {
     expect(await transport.send(email, "eml_1")).toEqual({ ok: true, id: "send_1" });
     expect(await transport.send(email, "eml_1")).toEqual({ ok: true, id: "send_1" });
     expect(requests[0]).toBe(requests[1]);
+  });
+
+  test("an email with a secret link opts out of click tracking only", async () => {
+    let body: unknown;
+    const transport = sequenzyTransport({
+      apiKey: "k",
+      fetch: fakeFetch(async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return Response.json({ success: true, emailSendId: "send_2" });
+      }),
+    });
+    await transport.send({ ...email, trackClicks: false }, "eml_2");
+    // Sequenzy's per-send fields only opt out, so open tracking is left to the dashboard.
+    expect(body).toMatchObject({ trackingSettings: { clickTracking: false } });
+    expect(body).not.toHaveProperty("trackingSettings.openTracking");
+  });
+
+  test("a frozen license email without trackClicks still keeps its convt:// key untracked", async () => {
+    let body: unknown;
+    const transport = sequenzyTransport({
+      apiKey: "k",
+      fetch: fakeFetch(async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return Response.json({ success: true, emailSendId: "send_3" });
+      }),
+    });
+    const html = '<p><a href="convt://activate?key=abc">Open in convt</a></p>';
+    await transport.send({ ...email, html }, "eml_3");
+    expect(body).toMatchObject({ trackingSettings: { clickTracking: false } });
   });
 
   const cases: Array<{ status: number; body: unknown; expected: SendResult }> = [

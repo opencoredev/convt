@@ -74,7 +74,7 @@ describe("Polar API through the SDK client", () => {
     expect(order).toMatchObject({
       status: "paid",
       billing_reason: "purchase",
-      net_amount: 2900,
+      net_amount: 3900,
       currency: "usd",
     });
     expect(order.metadata.convt_checkout).toBe("chk_desktop");
@@ -188,7 +188,7 @@ describe("Polar API through the SDK client", () => {
     const org = (await polar.organizations.list()).items[0];
     expect(org.subscription_settings.allow_multiple_subscriptions).toBe(true);
     const products = await polar.products.list({});
-    expect(products.items.length).toBe(4);
+    expect(products.items.length).toBe(5);
   });
 
   test("with multiple subscriptions off, a second subscription checkout fails", async () => {

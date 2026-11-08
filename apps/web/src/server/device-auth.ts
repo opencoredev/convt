@@ -21,7 +21,7 @@
 // Revoking a device on the dashboard (revokeDevice) makes its token answer 401.
 
 import { schema as t, consumeSendBucket, type Db } from "@convt/db";
-import { cloudAllowance } from "@convt/db/queries";
+import { cloudAllowance, currentDesktopKey } from "@convt/db/queries";
 import { base64urlEncode, newId, randomBytes } from "@convt/license";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
@@ -286,6 +286,9 @@ export async function renewDevice(
   return json(200, {
     key: current?.key ?? null,
     updates_until: current?.updatesUntil ?? null,
+    // The lifetime Desktop key, in a field of its own: builds up to 0.5.0 read only
+    // `key` and refuse a non-Pro key there, and ignore fields they don't know.
+    desktop_key: await currentDesktopKey(db, device.userId),
     access:
       access.kind === "trial"
         ? { kind: access.kind, ends_on: access.endsOn, ends_at: access.endsAt }

@@ -23,7 +23,7 @@ import { createResend, type ResendFault } from "./resend";
 import { createSequenzy } from "./sequenzy";
 import { deliveryHeaders, type Scheme } from "./sign";
 
-export type ProductKey = "desktop" | "pro_month" | "pro_year" | "api";
+export type ProductKey = "desktop" | "bundle" | "pro_month" | "pro_year" | "api";
 
 export type ProductDef = {
   productId: string;
@@ -39,11 +39,21 @@ export type ProductDef = {
 
 /** The organization's products in the `local` environment (packages/billing/src/catalog.ts). */
 export const localProducts: Record<ProductKey, ProductDef> = {
+  // `/admin/product` can set Desktop back to the legacy $29 price
+  // (`price_local_desktop`, 2900) to make an order like those sold before CNV-101.
   desktop: {
     productId: "prod_local_desktop",
-    priceId: "price_local_desktop",
+    priceId: "price_local_desktop_39",
     name: "convt Desktop",
-    amount: 2900,
+    amount: 3900,
+    interval: null,
+    trialDays: null,
+  },
+  bundle: {
+    productId: "prod_local_bundle",
+    priceId: "price_local_bundle",
+    name: "convt Desktop + Cloud",
+    amount: 6900,
     interval: null,
     trialDays: null,
   },

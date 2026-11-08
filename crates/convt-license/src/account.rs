@@ -245,7 +245,12 @@ pub enum Access {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LicenseReply {
+    /// The account's current Pro key.
     pub key: Option<String>,
+    /// The account's lifetime Desktop key (a Desktop or Desktop + Cloud purchase),
+    /// in a field of its own: builds up to 0.5.0 ignore it, and refuse a non-Pro
+    /// key in `key`.
+    pub desktop_key: Option<String>,
     pub access: Option<Access>,
 }
 
@@ -341,13 +346,22 @@ impl Api for Http {
             Some(serde_json::Value::Null) => Ok(None),
             _ => Err(ApiError::BadResponse),
         }?;
+        let desktop_key = match json.get("desktop_key") {
+            Some(serde_json::Value::String(key)) => Ok(Some(key.clone())),
+            Some(serde_json::Value::Null) | None => Ok(None),
+            _ => Err(ApiError::BadResponse),
+        }?;
         let access = json
             .get("access")
             .cloned()
             .map(serde_json::from_value)
             .transpose()
             .map_err(|_| ApiError::BadResponse)?;
-        Ok(LicenseReply { key, access })
+        Ok(LicenseReply {
+            key,
+            desktop_key,
+            access,
+        })
     }
 
     fn sign_out(&self, token: &str) -> Result<(), ApiError> {
@@ -498,6 +512,7 @@ mod tests {
             Http::new(&base).current_key("t", "v"),
             Ok(LicenseReply {
                 key: None,
+                desktop_key: None,
                 access: None
             })
         );
@@ -509,10 +524,24 @@ mod tests {
             Http::new(&base).current_key("t", "v"),
             Ok(LicenseReply {
                 key: None,
+                desktop_key: None,
                 access: Some(Access::Trial {
                     ends_on: "2026-10-15".into(),
                     ends_at: Some("2026-10-15T12:00:00Z".into()),
                 })
+            })
+        );
+        // The Desktop key arrives in a field of its own; old builds ignore it.
+        let (base, _) = serve_once(
+            200,
+            r#"{"key":null,"desktop_key":"d.s","access":{"kind":"pro"}}"#,
+        );
+        assert_eq!(
+            Http::new(&base).current_key("t", "v"),
+            Ok(LicenseReply {
+                key: None,
+                desktop_key: Some("d.s".into()),
+                access: Some(Access::Pro),
             })
         );
         let (base, _) = serve_once(401, r#"{"error":"signed_out"}"#);

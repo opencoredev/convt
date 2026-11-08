@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   attributionFromSearch,
+  nextAttribution,
   parseAttributionCookie,
   sanitizeAttribution,
   signupMethodFromAuthContext,
@@ -10,6 +11,7 @@ import {
 import { syncIdentifiedUser } from "../../src/lib/identify-user";
 import {
   captureEvent,
+  claimedPurchaseEvents,
   signupEventFromAuthHook,
   signupProperties,
   userSignedUpEvent,
@@ -164,6 +166,35 @@ test("attribution sanitizes the landing path and UTM and refuses mailboxes", () 
   expect(parseAttributionCookie("other=1")).toBeNull();
 });
 
+test("a guide visit followed by its tagged download link keeps the path and the campaign", () => {
+  const guide = nextAttribution(null, new URL("https://convt.app/guides/heic-to-jpg-mac"));
+  expect(guide).toEqual({ source: "/guides/heic-to-jpg-mac" });
+  // Signed out, /download redirects to sign-in before the page can read its tags.
+  const signIn = new URL("https://convt.app/sign-in");
+  signIn.searchParams.set(
+    "redirect",
+    "/download?utm_source=convt_guides&utm_medium=organic&utm_campaign=heic-to-jpg-mac",
+  );
+  const tagged = nextAttribution(guide, signIn);
+  expect(tagged).toEqual({
+    source: "/guides/heic-to-jpg-mac",
+    utm_source: "convt_guides",
+    utm_medium: "organic",
+    utm_campaign: "heic-to-jpg-mac",
+  });
+  // The first campaign wins, and untagged pages change nothing.
+  expect(
+    nextAttribution(tagged, new URL("https://convt.app/download?utm_source=other")),
+  ).toBeNull();
+  expect(nextAttribution(guide, new URL("https://convt.app/pricing"))).toBeNull();
+  // Only same-site paths count.
+  const offsite = new URL("https://convt.app/sign-in?redirect=//evil.test/?utm_source=x");
+  expect(nextAttribution(guide, offsite)).toBeNull();
+  // A redirect that isn't a valid URL is ignored instead of throwing.
+  const malformed = new URL("https://convt.app/sign-in?redirect=%2F%5C%5B");
+  expect(attributionFromSearch(malformed)).toEqual({ source: "/sign-in" });
+});
+
 test("identify sends only the user id and resets on sign-out or opt-out", () => {
   const calls: string[] = [];
   const client = {
@@ -176,4 +207,13 @@ test("identify sends only the user id and resets on sign-out or opt-out", () => 
   expect(syncIdentifiedUser(client, "usr_2", "browser", "usr_2")).toBeNull();
   expect(syncIdentifiedUser(client, "usr_3", "off", null)).toBeNull();
   expect(calls).toEqual(["identify:usr_1", "reset", "reset"]);
+});
+
+test("a claim sends purchases only for the licenses it attached", () => {
+  const had = [{ plan: "desktop", orderId: "ord_1" }];
+  const now = [...had, { plan: "desktop", orderId: "ord_2" }];
+  expect(claimedPurchaseEvents("usr_1", had, now).map((e) => e.insertId)).toEqual([
+    "license_purchased:desktop:ord_2",
+  ]);
+  expect(claimedPurchaseEvents("usr_1", [], had)).toHaveLength(1);
 });

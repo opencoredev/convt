@@ -299,7 +299,9 @@ fn folder_inputs_report_each_expanded_file() {
     let folder = fx.path("photos");
     let a = fx.png("photos/a.png");
     let b = fx.png("photos/nested/b.png");
-    std::fs::write(folder.join("readme.txt"), "skipped quietly").unwrap();
+    // Audio can't become WebP with any engine. A text file can wherever
+    // LibreOffice and PDFium are installed (txt -> pdf -> png -> webp).
+    std::fs::write(folder.join("song.mp3"), "skipped quietly").unwrap();
 
     let out = fx.run(&[
         "--json".as_ref(),

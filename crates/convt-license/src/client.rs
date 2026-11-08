@@ -513,6 +513,36 @@ impl Licensing {
         Ok(Renewed::Stored(offered))
     }
 
+    /// Verifies and stores the account's Desktop key that renewal fetched, so a
+    /// buyer who only signs in converts without pasting a key. It goes in when
+    /// nothing valid is stored or the stored key is Pro: a Desktop key covers every
+    /// build for good, and Cloud follows the account, not the stored key. A Desktop
+    /// key already stored stays.
+    pub fn offer_desktop_key(&mut self, key: &str) -> Result<Renewed, ActivateError> {
+        let key = key.trim();
+        let public_key = self
+            .config
+            .public_key
+            .as_ref()
+            .ok_or(ActivateError::NoPublicKey)?;
+        let offered = crate::verify(key, public_key).map_err(|_| ActivateError::Invalid)?;
+        if offered.plan != Plan::Desktop {
+            return Err(ActivateError::Invalid);
+        }
+        self.key = self.config.store.load(LICENSE);
+        if let Some(current) = self.license()
+            && current.plan == Plan::Desktop
+        {
+            return Ok(Renewed::Kept(current));
+        }
+        self.config
+            .store
+            .save(LICENSE, key)
+            .map_err(ActivateError::Store)?;
+        self.key = Some(key.to_string());
+        Ok(Renewed::Stored(offered))
+    }
+
     /// The convt.app sign-in kept on this machine, if any. Read whether or
     /// not this build checks licenses: sign-in is for Pro renewal and the
     /// cloud, not for converting.
@@ -954,6 +984,45 @@ mod tests {
             Ok(Renewed::Kept(k)) if k.plan == Plan::Desktop
         ));
         assert!(matches!(l.state(), State::Licensed(k) if k.plan == Plan::Desktop));
+    }
+
+    #[test]
+    fn the_account_desktop_key_goes_in_when_nothing_or_only_pro_is_stored() {
+        let f = Fixture::new();
+        let mut l = f.licensing(true);
+        // Nothing stored (a Desktop + Cloud buyer who only signed in): it goes in.
+        assert!(matches!(
+            l.offer_desktop_key(&f.key("9999-12-31")),
+            Ok(Renewed::Stored(k)) if k.plan == Plan::Desktop
+        ));
+        assert!(matches!(f.licensing(true).state(), State::Licensed(k) if k.plan == Plan::Desktop));
+        // A Desktop key already stored stays, even when another is offered.
+        assert!(matches!(
+            l.offer_desktop_key(&f.key("2099-01-01")),
+            Ok(Renewed::Kept(k)) if k.updates_until == "9999-12-31"
+        ));
+        // A stored Pro key gives way: the Desktop key never stops covering builds.
+        let mut p = Fixture::new().licensing(true);
+        let g = Fixture::new();
+        let mut q = g.licensing(true);
+        q.activate(&pro_key(&g, "2026-11-01")).unwrap();
+        assert!(matches!(
+            q.offer_desktop_key(&g.key("9999-12-31")),
+            Ok(Renewed::Stored(k)) if k.plan == Plan::Desktop
+        ));
+        // A Pro key, or a key that doesn't verify, is refused and changes nothing.
+        assert!(matches!(
+            q.offer_desktop_key(&pro_key(&g, "2099-01-01")),
+            Err(ActivateError::Invalid)
+        ));
+        assert!(matches!(
+            p.offer_desktop_key("garbage"),
+            Err(ActivateError::Invalid)
+        ));
+        assert!(matches!(
+            p.state(),
+            State::Trial { .. } | State::TrialEnded | State::SignInNeeded
+        ));
     }
 
     #[test]

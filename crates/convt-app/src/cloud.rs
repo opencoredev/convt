@@ -1,6 +1,7 @@
 //! Converting on convt's cloud instead of on this computer. Only a signed-in
-//! account with paid Pro can, and only after the user agrees to upload the
-//! file, since the cloud is the one place a file leaves the machine.
+//! account with paid cloud access (Pro, or a Desktop + Cloud year) can, and
+//! only after the user agrees to upload the file, since the cloud is the one
+//! place a file leaves the machine.
 //!
 //! Nothing here touches the network until the user starts a cloud
 //! conversion: [`access`] decides from what is already on this computer, and
@@ -34,11 +35,11 @@ pub use http::Http;
 /// Whether the Cloud choice in Quick convert can be used, and if not, why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloudAccess {
-    /// Signed in with paid Pro; cloud conversions can run.
+    /// Signed in with paid cloud access; cloud conversions can run.
     Ready,
     /// Not signed in to convt.app on this computer.
     SignedOut,
-    /// Signed in, but the account has no paid Pro.
+    /// Signed in, but the account has no paid cloud access.
     NeedsPro,
     /// Something else stops it, in words for the user (offline, not set up
     /// in this build).
@@ -55,25 +56,40 @@ impl CloudAccess {
         match self {
             CloudAccess::Ready => None,
             CloudAccess::SignedOut => {
-                Some("Sign in with a Pro account to convert in the cloud.".into())
+                Some("Sign in with your convt.app account to convert in the cloud.".into())
             }
-            CloudAccess::NeedsPro => Some("Cloud conversion is part of Pro.".into()),
+            CloudAccess::NeedsPro => {
+                Some("Cloud conversion comes with Desktop + Cloud or Pro.".into())
+            }
             CloudAccess::Unavailable(why) => Some(why.clone()),
         }
     }
 }
 
 /// Where cloud conversion stands, from what this computer already knows:
-/// whether this build has a site to sign in to, a stored sign-in, and the
-/// stored license. Pro must be current today (UTC days since the epoch).
-/// Builds from source check no license, so a sign-in is enough there;
-/// convt.app checks Pro either way before it issues a credential.
-pub fn access(account_url: &str, signed_in: bool, license: &State, today: i64) -> CloudAccess {
+/// whether this build has a site to sign in to, a stored sign-in, the stored
+/// license, and convt.app's last answer about the account. Either a stored Pro
+/// key current today (UTC days since the epoch) or `account_pro`, convt.app
+/// saying the account has paid cloud access, is enough. The second is how a
+/// Desktop key with a Desktop + Cloud year gets Cloud: the app keeps the
+/// Desktop key and never stores a Pro key over it. Builds from source check no
+/// license, so a sign-in is enough there; convt.app checks either way before it
+/// issues a credential.
+pub fn access(
+    account_url: &str,
+    signed_in: bool,
+    license: &State,
+    today: i64,
+    account_pro: bool,
+) -> CloudAccess {
     if account_url.is_empty() {
         return CloudAccess::Unavailable("Cloud conversion isn't set up in this build.".into());
     }
     if !signed_in {
         return CloudAccess::SignedOut;
+    }
+    if account_pro {
+        return CloudAccess::Ready;
     }
     match license {
         State::Unrestricted => CloudAccess::Ready,

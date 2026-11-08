@@ -33,7 +33,7 @@
     "@tanstack/react-router": "1.170.41",
     "@tanstack/react-router-devtools": "1.167.2",
     "@tanstack/react-start": "1.168.60",
-    "better-auth": "1.7.7",
+    "better-auth": "1.7.16",
     "drizzle-orm": "0.45.3",
     "pg": "8.23.1",
     "posthog-js": "1.268.9",
@@ -42,7 +42,7 @@
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
-    "@better-auth/core": "1.7.7",
+    "@better-auth/core": "1.7.16",
     "@cloudflare/vite-plugin": "^1.26.0",
     "@convt/oauth-mock": "workspace:*",
     "@tanstack/devtools-vite": "0.8.5",

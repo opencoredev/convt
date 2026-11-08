@@ -39,11 +39,16 @@ export type Mac = {
 /** Which overview a signed-in account sees (see deriveAccountState in packages/db). */
 export type AccountState = "new" | "trial" | "desktop" | "pro" | "pro_lapsed" | "api_only";
 
+/** Desktop + Cloud coverage. Dates are display text such as "Oct 30, 2027". */
+export type CloudYear = { state: "active"; until: string } | { state: "ended"; on: string };
+
 export type Overview = {
   account: Account;
   state: AccountState;
   /** Null when the account has no plan: the card shows an empty line and pricing. */
   plan: PlanSummary | null;
+  /** The account's Desktop + Cloud years, if it ever bought one. */
+  cloud: CloudYear | null;
   license: License | null;
   /** Null without API enrollment. `since` is an ISO date. */
   api: { conversionsThisMonth: number; since: string; keyCount: number } | null;
@@ -80,6 +85,11 @@ export type Billing = {
     /** ISO date the plan ends because it was set to cancel; null when it renews. */
     cancelsOn: string | null;
   } | null;
+  /**
+   * Desktop + Cloud coverage, shown on its own: a Pro subscriber who also bought the
+   * bundle still manages the subscription above.
+   */
+  cloud: CloudYear | null;
   /** True when the account had Pro before, so a new start has no trial. */
   hadPro: boolean;
   /** A live (not refunded or disputed) Desktop license. */

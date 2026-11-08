@@ -17,6 +17,7 @@ import {
   focusRing,
 } from "#/components/app/ui";
 import capabilities from "#/generated/cloud-formats.json";
+import { links } from "#/lib/config";
 import {
   QUALITY_CHOICES,
   type Choice,
@@ -128,7 +129,8 @@ function Converter() {
       <div className="flex flex-col gap-2">
         <PageTitle>Cloud converter</PageTitle>
         <p className="text-sm text-ink-2">
-          Convert from your browser or phone with Pro. Files are deleted after 24 hours.
+          Convert from your browser or phone with Desktop + Cloud or Pro. Files are deleted after 24
+          hours.
         </p>
       </div>
       <SecondaryLink href="/dashboard/api" className="self-start">
@@ -146,14 +148,14 @@ function Converter() {
       </Card>
       {!access.allowed ? (
         <Card className="flex flex-col gap-3 p-6">
-          <h2 className="text-base font-semibold">Cloud conversion needs paid Pro</h2>
+          <h2 className="text-base font-semibold">Cloud conversion needs Desktop + Cloud</h2>
           <p className="text-sm text-ink-2">
             {access.state === "trialing"
               ? "Cloud conversions start after your trial becomes a paid subscription."
-              : "An active Pro subscription includes 50 GB of input each month."}
+              : "Desktop + Cloud is $69 once: a Desktop license and a year of cloud conversions, 50 GB of input each month."}
           </p>
-          <SecondaryLink href="/dashboard/billing" className="self-start">
-            View Pro billing
+          <SecondaryLink href={links.buyBundle} className="self-start">
+            Get Desktop + Cloud
           </SecondaryLink>
         </Card>
       ) : !access.configured ? (

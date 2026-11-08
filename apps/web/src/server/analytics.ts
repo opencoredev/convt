@@ -1,6 +1,7 @@
 // Server-side PostHog capture for account events. Signup is recorded here so an
 // ad blocker cannot drop it. Events carry the user id and no email, name or other
-// PII. `$insert_id` makes a live capture and the backfill the same event.
+// PII. PostHog does not dedupe on `$insert_id`, so each event is sent from the one
+// place that first sees it: a purchase from the claim that attached its license.
 
 import { analyticsAllowedFromHeaders } from "#/lib/analytics-consent";
 import { stripQuery } from "#/lib/analytics-sanitize";
@@ -57,25 +58,40 @@ export function licensePurchasedEvent(
   userId: string,
   plan: "desktop" | "pro",
   subjectId: string,
+  /** What was bought: `bundle` for a Desktop + Cloud order's Desktop key. */
+  product: "desktop" | "bundle" | "pro" = plan,
 ): AnalyticsEvent {
   return {
     event: "license_purchased",
     distinctId: userId,
     insertId: `license_purchased:${plan}:${subjectId}`,
-    properties: { plan },
+    properties: { plan, product },
   };
 }
 
+type LicenseRef = {
+  plan: string;
+  /** The order's product for a Desktop key: `desktop` or `bundle`. */
+  product?: string | null;
+  orderId?: string | null;
+  subscriptionId?: string | null;
+};
+
 export function purchaseEventsFromLicenses(
   userId: string,
-  licenses: Array<{ plan: string; orderId?: string | null; subscriptionId?: string | null }>,
+  licenses: LicenseRef[],
 ): AnalyticsEvent[] {
   const events: AnalyticsEvent[] = [];
   const seen = new Set<string>();
   for (const license of licenses) {
     const event =
       license.plan === "desktop" && license.orderId
-        ? licensePurchasedEvent(userId, "desktop", license.orderId)
+        ? licensePurchasedEvent(
+            userId,
+            "desktop",
+            license.orderId,
+            license.product === "bundle" ? "bundle" : "desktop",
+          )
         : license.plan === "pro" && license.subscriptionId
           ? licensePurchasedEvent(userId, "pro", license.subscriptionId)
           : null;
@@ -84,6 +100,16 @@ export function purchaseEventsFromLicenses(
     events.push(event);
   }
   return events;
+}
+
+/** Purchase events for the licenses in `after` but not `before`: the ones a claim attached. */
+export function claimedPurchaseEvents(
+  userId: string,
+  before: LicenseRef[],
+  after: LicenseRef[],
+): AnalyticsEvent[] {
+  const owned = new Set(purchaseEventsFromLicenses(userId, before).map((e) => e.insertId));
+  return purchaseEventsFromLicenses(userId, after).filter((e) => !owned.has(e.insertId));
 }
 
 export function userSignedUpEvent(

@@ -5,6 +5,8 @@ import { CommandBlock, homebrewCommands } from "../../src/components/app/command
 import {
   Checksums,
   DownloadButton,
+  downloadLink,
+  downloadProperties,
   DownloadStage,
   Homebrew,
   Platforms,
@@ -95,9 +97,9 @@ test("an unpublished build says Shipping today and links nothing", () => {
   const html = renderToStaticMarkup(<DownloadStage os="macos" release={empty} />);
   expect(html).toContain("Shipping today");
   expect(html).not.toContain("download=");
-  expect(renderToStaticMarkup(<DownloadButton artifact={null} label="x" />)).toContain(
-    "Shipping today",
-  );
+  expect(
+    renderToStaticMarkup(<DownloadButton slot={{ ...slot("macos"), artifact: null }} label="x" />),
+  ).toContain("Shipping today");
   expect(renderToStaticMarkup(<Checksums release={empty} />)).toBe("");
 });
 
@@ -130,4 +132,33 @@ test("Raycast links to the store listing and credits its author", () => {
   expect(html).toContain('href="https://www.raycast.com/0xdhrv/convt"');
   expect(html).toContain("By Dhruv Suthar");
   expect(html).toContain("macOS and Windows");
+});
+
+test("download_clicked names the build and where it was picked, not the file URL", () => {
+  const props = downloadProperties(slot("macos"), "primary");
+  expect(props).toEqual({
+    os: "macos",
+    kind: "dmg",
+    arch: slot("macos").arch,
+    placement: "primary",
+  });
+  expect(JSON.stringify(props)).not.toContain("github.com");
+});
+
+test("every download link sends download_clicked for its build and placement", () => {
+  const sent: Array<[string, unknown]> = [];
+  const send = (event: string, properties: unknown) => void sent.push([event, properties]);
+  const mac = slot("macos");
+  for (const placement of ["primary", "alternate", "list"] as const) {
+    const link = downloadLink({ slot: mac, artifact: mac.artifact!, placement }, send);
+    expect(link.href).toBe(mac.artifact!.url);
+    expect(link.download).toBe("convt-macos-arm64.dmg");
+    link.onClick();
+  }
+  expect(sent).toEqual(
+    (["primary", "alternate", "list"] as const).map((placement) => [
+      "download_clicked",
+      { os: "macos", kind: "dmg", arch: mac.arch, placement },
+    ]),
+  );
 });

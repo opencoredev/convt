@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SITE_ORIGIN } from "#/lib/site";
+import { DOCS_SITEMAP_URL, SITE_ORIGIN } from "#/lib/site";
 
 // Account, checkout and API routes are private or useless to crawlers; the account
 // pages also send `robots: noindex`.
@@ -14,6 +14,7 @@ Disallow: /device
 Allow: /
 
 Sitemap: ${SITE_ORIGIN}/sitemap.xml
+Sitemap: ${DOCS_SITEMAP_URL}
 `;
 
 export const Route = createFileRoute("/robots.txt")({

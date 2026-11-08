@@ -1557,6 +1557,7 @@ dependencies = [
  "csv",
  "dirs 6.0.0",
  "flate2",
+ "gif 0.14.2",
  "htmd",
  "image",
  "libc",

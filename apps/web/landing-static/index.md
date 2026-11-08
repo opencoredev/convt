@@ -29,10 +29,10 @@ convt drives established open source tools from Rust, on your machine:
 
 ## Pricing
 
-Both plans will start with a 7-day free trial.
+Both are paid once. There is no subscription.
 
-- **Desktop:** $29 once. The app and the right-click menu, every format offline, on macOS, Windows and Linux, with lifetime updates.
-- **Pro:** $12 a month, or $8 a month billed yearly. Everything in Desktop, plus conversions from your phone or browser and cloud conversions for heavy video jobs.
+- **Desktop:** $39 once. The app and the right-click menu, every format offline, on macOS, Windows and Linux, with lifetime updates.
+- **Desktop + Cloud:** $69 once. Everything in Desktop, plus a year of conversions from your phone or browser and cloud conversions for heavy video jobs. It does not renew.
 - **API:** pay per conversion from your own code, no plan needed.
 
 ## More

@@ -3,7 +3,6 @@ import { HeadContent, Scripts, createRootRoute, useMatches } from "@tanstack/rea
 
 import { themeScript, useSystemTheme } from "#/components/app/theme";
 import { FeedbackButton } from "#/components/feedback";
-import { IdentifyUser } from "#/components/identify-user";
 import { PostHogProvider } from "#/components/posthog-provider";
 import { rememberAttribution } from "#/lib/analytics-attribution";
 import { getPublicConfig } from "#/server/public-config";
@@ -97,8 +96,7 @@ function PostHogRoot({ children }: { children: React.ReactNode }) {
     rememberAttribution();
   }, []);
   return (
-    <PostHogProvider config={posthog}>
-      <IdentifyUser userId={userId} />
+    <PostHogProvider config={posthog} userId={userId}>
       {children}
     </PostHogProvider>
   );

@@ -35,7 +35,7 @@ function OverviewPage() {
             <p className="text-[13px]/4 text-ink-2">
               {data.license
                 ? "Your license is on this account. Sign in inside the app to unlock it."
-                : "Every format works free for 7 days. No account or card to start."}
+                : "Install it and sign in with this account to start converting."}
             </p>
           </div>
           <PrimaryLink href={links.download} className="shrink-0 self-start sm:self-auto">
@@ -65,15 +65,15 @@ function OverviewPage() {
           <SummaryCard
             label="Plan"
             value={<span className="text-[22px]/7 font-semibold tracking-[-0.02em]">No plan</span>}
-            detail="Desktop is $29 once. Pro is $12 a month."
-            meta="7-day free trial"
+            detail="Desktop is $39 once. Desktop + Cloud is $69 once."
+            meta="No subscription"
             action={
               <span className="flex items-center gap-3">
                 <a href={links.buyDesktop} className={linkAction}>
                   Get Desktop
                 </a>
-                <a href={links.buyPro} className={linkAction}>
-                  Get Pro
+                <a href={links.buyBundle} className={linkAction}>
+                  Get Desktop + Cloud
                 </a>
               </span>
             }
@@ -97,15 +97,15 @@ function OverviewPage() {
             value={
               <span className="text-[22px]/7 font-semibold tracking-[-0.02em]">No key yet</span>
             }
-            detail="Buying Desktop or Pro puts a key here."
+            detail="Buying Desktop or Desktop + Cloud puts a key here."
             meta="Works offline"
             action={
               <span className="flex items-center gap-3">
                 <a href={links.buyDesktop} className={linkAction}>
                   Get Desktop
                 </a>
-                <a href={links.buyPro} className={linkAction}>
-                  Get Pro
+                <a href={links.buyBundle} className={linkAction}>
+                  Get Desktop + Cloud
                 </a>
               </span>
             }

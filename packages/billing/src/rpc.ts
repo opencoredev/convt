@@ -23,6 +23,8 @@ export interface BillingRpc {
     spendCapCents?: number | null;
     /** The desktop app opened this checkout; the success page then sends the buyer back to it. */
     fromApp?: boolean;
+    /** Pro only as a trial; refused with `trial_unavailable` otherwise (see checkout.ts). */
+    trialOnly?: boolean;
   }): Promise<
     | { ok: true; url: string; checkoutId: string; cookieValue: string }
     | { ok: false; refusal: CheckoutRefusal }
@@ -64,6 +66,11 @@ export interface BillingRpc {
     | { kind: "can_start_trial"; checkoutUrl: string }
     | { kind: "lapsed" }
   >;
+  /**
+   * Lays out the account's Desktop + Cloud years again. The site calls it after its
+   * sign-up claim attaches guest orders, which it cannot schedule as convt_web.
+   */
+  scheduleCloud(userId: string): Promise<void>;
   /** Whether the signed-in account gets campaign email. */
   marketingPreference(userId: string): Promise<MarketingPreference>;
   setMarketingPreference(userId: string, subscribed: boolean): Promise<MarketingPreference>;

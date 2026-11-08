@@ -1,3 +1,5 @@
+import { guidePath, guides } from "#/lib/guides";
+import { commandLineConverter, macFileConverter } from "#/lib/landing-pages";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 /** Footer columns, shared by the landing page and the other public pages. */
@@ -7,13 +9,23 @@ export const footerColumns = [
     links: [
       { label: "Download", href: routes.download },
       { label: "Formats", href: routes.formats },
+      { label: macFileConverter.footerLabel, href: macFileConverter.path },
       { label: "Pricing", href: routes.pricing },
       { label: "Changelog", href: routes.changelog },
     ],
   },
   {
+    // Every guide, so each one is a link away from the homepage and every other page.
+    title: "Guides",
+    links: [
+      ...guides.map((guide) => ({ label: guide.footerLabel, href: guidePath(guide.slug) })),
+      { label: "All guides", href: routes.guides },
+    ],
+  },
+  {
     title: "Developers",
     links: [
+      { label: commandLineConverter.footerLabel, href: commandLineConverter.path },
       { label: "API docs", href: routes.apiDocs },
       { label: "GitHub", href: GITHUB_URL },
     ],

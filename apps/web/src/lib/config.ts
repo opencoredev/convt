@@ -12,7 +12,8 @@ export const links = {
   /** The download page; it picks the visitor's OS, including Linux when that build exists. */
   download: "/download",
   buyDesktop: "/checkout/desktop",
-  buyPro: "/checkout/pro?interval=month",
+  /** Desktop + Cloud. Pro is no longer sold; only the app's trial opens its checkout. */
+  buyBundle: "/checkout/bundle",
   /** The pricing section on the landing page. */
   pricing: "/#pricing",
   terms: "/terms",

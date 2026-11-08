@@ -27,6 +27,8 @@ describe("templates", () => {
     expect(m.subject).toBe("Your convt Desktop license key");
     expect(m.text).toMatchSnapshot();
     expect(m.html).toContain("convt://activate?key=eyJpZCI6ImxpY18xIn0.c2ln");
+    // The key rides in a convt:// link, which a click-tracking redirect would break.
+    expect(m.trackClicks).toBe(false);
     expect(m.text).toContain("lifetime desktop updates");
   });
 
@@ -39,6 +41,21 @@ describe("templates", () => {
       downloadUrl: `${site}/download/mac`,
     });
     expect(m.subject).toBe("Your convt Pro license key");
+    expect(m.text).toMatchSnapshot();
+  });
+
+  test("license_issued for Desktop + Cloud names the day the cloud year ends", () => {
+    const m = licenseIssued({
+      product: "bundle",
+      cloudUntil: "2027-10-30",
+      token: "c.d",
+      updatesUntil: "9999-12-31",
+      siteUrl: site,
+      downloadUrl: `${site}/download/mac`,
+    });
+    expect(m.subject).toBe("Your convt Desktop + Cloud license key");
+    expect(m.text).toContain("lifetime desktop updates");
+    expect(m.text).toContain("Oct 30, 2027");
     expect(m.text).toMatchSnapshot();
   });
 
@@ -104,8 +121,22 @@ describe("templates", () => {
       renewalFailed({ kind: "pro", periodStart: "2026-10-05T00:00:00Z", siteUrl: site }),
     ];
     for (const m of all) expect(`${m.subject}${m.text}`).not.toContain("—");
-    expect(templateVersion).toBe(3);
+    expect(templateVersion).toBe(5);
   });
+});
+
+test("emails whose links carry no secret keep the provider's click tracking", () => {
+  const plain = [
+    trialEnding({
+      trialEndsAt: "2026-10-12T00:00:00Z",
+      amountCents: 9600,
+      interval: "year",
+      siteUrl: site,
+    }),
+    renewalFailed({ kind: "pro", periodStart: "2026-10-05T00:00:00Z", siteUrl: site }),
+    codeEmail({ kind: "confirm", email: "a@convt.test", code: "123456", link: "", minutes: 15 }),
+  ];
+  for (const m of plain) expect(m).not.toHaveProperty("trackClicks");
 });
 
 describe("code email", () => {
@@ -120,6 +151,8 @@ describe("code email", () => {
     expect(m.text).toMatchSnapshot();
     expect(m.html).toContain(">123456</p>");
     expect(m.html).toContain(`href="${escapeHtml(link)}"`);
+    // The link carries the code, so it must reach the reader unrewritten.
+    expect(m.trackClicks).toBe(false);
     expect(m.html).toContain("expires in 15 minutes");
     expect(m.html).toContain('<meta name="color-scheme" content="light dark">');
   });

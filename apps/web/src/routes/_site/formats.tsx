@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { cx } from "#/components/app/ui";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
-import { routes, seo } from "#/lib/site";
+import { guidePath, guides } from "#/lib/guides";
+import { routes, seo, topLevelBreadcrumb } from "#/lib/site";
 import data from "../../../content/formats.json";
 
 // content/formats.json is regenerated from the convt CLI by scripts/generate-content.ts
@@ -49,7 +50,18 @@ const packFormats = new Set([
 const description = `All ${data.formats.length} formats convt converts between: images, video, audio and documents, and the targets each one reaches.`;
 
 export const Route = createFileRoute("/_site/formats")({
-  head: () => seo({ title: "Supported formats · convt", description, path: routes.formats }),
+  head: () => ({
+    ...seo({ title: "Supported formats · convt", description, path: routes.formats }),
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          ...topLevelBreadcrumb({ name: "Formats", path: routes.formats }),
+        }),
+      },
+    ],
+  }),
   component: FormatsPage,
 });
 
@@ -92,6 +104,7 @@ function CategorySection({ category }: { category: Category }) {
         {title}
       </h2>
       {id === "documents" && <DocumentPack />}
+      <CategoryGuides category={category} />
       <div className="overflow-clip rounded-2xl bg-raised shadow-[inset_0_0_0_1px_var(--line)] dark:bg-panel">
         <div
           aria-hidden="true"
@@ -107,6 +120,20 @@ function CategorySection({ category }: { category: Category }) {
         </ul>
       </div>
     </section>
+  );
+}
+
+function CategoryGuides({ category }: { category: Category }) {
+  const related = guides.filter((g) => g.category === category.id);
+  if (related.length === 0) return null;
+  return (
+    <ul aria-label={`${category.title} guides`} className="-mt-1 flex flex-wrap gap-x-6 gap-y-2">
+      {related.map((guide) => (
+        <li key={guide.slug} className="text-sm/5 text-ink-2">
+          Guide: <TextLink href={guidePath(guide.slug)}>{guide.heading}</TextLink>
+        </li>
+      ))}
+    </ul>
   );
 }
 

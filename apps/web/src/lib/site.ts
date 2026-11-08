@@ -52,6 +52,9 @@ export const legal = {
 export const routes = {
   download: "/download",
   formats: "/formats",
+  guides: "/guides",
+  macFileConverter: "/mac-file-converter",
+  commandLineConverter: "/command-line-file-converter",
   pricing: "/#pricing",
   changelog: "/changelog",
   apiDocs: "/docs/api",
@@ -63,22 +66,39 @@ export const routes = {
   dashboard: "/dashboard",
 } as const;
 
-/** Checkout for the $29 Desktop License; works signed out. */
+/** Checkout for the $39 Desktop License; works signed out. */
 export const BUY_DESKTOP_URL = "/checkout/desktop";
-/** Checkout for Pro; signs in first. */
-export const buyProUrl = (interval: "month" | "year") => `/checkout/pro?interval=${interval}`;
+/** Checkout for Desktop + Cloud ($69 once); signs in first, since the cloud year is the account's. */
+export const BUY_BUNDLE_URL = "/checkout/bundle";
 
-/** Pages listed in the sitemap, in order. /download asks for an account, so it isn't one. */
-export const sitemapPaths = [
-  "/",
-  routes.formats,
-  routes.changelog,
-  routes.apiDocs,
-  routes.contact,
-  routes.brand,
-  routes.privacy,
-  routes.terms,
-] as const;
+/** A calendar day, `YYYY-MM-DD`, as the sitemap's `lastmod` expects. */
+type IsoDate = `${number}-${number}-${number}`;
+
+/**
+ * Pages listed in the sitemap, in order; the sitemap route adds /guides and each guide after
+ * these, dated from `guides`. /download asks for an account, so it isn't one, and the docs
+ * (/docs, /docs/api) have their own sitemap on the convt-docs Worker.
+ *
+ * `lastmod` is the day the page's content last changed, taken from git (the route file, the
+ * content or components it renders, and the shared site header and footer), never the build
+ * time. Move it when you change what the page says, not for refactors that leave the page
+ * the same. `listsGuides` marks a page that renders links to every guide: the sitemap dates it
+ * from the newest guide when that is later, so adding a guide moves it without a hand edit.
+ */
+export const sitemapPages = [
+  { path: "/", lastmod: "2026-10-30" },
+  { path: routes.formats, lastmod: "2026-10-30", listsGuides: true },
+  { path: routes.changelog, lastmod: "2026-10-26" },
+  { path: routes.contact, lastmod: "2026-10-30" },
+  { path: routes.brand, lastmod: "2026-10-23" },
+  { path: routes.macFileConverter, lastmod: "2026-11-03", listsGuides: true },
+  { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: true },
+  { path: routes.privacy, lastmod: "2026-10-27" },
+  { path: routes.terms, lastmod: "2026-10-30" },
+] as const satisfies readonly { path: string; lastmod: IsoDate; listsGuides?: true }[];
+
+/** The docs Worker's own sitemap, referenced from robots.txt. */
+export const DOCS_SITEMAP_URL = `${SITE_ORIGIN}/docs/sitemap.xml`;
 
 /** Share card for every public page: the landing hero at 1200x630 (public/og.png). */
 const OG_IMAGE = {
@@ -93,10 +113,12 @@ export function seo({
   title,
   description,
   path,
+  type = "website",
 }: {
   title: string;
   description: string;
   path: string;
+  type?: "website" | "article";
 }) {
   const url = `${SITE_ORIGIN}${path}`;
   return {
@@ -105,7 +127,7 @@ export function seo({
       { name: "description", content: description },
       { property: "og:title", content: title },
       { property: "og:description", content: description },
-      { property: "og:type", content: "website" },
+      { property: "og:type", content: type },
       { property: "og:url", content: url },
       { property: "og:site_name", content: SITE_NAME },
       { property: "og:image", content: OG_IMAGE.url },
@@ -118,5 +140,27 @@ export function seo({
       { name: "twitter:image", content: OG_IMAGE.url },
     ],
     links: [{ rel: "canonical", href: url }],
+  };
+}
+
+/** BreadcrumbList JSON-LD for a public page one level below the homepage, like /formats. */
+export function topLevelBreadcrumb({ name, path }: { name: string; path: string }) {
+  return {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: SITE_NAME, item: `${SITE_ORIGIN}/` },
+      { "@type": "ListItem", position: 2, name, item: `${SITE_ORIGIN}${path}` },
+    ],
+  };
+}
+
+/** The head `scripts` entry carrying `topLevelBreadcrumb` as JSON-LD, for pages with no other structured data. */
+export function topLevelBreadcrumbScript({ name, path }: { name: string; path: string }) {
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify({
+      "@context": "https://schema.org",
+      ...topLevelBreadcrumb({ name, path }),
+    }),
   };
 }

@@ -207,11 +207,14 @@ function Ready({
 }) {
   const notice = useNotice();
   const product = state.product === "pro" ? "convt Pro" : "convt Desktop";
+  const eyebrow = {
+    pro: "CONVT PRO",
+    desktop: "CONVT DESKTOP",
+    bundle: "CONVT DESKTOP + CLOUD",
+  }[state.product];
   return (
     <>
-      <Heading eyebrow={state.product === "pro" ? "CONVT PRO" : "CONVT DESKTOP"}>
-        Thanks. Here's your license key.
-      </Heading>
+      <Heading eyebrow={eyebrow}>Thanks. Here's your license key.</Heading>
       <div className="flex flex-col gap-3 rounded-xl bg-raised p-4 ring-1 ring-line">
         <p className="text-xs/4 text-ink-2">{product} license key</p>
         <p data-testid="license-key" className="font-mono text-xs/[18px] break-all select-all">
@@ -237,10 +240,15 @@ function Ready({
       </div>
       <ul className="flex flex-col gap-1.5 text-[13px]/5 text-ink-2">
         <li>
-          {state.product === "desktop"
-            ? "Includes lifetime desktop updates."
-            : `Covers every build released up to ${state.updatesUntil}.`}
+          {state.product === "pro"
+            ? `Covers every build released up to ${state.updatesUntil}.`
+            : "Includes lifetime desktop updates."}
         </li>
+        {state.product === "bundle" ? (
+          <li>
+            Cloud conversions are on this account for a year. Billing shows the date they end.
+          </li>
+        ) : null}
         <li>We also emailed it to {state.maskedEmail}.</li>
         <li>Open in convt asks the app to confirm before it adds the key.</li>
       </ul>

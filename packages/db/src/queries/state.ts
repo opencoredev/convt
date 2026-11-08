@@ -6,7 +6,12 @@ export type StateSubscription = {
   kind: string;
   status: string;
   endedAt: Date | null;
+  /** Set for a prepaid Desktop + Cloud year; absent or null for a recurring subscription. */
+  orderId?: string | null;
 };
+
+/** A recurring subscription (Pro or API); prepaid cloud years are not one. */
+const recurring = (s: StateSubscription) => !s.orderId;
 
 export type StateLicense = { plan: string; revokedAt: Date | null };
 
@@ -36,7 +41,8 @@ export function deriveAccountState(
   licenses: StateLicense[],
   now: Date,
 ): AccountState {
-  const pro = subscriptions.filter((s) => s.kind === "pro");
+  // A Desktop + Cloud owner is a Desktop account; its cloud year shows on its own.
+  const pro = subscriptions.filter((s) => s.kind === "pro" && recurring(s));
   if (pro.some((s) => (s.status === "active" || s.status === "past_due") && !ended(s, now)))
     return "pro";
   if (pro.some((s) => s.status === "trialing" && !ended(s, now))) return "trial";
@@ -60,7 +66,34 @@ export function currentProSubscription<T extends StateSubscription & { createdAt
   now: Date,
 ): T | null {
   const pro = subscriptions
-    .filter((s) => s.kind === "pro")
+    .filter((s) => s.kind === "pro" && recurring(s))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   return pro.find((s) => live(s, now)) ?? pro.find((s) => ended(s, now)) ?? null;
+}
+
+export type CloudYearRow = StateSubscription & {
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+};
+
+/**
+ * The account's Desktop + Cloud coverage: `active` with the day the last scheduled
+ * year ends (stacked years run back to back), or `ended` with the day the last one
+ * stopped. Canceled years (refunded, disputed, deleted) count only for `ended`.
+ */
+export function cloudYears(
+  subscriptions: CloudYearRow[],
+  now: Date,
+): { state: "active"; until: Date } | { state: "ended"; on: Date } | null {
+  const years = subscriptions.filter((s) => s.kind === "pro" && !recurring(s));
+  const running = years.filter(
+    (s) => s.status === "active" && s.endedAt !== null && s.endedAt > now,
+  );
+  if (running.length) {
+    const until = Math.max(...running.map((s) => s.endedAt!.getTime()));
+    return { state: "active", until: new Date(until) };
+  }
+  const stopped = years.map((s) => s.endedAt).filter((d): d is Date => d !== null);
+  if (!stopped.length) return null;
+  return { state: "ended", on: new Date(Math.max(...stopped.map((d) => d.getTime()))) };
 }

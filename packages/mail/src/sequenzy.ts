@@ -1,4 +1,4 @@
-import type { MailTransport } from "./transport";
+import type { MailTransport, OutgoingEmail } from "./transport";
 
 export type SequenzyOptions = {
   apiKey: string;
@@ -6,7 +6,19 @@ export type SequenzyOptions = {
   fetch?: typeof fetch;
 };
 
-/** Sequenzy accepts mail asynchronously and replays keys for 14 days. */
+/**
+ * Also true for a `convt://` link in the HTML, so a license email the outbox froze
+ * before `trackClicks` existed still keeps its key out of the click redirect.
+ */
+function untrackedLinks(email: OutgoingEmail): boolean {
+  return email.trackClicks === false || /href="convt:\/\//i.test(email.html);
+}
+
+/**
+ * Sequenzy accepts mail asynchronously and replays keys for 14 days. Open and click
+ * tracking follow the dashboard's Transactional API defaults; a send can only opt
+ * out, which it does for click tracking when `trackClicks` is false.
+ */
 export function sequenzyTransport(options: SequenzyOptions): MailTransport {
   const doFetch = options.fetch ?? fetch;
   return {
@@ -35,7 +47,7 @@ export function sequenzyTransport(options: SequenzyOptions): MailTransport {
             subject: email.subject,
             body: email.html,
             emailType: "transactional",
-            trackingSettings: { clickTracking: false, openTracking: false },
+            ...(untrackedLinks(email) ? { trackingSettings: { clickTracking: false } } : {}),
           }),
           signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
         });

@@ -4,8 +4,13 @@
 // organizations (docs/p7-billing-plan.md, "Accounts and secrets").
 
 export type CatalogEnv = "local" | "sandbox" | "production";
-export type CatalogProduct = "desktop" | "pro_month" | "pro_year" | "api";
+export type CatalogProduct = "desktop" | "bundle" | "pro_month" | "pro_year" | "api";
 export type ProProduct = "pro_month" | "pro_year";
+/** Products sold for one payment: an order, never a subscription. */
+export type OneTimeProduct = "desktop" | "bundle";
+
+/** How long the cloud year of one Desktop + Cloud order lasts. */
+export const BUNDLE_CLOUD_DAYS = 365;
 export type Proration = "invoice" | "next_period";
 
 export type CatalogEntry = {
@@ -24,6 +29,12 @@ export type CatalogDiscount = {
   code: string;
   basisPoints: number;
   products: CatalogProduct[];
+  /**
+   * When set, an order's priced items must all be one of these prices. A code made
+   * for a price that has since changed stays valid for the orders it discounted,
+   * and never applies to the new price.
+   */
+  priceIds?: string[];
 };
 
 export type Catalog = {
@@ -35,18 +46,31 @@ export type Catalog = {
   /** Switching between monthly and yearly takes effect at once, both ways. */
   switchPolicy: Record<ProProduct, Proration>;
   meterName: "api_conversion";
-  legacyDesktop?: DesktopProductIds[];
+  /**
+   * Prices no longer sold that past orders still carry, each at the amount it
+   * charged. Refunds, disputes and the backfill refetch those orders.
+   */
+  legacyPrices: LegacyPrice[];
 };
 
-export type DesktopProductIds = { productId: string; priceId: string };
+export type LegacyPrice = {
+  product: OneTimeProduct;
+  productId: string;
+  priceId: string;
+  amountCents: number;
+};
 
 // The Product Hunt launch offer: 30% off Desktop, or off the first 3 months of Pro
 // monthly, until the end of 31 October 2026 Pacific time (the code's ends_at in Polar).
-const productHunt: CatalogDiscount = {
+// It stays listed so the launch orders it discounted still validate when refetched.
+// Limited to the $29 Desktop price and Pro monthly's price: Polar restricts a code by
+// product, so it would otherwise discount the $39 price too (CNV-101).
+const productHunt = (priceIds: [desktop29: string, proMonth: string]): CatalogDiscount => ({
   code: "PRODUCTHUNT",
   basisPoints: 3000,
   products: ["desktop", "pro_month"],
-};
+  priceIds,
+});
 
 const local: Catalog = {
   env: "local",
@@ -54,8 +78,16 @@ const local: Catalog = {
   products: {
     desktop: {
       productId: "prod_local_desktop",
-      priceId: "price_local_desktop",
-      amountCents: 2900,
+      priceId: "price_local_desktop_39",
+      amountCents: 3900,
+      unitAmount: null,
+      interval: null,
+      trialDays: null,
+    },
+    bundle: {
+      productId: "prod_local_bundle",
+      priceId: "price_local_bundle",
+      amountCents: 6900,
       unitAmount: null,
       interval: null,
       trialDays: null,
@@ -88,7 +120,18 @@ const local: Catalog = {
   },
   switchPolicy: { pro_month: "invoice", pro_year: "invoice" },
   meterName: "api_conversion",
-  discounts: { disc_local_producthunt: productHunt },
+  discounts: {
+    disc_local_producthunt: productHunt(["price_local_desktop", "price_local_pro_month"]),
+  },
+  // The $29 Desktop price, sold until CNV-101.
+  legacyPrices: [
+    {
+      product: "desktop",
+      productId: "prod_local_desktop",
+      priceId: "price_local_desktop",
+      amountCents: 2900,
+    },
+  ],
 };
 
 /** The same products in a Polar organization: only the ids differ from `local`. */
@@ -96,10 +139,12 @@ const withIds = (
   env: "sandbox" | "production",
   ids: Record<CatalogProduct, { productId: string; priceId: string }>,
   discounts: Catalog["discounts"],
+  legacyPrices: LegacyPrice[],
 ): Catalog => ({
   ...local,
   env,
   discounts,
+  legacyPrices,
   products: Object.fromEntries(
     Object.entries(local.products).map(([k, v]) => [k, { ...v, ...ids[k as CatalogProduct] }]),
   ) as Catalog["products"],
@@ -111,7 +156,11 @@ const sandbox = withIds(
   {
     desktop: {
       productId: "31a1a071-bec9-4b7e-a5dd-e9a52eb7d3ab",
-      priceId: "20024212-c2be-4d23-819e-151b704a3a3e",
+      priceId: "6de98f13-5bae-4034-8765-f503c5d59fb7",
+    },
+    bundle: {
+      productId: "54d08177-51c3-46de-8625-8e757ae345c1",
+      priceId: "8c635bd5-84df-4abb-ab40-712b1d324fa0",
     },
     pro_month: {
       productId: "274ac0a7-b561-4a2b-a378-cbefc994e558",
@@ -126,8 +175,26 @@ const sandbox = withIds(
       priceId: "4922ee3c-ee15-46fd-9aaa-bc25922fb9a9",
     },
   },
-  { "cbc510ac-177c-450b-b5ca-26bcd8a345a7": productHunt },
+  {
+    "cbc510ac-177c-450b-b5ca-26bcd8a345a7": productHunt([
+      "20024212-c2be-4d23-819e-151b704a3a3e",
+      "4f9c498a-7c19-468e-b40a-99c77a6de2dc",
+    ]),
+  },
+  [
+    {
+      product: "desktop",
+      productId: "31a1a071-bec9-4b7e-a5dd-e9a52eb7d3ab",
+      priceId: "20024212-c2be-4d23-819e-151b704a3a3e",
+      amountCents: 2900,
+    },
+  ],
 );
+
+const productHuntProduction = productHunt([
+  "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
+  "ba25c579-8e8d-4e90-9536-02e291822979",
+]);
 
 // The production organization "convt" (6098e410-4ea7-48fd-b677-7b261b8e0f7c).
 const production = withIds(
@@ -135,7 +202,11 @@ const production = withIds(
   {
     desktop: {
       productId: "9d3028c1-1e4f-4d12-9641-59960eb58679",
-      priceId: "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
+      priceId: "8cf0428e-22a8-4788-a240-6be39da64c91",
+    },
+    bundle: {
+      productId: "524c7687-97e4-4b9a-a505-e2dbad9f1bac",
+      priceId: "d8f9a8ee-f157-41f1-bb77-0dd15c197f01",
     },
     pro_month: {
       productId: "366bad05-07e3-41ca-b620-ce3d1ae5db3c",
@@ -154,8 +225,8 @@ const production = withIds(
     // Recorded when the catalog was filled. Polar also issues
     // 8d401db5-… for the same PRODUCTHUNT code; both must be accepted or
     // launch checkouts hang on /checkout/success and never grant Pro.
-    "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHunt,
-    "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHunt,
+    "64641dd4-73ae-4704-8fbf-450bed2b2aa4": productHuntProduction,
+    "8d401db5-99d3-44c2-82e9-6483dec9ced7": productHuntProduction,
     "17bb47c4-8b7b-4fb5-b013-31ad52a0e909": {
       code: "FAMILY",
       basisPoints: 10000,
@@ -167,6 +238,14 @@ const production = withIds(
       products: ["desktop"],
     },
   },
+  [
+    {
+      product: "desktop",
+      productId: "9d3028c1-1e4f-4d12-9641-59960eb58679",
+      priceId: "a68e7412-964d-4dfc-bd9b-7aa6353ae37f",
+      amountCents: 2900,
+    },
+  ],
 );
 
 const catalogs: Record<CatalogEnv, Catalog> = {
@@ -201,28 +280,38 @@ export function validateCatalog(c: Catalog): string[] {
     if (!Number.isInteger(d.basisPoints) || d.basisPoints <= 0 || d.basisPoints > 10000)
       problems.push(`discount ${id}: basis points must be between 1 and 10000`);
     if (d.products.includes("api")) problems.push(`discount ${id}: the API is never discounted`);
+    const known = new Set([
+      ...Object.values(c.products).map((e) => e.priceId),
+      ...c.legacyPrices.map((l) => l.priceId),
+    ]);
+    for (const p of d.priceIds ?? [])
+      if (!known.has(p)) problems.push(`discount ${id}: ${p} is not a price in the catalog`);
   }
-  if (
-    c.env !== "local" &&
-    Object.values(c.products).some((e) => e.productId.startsWith("PLACEHOLDER"))
-  )
-    problems.push(`${c.env}: product ids are placeholders`);
+  const current = new Set(Object.values(c.products).map((e) => e.priceId));
+  for (const l of c.legacyPrices) {
+    if (!Number.isInteger(l.amountCents) || l.amountCents <= 0)
+      problems.push(`legacy ${l.priceId}: the price must be a positive whole number of cents`);
+    if (current.has(l.priceId)) problems.push(`legacy ${l.priceId}: still a current price`);
+  }
+  if (c.env !== "local" && placeholderIds(c).length)
+    problems.push(`${c.env}: product ids are placeholders: ${placeholderIds(c).join(", ")}`);
   return problems;
 }
 
-/** Loads the catalog for an environment, refusing one with an invalid price. */
-export function loadCatalog(env: CatalogEnv, desktop?: DesktopProductIds): Catalog {
-  const previous = catalogs[env].products.desktop;
-  const c = desktop
-    ? {
-        ...catalogs[env],
-        legacyDesktop: [{ productId: previous.productId, priceId: previous.priceId }],
-        products: {
-          ...catalogs[env].products,
-          desktop: { ...catalogs[env].products.desktop, ...desktop },
-        },
-      }
-    : catalogs[env];
+/** Ids not yet filled in from the provider. A deploy with any of them is refused. */
+export function placeholderIds(c: Catalog): string[] {
+  return Object.values(c.products)
+    .flatMap((e) => [e.productId, e.priceId])
+    .filter((id) => id.startsWith("PLACEHOLDER"));
+}
+
+/**
+ * Loads the catalog for an environment, refusing one with an invalid price.
+ * Placeholders are allowed here so tests and local tools load every catalog;
+ * `scripts/deploy-worker.sh` refuses to deploy one.
+ */
+export function loadCatalog(env: CatalogEnv): Catalog {
+  const c = catalogs[env];
   const problems = validateCatalog(c).filter((p) => !p.includes("placeholders"));
   if (problems.length) throw new Error(`the ${env} catalog is invalid: ${problems.join("; ")}`);
   return c;
@@ -232,23 +321,37 @@ export function productByProviderId(c: Catalog, productId: string | null): Catal
   if (!productId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.productId === productId) return k as CatalogProduct;
-  if (c.legacyDesktop?.some((p) => p.productId === productId)) return "desktop";
-  return null;
+  return c.legacyPrices.find((p) => p.productId === productId)?.product ?? null;
 }
 
 export function productByPriceId(c: Catalog, priceId: string | null): CatalogProduct | null {
   if (!priceId) return null;
   for (const [k, v] of Object.entries(c.products))
     if (v.priceId === priceId) return k as CatalogProduct;
-  if (c.legacyDesktop?.some((p) => p.priceId === priceId)) return "desktop";
-  return null;
+  return c.legacyPrices.find((p) => p.priceId === priceId)?.product ?? null;
 }
 
 export const isPro = (p: CatalogProduct | null): p is ProProduct =>
   p === "pro_month" || p === "pro_year";
 
-/** Polar line items used when deciding whether a Desktop order charged nothing. */
-export type ComplimentaryDesktopAmounts = {
+export const isOneTime = (p: CatalogProduct | null): p is OneTimeProduct =>
+  p === "desktop" || p === "bundle";
+
+/**
+ * The list price `priceId` charges for `product`: the current price or a legacy
+ * one at its own recorded amount. Null when the price is not one of the product's.
+ */
+export function listPriceOf(c: Catalog, product: OneTimeProduct, priceId: string | null) {
+  if (!priceId) return null;
+  const current = c.products[product];
+  if (current.priceId === priceId) return current.amountCents;
+  return (
+    c.legacyPrices.find((p) => p.product === product && p.priceId === priceId)?.amountCents ?? null
+  );
+}
+
+/** Polar line items used when deciding whether a one-time order charged nothing. */
+export type ComplimentaryAmounts = {
   netCents: number;
   subtotalCents: number;
   discountCents: number;
@@ -257,17 +360,20 @@ export type ComplimentaryDesktopAmounts = {
 };
 
 /**
- * A Polar-signed Desktop order that took no money: a 100% code, Polar zeroing the
+ * A Polar-signed one-time order that took no money: a 100% code, Polar zeroing the
  * line, or store credit covering the list price. Partial unknown discounts are not.
  */
-export function complimentaryDesktop(c: Catalog, o: ComplimentaryDesktopAmounts): boolean {
-  const price = c.products.desktop;
-  if (o.netCents !== 0) return false;
-  const acceptedPrices = new Set([price.priceId, ...(c.legacyDesktop ?? []).map((p) => p.priceId)]);
-  if (o.items.length !== 1 || !acceptedPrices.has(o.items[0].priceId ?? "")) return false;
+export function complimentaryOrder(
+  c: Catalog,
+  product: OneTimeProduct,
+  o: ComplimentaryAmounts,
+): boolean {
+  if (o.netCents !== 0 || o.items.length !== 1) return false;
+  const price = listPriceOf(c, product, o.items[0].priceId);
+  if (price === null) return false;
   const item = o.items[0].amountCents;
-  if (item !== price.amountCents && item !== 0) return false;
-  if (o.subtotalCents !== price.amountCents && o.subtotalCents !== 0) return false;
+  if (item !== price && item !== 0) return false;
+  if (o.subtotalCents !== price && o.subtotalCents !== 0) return false;
   if (o.subtotalCents === 0) return o.discountCents === 0;
   return o.discountCents + (o.appliedBalanceCents ?? 0) >= o.subtotalCents;
 }
@@ -275,21 +381,24 @@ export function complimentaryDesktop(c: Catalog, o: ComplimentaryDesktopAmounts)
 /**
  * Why a discount on `product` is not acceptable, or null. `discountCents` is checked
  * against the code's percentage of `subtotalCents` when given (orders only).
- * A complimentary Desktop write-off is accepted even when Polar's discount id is
+ * A complimentary one-time write-off is accepted even when Polar's discount id is
  * not in the catalog (giveaway codes, 100% coupons).
  */
 export function discountProblem(
   c: Catalog,
   discountId: string | null,
   product: CatalogProduct,
-  amounts?: ComplimentaryDesktopAmounts,
+  amounts?: ComplimentaryAmounts,
 ): string | null {
-  if (product === "desktop" && amounts && complimentaryDesktop(c, amounts)) return null;
+  if (isOneTime(product) && amounts && complimentaryOrder(c, product, amounts)) return null;
   if (!discountId)
     return amounts && amounts.discountCents !== 0 ? "a discount without a code" : null;
   const d = c.discounts[discountId];
   if (!d) return `unknown discount ${discountId}`;
   if (!d.products.includes(product)) return `${d.code} does not apply to ${product}`;
+  const allowed = d.priceIds;
+  if (allowed && amounts?.items.some((i) => i.priceId !== null && !allowed.includes(i.priceId)))
+    return `${d.code} does not apply to this price`;
   if (amounts) {
     const expected = Math.round((amounts.subtotalCents * d.basisPoints) / 10000);
     if (Math.abs(amounts.discountCents - expected) > 1)

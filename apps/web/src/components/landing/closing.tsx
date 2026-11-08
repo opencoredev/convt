@@ -22,7 +22,7 @@ export function CallToAction({ signedIn }: { signedIn: boolean }) {
             <br className="hidden md:inline" /> to convert them.
           </h2>
           <p className="text-[17px]/[26px] text-land-soft">
-            Try convt free for 7 days. Your files stay on your machine.
+            Pay once and convert for good. Your files stay on your machine.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">

@@ -28,7 +28,7 @@ import { and, eq, lt, ne, sql } from "drizzle-orm";
 import { analyticsAllowedFromHeaders } from "#/lib/analytics-consent";
 import {
   captureEvent,
-  purchaseEventsFromLicenses,
+  claimedPurchaseEvents,
   signupEventFromAuthHook,
   type AuthHookContext,
   type CaptureAnalytics,
@@ -55,7 +55,13 @@ export type AuthDeps = {
   startCookies?: boolean;
   /** Replaces PostHog capture (tests record signup events this way). */
   captureAnalytics?: CaptureAnalytics;
+  /** Replaces billing's BillingRpc.scheduleCloud, called after a claim attaches orders. */
+  scheduleCloud?: (userId: string) => Promise<void>;
 };
+
+/** Billing's binding is imported lazily: it exists only inside the Worker. */
+const billingScheduleCloud = async (userId: string) =>
+  (await import("./billing")).billing().scheduleCloud(userId);
 
 const idPrefixes: Record<string, IdPrefix> = {
   user: "usr",
@@ -156,27 +162,51 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
   const { db } = scope;
   const deliver = deps.sendMail ?? ((message: MailMessage) => sendMail(env.mail, message));
   const capture = deps.captureAnalytics ?? ((event) => captureEvent(env.posthog, event));
-  const trackClaimedPurchases = async (userId: string, headers?: Headers | null) => {
-    const claimed = await claimPurchases(db, userId);
-    if (claimed.licenses === 0) return;
-    if (headers && !analyticsAllowedFromHeaders(headers)) return;
-    const licenses = await db.execute<{
+  const licenseRefs = async (q: Pick<typeof db, "execute">, userId: string) => {
+    const licenses = await q.execute<{
       plan: string;
+      product: string | null;
       order_id: string | null;
       subscription_id: string | null;
     }>(
-      sql`select plan, order_id, subscription_id from licenses where user_id = ${userId} and revoked_at is null`,
+      sql`select l.plan, o.product, l.order_id, l.subscription_id from licenses l
+          left join orders o on o.id = l.order_id
+          where l.user_id = ${userId} and l.revoked_at is null`,
     );
-    for (const event of purchaseEventsFromLicenses(
-      userId,
-      licenses.rows.map((license) => ({
-        plan: license.plan,
-        orderId: license.order_id,
-        subscriptionId: license.subscription_id,
-      })),
-    )) {
-      scope.background(capture(event));
-    }
+    return licenses.rows.map((license) => ({
+      plan: license.plan,
+      product: license.product,
+      orderId: license.order_id,
+      subscriptionId: license.subscription_id,
+    }));
+  };
+  const trackClaimedPurchases = async (userId: string, headers?: Headers | null) => {
+    // Licenses the account already had were counted when they were attached. The
+    // user lock (claim_purchases and billing ingest take it before writing this
+    // user's rows) keeps anything but this claim from landing between the reads.
+    const { events, orders } = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`user:${userId}`}, 0))`);
+      const before = await licenseRefs(tx, userId);
+      const claimed = await claimPurchases(tx, userId);
+      if (claimed.licenses === 0) return { events: [], orders: claimed.orders };
+      return {
+        events: claimedPurchaseEvents(userId, before, await licenseRefs(tx, userId)),
+        orders: claimed.orders,
+      };
+    });
+    // Desktop + Cloud orders bought before the account each got a cloud year of their
+    // own; billing lays them out again (the reconciler catches a miss).
+    if (orders > 0)
+      scope.background(
+        (deps.scheduleCloud ?? billingScheduleCloud)(userId).catch((e) =>
+          console.error(
+            "[auth] scheduleCloud after claim failed",
+            e instanceof Error ? e.message : e,
+          ),
+        ),
+      );
+    if (events.length === 0 || (headers && !analyticsAllowedFromHeaders(headers))) return;
+    for (const event of events) scope.background(capture(event));
   };
   // Set by the before hook on /sign-in/email-otp (and the user create hook), read
   // by its after hook. The auth instance lives for one request, so these cannot
@@ -465,7 +495,13 @@ export function authOptions(scope: RequestScope, env: AppEnv, deps: AuthDeps = {
       },
       session: {
         create: {
-          after: async (session) => void (await claimPurchases(db, session.userId)),
+          after: async (session, hookCtx) =>
+            trackClaimedPurchases(
+              session.userId,
+              (hookCtx as AuthHookContext)?.headers ??
+                (hookCtx as AuthHookContext)?.request?.headers ??
+                null,
+            ),
         },
       },
       verification: {

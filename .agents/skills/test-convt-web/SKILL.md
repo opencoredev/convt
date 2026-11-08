@@ -59,6 +59,7 @@ All fixtures are on the reserved `.test` domain and exist only in local database
 | `pastdue@convt.test`    | Pro monthly whose renewal failed: past due, last month's key.                        |
 | `disputed@convt.test`   | A Desktop purchase with a lost chargeback: the key shows DISPUTED.                   |
 | `apipending@convt.test` | API enrollment waiting for a card (pending).                                         |
+| `bundle@convt.test`     | Desktop + Cloud bought 30 days ago: a Desktop key and a cloud year, no Pro key.      |
 
 `trial@` has no key (a trial is not paid coverage); a database seeded before P7 keeps its old trial key, because licenses are never deleted. Every subscription fixture has payment coverage and a `billing_customers` row with mock ids.
 
@@ -88,9 +89,10 @@ E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/code-input.sh  # code boxes
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/fixtures.sh  # every fixture, 5 pages, 1280 and 390 px, light and dark
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/account.sh   # activate, copy key, rename, change email, connect, sign out
 E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/billing.sh   # checkout, keys, trial, switch, refund, API, emails, deletion
+E2E_SESSION=convt-web E2E_SHOTS=$work/shots bash e2e/one-time.sh  # $39 Desktop, a $29 legacy refund, Desktop + Cloud: stack, refund, chargeback, deletion; Pro subscriber
 ```
 
-They read the site origin from `apps/web/.dev.vars`; set `E2E_URL` to test Wrangler instead. `billing.sh` drives the mock's hosted checkout and its `/admin/*` endpoints (end a trial, renew, fail a card, refund, change settings), runs crons through `$E2E_URL/__billing/scheduled?cron=...`, and screenshots each billing screen and the four emails (Mailpit's `/view/<id>.html`) in both themes. Run it once per fresh `dev:web`: it changes mock settings and deletes an account. `account.sh` calls a source module directly to prove `getLicenseKey` refuses another user's license, which only works under Vite. A layout change needs desktop and 390 px screenshots in both themes; look at each one with the Read tool.
+They read the site origin from `apps/web/.dev.vars`; set `E2E_URL` to test Wrangler instead. `one-time.sh` ends by renewing `pro@`, which moves the mock clock a year forward, so run it once per fresh `dev:web` too. Pro is sold only through the desktop app's trial (`/checkout/pro?from=app`); without `from=app` the route answers 303 to `/#pricing`. Desktop + Cloud (`/checkout/bundle`) needs sign-in; its cloud year is a prepaid `subscriptions` row with `order_id` set (`packages/billing/src/converge.ts`, `scheduleCloud`). `billing.sh` drives the mock's hosted checkout and its `/admin/*` endpoints (end a trial, renew, fail a card, refund, change settings), runs crons through `$E2E_URL/__billing/scheduled?cron=...`, and screenshots each billing screen and the four emails (Mailpit's `/view/<id>.html`) in both themes. Run it once per fresh `dev:web`: it changes mock settings and deletes an account. `account.sh` calls a source module directly to prove `getLicenseKey` refuses another user's license, which only works under Vite. A layout change needs desktop and 390 px screenshots in both themes; look at each one with the Read tool.
 
 Activate opens `convt://activate?key=<token>` through a temporary link. `account.sh` stubs `HTMLAnchorElement.prototype.click` to check the URL, because Chrome lets no page script stub `location`. Opening the link in the real desktop app is a GUI check (see test-convt-desktop): register the handler with `integrations/linux/install.py` and use `CONVT_LICENSE_STORE=file` with `HOME` and the XDG directories in a `mktemp` directory. Seeded keys are signed with `.convt-dev/license.key`, whose public half local builds embed.
 

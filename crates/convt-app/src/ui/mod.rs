@@ -196,7 +196,7 @@ impl AssetSource for Assets {
 }
 
 /// The license price quoted in the trial card and the first-run window.
-pub const LICENSE_PRICE: &str = "$29";
+pub const LICENSE_PRICE: &str = "$39";
 
 /// An open window of one kind, if any.
 struct Open<V: 'static>(AnyWindowHandle, WeakEntity<V>);

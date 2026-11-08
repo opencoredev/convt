@@ -13,18 +13,23 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as SiteRouteImport } from './routes/_site'
 import { Route as BrandRouteImport } from './routes/brand'
+import { Route as Google14363a02f88d13faDothtmlRouteImport } from './routes/google14363a02f88d13fa[.]html'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AppShellRouteImport } from './routes/_app/_shell'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
+import { Route as SiteCommandLineFileConverterRouteImport } from './routes/_site/command-line-file-converter'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDownloadRouteImport } from './routes/_site/download'
 import { Route as SiteFormatsRouteImport } from './routes/_site/formats'
+import { Route as SiteMacFileConverterRouteImport } from './routes/_site/mac-file-converter'
 import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
+import { Route as CheckoutBundleRouteImport } from './routes/checkout/bundle'
 import { Route as CheckoutDesktopRouteImport } from './routes/checkout/desktop'
 import { Route as CheckoutProRouteImport } from './routes/checkout/pro'
 import { Route as UpdatesManifestDotjsonRouteImport } from './routes/updates/manifest[.]json'
@@ -35,6 +40,14 @@ import { Route as AppSignInIndexRouteImport } from './routes/_app/sign-in/index'
 import { Route as AppSignInCheckEmailRouteImport } from './routes/_app/sign-in/check-email'
 import { Route as AppSignInVerifyRouteImport } from './routes/_app/sign-in/verify'
 import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/verify-email'
+import { Route as SiteGuidesIndexRouteImport } from './routes/_site/guides/index'
+import { Route as SiteGuidesBatchHeicToJpgWindowsRouteImport } from './routes/_site/guides/batch-heic-to-jpg-windows'
+import { Route as SiteGuidesHeicToJpgMacRouteImport } from './routes/_site/guides/heic-to-jpg-mac'
+import { Route as SiteGuidesMovToMp4MacRouteImport } from './routes/_site/guides/mov-to-mp4-mac'
+import { Route as SiteGuidesMp4FlacWavToMp3MacRouteImport } from './routes/_site/guides/mp4-flac-wav-to-mp3-mac'
+import { Route as SiteGuidesPdfToPngMacWindowsRouteImport } from './routes/_site/guides/pdf-to-png-mac-windows'
+import { Route as SiteGuidesSvgToPngMacRouteImport } from './routes/_site/guides/svg-to-png-mac'
+import { Route as SiteGuidesWebpToPngJpgRouteImport } from './routes/_site/guides/webp-to-png-jpg'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDeviceCloudRouteImport } from './routes/api/device/cloud'
 import { Route as ApiDeviceLicenseRouteImport } from './routes/api/device/license'
@@ -62,6 +75,17 @@ const SiteRoute = SiteRouteImport.update({
 const BrandRoute = BrandRouteImport.update({
   id: '/brand',
   path: '/brand',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Google14363a02f88d13faDothtmlRoute =
+  Google14363a02f88d13faDothtmlRouteImport.update({
+    id: '/google14363a02f88d13fa.html',
+    path: '/google14363a02f88d13fa.html',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PricingRoute = PricingRouteImport.update({
@@ -93,6 +117,12 @@ const SiteChangelogRoute = SiteChangelogRouteImport.update({
   path: '/changelog',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteCommandLineFileConverterRoute =
+  SiteCommandLineFileConverterRouteImport.update({
+    id: '/command-line-file-converter',
+    path: '/command-line-file-converter',
+    getParentRoute: () => SiteRoute,
+  } as any)
 const SiteContactRoute = SiteContactRouteImport.update({
   id: '/contact',
   path: '/contact',
@@ -108,6 +138,11 @@ const SiteFormatsRoute = SiteFormatsRouteImport.update({
   path: '/formats',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteMacFileConverterRoute = SiteMacFileConverterRouteImport.update({
+  id: '/mac-file-converter',
+  path: '/mac-file-converter',
+  getParentRoute: () => SiteRoute,
+} as any)
 const SitePrivacyRoute = SitePrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -121,6 +156,11 @@ const SiteTermsRoute = SiteTermsRouteImport.update({
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
   id: '/api/feedback',
   path: '/api/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutBundleRoute = CheckoutBundleRouteImport.update({
+  id: '/checkout/bundle',
+  path: '/checkout/bundle',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutDesktopRoute = CheckoutDesktopRouteImport.update({
@@ -172,6 +212,49 @@ const AppSignInVerifyEmailRoute = AppSignInVerifyEmailRouteImport.update({
   id: '/sign-in/verify-email',
   path: '/sign-in/verify-email',
   getParentRoute: () => AppRoute,
+} as any)
+const SiteGuidesIndexRoute = SiteGuidesIndexRouteImport.update({
+  id: '/guides/',
+  path: '/guides/',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteGuidesBatchHeicToJpgWindowsRoute =
+  SiteGuidesBatchHeicToJpgWindowsRouteImport.update({
+    id: '/guides/batch-heic-to-jpg-windows',
+    path: '/guides/batch-heic-to-jpg-windows',
+    getParentRoute: () => SiteRoute,
+  } as any)
+const SiteGuidesHeicToJpgMacRoute = SiteGuidesHeicToJpgMacRouteImport.update({
+  id: '/guides/heic-to-jpg-mac',
+  path: '/guides/heic-to-jpg-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteGuidesMovToMp4MacRoute = SiteGuidesMovToMp4MacRouteImport.update({
+  id: '/guides/mov-to-mp4-mac',
+  path: '/guides/mov-to-mp4-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteGuidesMp4FlacWavToMp3MacRoute =
+  SiteGuidesMp4FlacWavToMp3MacRouteImport.update({
+    id: '/guides/mp4-flac-wav-to-mp3-mac',
+    path: '/guides/mp4-flac-wav-to-mp3-mac',
+    getParentRoute: () => SiteRoute,
+  } as any)
+const SiteGuidesPdfToPngMacWindowsRoute =
+  SiteGuidesPdfToPngMacWindowsRouteImport.update({
+    id: '/guides/pdf-to-png-mac-windows',
+    path: '/guides/pdf-to-png-mac-windows',
+    getParentRoute: () => SiteRoute,
+  } as any)
+const SiteGuidesSvgToPngMacRoute = SiteGuidesSvgToPngMacRouteImport.update({
+  id: '/guides/svg-to-png-mac',
+  path: '/guides/svg-to-png-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteGuidesWebpToPngJpgRoute = SiteGuidesWebpToPngJpgRouteImport.update({
+  id: '/guides/webp-to-png-jpg',
+  path: '/guides/webp-to-png-jpg',
+  getParentRoute: () => SiteRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -230,17 +313,22 @@ const AppShellDashboardApiConvertRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/brand': typeof BrandRoute
+  '/google14363a02f88d13fa.html': typeof Google14363a02f88d13faDothtmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/pricing': typeof PricingRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
   '/changelog': typeof SiteChangelogRoute
+  '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/checkout/bundle': typeof CheckoutBundleRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
@@ -250,12 +338,20 @@ export interface FileRoutesByFullPath {
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
+  '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
+  '/guides/svg-to-png-mac': typeof SiteGuidesSvgToPngMacRoute
+  '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
   '/sign-in/': typeof AppSignInIndexRoute
+  '/guides/': typeof SiteGuidesIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
@@ -265,17 +361,22 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/brand': typeof BrandRoute
+  '/google14363a02f88d13fa.html': typeof Google14363a02f88d13faDothtmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/pricing': typeof PricingRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
   '/changelog': typeof SiteChangelogRoute
+  '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/checkout/bundle': typeof CheckoutBundleRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
@@ -285,12 +386,20 @@ export interface FileRoutesByTo {
   '/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/sign-in/verify': typeof AppSignInVerifyRoute
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
+  '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
+  '/guides/svg-to-png-mac': typeof SiteGuidesSvgToPngMacRoute
+  '/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
   '/sign-in': typeof AppSignInIndexRoute
+  '/guides': typeof SiteGuidesIndexRoute
   '/dashboard/api': typeof AppShellDashboardApiRoute
   '/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/dashboard/licenses': typeof AppShellDashboardLicensesRoute
@@ -303,18 +412,23 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_site': typeof SiteRouteWithChildren
   '/brand': typeof BrandRoute
+  '/google14363a02f88d13fa.html': typeof Google14363a02f88d13faDothtmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/pricing': typeof PricingRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/_shell': typeof AppShellRouteWithChildren
   '/_app/device': typeof AppDeviceRoute
   '/_site/changelog': typeof SiteChangelogRoute
+  '/_site/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/_site/contact': typeof SiteContactRoute
   '/_site/download': typeof SiteDownloadRoute
   '/_site/formats': typeof SiteFormatsRoute
+  '/_site/mac-file-converter': typeof SiteMacFileConverterRoute
   '/_site/privacy': typeof SitePrivacyRoute
   '/_site/terms': typeof SiteTermsRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/checkout/bundle': typeof CheckoutBundleRoute
   '/checkout/desktop': typeof CheckoutDesktopRoute
   '/checkout/pro': typeof CheckoutProRoute
   '/updates/manifest.json': typeof UpdatesManifestDotjsonRoute
@@ -324,12 +438,20 @@ export interface FileRoutesById {
   '/_app/sign-in/check-email': typeof AppSignInCheckEmailRoute
   '/_app/sign-in/verify': typeof AppSignInVerifyRoute
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
+  '/_site/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
+  '/_site/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/_site/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
+  '/_site/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  '/_site/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
+  '/_site/guides/svg-to-png-mac': typeof SiteGuidesSvgToPngMacRoute
+  '/_site/guides/webp-to-png-jpg': typeof SiteGuidesWebpToPngJpgRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/device/cloud': typeof ApiDeviceCloudRoute
   '/api/device/license': typeof ApiDeviceLicenseRoute
   '/api/device/sign-out': typeof ApiDeviceSignOutRoute
   '/api/device/token': typeof ApiDeviceTokenRoute
   '/_app/sign-in/': typeof AppSignInIndexRoute
+  '/_site/guides/': typeof SiteGuidesIndexRoute
   '/_app/_shell/dashboard/api': typeof AppShellDashboardApiRoute
   '/_app/_shell/dashboard/billing': typeof AppShellDashboardBillingRoute
   '/_app/_shell/dashboard/licenses': typeof AppShellDashboardLicensesRoute
@@ -341,17 +463,22 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/brand'
+    | '/google14363a02f88d13fa.html'
+    | '/llms.txt'
     | '/pricing'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/device'
     | '/changelog'
+    | '/command-line-file-converter'
     | '/contact'
     | '/download'
     | '/formats'
+    | '/mac-file-converter'
     | '/privacy'
     | '/terms'
     | '/api/feedback'
+    | '/checkout/bundle'
     | '/checkout/desktop'
     | '/checkout/pro'
     | '/updates/manifest.json'
@@ -361,12 +488,20 @@ export interface FileRouteTypes {
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
+    | '/guides/batch-heic-to-jpg-windows'
+    | '/guides/heic-to-jpg-mac'
+    | '/guides/mov-to-mp4-mac'
+    | '/guides/mp4-flac-wav-to-mp3-mac'
+    | '/guides/pdf-to-png-mac-windows'
+    | '/guides/svg-to-png-mac'
+    | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
     | '/sign-in/'
+    | '/guides/'
     | '/dashboard/api'
     | '/dashboard/billing'
     | '/dashboard/licenses'
@@ -376,17 +511,22 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/brand'
+    | '/google14363a02f88d13fa.html'
+    | '/llms.txt'
     | '/pricing'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/device'
     | '/changelog'
+    | '/command-line-file-converter'
     | '/contact'
     | '/download'
     | '/formats'
+    | '/mac-file-converter'
     | '/privacy'
     | '/terms'
     | '/api/feedback'
+    | '/checkout/bundle'
     | '/checkout/desktop'
     | '/checkout/pro'
     | '/updates/manifest.json'
@@ -396,12 +536,20 @@ export interface FileRouteTypes {
     | '/sign-in/check-email'
     | '/sign-in/verify'
     | '/sign-in/verify-email'
+    | '/guides/batch-heic-to-jpg-windows'
+    | '/guides/heic-to-jpg-mac'
+    | '/guides/mov-to-mp4-mac'
+    | '/guides/mp4-flac-wav-to-mp3-mac'
+    | '/guides/pdf-to-png-mac-windows'
+    | '/guides/svg-to-png-mac'
+    | '/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
     | '/sign-in'
+    | '/guides'
     | '/dashboard/api'
     | '/dashboard/billing'
     | '/dashboard/licenses'
@@ -413,18 +561,23 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_site'
     | '/brand'
+    | '/google14363a02f88d13fa.html'
+    | '/llms.txt'
     | '/pricing'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/_app/_shell'
     | '/_app/device'
     | '/_site/changelog'
+    | '/_site/command-line-file-converter'
     | '/_site/contact'
     | '/_site/download'
     | '/_site/formats'
+    | '/_site/mac-file-converter'
     | '/_site/privacy'
     | '/_site/terms'
     | '/api/feedback'
+    | '/checkout/bundle'
     | '/checkout/desktop'
     | '/checkout/pro'
     | '/updates/manifest.json'
@@ -434,12 +587,20 @@ export interface FileRouteTypes {
     | '/_app/sign-in/check-email'
     | '/_app/sign-in/verify'
     | '/_app/sign-in/verify-email'
+    | '/_site/guides/batch-heic-to-jpg-windows'
+    | '/_site/guides/heic-to-jpg-mac'
+    | '/_site/guides/mov-to-mp4-mac'
+    | '/_site/guides/mp4-flac-wav-to-mp3-mac'
+    | '/_site/guides/pdf-to-png-mac-windows'
+    | '/_site/guides/svg-to-png-mac'
+    | '/_site/guides/webp-to-png-jpg'
     | '/api/auth/$'
     | '/api/device/cloud'
     | '/api/device/license'
     | '/api/device/sign-out'
     | '/api/device/token'
     | '/_app/sign-in/'
+    | '/_site/guides/'
     | '/_app/_shell/dashboard/api'
     | '/_app/_shell/dashboard/billing'
     | '/_app/_shell/dashboard/licenses'
@@ -452,10 +613,13 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   SiteRoute: typeof SiteRouteWithChildren
   BrandRoute: typeof BrandRoute
+  Google14363a02f88d13faDothtmlRoute: typeof Google14363a02f88d13faDothtmlRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   PricingRoute: typeof PricingRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
+  CheckoutBundleRoute: typeof CheckoutBundleRoute
   CheckoutDesktopRoute: typeof CheckoutDesktopRoute
   CheckoutProRoute: typeof CheckoutProRoute
   UpdatesManifestDotjsonRoute: typeof UpdatesManifestDotjsonRoute
@@ -494,6 +658,20 @@ declare module '@tanstack/react-router' {
       path: '/brand'
       fullPath: '/brand'
       preLoaderRoute: typeof BrandRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/google14363a02f88d13fa.html': {
+      id: '/google14363a02f88d13fa.html'
+      path: '/google14363a02f88d13fa.html'
+      fullPath: '/google14363a02f88d13fa.html'
+      preLoaderRoute: typeof Google14363a02f88d13faDothtmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
@@ -538,6 +716,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteChangelogRouteImport
       parentRoute: typeof SiteRoute
     }
+    '/_site/command-line-file-converter': {
+      id: '/_site/command-line-file-converter'
+      path: '/command-line-file-converter'
+      fullPath: '/command-line-file-converter'
+      preLoaderRoute: typeof SiteCommandLineFileConverterRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/_site/contact': {
       id: '/_site/contact'
       path: '/contact'
@@ -559,6 +744,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteFormatsRouteImport
       parentRoute: typeof SiteRoute
     }
+    '/_site/mac-file-converter': {
+      id: '/_site/mac-file-converter'
+      path: '/mac-file-converter'
+      fullPath: '/mac-file-converter'
+      preLoaderRoute: typeof SiteMacFileConverterRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/_site/privacy': {
       id: '/_site/privacy'
       path: '/privacy'
@@ -578,6 +770,13 @@ declare module '@tanstack/react-router' {
       path: '/api/feedback'
       fullPath: '/api/feedback'
       preLoaderRoute: typeof ApiFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout/bundle': {
+      id: '/checkout/bundle'
+      path: '/checkout/bundle'
+      fullPath: '/checkout/bundle'
+      preLoaderRoute: typeof CheckoutBundleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout/desktop': {
@@ -649,6 +848,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in/verify-email'
       preLoaderRoute: typeof AppSignInVerifyEmailRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_site/guides/': {
+      id: '/_site/guides/'
+      path: '/guides'
+      fullPath: '/guides/'
+      preLoaderRoute: typeof SiteGuidesIndexRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/batch-heic-to-jpg-windows': {
+      id: '/_site/guides/batch-heic-to-jpg-windows'
+      path: '/guides/batch-heic-to-jpg-windows'
+      fullPath: '/guides/batch-heic-to-jpg-windows'
+      preLoaderRoute: typeof SiteGuidesBatchHeicToJpgWindowsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/heic-to-jpg-mac': {
+      id: '/_site/guides/heic-to-jpg-mac'
+      path: '/guides/heic-to-jpg-mac'
+      fullPath: '/guides/heic-to-jpg-mac'
+      preLoaderRoute: typeof SiteGuidesHeicToJpgMacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/mov-to-mp4-mac': {
+      id: '/_site/guides/mov-to-mp4-mac'
+      path: '/guides/mov-to-mp4-mac'
+      fullPath: '/guides/mov-to-mp4-mac'
+      preLoaderRoute: typeof SiteGuidesMovToMp4MacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/mp4-flac-wav-to-mp3-mac': {
+      id: '/_site/guides/mp4-flac-wav-to-mp3-mac'
+      path: '/guides/mp4-flac-wav-to-mp3-mac'
+      fullPath: '/guides/mp4-flac-wav-to-mp3-mac'
+      preLoaderRoute: typeof SiteGuidesMp4FlacWavToMp3MacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/pdf-to-png-mac-windows': {
+      id: '/_site/guides/pdf-to-png-mac-windows'
+      path: '/guides/pdf-to-png-mac-windows'
+      fullPath: '/guides/pdf-to-png-mac-windows'
+      preLoaderRoute: typeof SiteGuidesPdfToPngMacWindowsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/svg-to-png-mac': {
+      id: '/_site/guides/svg-to-png-mac'
+      path: '/guides/svg-to-png-mac'
+      fullPath: '/guides/svg-to-png-mac'
+      preLoaderRoute: typeof SiteGuidesSvgToPngMacRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/guides/webp-to-png-jpg': {
+      id: '/_site/guides/webp-to-png-jpg'
+      path: '/guides/webp-to-png-jpg'
+      fullPath: '/guides/webp-to-png-jpg'
+      preLoaderRoute: typeof SiteGuidesWebpToPngJpgRouteImport
+      parentRoute: typeof SiteRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -771,20 +1026,40 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface SiteRouteChildren {
   SiteChangelogRoute: typeof SiteChangelogRoute
+  SiteCommandLineFileConverterRoute: typeof SiteCommandLineFileConverterRoute
   SiteContactRoute: typeof SiteContactRoute
   SiteDownloadRoute: typeof SiteDownloadRoute
   SiteFormatsRoute: typeof SiteFormatsRoute
+  SiteMacFileConverterRoute: typeof SiteMacFileConverterRoute
   SitePrivacyRoute: typeof SitePrivacyRoute
   SiteTermsRoute: typeof SiteTermsRoute
+  SiteGuidesBatchHeicToJpgWindowsRoute: typeof SiteGuidesBatchHeicToJpgWindowsRoute
+  SiteGuidesHeicToJpgMacRoute: typeof SiteGuidesHeicToJpgMacRoute
+  SiteGuidesMovToMp4MacRoute: typeof SiteGuidesMovToMp4MacRoute
+  SiteGuidesMp4FlacWavToMp3MacRoute: typeof SiteGuidesMp4FlacWavToMp3MacRoute
+  SiteGuidesPdfToPngMacWindowsRoute: typeof SiteGuidesPdfToPngMacWindowsRoute
+  SiteGuidesSvgToPngMacRoute: typeof SiteGuidesSvgToPngMacRoute
+  SiteGuidesWebpToPngJpgRoute: typeof SiteGuidesWebpToPngJpgRoute
+  SiteGuidesIndexRoute: typeof SiteGuidesIndexRoute
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
   SiteChangelogRoute: SiteChangelogRoute,
+  SiteCommandLineFileConverterRoute: SiteCommandLineFileConverterRoute,
   SiteContactRoute: SiteContactRoute,
   SiteDownloadRoute: SiteDownloadRoute,
   SiteFormatsRoute: SiteFormatsRoute,
+  SiteMacFileConverterRoute: SiteMacFileConverterRoute,
   SitePrivacyRoute: SitePrivacyRoute,
   SiteTermsRoute: SiteTermsRoute,
+  SiteGuidesBatchHeicToJpgWindowsRoute: SiteGuidesBatchHeicToJpgWindowsRoute,
+  SiteGuidesHeicToJpgMacRoute: SiteGuidesHeicToJpgMacRoute,
+  SiteGuidesMovToMp4MacRoute: SiteGuidesMovToMp4MacRoute,
+  SiteGuidesMp4FlacWavToMp3MacRoute: SiteGuidesMp4FlacWavToMp3MacRoute,
+  SiteGuidesPdfToPngMacWindowsRoute: SiteGuidesPdfToPngMacWindowsRoute,
+  SiteGuidesSvgToPngMacRoute: SiteGuidesSvgToPngMacRoute,
+  SiteGuidesWebpToPngJpgRoute: SiteGuidesWebpToPngJpgRoute,
+  SiteGuidesIndexRoute: SiteGuidesIndexRoute,
 }
 
 const SiteRouteWithChildren = SiteRoute._addFileChildren(SiteRouteChildren)
@@ -794,10 +1069,13 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   SiteRoute: SiteRouteWithChildren,
   BrandRoute: BrandRoute,
+  Google14363a02f88d13faDothtmlRoute: Google14363a02f88d13faDothtmlRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   PricingRoute: PricingRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
+  CheckoutBundleRoute: CheckoutBundleRoute,
   CheckoutDesktopRoute: CheckoutDesktopRoute,
   CheckoutProRoute: CheckoutProRoute,
   UpdatesManifestDotjsonRoute: UpdatesManifestDotjsonRoute,

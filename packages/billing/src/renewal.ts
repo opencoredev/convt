@@ -43,10 +43,27 @@ export async function proSubscription(db: Db, userId: string, now: Date) {
     select status, trial_ends_at from subscriptions
     where user_id = ${userId} and kind = 'pro'
       and status in ('trialing', 'active', 'past_due', 'unpaid', 'incomplete')
-      and (ended_at is null or ended_at > ${now})
+      and (ended_at is null or ended_at > ${now}) and order_id is null
     order by created_at desc limit 1`,
   );
   return live ?? null;
+}
+
+/**
+ * Whether a Desktop + Cloud year runs now. It counts only between its start and
+ * end, as convt-server checks it, so a stacked year that hasn't started (or the
+ * gap a refund leaves) never offers Cloud the API would refuse.
+ */
+export async function hasLiveCloudYear(db: Db, userId: string, now: Date): Promise<boolean> {
+  const [row] = await rows<{ x: number }>(
+    db,
+    sql`
+    select 1 as x from subscriptions
+    where user_id = ${userId} and kind = 'pro' and order_id is not null and status = 'active'
+      and current_period_start <= ${now} and current_period_end > ${now} and ended_at > ${now}
+    limit 1`,
+  );
+  return !!row;
 }
 
 export async function hasProSubscription(db: Db, userId: string): Promise<boolean> {
@@ -68,6 +85,9 @@ export async function currentProAccess(
   );
   if (deleting.length) return { kind: "lapsed" };
   const live = await proSubscription(ctx.db, userId, ctx.clock());
+  // A paid subscription or a running cloud year is Pro, whatever else the account has.
+  if (live?.status === "active" || live?.status === "past_due") return { kind: "pro" };
+  if (await hasLiveCloudYear(ctx.db, userId, ctx.clock())) return { kind: "pro" };
   if (
     (live?.status === "trialing" || live?.status === "incomplete") &&
     live.trial_ends_at &&

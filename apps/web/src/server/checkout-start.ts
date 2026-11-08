@@ -6,6 +6,7 @@ import type { CatalogProduct } from "@convt/billing/rpc";
 
 import { billing, allowCheckout, checkoutCookie, productForPro } from "./billing";
 import { createAuth } from "./auth";
+import { proTrialEntry } from "./pro-trial";
 import { requestContext } from "./context";
 
 const nonceMaxAge = 2 * 60 * 60;
@@ -16,7 +17,11 @@ function to(url: string, cookie?: string) {
   return new Response(null, { status: 303, headers });
 }
 
-export async function startCheckout(request: Request, context: unknown, kind: "desktop" | "pro") {
+export async function startCheckout(
+  request: Request,
+  context: unknown,
+  kind: "desktop" | "bundle" | "pro",
+) {
   const { scope, appEnv } = requestContext(context);
   const url = new URL(request.url);
   const session = await createAuth(scope, appEnv).api.getSession({ headers: request.headers });
@@ -26,7 +31,13 @@ export async function startCheckout(request: Request, context: unknown, kind: "d
   // The desktop app's Start free trial opens /checkout/pro?from=app (convt-billing's
   // checkout_url), so the success page can send the buyer back to the app.
   const fromApp = url.searchParams.get("from") === "app";
-  let product: CatalogProduct = "desktop";
+  // Pro is sold only through the app's trial; old links and bookmarks go to pricing.
+  if (kind === "pro" && !fromApp) return to("/#pricing");
+  let product: CatalogProduct = kind === "bundle" ? "bundle" : "desktop";
+  if (kind === "bundle" && !user)
+    return to(
+      `/sign-in?redirect=${encodeURIComponent(`/checkout/bundle${fromApp ? "?from=app" : ""}`)}`,
+    );
   if (kind === "pro") {
     const p = productForPro(url.searchParams.get("interval") ?? "month");
     if (!p) return new Response("Unknown interval", { status: 400 });
@@ -35,13 +46,28 @@ export async function startCheckout(request: Request, context: unknown, kind: "d
       const back = `/checkout/pro?interval=${p === "pro_year" ? "year" : "month"}${fromApp ? "&from=app" : ""}`;
       return to(`/sign-in?redirect=${encodeURIComponent(back)}`);
     }
+    // Only a trial: billing would otherwise sell a paid subscription to an
+    // account that already used its trial.
+    const entry = proTrialEntry(await billing().currentProAccess(user.id));
+    if (entry !== "checkout") return to(entry);
   }
   const ip = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
   if (!(await allowCheckout(scope.db, ip, user?.id ?? null)))
     return to("/checkout/success?error=rate_limited");
-  const created = await billing().createCheckout({ product, user, fromApp });
+  // Pro is only ever a trial: billing refuses at creation time if the account
+  // can't start one, closing the race with a purchase after the check above.
+  const created = await billing().createCheckout({
+    product,
+    user,
+    fromApp,
+    trialOnly: kind === "pro",
+  });
   if (!created.ok) {
     if (created.refusal === "already_pro") return to("/dashboard/billing");
+    if (created.refusal === "trial_unavailable" && user) {
+      const entry = proTrialEntry(await billing().currentProAccess(user.id));
+      return to(entry === "checkout" ? "/#pricing" : entry);
+    }
     return to(`/checkout/success?error=${created.refusal}`);
   }
   return to(created.url, checkoutCookie(appEnv, created.cookieValue, nonceMaxAge));

@@ -138,15 +138,18 @@ wait_url /checkout/success 30
 check "the buyer sees their key" wait_text "Here's your license key"
 check "and it is theirs on the dashboard" until_sql "select count(*) from licenses l join users u on u.id = l.user_id where u.email = '$buyer'" 1
 
-# 3. Pro with a trial, then the first payment issues the key.
+# 3. Pro with a trial, then the first payment issues the key. Pro is sold only
+# through the desktop app's trial (CNV-101), which opens this URL with from=app.
 pro="pro-$RANDOM@convt.test"
 sign_in_code "$pro"
-ab open "$E2E_URL/checkout/pro?interval=month" >/dev/null
+web_pro=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$E2E_URL/checkout/pro?interval=month")
+check "a Pro checkout outside the app goes to pricing" test "$web_pro" = "303 $E2E_URL/#pricing"
+ab open "$E2E_URL/checkout/pro?interval=month&from=app" >/dev/null
 wait_url "$MOCK/checkout/"
 check "the Pro checkout offers the 7-day trial" grep -q "7-day free trial" <<<"$(page_text)"
 pay
 wait_url /checkout/success 30
-check "the success page says the trial started" wait_text "Your trial has started"
+check "the success page says the trial is on" wait_text "Your trial is on"
 shots success-trial
 check "no key during the trial" test "$(owner_sql "select count(*) from licenses l join users u on u.id = l.user_id where u.email = '$pro'")" = 0
 open_page /dashboard/billing
