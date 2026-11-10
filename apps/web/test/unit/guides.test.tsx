@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { guideDownloadUrl, guideHead, guidePath, guides, relatedGuides } from "#/lib/guides";
 import { Route as BatchHeicToJpgWindows } from "../../src/routes/_site/guides/batch-heic-to-jpg-windows";
 import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg-mac";
+import { Route as MkvToMp4Mac } from "../../src/routes/_site/guides/mkv-to-mp4-mac";
 import { Route as MovToMp4Mac } from "../../src/routes/_site/guides/mov-to-mp4-mac";
 import { Route as Mp4FlacWavToMp3Mac } from "../../src/routes/_site/guides/mp4-flac-wav-to-mp3-mac";
 import { Route as PdfToPngMacWindows } from "../../src/routes/_site/guides/pdf-to-png-mac-windows";
@@ -78,7 +79,8 @@ function renderGuide(
     | typeof WebpToPngJpg
     | typeof PdfToPngMacWindows
     | typeof Mp4FlacWavToMp3Mac
-    | typeof SvgToPngMac,
+    | typeof SvgToPngMac
+    | typeof MkvToMp4Mac,
 ) {
   const Page = route.options.component;
   if (!Page) throw new Error("guide route has no component");
@@ -128,6 +130,7 @@ test("every guide links to every other guide, same kind of file first", () => {
     "pdf-to-png-mac-windows": PdfToPngMacWindows,
     "mp4-flac-wav-to-mp3-mac": Mp4FlacWavToMp3Mac,
     "svg-to-png-mac": SvgToPngMac,
+    "mkv-to-mp4-mac": MkvToMp4Mac,
   } satisfies Record<(typeof guides)[number]["slug"], unknown>;
   for (const guide of guides) {
     const html = renderGuide(routes[guide.slug]);
@@ -145,6 +148,7 @@ test("every guide links to every other guide, same kind of file first", () => {
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
+    "mkv-to-mp4-mac",
   ]);
   const related = renderGuide(HeicToJpgMac).split("Related guides")[1] ?? "";
   expect([...related.matchAll(/href="\/guides\/([^"]+)"/g)].map((m) => m[1])).toEqual([
@@ -154,8 +158,11 @@ test("every guide links to every other guide, same kind of file first", () => {
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
+    "mkv-to-mp4-mac",
   ]);
+  // The MOV guide lists the other video guide first.
   expect(relatedGuides(guides[2]).map((g) => g.slug)).toEqual([
+    "mkv-to-mp4-mac",
     "heic-to-jpg-mac",
     "batch-heic-to-jpg-windows",
     "webp-to-png-jpg",
@@ -170,6 +177,7 @@ test("every guide links to every other guide, same kind of file first", () => {
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
+    "mkv-to-mp4-mac",
   ]);
 });
 
@@ -200,6 +208,7 @@ test("the PDF guide tags its download link and prints the tested page and folder
     "webp-to-png-jpg",
     "mp4-flac-wav-to-mp3-mac",
     "svg-to-png-mac",
+    "mkv-to-mp4-mac",
   ]);
 });
 
@@ -227,6 +236,7 @@ test("the MP3 guide tags its download link and prints the tested file, folder an
     "webp-to-png-jpg",
     "pdf-to-png-mac-windows",
     "svg-to-png-mac",
+    "mkv-to-mp4-mac",
   ]);
 });
 
@@ -256,5 +266,31 @@ test("the SVG guide tags its download link and prints the tested size, backgroun
     "mov-to-mp4-mac",
     "pdf-to-png-mac-windows",
     "mp4-flac-wav-to-mp3-mac",
+    "mkv-to-mp4-mac",
   ]);
+});
+
+test("the MKV guide tags its download link and prints the tested remux, audio, re-encode and folder commands", () => {
+  expect(guideHead("mkv-to-mp4-mac").links).toContainEqual({
+    rel: "canonical",
+    href: "https://convt.app/guides/mkv-to-mp4-mac",
+  });
+  const html = renderGuide(MkvToMp4Mac);
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
+    "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=mkv-to-mp4-mac",
+  ]);
+  expect(html).toContain(
+    "ffmpeg -i input.mkv -map 0:v -map 0:a -map 0:s? -c copy -c:s mov_text -movflags +faststart output.mp4",
+  );
+  expect(html).toContain("-c copy -c:s mov_text -tag:v hvc1 -movflags +faststart output.mp4");
+  expect(html).toContain("-c:v copy -c:a aac -b:a 192k -c:s mov_text");
+  expect(html).toContain("-map 0:v:0 -map 0:a -map 0:s? -c:v libx264 -crf 20 -preset medium");
+  expect(html).toContain("convt videos --to mp4 -r -o mp4");
+  expect(html).toContain(
+    "&amp; &quot;$env:LOCALAPPDATA\\Programs\\convt\\convt.exe&quot; Videos --to mp4 -r -o mp4",
+  );
+  expect(html).toContain('href="/guides/mov-to-mp4-mac#smaller"');
+  // A video guide: the MOV guide first, then the rest in catalog order.
+  expect(relatedGuides(guides[7]).map((g) => g.slug)[0]).toBe("mov-to-mp4-mac");
 });
