@@ -43,6 +43,7 @@ import { Route as AppSignInVerifyEmailRouteImport } from './routes/_app/sign-in/
 import { Route as SiteGuidesIndexRouteImport } from './routes/_site/guides/index'
 import { Route as SiteGuidesBatchHeicToJpgWindowsRouteImport } from './routes/_site/guides/batch-heic-to-jpg-windows'
 import { Route as SiteGuidesHeicToJpgMacRouteImport } from './routes/_site/guides/heic-to-jpg-mac'
+import { Route as SiteGuidesMkvToMp4MacRouteImport } from './routes/_site/guides/mkv-to-mp4-mac'
 import { Route as SiteGuidesMovToMp4MacRouteImport } from './routes/_site/guides/mov-to-mp4-mac'
 import { Route as SiteGuidesMp4FlacWavToMp3MacRouteImport } from './routes/_site/guides/mp4-flac-wav-to-mp3-mac'
 import { Route as SiteGuidesPdfToPngMacWindowsRouteImport } from './routes/_site/guides/pdf-to-png-mac-windows'
@@ -229,6 +230,11 @@ const SiteGuidesHeicToJpgMacRoute = SiteGuidesHeicToJpgMacRouteImport.update({
   path: '/guides/heic-to-jpg-mac',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteGuidesMkvToMp4MacRoute = SiteGuidesMkvToMp4MacRouteImport.update({
+  id: '/guides/mkv-to-mp4-mac',
+  path: '/guides/mkv-to-mp4-mac',
+  getParentRoute: () => SiteRoute,
+} as any)
 const SiteGuidesMovToMp4MacRoute = SiteGuidesMovToMp4MacRouteImport.update({
   id: '/guides/mov-to-mp4-mac',
   path: '/guides/mov-to-mp4-mac',
@@ -340,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/guides/mkv-to-mp4-mac': typeof SiteGuidesMkvToMp4MacRoute
   '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
   '/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
   '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
@@ -388,6 +395,7 @@ export interface FileRoutesByTo {
   '/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/guides/mkv-to-mp4-mac': typeof SiteGuidesMkvToMp4MacRoute
   '/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
   '/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
   '/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
@@ -440,6 +448,7 @@ export interface FileRoutesById {
   '/_app/sign-in/verify-email': typeof AppSignInVerifyEmailRoute
   '/_site/guides/batch-heic-to-jpg-windows': typeof SiteGuidesBatchHeicToJpgWindowsRoute
   '/_site/guides/heic-to-jpg-mac': typeof SiteGuidesHeicToJpgMacRoute
+  '/_site/guides/mkv-to-mp4-mac': typeof SiteGuidesMkvToMp4MacRoute
   '/_site/guides/mov-to-mp4-mac': typeof SiteGuidesMovToMp4MacRoute
   '/_site/guides/mp4-flac-wav-to-mp3-mac': typeof SiteGuidesMp4FlacWavToMp3MacRoute
   '/_site/guides/pdf-to-png-mac-windows': typeof SiteGuidesPdfToPngMacWindowsRoute
@@ -490,6 +499,7 @@ export interface FileRouteTypes {
     | '/sign-in/verify-email'
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
+    | '/guides/mkv-to-mp4-mac'
     | '/guides/mov-to-mp4-mac'
     | '/guides/mp4-flac-wav-to-mp3-mac'
     | '/guides/pdf-to-png-mac-windows'
@@ -538,6 +548,7 @@ export interface FileRouteTypes {
     | '/sign-in/verify-email'
     | '/guides/batch-heic-to-jpg-windows'
     | '/guides/heic-to-jpg-mac'
+    | '/guides/mkv-to-mp4-mac'
     | '/guides/mov-to-mp4-mac'
     | '/guides/mp4-flac-wav-to-mp3-mac'
     | '/guides/pdf-to-png-mac-windows'
@@ -589,6 +600,7 @@ export interface FileRouteTypes {
     | '/_app/sign-in/verify-email'
     | '/_site/guides/batch-heic-to-jpg-windows'
     | '/_site/guides/heic-to-jpg-mac'
+    | '/_site/guides/mkv-to-mp4-mac'
     | '/_site/guides/mov-to-mp4-mac'
     | '/_site/guides/mp4-flac-wav-to-mp3-mac'
     | '/_site/guides/pdf-to-png-mac-windows'
@@ -870,6 +882,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SiteGuidesHeicToJpgMacRouteImport
       parentRoute: typeof SiteRoute
     }
+    '/_site/guides/mkv-to-mp4-mac': {
+      id: '/_site/guides/mkv-to-mp4-mac'
+      path: '/guides/mkv-to-mp4-mac'
+      fullPath: '/guides/mkv-to-mp4-mac'
+      preLoaderRoute: typeof SiteGuidesMkvToMp4MacRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/_site/guides/mov-to-mp4-mac': {
       id: '/_site/guides/mov-to-mp4-mac'
       path: '/guides/mov-to-mp4-mac'
@@ -1035,6 +1054,7 @@ interface SiteRouteChildren {
   SiteTermsRoute: typeof SiteTermsRoute
   SiteGuidesBatchHeicToJpgWindowsRoute: typeof SiteGuidesBatchHeicToJpgWindowsRoute
   SiteGuidesHeicToJpgMacRoute: typeof SiteGuidesHeicToJpgMacRoute
+  SiteGuidesMkvToMp4MacRoute: typeof SiteGuidesMkvToMp4MacRoute
   SiteGuidesMovToMp4MacRoute: typeof SiteGuidesMovToMp4MacRoute
   SiteGuidesMp4FlacWavToMp3MacRoute: typeof SiteGuidesMp4FlacWavToMp3MacRoute
   SiteGuidesPdfToPngMacWindowsRoute: typeof SiteGuidesPdfToPngMacWindowsRoute
@@ -1054,6 +1074,7 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteTermsRoute: SiteTermsRoute,
   SiteGuidesBatchHeicToJpgWindowsRoute: SiteGuidesBatchHeicToJpgWindowsRoute,
   SiteGuidesHeicToJpgMacRoute: SiteGuidesHeicToJpgMacRoute,
+  SiteGuidesMkvToMp4MacRoute: SiteGuidesMkvToMp4MacRoute,
   SiteGuidesMovToMp4MacRoute: SiteGuidesMovToMp4MacRoute,
   SiteGuidesMp4FlacWavToMp3MacRoute: SiteGuidesMp4FlacWavToMp3MacRoute,
   SiteGuidesPdfToPngMacWindowsRoute: SiteGuidesPdfToPngMacWindowsRoute,
