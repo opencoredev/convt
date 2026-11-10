@@ -29,7 +29,7 @@ const slug = "mkv-to-mp4-mac";
 const guide = guideBySlug(slug);
 
 const remuxCommand =
-  "ffmpeg -i input.mkv -map 0:v -map 0:a -map 0:s? -c copy -c:s mov_text -movflags +faststart output.mp4";
+  'ffmpeg -i input.mkv -map 0:v -map 0:a -map "0:s?" -c copy -c:s mov_text -movflags +faststart output.mp4';
 
 const sections = [
   { id: "why", title: "Why MKV won't open" },
@@ -216,8 +216,8 @@ function MkvToMp4Mac() {
           facts={[
             [<Code>-map 0:v -map 0:a</Code>, "Takes every video and audio track, not just one."],
             [
-              <Code>-map 0:s?</Code>,
-              "Takes every subtitle track. The ? means files without subtitles still work.",
+              <Code>-map "0:s?"</Code>,
+              "Takes every subtitle track. The ? means files without subtitles still work, and the quotes stop the Mac's zsh shell from reading ? as a filename pattern.",
             ],
             [<Code>-c copy</Code>, "Copies the video and audio as they are: no quality loss."],
             [
@@ -254,7 +254,7 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            "ffmpeg -i input.mkv -map 0:v -map 0:a -map 0:s? -c copy -c:s mov_text -tag:v hvc1 -movflags +faststart output.mp4",
+            'ffmpeg -i input.mkv -map 0:v -map 0:a -map "0:s?" -c copy -c:s mov_text -tag:v hvc1 -movflags +faststart output.mp4',
           ]}
         />
         <Prose>
@@ -271,7 +271,7 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            "ffmpeg -i input.mkv -map 0:v -map 0:a -map 0:s? -c:v copy -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4",
+            'ffmpeg -i input.mkv -map 0:v -map 0:a -map "0:s?" -c:v copy -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4',
           ]}
         />
         <Prose>
@@ -288,7 +288,7 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            "ffmpeg -i input.mkv -map 0:v:0 -map 0:a -map 0:s? -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4",
+            'ffmpeg -i input.mkv -map 0:v:0 -map 0:a -map "0:s?" -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4',
           ]}
         />
         <Prose>
@@ -315,7 +315,7 @@ function MkvToMp4Mac() {
         </Output>
         <Prose>
           <p>
-            Replace <Code>-map 0:s? -c:s mov_text</Code> with <Code>-sn</Code> to leave the
+            Replace <Code>-map "0:s?" -c:s mov_text</Code> with <Code>-sn</Code> to leave the
             subtitles out, or keep the MKV for watching with subtitles.
           </p>
         </Prose>
@@ -529,16 +529,17 @@ function MkvToMp4Mac() {
             </dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               A plain <Code>ffmpeg -i input.mkv -c copy output.mp4</Code> leaves them out, and so
-              does convt 0.5.0. Add <Code>-map 0:s? -c:s mov_text</Code> as shown above. Picture
-              subtitles from discs can't be converted to MP4 text subtitles at all.
+              does convt 0.5.0. Use the command at the top of this page, which maps the video, audio
+              and subtitles. Picture subtitles from discs can't be converted to MP4 text subtitles
+              at all.
             </dd>
           </div>
           <div className="flex flex-col gap-1.5">
             <dt className="text-[16px]/6 font-semibold">Why does my MP4 only have one language?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
-              FFmpeg picks a single audio track unless you add <Code>-map 0:a</Code>. With it, every
-              language track comes across with its language tag, and players that support MP4 audio
-              tracks let you switch between them.
+              FFmpeg picks a single audio track unless you map them yourself with{" "}
+              <Code>-map 0:v -map 0:a</Code>. With it, every language track comes across with its
+              language tag, and players that support MP4 audio tracks let you switch between them.
             </dd>
           </div>
           <div className="flex flex-col gap-1.5">
