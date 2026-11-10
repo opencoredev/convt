@@ -281,12 +281,12 @@ test("the MKV guide tags its download link and prints the tested remux, audio, r
     "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=mkv-to-mp4-mac",
   ]);
   expect(html).toContain(
-    "ffmpeg -i input.mkv -map 0:v -map 0:a -map &quot;0:s?&quot; -c copy -c:s mov_text -movflags +faststart output.mp4",
+    "ffmpeg -i input.mkv -map 0:v -map &quot;0:a?&quot; -map &quot;0:s?&quot; -c copy -c:s mov_text -movflags +faststart output.mp4",
   );
   expect(html).toContain("-c copy -c:s mov_text -tag:v hvc1 -movflags +faststart output.mp4");
   expect(html).toContain("-c:v copy -c:a aac -b:a 192k -c:s mov_text");
   expect(html).toContain(
-    "-map 0:v:0 -map 0:a -map &quot;0:s?&quot; -c:v libx264 -crf 20 -preset medium",
+    "-map 0:v:0 -map &quot;0:a?&quot; -map &quot;0:s?&quot; -c:v libx264 -crf 20 -preset medium",
   );
   expect(html).toContain("convt videos --to mp4 -r -o mp4");
   expect(html).toContain(

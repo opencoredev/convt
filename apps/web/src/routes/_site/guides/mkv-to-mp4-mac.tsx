@@ -29,7 +29,7 @@ const slug = "mkv-to-mp4-mac";
 const guide = guideBySlug(slug);
 
 const remuxCommand =
-  'ffmpeg -i input.mkv -map 0:v -map 0:a -map "0:s?" -c copy -c:s mov_text -movflags +faststart output.mp4';
+  'ffmpeg -i input.mkv -map 0:v -map "0:a?" -map "0:s?" -c copy -c:s mov_text -movflags +faststart output.mp4';
 
 const sections = [
   { id: "why", title: "Why MKV won't open" },
@@ -214,10 +214,13 @@ function MkvToMp4Mac() {
         <Commands label="FFmpeg" commands={[remuxCommand]} />
         <FactList
           facts={[
-            [<Code>-map 0:v -map 0:a</Code>, "Takes every video and audio track, not just one."],
+            [
+              <Code>-map 0:v -map "0:a?"</Code>,
+              "Takes every video and audio track, not just one. The ? lets a video with no sound through.",
+            ],
             [
               <Code>-map "0:s?"</Code>,
-              "Takes every subtitle track. The ? means files without subtitles still work, and the quotes stop the Mac's zsh shell from reading ? as a filename pattern.",
+              "Takes every subtitle track, if there are any. The quotes stop the Mac's zsh shell from reading ? as a filename pattern.",
             ],
             [<Code>-c copy</Code>, "Copies the video and audio as they are: no quality loss."],
             [
@@ -254,7 +257,7 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            'ffmpeg -i input.mkv -map 0:v -map 0:a -map "0:s?" -c copy -c:s mov_text -tag:v hvc1 -movflags +faststart output.mp4',
+            'ffmpeg -i input.mkv -map 0:v -map "0:a?" -map "0:s?" -c copy -c:s mov_text -tag:v hvc1 -movflags +faststart output.mp4',
           ]}
         />
         <Prose>
@@ -271,7 +274,7 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            'ffmpeg -i input.mkv -map 0:v -map 0:a -map "0:s?" -c:v copy -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4',
+            'ffmpeg -i input.mkv -map 0:v -map "0:a?" -map "0:s?" -c:v copy -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4',
           ]}
         />
         <Prose>
@@ -288,7 +291,7 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            'ffmpeg -i input.mkv -map 0:v:0 -map 0:a -map "0:s?" -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4',
+            'ffmpeg -i input.mkv -map 0:v:0 -map "0:a?" -map "0:s?" -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -c:s mov_text -movflags +faststart output.mp4',
           ]}
         />
         <Prose>
@@ -332,13 +335,15 @@ function MkvToMp4Mac() {
         <Commands
           label="FFmpeg"
           commands={[
-            `find . -maxdepth 1 -iname "*.mkv" -exec sh -c 'ffmpeg -i "$1" -map 0:v -map 0:a -map "0:s?" -c copy -c:s mov_text -movflags +faststart "\${1%.*}.mp4"' _ {} \\;`,
+            `find . -maxdepth 1 -iname "*.mkv" -exec sh -c 'ffmpeg -i "$1" -map 0:v -map "0:a?" -map "0:s?" -c copy -c:s mov_text -movflags +faststart "\${1%.*}.mp4"' _ {} \\;`,
           ]}
         />
         <Prose>
           <p>
-            It skips subfolders and stops on any file whose codecs or subtitles need the fixes
-            above. For a mixed folder, convt below re-encodes whatever it finds.
+            It skips subfolders. A file whose codecs or subtitles need the fixes above prints an
+            error and gets no MP4, while the loop carries on with the rest, so read the output
+            before you delete anything. For a mixed folder, convt below re-encodes whatever it
+            finds.
           </p>
         </Prose>
       </GuideSection>
@@ -538,7 +543,7 @@ function MkvToMp4Mac() {
             <dt className="text-[16px]/6 font-semibold">Why does my MP4 only have one language?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               FFmpeg picks a single audio track unless you map them yourself with{" "}
-              <Code>-map 0:v -map 0:a</Code>. With it, every language track comes across with its
+              <Code>-map 0:v -map "0:a?"</Code>. With it, every language track comes across with its
               language tag, and players that support MP4 audio tracks let you switch between them.
             </dd>
           </div>
