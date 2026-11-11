@@ -3,15 +3,25 @@ import type { ReactNode } from "react";
 
 import { cx } from "#/components/app/ui";
 import { PageHeader, TextLink, siteColumn } from "#/components/site/layout";
-import { GITHUB_URL, PRIVACY_EMAIL, SUPPORT_EMAIL, routes, seo } from "#/lib/site";
+import {
+  GITHUB_URL,
+  PRIVACY_EMAIL,
+  SUPPORT_EMAIL,
+  routes,
+  seo,
+  topLevelBreadcrumbScript,
+} from "#/lib/site";
 
 export const Route = createFileRoute("/_site/contact")({
-  head: () =>
-    seo({
+  head: () => ({
+    ...seo({
       title: "Contact and help · convt",
-      description: "Get help with convt: support email, license keys, billing and bug reports.",
+      description:
+        "Get help with convt: email support, bug reports and feature requests on GitHub, privacy requests, and answers about license keys, uploads and pricing.",
       path: routes.contact,
     }),
+    scripts: [topLevelBreadcrumbScript({ name: "Contact and help", path: routes.contact })],
+  }),
   component: ContactPage,
 });
 

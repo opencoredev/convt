@@ -299,8 +299,8 @@ docs/2026/invoice.pdf -> png/2026/invoice.png, png/2026/invoice-2.png, png/2026/
             <dt className="text-[16px]/6 font-semibold">Does convt upload my PDF?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not for local conversions. The app and the command-line tool convert on your computer.
-              The app uploads a file only if you pick Cloud for a job, which is part of convt Pro.
-              For other images, see{" "}
+              The app uploads a file only if you pick Cloud for a job, which is part of Desktop +
+              Cloud. For other images, see{" "}
               <TextLink href={guidePath("webp-to-png-jpg")}>WebP to PNG or JPG</TextLink>, or every
               format convt handles on the <TextLink href={routes.formats}>formats page</TextLink>.
             </dd>

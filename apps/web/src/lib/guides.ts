@@ -114,6 +114,19 @@ export const guides = [
     published: "2026-11-03",
     updated: "2026-11-03",
   },
+  {
+    slug: "mkv-to-mp4-mac",
+    title: "How to convert MKV to MP4 on Mac without losing subtitles or quality",
+    heading: "How to convert MKV to MP4 on a Mac",
+    footerLabel: "MKV to MP4 on Mac",
+    description:
+      "Convert MKV videos to MP4 on a Mac: remux with FFmpeg in seconds and keep every audio track and subtitle, re-encode in HandBrake, or convert whole folders with convt.",
+    summary:
+      "FFmpeg remux with every audio and subtitle track kept (and what a plain -c copy drops), HandBrake, and folders with subfolders in the convt CLI. Notes that convt 0.5.0 keeps one audio track and no subtitles.",
+    category: "video",
+    published: "2026-11-10",
+    updated: "2026-11-10",
+  },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];

@@ -281,8 +281,8 @@ images/photo.webp -> png/photo.png
             <dt className="text-[16px]/6 font-semibold">Does convt upload my images?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               Not for local conversions. The app and the command-line tool convert on your computer.
-              The app uploads a file only if you pick Cloud for a job, which is part of convt Pro.
-              For iPhone photos, see{" "}
+              The app uploads a file only if you pick Cloud for a job, which is part of Desktop +
+              Cloud. For iPhone photos, see{" "}
               <TextLink href={guidePath("heic-to-jpg-mac")}>HEIC to JPG on a Mac</TextLink>, or
               every format convt handles on the{" "}
               <TextLink href={routes.formats}>formats page</TextLink>.
