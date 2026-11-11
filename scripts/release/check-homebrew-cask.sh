@@ -17,8 +17,14 @@ brew tap-new --no-git "$tap" >/dev/null
 repo=$(brew --repository "$tap")
 mkdir -p "$repo/Casks"
 cp "$cask" "$repo/Casks/convt.rb"
-cleanup() { brew untap "$tap" >/dev/null 2>&1 || true; }
+cleanup() {
+  brew untrust --cask "$tap/convt" >/dev/null 2>&1 || true
+  brew untap "$tap" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
+if brew trust --help >/dev/null 2>&1; then
+  brew trust --cask "$tap/convt"
+fi
 
 brew style --cask "$tap/convt"
 brew audit --cask "$tap/convt"
