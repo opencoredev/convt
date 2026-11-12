@@ -83,6 +83,9 @@ formats! {
     "webm", "WebM", Video, ["webm"], "video/webm";
     "mkv", "MKV", Video, ["mkv"], "video/x-matroska";
     "avi", "AVI", Video, ["avi"], "video/x-msvideo";
+    // Input only: DVD and older camera MPEG-1/2, and MP4 files named .mpg4.
+    "mpeg", "MPEG", Video, ["mpg", "mpeg"], "video/mpeg";
+    "mpg4", "MPG4", Video, ["mpg4"], "video/mp4";
     // Audio
     "mp3", "MP3", Audio, ["mp3"], "audio/mpeg";
     "wav", "WAV", Audio, ["wav"], "audio/wav";
@@ -157,5 +160,8 @@ mod tests {
             "heic"
         );
         assert!(format_by_extension(Path::new("noext")).is_none());
+        for (name, id) in [("a.mpg", "mpeg"), ("a.MPEG", "mpeg"), ("a.mpg4", "mpg4")] {
+            assert_eq!(format_by_extension(Path::new(name)).unwrap().id, id);
+        }
     }
 }

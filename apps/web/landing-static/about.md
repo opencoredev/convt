@@ -6,7 +6,7 @@ convt converts files on your own computer. You right-click a file, pick a format
 
 Most people convert files by searching for "heic to jpg", uploading a photo to a site they have never heard of, and downloading the result. That is slow, it leaks private files to strangers, and it rarely handles a folder at once. The tools that do the work well, like FFmpeg and LibreOffice, are free and excellent, but they live on the command line and each one only covers part of the job.
 
-convt puts those tools behind one menu. It knows 49 formats across images, video, audio and documents, picks the right engine for each conversion, and chains up to three steps when no single tool can do the job directly.
+convt puts those tools behind one menu. It knows 51 formats across images, video, audio and documents, picks the right engine for each conversion, and chains up to three steps when no single tool can do the job directly.
 
 ## How it is built
 
