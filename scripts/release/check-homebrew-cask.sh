@@ -17,8 +17,21 @@ brew tap-new --no-git "$tap" >/dev/null
 repo=$(brew --repository "$tap")
 mkdir -p "$repo/Casks"
 cp "$cask" "$repo/Casks/convt.rb"
-cleanup() { brew untap "$tap" >/dev/null 2>&1 || true; }
+trusted=0
+cleanup() {
+  local status=$?
+  if [ "$trusted" = 1 ] && ! brew untrust --cask "$tap/convt" >/dev/null; then
+    echo "error: could not remove trust for $tap/convt" >&2
+    status=1
+  fi
+  brew untap "$tap" >/dev/null 2>&1 || true
+  exit "$status"
+}
 trap cleanup EXIT
+if brew trust --help >/dev/null 2>&1; then
+  trusted=1
+  brew trust --cask "$tap/convt"
+fi
 
 brew style --cask "$tap/convt"
 brew audit --cask "$tap/convt"
