@@ -341,9 +341,9 @@ function MkvToMp4Mac() {
         <Prose>
           <p>
             It skips subfolders. A file whose codecs or subtitles need the fixes above prints an
-            error and gets no MP4, while the loop carries on with the rest, so read the output
-            before you delete anything. For a mixed folder, convt below re-encodes whatever it
-            finds.
+            error and leaves an empty MP4 behind, while the loop carries on with the rest, so read
+            the output before you delete anything. For a mixed folder, convt below re-encodes
+            whatever it finds.
           </p>
         </Prose>
       </GuideSection>

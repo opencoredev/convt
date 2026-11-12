@@ -311,8 +311,8 @@ Could not write header (incorrect codec parameters ?): Invalid argument`}</Outpu
         />
         <Prose>
           <p>
-            It skips subfolders. A file that needs re-encoding prints an error and gets no MP4,
-            while the loop carries on with the rest; that's where convt helps.
+            It skips subfolders. A file that needs re-encoding prints an error and leaves an empty
+            MP4 behind, while the loop carries on with the rest; that's where convt helps.
           </p>
         </Prose>
       </GuideSection>
