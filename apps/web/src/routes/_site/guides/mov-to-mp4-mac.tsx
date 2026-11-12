@@ -16,7 +16,7 @@ import {
   Prose,
   Steps,
 } from "#/components/site/guide";
-import { guideBySlug, guideDownloadUrl, guideHead } from "#/lib/guides";
+import { guideBySlug, guideDownloadUrl, guideHead, guidePath } from "#/lib/guides";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 // Every FFmpeg and convt command and result on this page comes from a run of the released
@@ -261,6 +261,12 @@ function MovToMp4Mac() {
             in a browser before it has fully downloaded. For HEVC videos from an iPhone, add{" "}
             <Code>-tag:v hvc1</Code> so QuickTime and Apple devices recognise the copy.
           </p>
+          <p>
+            Don't reuse this command for MKV files: with several audio languages or subtitles, it
+            keeps one audio track and drops the subtitles. The{" "}
+            <TextLink href={guidePath("mkv-to-mp4-mac")}>MKV to MP4 guide</TextLink> has the command
+            that keeps them.
+          </p>
         </Prose>
 
         <h3 className="mt-4 text-[19px]/7 font-semibold tracking-[-0.01em]">
@@ -305,8 +311,8 @@ Could not write header (incorrect codec parameters ?): Invalid argument`}</Outpu
         />
         <Prose>
           <p>
-            It skips subfolders, and it stops with an error on any file that needs re-encoding;
-            that's where convt helps.
+            It skips subfolders. A file that needs re-encoding prints an error and gets no MP4,
+            while the loop carries on with the rest; that's where convt helps.
           </p>
         </Prose>
       </GuideSection>

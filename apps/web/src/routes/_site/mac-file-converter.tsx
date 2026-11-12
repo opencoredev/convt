@@ -79,7 +79,8 @@ const formatFacts: [ReactNode, ReactNode][] = [
     <>
       MP4, MOV, WebM, MKV and AVI to each other, plus GIF and the sound track alone (MP3, M4A, WAV).
       Cap the height with <Code>--video-height</Code>, pick H.264 or HEVC with{" "}
-      <Code>--video-codec</Code>.
+      <Code>--video-codec</Code>. For films with several languages or subtitles, see{" "}
+      <TextLink href={guidePath("mkv-to-mp4-mac")}>MKV to MP4 on a Mac</TextLink>.
     </>,
   ],
   [
