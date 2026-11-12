@@ -1,5 +1,23 @@
 # @convt/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- [#141](https://github.com/opencoredev/convt/pull/141) [`64037a1`](https://github.com/opencoredev/convt/commit/64037a1c68aa5776fa84df5d43ecf40484def34b) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Compress a file without changing its format (`convt clip.mp4 --to mp4 --quality 60`, or the file's own format in Quick convert), and fit output under a size with `--target-size 10MB` or the new Max file size control. WebP is now lossy by default and follows `--quality` (100 stays lossless), so photos no longer come out larger than their JPEG. New `--strip-metadata`, `--trim-start`, `--trim-end` and `--fps` options, and a Strip metadata checkbox in Quick convert. Photos with an EXIF rotation now keep it.
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Nine new formats. Markdown converts to HTML and plain text, and HTML, Word and other documents convert to Markdown. CSV, TSV, JSON and YAML convert between each other, and CSV and TSV become HTML, Markdown or text tables, all without the document pack. SRT and WebVTT subtitles convert to each other and to plain text, and MP4, MOV, MKV and WebM videos give up their subtitle track as SRT or VTT. AIFF, CAF and M4R (iPhone ringtone) audio join the audio formats.
+
+### Patch Changes
+
+- [#134](https://github.com/opencoredev/convt/pull/134) [`7e7bba3`](https://github.com/opencoredev/convt/commit/7e7bba38f9c9e39c21464d09d080266dda9cccab) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The email code boxes on convt.app submit as soon as the last digit is typed or pasted, show when the code is being checked, and shake and clear on a wrong code.
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Video encodes to H.264 and HEVC on the graphics hardware when it works: VideoToolbox on Macs and NVENC on NVIDIA cards. Conversions finish sooner and leave the CPU free. If the hardware can't handle a file, convt encodes it in software as before. Set `CONVT_HWACCEL=0` to always use software.
+
+- [#159](https://github.com/opencoredev/convt/pull/159) [`75ceb2c`](https://github.com/opencoredev/convt/commit/75ceb2cbc216b1a6818e65504a205b3ee49bb93f) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Update the Markdown parser, pulldown-cmark, to 0.13.6 for RUSTSEC-2026-0433. convt does not turn on the wikilink syntax that advisory affects, so conversions behave the same.
+
+- [#154](https://github.com/opencoredev/convt/pull/154) [`f5bb2e3`](https://github.com/opencoredev/convt/commit/f5bb2e3c24bdac2a7e13f5dc4d8b1f67cf83c489) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Update dependencies with known security fixes: rustls, rustls-webpki, webpki-roots, rustix and tar in the app and CLI, and seroval, undici, vite and other packages in the website.
+
 ## 0.5.0
 
 ### Minor Changes
