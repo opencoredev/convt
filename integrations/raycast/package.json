@@ -98,5 +98,8 @@
   },
   "contributors": [
     "ray.dhruv"
-  ]
+  ],
+  "overrides": {
+    "minimatch@>=10.0.0 <11.0.1": "11.0.1"
+  }
 }
