@@ -60,7 +60,7 @@ export const guides = [
       "When renaming works, iMovie, FFmpeg remux vs re-encode with tested commands, and whole folders plus smaller files with the convt CLI. Covers Windows too.",
     category: "video",
     published: "2026-10-30",
-    updated: "2026-10-30",
+    updated: "2026-11-12",
   },
   {
     slug: "webp-to-png-jpg",
@@ -125,7 +125,7 @@ export const guides = [
       "FFmpeg remux with every audio and subtitle track kept (and what a plain -c copy drops), HandBrake, and folders with subfolders in the convt CLI. Notes that convt 0.5.0 keeps one audio track and no subtitles.",
     category: "video",
     published: "2026-11-10",
-    updated: "2026-11-10",
+    updated: "2026-11-12",
   },
 ] as const satisfies readonly Guide[];
 
