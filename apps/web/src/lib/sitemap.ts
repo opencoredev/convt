@@ -6,8 +6,11 @@ export type SitemapEntry = { path: string; lastmod: string };
 /** The later of two `YYYY-MM-DD` days; the format sorts as text. */
 const later = (a: string, b: string): string => (a > b ? a : b);
 
-/** The newest guide's `updated` day: the guides index changes whenever a guide does. */
-export const guidesLastmod: string = guides.map((guide): string => guide.updated).reduce(later);
+/**
+ * The newest guide's `published` day: a page that lists guides changes when a guide is added.
+ * Edits inside a guide's body only move that guide's own `updated` date.
+ */
+export const guidesLastmod: string = guides.map((guide): string => guide.published).reduce(later);
 
 /**
  * Every URL in /sitemap.xml with its `lastmod`: the fixed pages (dated from the newest guide

@@ -21,12 +21,12 @@ describe("sitemap pages", () => {
     expect(paths.some((p) => p.startsWith("/docs"))).toBe(false);
   });
 
-  test("pages that list guides are never dated before the newest guide", () => {
+  test("pages that list guides are dated from the newest guide added", () => {
     const formats = sitemapEntries.find((e) => e.path === routes.formats);
     const index = sitemapEntries.find((e) => e.path === routes.guides);
     expect(guidesLastmod).toBe(
       guides
-        .map((g) => g.updated)
+        .map((g) => g.published)
         .sort()
         .at(-1) ?? "",
     );
