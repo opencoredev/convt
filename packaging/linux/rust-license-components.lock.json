@@ -1,5 +1,5 @@
 {
-  "cargo_lock_sha256": "59481c619b9d3bc728efb9354d34a1dc72ed775b432b2a49ff821518f1f7c2e3",
+  "cargo_lock_sha256": "56c79daead39a105e5cff0323e3895254389cf7d599b777e2585361fe4979b63",
   "scope": "Conservative normal transitive graph rooted at convt-cli, convt-app for x86_64-unknown-linux-gnu. Excludes dev/build edges; workspace feature unification and proc macros may overinclude. This is not a per-file licence or linkage audit.",
   "targets": [
     "x86_64-unknown-linux-gnu"
@@ -35973,11 +35973,11 @@
     },
     {
       "name": "heapless",
-      "version": "0.9.4",
+      "version": "0.9.3",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
-      "original_manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
+      "manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
+      "original_manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
       "holders": [
         "Copyright (c) 2017 Jorge Aparicio"
       ],
@@ -36000,7 +36000,7 @@
         },
         {
           "source_path": "src/pool/arc.rs (notice comment blocks)",
-          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
+          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -36015,7 +36015,7 @@
         },
         {
           "source_path": "src/pool/arc.rs",
-          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
+          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -39045,6 +39045,32 @@
       "license": "ISC",
       "manifest_sha256": "c70a979f3e8987bcf85b377d310b895b4bbeae29f6b0a28735cf48230087d5e2",
       "original_manifest_sha256": "c70a979f3e8987bcf85b377d310b895b4bbeae29f6b0a28735cf48230087d5e2",
+      "holders": [
+        "Copyright © 2015, Simonas Kazlauskas"
+      ],
+      "notices": [
+        {
+          "source_path": "LICENSE",
+          "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f",
+          "text": "Copyright © 2015, Simonas Kazlauskas\n\nPermission to use, copy, modify, and/or distribute this software for any purpose with or without\nfee is hereby granted, provided that the above copyright notice and this permission notice appear\nin all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS\nSOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE\nAUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES\nWHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,\nNEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.\n"
+        }
+      ],
+      "incomplete_notices": [],
+      "source_headers": [],
+      "notice_complete": true,
+      "license_declaration": null,
+      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ]
+    },
+    {
+      "name": "libloading",
+      "version": "0.9.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "license": "ISC",
+      "manifest_sha256": "4419c3b53bcbe50d15ea020c93a828028d4a35c271d74a059601e9f985b7aeee",
+      "original_manifest_sha256": "4419c3b53bcbe50d15ea020c93a828028d4a35c271d74a059601e9f985b7aeee",
       "holders": [
         "Copyright © 2015, Simonas Kazlauskas"
       ],
@@ -45581,11 +45607,11 @@
     },
     {
       "name": "notify-rust",
-      "version": "4.19.0",
+      "version": "4.18.1",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "f10e40a2db1cd4e20a94d1e47667f5db9abaf55de9d5b4b8e49fa234e262b338",
-      "original_manifest_sha256": "f10e40a2db1cd4e20a94d1e47667f5db9abaf55de9d5b4b8e49fa234e262b338",
+      "manifest_sha256": "abbd55e21beaa970b0a43cb1020cfb789147a2f34445ada43b6c04cb001e795e",
+      "original_manifest_sha256": "abbd55e21beaa970b0a43cb1020cfb789147a2f34445ada43b6c04cb001e795e",
       "holders": [
         "Copyright (c) 2017 Hendrik Sollich"
       ],
@@ -71470,87 +71496,6 @@
       ]
     },
     {
-      "name": "socket2",
-      "version": "0.6.5",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "e66848b959431828ed8acf12d5232c586bb6fe044f55d6f14ab7705ea3fff7a4",
-      "original_manifest_sha256": "e66848b959431828ed8acf12d5232c586bb6fe044f55d6f14ab7705ea3fff7a4",
-      "holders": [
-        "Copyright (c) 2014 Alex Crichton",
-        "Copyright 2015 The Rust Project Developers."
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE-APACHE",
-          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-          "text": "                              Apache License\n                        Version 2.0, January 2004\n                     http://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n   \"License\" shall mean the terms and conditions for use, reproduction,\n   and distribution as defined by Sections 1 through 9 of this document.\n\n   \"Licensor\" shall mean the copyright owner or entity authorized by\n   the copyright owner that is granting the License.\n\n   \"Legal Entity\" shall mean the union of the acting entity and all\n   other entities that control, are controlled by, or are under common\n   control with that entity. For the purposes of this definition,\n   \"control\" means (i) the power, direct or indirect, to cause the\n   direction or management of such entity, whether by contract or\n   otherwise, or (ii) ownership of fifty percent (50%) or more of the\n   outstanding shares, or (iii) beneficial ownership of such entity.\n\n   \"You\" (or \"Your\") shall mean an individual or Legal Entity\n   exercising permissions granted by this License.\n\n   \"Source\" form shall mean the preferred form for making modifications,\n   including but not limited to software source code, documentation\n   source, and configuration files.\n\n   \"Object\" form shall mean any form resulting from mechanical\n   transformation or translation of a Source form, including but\n   not limited to compiled object code, generated documentation,\n   and conversions to other media types.\n\n   \"Work\" shall mean the work of authorship, whether in Source or\n   Object form, made available under the License, as indicated by a\n   copyright notice that is included in or attached to the work\n   (an example is provided in the Appendix below).\n\n   \"Derivative Works\" shall mean any work, whether in Source or Object\n   form, that is based on (or derived from) the Work and for which the\n   editorial revisions, annotations, elaborations, or other modifications\n   represent, as a whole, an original work of authorship. For the purposes\n   of this License, Derivative Works shall not include works that remain\n   separable from, or merely link (or bind by name) to the interfaces of,\n   the Work and Derivative Works thereof.\n\n   \"Contribution\" shall mean any work of authorship, including\n   the original version of the Work and any modifications or additions\n   to that Work or Derivative Works thereof, that is intentionally\n   submitted to Licensor for inclusion in the Work by the copyright owner\n   or by an individual or Legal Entity authorized to submit on behalf of\n   the copyright owner. For the purposes of this definition, \"submitted\"\n   means any form of electronic, verbal, or written communication sent\n   to the Licensor or its representatives, including but not limited to\n   communication on electronic mailing lists, source code control systems,\n   and issue tracking systems that are managed by, or on behalf of, the\n   Licensor for the purpose of discussing and improving the Work, but\n   excluding communication that is conspicuously marked or otherwise\n   designated in writing by the copyright owner as \"Not a Contribution.\"\n\n   \"Contributor\" shall mean Licensor and any individual or Legal Entity\n   on behalf of whom a Contribution has been received by Licensor and\n   subsequently incorporated within the Work.\n\n2. Grant of Copyright License. Subject to the terms and conditions of\n   this License, each Contributor hereby grants to You a perpetual,\n   worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n   copyright license to reproduce, prepare Derivative Works of,\n   publicly display, publicly perform, sublicense, and distribute the\n   Work and such Derivative Works in Source or Object form.\n\n3. Grant of Patent License. Subject to the terms and conditions of\n   this License, each Contributor hereby grants to You a perpetual,\n   worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n   (except as stated in this section) patent license to make, have made,\n   use, offer to sell, sell, import, and otherwise transfer the Work,\n   where such license applies only to those patent claims licensable\n   by such Contributor that are necessarily infringed by their\n   Contribution(s) alone or by combination of their Contribution(s)\n   with the Work to which such Contribution(s) was submitted. If You\n   institute patent litigation against any entity (including a\n   cross-claim or counterclaim in a lawsuit) alleging that the Work\n   or a Contribution incorporated within the Work constitutes direct\n   or contributory patent infringement, then any patent licenses\n   granted to You under this License for that Work shall terminate\n   as of the date such litigation is filed.\n\n4. Redistribution. You may reproduce and distribute copies of the\n   Work or Derivative Works thereof in any medium, with or without\n   modifications, and in Source or Object form, provided that You\n   meet the following conditions:\n\n   (a) You must give any other recipients of the Work or\n       Derivative Works a copy of this License; and\n\n   (b) You must cause any modified files to carry prominent notices\n       stating that You changed the files; and\n\n   (c) You must retain, in the Source form of any Derivative Works\n       that You distribute, all copyright, patent, trademark, and\n       attribution notices from the Source form of the Work,\n       excluding those notices that do not pertain to any part of\n       the Derivative Works; and\n\n   (d) If the Work includes a \"NOTICE\" text file as part of its\n       distribution, then any Derivative Works that You distribute must\n       include a readable copy of the attribution notices contained\n       within such NOTICE file, excluding those notices that do not\n       pertain to any part of the Derivative Works, in at least one\n       of the following places: within a NOTICE text file distributed\n       as part of the Derivative Works; within the Source form or\n       documentation, if provided along with the Derivative Works; or,\n       within a display generated by the Derivative Works, if and\n       wherever such third-party notices normally appear. The contents\n       of the NOTICE file are for informational purposes only and\n       do not modify the License. You may add Your own attribution\n       notices within Derivative Works that You distribute, alongside\n       or as an addendum to the NOTICE text from the Work, provided\n       that such additional attribution notices cannot be construed\n       as modifying the License.\n\n   You may add Your own copyright statement to Your modifications and\n   may provide additional or different license terms and conditions\n   for use, reproduction, or distribution of Your modifications, or\n   for any such Derivative Works as a whole, provided Your use,\n   reproduction, and distribution of the Work otherwise complies with\n   the conditions stated in this License.\n\n5. Submission of Contributions. Unless You explicitly state otherwise,\n   any Contribution intentionally submitted for inclusion in the Work\n   by You to the Licensor shall be under the terms and conditions of\n   this License, without any additional terms or conditions.\n   Notwithstanding the above, nothing herein shall supersede or modify\n   the terms of any separate license agreement you may have executed\n   with Licensor regarding such Contributions.\n\n6. Trademarks. This License does not grant permission to use the trade\n   names, trademarks, service marks, or product names of the Licensor,\n   except as required for reasonable and customary use in describing the\n   origin of the Work and reproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty. Unless required by applicable law or\n   agreed to in writing, Licensor provides the Work (and each\n   Contributor provides its Contributions) on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n   implied, including, without limitation, any warranties or conditions\n   of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n   PARTICULAR PURPOSE. You are solely responsible for determining the\n   appropriateness of using or redistributing the Work and assume any\n   risks associated with Your exercise of permissions under this License.\n\n8. Limitation of Liability. In no event and under no legal theory,\n   whether in tort (including negligence), contract, or otherwise,\n   unless required by applicable law (such as deliberate and grossly\n   negligent acts) or agreed to in writing, shall any Contributor be\n   liable to You for damages, including any direct, indirect, special,\n   incidental, or consequential damages of any character arising as a\n   result of this License or out of the use or inability to use the\n   Work (including but not limited to damages for loss of goodwill,\n   work stoppage, computer failure or malfunction, or any and all\n   other commercial damages or losses), even if such Contributor\n   has been advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability. While redistributing\n   the Work or Derivative Works thereof, You may choose to offer,\n   and charge a fee for, acceptance of support, warranty, indemnity,\n   or other liability obligations and/or rights consistent with this\n   License. However, in accepting such obligations, You may act only\n   on Your own behalf and on Your sole responsibility, not on behalf\n   of any other Contributor, and only if You agree to indemnify,\n   defend, and hold each Contributor harmless for any liability\n   incurred by, or claims asserted against, such Contributor by reason\n   of your accepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nAPPENDIX: How to apply the Apache License to your work.\n\n   To apply the Apache License to your work, attach the following\n   boilerplate notice, with the fields enclosed by brackets \"[]\"\n   replaced with your own identifying information. (Don't include\n   the brackets!)  The text should be enclosed in the appropriate\n   comment syntax for the file format. We also recommend that a\n   file or class name and description of purpose be included on the\n   same \"printed page\" as the copyright notice for easier\n   identification within third-party archives.\n\nCopyright [yyyy] [name of copyright owner]\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n\thttp://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.\n"
-        },
-        {
-          "source_path": "LICENSE-MIT",
-          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
-          "text": "Copyright (c) 2014 Alex Crichton\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        },
-        {
-          "source_path": "src/lib.rs (notice comment blocks)",
-          "source_sha256": "f3782bc62e5a17e25e8868c55a14fa1da89f564bd0db9ad234dff429094386e1",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        },
-        {
-          "source_path": "src/socket.rs (notice comment blocks)",
-          "source_sha256": "14d718fc14286e1a0c35d785d1ece2096c5af12188c248a7493851d0d87f824d",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        },
-        {
-          "source_path": "src/sys/unix.rs (notice comment blocks)",
-          "source_sha256": "5193fd8c91103f8c73c03c0237c2a493aba911a2995c3750ffb13b054f5c9433",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        },
-        {
-          "source_path": "src/sys/windows.rs (notice comment blocks)",
-          "source_sha256": "ea941638399a4e3f7cf0ac2f21d5eaf44d62d26c760d97b1660ba653853101dd",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [
-        {
-          "source_path": "src/lib.rs",
-          "source_sha256": "f3782bc62e5a17e25e8868c55a14fa1da89f564bd0db9ad234dff429094386e1",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        },
-        {
-          "source_path": "src/socket.rs",
-          "source_sha256": "14d718fc14286e1a0c35d785d1ece2096c5af12188c248a7493851d0d87f824d",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        },
-        {
-          "source_path": "src/sys/unix.rs",
-          "source_sha256": "5193fd8c91103f8c73c03c0237c2a493aba911a2995c3750ffb13b054f5c9433",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        },
-        {
-          "source_path": "src/sys/windows.rs",
-          "source_sha256": "ea941638399a4e3f7cf0ac2f21d5eaf44d62d26c760d97b1660ba653853101dd",
-          "text": "// Copyright 2015 The Rust Project Developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
-          "sha256": "b54ab1543eb4985c47cc3a484ec988d4746c97c958065b7d3cdb5263d2734883"
-        }
-      ],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
       "name": "spin",
       "version": "0.10.1",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -80321,32 +80266,6 @@
       ]
     },
     {
-      "name": "zbus",
-      "version": "6.4.0",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "7059bbd93ef9c6b480a805efcfb2d2528e550158c6b5af0e8273367a59848293",
-      "original_manifest_sha256": "7059bbd93ef9c6b480a805efcfb2d2528e550158c6b5af0e8273367a59848293",
-      "holders": [
-        "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
-          "text": "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
       "name": "zbus-lockstep",
       "version": "0.5.2",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -80456,64 +80375,12 @@
       ]
     },
     {
-      "name": "zbus_macros",
-      "version": "6.4.0",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "3e51d262796ec128faacceebe36de2944476e124bb792dc49809300519e16e7e",
-      "original_manifest_sha256": "3e51d262796ec128faacceebe36de2944476e124bb792dc49809300519e16e7e",
-      "holders": [
-        "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
-          "text": "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
       "name": "zbus_names",
       "version": "4.3.5",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "manifest_sha256": "97e4aa970ffdd22cbdcd74d575b247f310755ccb43eb63453ecfcc2e570eee54",
       "original_manifest_sha256": "97e4aa970ffdd22cbdcd74d575b247f310755ccb43eb63453ecfcc2e570eee54",
-      "holders": [
-        "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
-          "text": "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
-      "name": "zbus_utils",
-      "version": "6.1.0",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "98626cc25ebfccdf30dcfc4b694e54d3b0d96a7558f8cd9def5f5cdce870d805",
-      "original_manifest_sha256": "98626cc25ebfccdf30dcfc4b694e54d3b0d96a7558f8cd9def5f5cdce870d805",
       "holders": [
         "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
       ],
@@ -83113,46 +82980,6 @@
       ],
       "incomplete_notices": [],
       "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
-      "name": "zruntime",
-      "version": "0.2.4",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "772016f5109770d0705265671526f065f779eafdb46f7c1bcaf274623bb8c748",
-      "original_manifest_sha256": "772016f5109770d0705265671526f065f779eafdb46f7c1bcaf274623bb8c748",
-      "holders": [
-        "Copyright (c) 2020 Yoshua Wuyts, Stjepan Glavina & Zeeshan Ali Khan",
-        "Copyright (c) 2026 Zeeshan Ali Khan & zruntime contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "ec2e030f7cd75edbe3e981d10b458a100a90a6c6056334538ab933f8db71654e",
-          "text": "Copyright (c) 2026 Zeeshan Ali Khan & zruntime contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n\nThe broadcast channel (`src/broadcast.rs`), its tests (`src/tests/broadcast.rs`) and its\nbenchmark (`benches/broadcast.rs`) come from the async-broadcast crate\n(https://github.com/smol-rs/async-broadcast), under the license above and this notice:\n\nCopyright (c) 2020 Yoshua Wuyts, Stjepan Glavina & Zeeshan Ali Khan\n"
-        },
-        {
-          "source_path": "src/broadcast.rs (notice comment blocks)",
-          "source_sha256": "c0d04452c490b32e2d0447169daa67e674e09263777af843b1d4d474d5df3751",
-          "text": "// Moved from the async-broadcast crate; see `LICENSE` for its copyright notices.\n",
-          "sha256": "268886f13ab9bb72ef5ff645f651cbb4b9e99a1d94b1d649f7c08d6b8a343ddf"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [
-        {
-          "source_path": "src/broadcast.rs",
-          "source_sha256": "c0d04452c490b32e2d0447169daa67e674e09263777af843b1d4d474d5df3751",
-          "text": "// Moved from the async-broadcast crate; see `LICENSE` for its copyright notices.\n",
-          "sha256": "268886f13ab9bb72ef5ff645f651cbb4b9e99a1d94b1d649f7c08d6b8a343ddf"
-        }
-      ],
       "notice_complete": true,
       "license_declaration": null,
       "status": "collected source notices; manifest-declared license; per-file licence audit still required",
@@ -125882,11 +125709,11 @@
     },
     {
       "name": "heapless",
-      "version": "0.9.4",
+      "version": "0.9.3",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
-      "original_manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
+      "manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
+      "original_manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
       "holders": [
         "Copyright (c) 2017 Jorge Aparicio"
       ],
@@ -125909,7 +125736,7 @@
         },
         {
           "source_path": "src/pool/arc.rs (notice comment blocks)",
-          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
+          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -125924,7 +125751,7 @@
         },
         {
           "source_path": "src/pool/arc.rs",
-          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
+          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -131029,6 +130856,32 @@
       "license": "ISC",
       "manifest_sha256": "c70a979f3e8987bcf85b377d310b895b4bbeae29f6b0a28735cf48230087d5e2",
       "original_manifest_sha256": "c70a979f3e8987bcf85b377d310b895b4bbeae29f6b0a28735cf48230087d5e2",
+      "holders": [
+        "Copyright © 2015, Simonas Kazlauskas"
+      ],
+      "notices": [
+        {
+          "source_path": "LICENSE",
+          "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f",
+          "text": "Copyright © 2015, Simonas Kazlauskas\n\nPermission to use, copy, modify, and/or distribute this software for any purpose with or without\nfee is hereby granted, provided that the above copyright notice and this permission notice appear\nin all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS\nSOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE\nAUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES\nWHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,\nNEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.\n"
+        }
+      ],
+      "incomplete_notices": [],
+      "source_headers": [],
+      "notice_complete": true,
+      "license_declaration": null,
+      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
+      "targets": [
+        "x86_64-unknown-linux-gnu"
+      ]
+    },
+    {
+      "name": "libloading",
+      "version": "0.9.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "license": "ISC",
+      "manifest_sha256": "4419c3b53bcbe50d15ea020c93a828028d4a35c271d74a059601e9f985b7aeee",
+      "original_manifest_sha256": "4419c3b53bcbe50d15ea020c93a828028d4a35c271d74a059601e9f985b7aeee",
       "holders": [
         "Copyright © 2015, Simonas Kazlauskas"
       ],
@@ -139149,11 +139002,11 @@
     },
     {
       "name": "notify-rust",
-      "version": "4.19.0",
+      "version": "4.18.1",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "f10e40a2db1cd4e20a94d1e47667f5db9abaf55de9d5b4b8e49fa234e262b338",
-      "original_manifest_sha256": "f10e40a2db1cd4e20a94d1e47667f5db9abaf55de9d5b4b8e49fa234e262b338",
+      "manifest_sha256": "abbd55e21beaa970b0a43cb1020cfb789147a2f34445ada43b6c04cb001e795e",
+      "original_manifest_sha256": "abbd55e21beaa970b0a43cb1020cfb789147a2f34445ada43b6c04cb001e795e",
       "holders": [
         "Copyright (c) 2017 Hendrik Sollich"
       ],
@@ -170232,9 +170085,7 @@
       "notice_complete": true,
       "license_declaration": null,
       "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
+      "targets": []
     },
     {
       "name": "spin",
@@ -191651,32 +191502,6 @@
       ]
     },
     {
-      "name": "zbus",
-      "version": "6.4.0",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "7059bbd93ef9c6b480a805efcfb2d2528e550158c6b5af0e8273367a59848293",
-      "original_manifest_sha256": "7059bbd93ef9c6b480a805efcfb2d2528e550158c6b5af0e8273367a59848293",
-      "holders": [
-        "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
-          "text": "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
       "name": "zbus-lockstep",
       "version": "0.5.2",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -191786,64 +191611,12 @@
       ]
     },
     {
-      "name": "zbus_macros",
-      "version": "6.4.0",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "3e51d262796ec128faacceebe36de2944476e124bb792dc49809300519e16e7e",
-      "original_manifest_sha256": "3e51d262796ec128faacceebe36de2944476e124bb792dc49809300519e16e7e",
-      "holders": [
-        "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
-          "text": "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
       "name": "zbus_names",
       "version": "4.3.5",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
       "manifest_sha256": "97e4aa970ffdd22cbdcd74d575b247f310755ccb43eb63453ecfcc2e570eee54",
       "original_manifest_sha256": "97e4aa970ffdd22cbdcd74d575b247f310755ccb43eb63453ecfcc2e570eee54",
-      "holders": [
-        "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad",
-          "text": "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
-      "name": "zbus_utils",
-      "version": "6.1.0",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "98626cc25ebfccdf30dcfc4b694e54d3b0d96a7558f8cd9def5f5cdce870d805",
-      "original_manifest_sha256": "98626cc25ebfccdf30dcfc4b694e54d3b0d96a7558f8cd9def5f5cdce870d805",
       "holders": [
         "Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors"
       ],
@@ -194443,46 +194216,6 @@
       ],
       "incomplete_notices": [],
       "source_headers": [],
-      "notice_complete": true,
-      "license_declaration": null,
-      "status": "collected source notices; manifest-declared license; per-file licence audit still required",
-      "targets": [
-        "x86_64-unknown-linux-gnu"
-      ]
-    },
-    {
-      "name": "zruntime",
-      "version": "0.2.4",
-      "source": "registry+https://github.com/rust-lang/crates.io-index",
-      "license": "MIT",
-      "manifest_sha256": "772016f5109770d0705265671526f065f779eafdb46f7c1bcaf274623bb8c748",
-      "original_manifest_sha256": "772016f5109770d0705265671526f065f779eafdb46f7c1bcaf274623bb8c748",
-      "holders": [
-        "Copyright (c) 2020 Yoshua Wuyts, Stjepan Glavina & Zeeshan Ali Khan",
-        "Copyright (c) 2026 Zeeshan Ali Khan & zruntime contributors"
-      ],
-      "notices": [
-        {
-          "source_path": "LICENSE",
-          "sha256": "ec2e030f7cd75edbe3e981d10b458a100a90a6c6056334538ab933f8db71654e",
-          "text": "Copyright (c) 2026 Zeeshan Ali Khan & zruntime contributors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n\nThe broadcast channel (`src/broadcast.rs`), its tests (`src/tests/broadcast.rs`) and its\nbenchmark (`benches/broadcast.rs`) come from the async-broadcast crate\n(https://github.com/smol-rs/async-broadcast), under the license above and this notice:\n\nCopyright (c) 2020 Yoshua Wuyts, Stjepan Glavina & Zeeshan Ali Khan\n"
-        },
-        {
-          "source_path": "src/broadcast.rs (notice comment blocks)",
-          "source_sha256": "c0d04452c490b32e2d0447169daa67e674e09263777af843b1d4d474d5df3751",
-          "text": "// Moved from the async-broadcast crate; see `LICENSE` for its copyright notices.\n",
-          "sha256": "268886f13ab9bb72ef5ff645f651cbb4b9e99a1d94b1d649f7c08d6b8a343ddf"
-        }
-      ],
-      "incomplete_notices": [],
-      "source_headers": [
-        {
-          "source_path": "src/broadcast.rs",
-          "source_sha256": "c0d04452c490b32e2d0447169daa67e674e09263777af843b1d4d474d5df3751",
-          "text": "// Moved from the async-broadcast crate; see `LICENSE` for its copyright notices.\n",
-          "sha256": "268886f13ab9bb72ef5ff645f651cbb4b9e99a1d94b1d649f7c08d6b8a343ddf"
-        }
-      ],
       "notice_complete": true,
       "license_declaration": null,
       "status": "collected source notices; manifest-declared license; per-file licence audit still required",
