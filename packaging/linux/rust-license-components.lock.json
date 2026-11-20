@@ -1,5 +1,5 @@
 {
-  "cargo_lock_sha256": "98d7fc6f0caba0cc05788a033feeab6fe9c8940ce3c60e6e8f8d79de6c60621d",
+  "cargo_lock_sha256": "b4746e12b43a8edd1ea37da8082e638c15f6360137cad89c89d19597a51bb29c",
   "scope": "Conservative normal transitive graph rooted at convt-cli, convt-app for x86_64-unknown-linux-gnu. Excludes dev/build edges; workspace feature unification and proc macros may overinclude. This is not a per-file licence or linkage audit.",
   "targets": [
     "x86_64-unknown-linux-gnu"
