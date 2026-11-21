@@ -28,7 +28,7 @@ flate2 = "=1.1.10"
 tar = "=0.4.46"
 ureq = { version = "=3.1.4", default-features = false, features = ["rustls"] }
 which.workspace = true
-url = "=2.5.8"
+url = "=2.5.9"
 base64.workspace = true
 csv = "=1.4.0"
 htmd = "=0.5.6"
