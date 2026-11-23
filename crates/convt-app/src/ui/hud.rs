@@ -30,6 +30,8 @@ const DONE_FOR: Duration = Duration::from_secs(4);
 const MIXED_FOR: Duration = Duration::from_secs(6);
 /// How long it stays when every job failed, so the reason can be read.
 const FAILED_FOR: Duration = Duration::from_secs(7);
+/// How long it stays after the pointer leaves a finished HUD.
+const HOVER_LEAVE_FOR: Duration = Duration::from_millis(2500);
 /// The picture at the start of the title row.
 const LEAD: f32 = 32.;
 /// Space between the picture and the words.
@@ -65,6 +67,8 @@ pub struct HudView {
     seen: HashMap<JobId, Entry>,
     /// Copy was clicked; the button says Copied.
     pub(super) copied: bool,
+    /// The pointer is over the HUD; pause auto-dismiss until it leaves.
+    pub(super) hovered: bool,
     /// The jobs the close timer was set for; new jobs reset it.
     closing: Option<usize>,
     _close: Option<Task<()>>,
@@ -90,6 +94,7 @@ impl HudView {
             jobs,
             seen: HashMap::new(),
             copied: false,
+            hovered: false,
             closing: None,
             _close: None,
         };
@@ -152,12 +157,13 @@ impl HudView {
             .collect()
     }
 
-    /// Once every job is finished, closes after a few seconds. Closing is the
-    /// last window closing, so with nothing else open convt quits then
+    /// Once every job is finished, closes after a few seconds unless the
+    /// pointer is over the HUD. Closing is the last window closing, so with
+    /// nothing else open convt quits then
     /// (`model::AppState::maybe_quit_after_hud`).
     fn close_when_done(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let phase = self.phase();
-        if phase == Phase::Running {
+        if phase == Phase::Running || self.hovered {
             self.closing = None;
             self._close = None;
             return;
@@ -165,16 +171,40 @@ impl HudView {
         if self.closing == Some(self.jobs.len()) {
             return;
         }
-        self.closing = Some(self.jobs.len());
         let wait = match phase {
             Phase::Failed => FAILED_FOR,
             Phase::Mixed => MIXED_FOR,
             _ => DONE_FOR,
         };
+        self.schedule_close(wait, window, cx);
+    }
+
+    fn schedule_close(&mut self, wait: Duration, window: &mut Window, cx: &mut Context<Self>) {
+        self.closing = Some(self.jobs.len());
         self._close = Some(cx.spawn_in(window, async move |_, cx| {
             cx.background_executor().timer(wait).await;
             let _ = cx.update(|window, _| window.remove_window());
         }));
+    }
+
+    /// Pauses auto-dismiss while the pointer is over the HUD, and gives a
+    /// short grace period after it leaves.
+    pub(super) fn set_hovered(
+        &mut self,
+        hovered: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.hovered == hovered {
+            return;
+        }
+        self.hovered = hovered;
+        if hovered {
+            self.closing = None;
+            self._close = None;
+        } else if self.phase() != Phase::Running {
+            self.schedule_close(HOVER_LEAVE_FOR, window, cx);
+        }
     }
 
     fn copy(&mut self, cx: &mut Context<Self>) {
@@ -283,11 +313,12 @@ impl HudView {
         }
     }
 
-    /// The files that failed, in job order.
-    fn failed_inputs(&self) -> Vec<PathBuf> {
+    /// The failed jobs' recorded history ids (when known) and inputs, in job order.
+    fn failed_records(&self, cx: &App) -> Vec<(Option<i64>, PathBuf)> {
+        let state = self.app.read(cx);
         self.entries()
             .filter(|e| matches!(e.status, Status::Failed(_)))
-            .map(|e| e.input.clone())
+            .map(|e| (state.record_id(e.id), e.input.clone()))
             .collect()
     }
 
@@ -418,13 +449,13 @@ impl Render for HudView {
         // A failure's full message is in Activity, beside Retry, even when
         // other files of the batch were saved.
         let details = matches!(phase, Phase::Mixed | Phase::Failed).then(|| {
-            let inputs = self.failed_inputs();
+            let failures = self.failed_records(cx);
             div().flex_shrink_0().child(
                 Button::secondary("hud-details", "Details")
                     .small()
                     .build(&p)
                     .on_click(move |_, window, cx| {
-                        super::show_failures(inputs.clone(), cx);
+                        super::show_failures(failures.clone(), cx);
                         window.remove_window();
                     }),
             )
@@ -467,6 +498,17 @@ impl Render for HudView {
             .id("hud")
             .test_support()
             .aria_label(SharedString::from(phase.name()))
+            // Pause auto-dismiss when the pointer moves onto the HUD (not just
+            // if a stationary cursor happened to sit at (0, 0) on spawn), and
+            // restart the grace timer when it leaves.
+            .on_mouse_move(cx.listener(|this, _, window, cx| {
+                this.set_hovered(true, window, cx);
+            }))
+            .on_hover(cx.listener(|this, hovered: &bool, window, cx| {
+                if !*hovered {
+                    this.set_hovered(false, window, cx);
+                }
+            }))
             .flex()
             .flex_col()
             .justify_center()

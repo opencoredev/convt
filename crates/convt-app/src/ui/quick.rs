@@ -1755,11 +1755,20 @@ impl QuickView {
         }
         if background_applies(to, &self.files) {
             let default = default_background(&self.app.read(cx).registry, to, &self.files);
-            parts.push(
-                shown_background(to, self.background)
-                    .or(default)
-                    .map_or_else(|| "Automatic".to_string(), |b| b.name().to_string()),
-            );
+            let effective = shown_background(to, self.background).or(default);
+            // Only show "Transparent" when a source can actually carry alpha
+            // (or the user picked a non-default background explicitly): a JPEG
+            // photo going to PNG has no transparency to preserve.
+            let sources_can_have_alpha = sources(&self.files)
+                .any(|f| f.keeps_transparency() || f.category == Category::Vector);
+            if !(self.background.is_none()
+                && effective == Some(Background::Transparent)
+                && !sources_can_have_alpha)
+            {
+                parts.push(
+                    effective.map_or_else(|| "Automatic".to_string(), |b| b.name().to_string()),
+                );
+            }
         }
         if audio_applies(to) && self.strip_audio {
             parts.push("No audio".into());
@@ -2060,10 +2069,11 @@ impl QuickView {
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
-            let failed: Vec<PathBuf> = self
+            let state = self.app.read(cx);
+            let failed: Vec<(Option<i64>, PathBuf)> = self
                 .entries()
                 .filter(|e| matches!(e.status, Status::Failed(_)))
-                .map(|e| e.input.clone())
+                .map(|e| (state.record_id(e.id), e.input.clone()))
                 .collect();
             let saved = self
                 .entries()
@@ -2196,7 +2206,7 @@ const MIN_HIDDEN: usize = 3;
 /// drawn at its width: the license banner, the PNG warning, an open Options
 /// row, a row of format cards with the gap above it, and the pack card.
 const BANNER_HEIGHT: f32 = 118.;
-const PNG_HINT_HEIGHT: f32 = 118.;
+const PNG_HINT_HEIGHT: f32 = 100.;
 const OPTION_ROW_HEIGHT: f32 = 44.;
 const CARD_ROW_HEIGHT: f32 = 57.;
 const PACK_CARD_HEIGHT: f32 = 96.;

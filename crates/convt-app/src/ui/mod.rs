@@ -714,15 +714,17 @@ pub fn has_regular_windows(cx: &App) -> bool {
     !only_hud_open(cx)
 }
 
-/// The HUD's Details for a failure: the main window on Activity, with the
-/// newest failed record of each of `inputs` opened to its full message.
-pub(crate) fn show_failures(inputs: Vec<PathBuf>, cx: &mut App) {
+/// The HUD's or Quick convert's Details for a failure: the main window on
+/// Activity, with each failed record opened to its full message (matching the
+/// exact recorded id when known, or falling back to the newest failed record
+/// for that input).
+pub(crate) fn show_failures(failures: Vec<(Option<i64>, PathBuf)>, cx: &mut App) {
     if first_run_pending(cx) {
         open_first_run(cx);
         return;
     }
     if let Some((_, view)) = open_main(cx) {
-        view.update(cx, |view, cx| view.expand_failures(&inputs, cx));
+        view.update(cx, |view, cx| view.expand_failures(&failures, cx));
     }
 }
 

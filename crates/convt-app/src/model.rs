@@ -311,6 +311,9 @@ pub struct AppState {
     history: History,
     /// The newest history rows, refreshed whenever history changes.
     pub recent: Vec<Record>,
+    /// The history record id written for each finished job in this session, so
+    /// Details can open the exact failed attempt even for repeated runs.
+    recorded: HashMap<JobId, i64>,
     pub settings: Settings,
     settings_path: Option<PathBuf>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
@@ -480,6 +483,7 @@ impl AppState {
             queue: Queue::default(),
             history,
             recent: Vec::new(),
+            recorded: HashMap::new(),
             settings,
             settings_path: paths.settings,
             presets: BTreeMap::new(),
@@ -1225,6 +1229,11 @@ impl AppState {
         self.queue.get(id)
     }
 
+    /// The history record id written when `job` finished, if recorded.
+    pub fn record_id(&self, job: JobId) -> Option<i64> {
+        self.recorded.get(&job).copied()
+    }
+
     /// Whether this build checks licenses.
     pub fn license_enforced(&self) -> bool {
         self.licensing.enforced()
@@ -1289,11 +1298,16 @@ impl AppState {
                     Outcome::Cancelled
                 }
             };
-            if let Err(e) =
-                self.history
-                    .add_sized(&entry.input, entry.to.id, &entry.setup, &outcome, sizes)
+            match self
+                .history
+                .add_sized(&entry.input, entry.to.id, &entry.setup, &outcome, sizes)
             {
-                tracing::warn!(error = %e, "could not record history");
+                Ok(id) => {
+                    self.recorded.insert(entry.id, id);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "could not record history");
+                }
             }
             self.refresh_history();
             if self.queue.active() == 0 {

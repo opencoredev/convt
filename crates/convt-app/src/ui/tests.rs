@@ -1719,6 +1719,10 @@ fn size_deltas_read_as_the_change() {
         ("4.2× larger".to_string(), Tone::Amber)
     );
     assert_eq!(
+        size_delta(1000, 9960),
+        ("10× larger".to_string(), Tone::Amber)
+    );
+    assert_eq!(
         size_delta(1000, 23_000),
         ("23× larger".to_string(), Tone::Amber)
     );
@@ -1861,8 +1865,7 @@ fn the_hud_keeps_the_saved_files_of_a_batch_with_failures(cx: &mut TestAppContex
         "the line says which file failed"
     );
     assert!(shown(cx, hud, "hud-show"), "the saved file can be shown");
-    click(cx, hud, "hud-copy");
-    assert_eq!(label(cx, hud, "hud-copy").as_deref(), Some("Copied"));
+    assert!(shown(cx, hud, "hud-copy"), "the saved file can be copied");
     cx.executor().advance_clock(Duration::from_secs(5));
     cx.run_until_parked();
     assert!(hud_open(cx), "still up after 5s");
@@ -1870,7 +1873,7 @@ fn the_hud_keeps_the_saved_files_of_a_batch_with_failures(cx: &mut TestAppContex
     cx.run_until_parked();
     assert!(!hud_open(cx), "gone after 6s");
 
-    // Several saved files: the count, and where they are.
+    // Several saved files: the count, where they are, and Copy works.
     let files = vec![f.png("one.png"), f.png("two.png")];
     cx.update(|cx| super::route(cli(files, Some("jpeg"), None), cx));
     let (hud, _) = window_of::<HudView>(cx);
@@ -1883,6 +1886,8 @@ fn the_hud_keeps_the_saved_files_of_a_batch_with_failures(cx: &mut TestAppContex
         label(cx, hud, "hud-line").as_deref(),
         Some("In the original folder")
     );
+    click(cx, hud, "hud-copy");
+    assert_eq!(label(cx, hud, "hud-copy").as_deref(), Some("Copied"));
 }
 
 /// A mixed batch keeps Copy and Show for the saved file and adds Details
@@ -2257,6 +2262,93 @@ fn the_failed_hud_opens_the_failure_in_activity(cx: &mut TestAppContext) {
     });
     assert!(shown(cx, main, &format!("record-status-{}", record.id)));
     assert!(shown(cx, main, &format!("retry-{}", record.id)));
+}
+
+/// Hovering over a finished HUD pauses auto-dismiss until the pointer leaves.
+#[gpui_kit::test]
+fn hovering_the_hud_pauses_auto_dismiss(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("hover.png");
+    cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+    let (hud, view) = window_of::<HudView>(cx);
+    wait_for_label(cx, hud, "hud", |s| s == "done");
+
+    hud.update(cx, |_, window, cx| {
+        view.update(cx, |v, cx| v.set_hovered(true, window, cx));
+    })
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_secs(10));
+    cx.run_until_parked();
+    assert!(hud_open(cx), "hovered HUD stays open past DONE_FOR");
+
+    hud.update(cx, |_, window, cx| {
+        view.update(cx, |v, cx| v.set_hovered(false, window, cx));
+    })
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+    assert!(hud_open(cx), "stays up briefly after pointer leaves");
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert!(!hud_open(cx), "closes after hover-leave grace period");
+}
+
+/// Clicking Details opens the exact failed record id, not a different failure
+/// of the same file.
+#[gpui_kit::test]
+fn details_targets_the_exact_failed_record_id(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        })
+    });
+    let broken = f.dir.path().join("twice.bmp");
+    std::fs::write(&broken, "not a bmp").unwrap();
+
+    // First failure, tracked by the HUD.
+    cx.update(|cx| super::route(cli(vec![broken.clone()], Some("png"), None), cx));
+    let (hud, _) = window_of::<HudView>(cx);
+    wait_for_label(cx, hud, "hud", |s| s == "failed");
+    let first_id = cx.read(|cx| f.app.read(cx).recent[0].id);
+
+    // Pause HUD dismiss while a second failure of the same path runs.
+    let (_, hud_view) = window_of::<HudView>(cx);
+    hud.update(cx, |_, window, cx| {
+        hud_view.update(cx, |v, cx| v.set_hovered(true, window, cx));
+    })
+    .unwrap();
+
+    // Second failure of the same path through Quick convert (not the HUD).
+    let (quick, _) = f.quick(cli(vec![broken.clone()], Some("webp"), None), cx);
+    click(cx, quick, "convert");
+    wait_for_label(cx, quick, "quick-status", |s| s == "Failed");
+    let second_id = cx.read(|cx| f.app.read(cx).recent[0].id);
+    assert_ne!(first_id, second_id);
+
+    // HUD Details must open the first failure, not the newer second one.
+    click(cx, hud, "hud-details");
+    let (_, main_view) = window_of::<MainView>(cx);
+    cx.read(|cx| {
+        let open = &main_view.read(cx).details_open;
+        assert!(open.contains(&first_id), "exact HUD failure is open");
+        assert!(!open.contains(&second_id), "other failure stays closed");
+    });
+}
+
+/// A JPEG photo going to PNG has no alpha channel, so the collapsed Options
+/// summary omits "Transparent" unless the user picks a background color.
+#[gpui_kit::test]
+fn jpeg_to_png_options_summary_omits_transparent(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let jpg = f.rgb("photo.jpg");
+    let (window, _) = f.quick(cli(vec![jpg], None, None), cx);
+    click(cx, window, "to-png");
+    let summary = label(cx, window, "options-summary").unwrap_or_default();
+    assert!(
+        !summary.contains("Transparent"),
+        "JPEG->PNG summary should omit Transparent: {summary}"
+    );
 }
 
 #[gpui_kit::test]

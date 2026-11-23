@@ -158,11 +158,11 @@ fn run(primary: instance::Primary, first: Request) {
         for req in first {
             ui::route(req, cx);
         }
-        // A launch that opened no window (a Finder or command-line
-        // conversion) stays out of the Dock while the tray keeps it running.
-        // The progress HUD such a launch shows doesn't count as one.
+        // A launch that opened no regular window (a Finder or command-line
+        // conversion) stays out of the Dock so silent conversions don't bounce
+        // it. The progress HUD such a launch shows doesn't count as one.
         #[cfg(target_os = "macos")]
-        if !ui::has_regular_windows(cx) && tray::shown(cx) {
+        if !ui::has_regular_windows(cx) {
             macos::show_in_dock(false);
         }
     });

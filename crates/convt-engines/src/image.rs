@@ -419,18 +419,29 @@ fn has_verified_sdr_trc(icc: &[u8]) -> bool {
 #[cfg(any(test, target_os = "macos"))]
 const SDR_GAMMA: std::ops::RangeInclusive<f32> = 1.75..=2.65;
 
+/// Whether a normalized tone curve sample `(x, y)` lies inside the SDR
+/// gamma envelope (roughly gamma 1.65 to 2.7, with a small toe margin for
+/// sRGB / Display P3 / Rec.709 linear segments).
+#[cfg(any(test, target_os = "macos"))]
+fn in_sdr_envelope(x: f64, y: f64) -> bool {
+    let low = x.powf(2.7) - 0.03;
+    let high = x.powf(1.65) + 0.03;
+    (low..=high).contains(&y)
+}
+
 /// Whether one ICC tone curve is an SDR gamma. A `curv` with no entries is
 /// linear, one entry is a u8Fixed8 gamma, and more are a lookup table that
-/// must run from 0 to 65535 without falling and pass its midpoint where a
+/// must run from 0 to 65535 without falling, pass its midpoint where a
 /// gamma of about 1.6 to 2.7 would (0.5^2.2 is 0.214; linear is 0.5 and PQ
-/// is near 0.01). A `para` of any of the five ICC function types needs its
-/// gamma in [`SDR_GAMMA`] and, evaluated in full ([`eval_icc_para`]) at 33
-/// points from 0 to 1, must run from about 0 to about 1 without falling and
-/// pass its midpoint between 0.15 and 0.35, as a `curv` table must: the
-/// exponent alone says nothing when a linear segment covers the whole range.
-/// A type 3 or 4 curve must also not drop where its segments join
-/// ([`para_joins_without_a_drop`]).
-/// Anything else, or a tag too short for its own header, is not SDR.
+/// is near 0.01), and stay inside [`in_sdr_envelope`] across quantiles 0.1
+/// through 0.9 so step/plateau tables cannot slip through. A `para` of any
+/// of the five ICC function types needs its gamma in [`SDR_GAMMA`] and,
+/// evaluated in full ([`eval_icc_para`]) at 33 points from 0 to 1, must run
+/// from about 0 to about 1 without falling, pass its midpoint between 0.15
+/// and 0.35, and stay inside [`in_sdr_envelope`] across its interior. A
+/// type 3 or 4 curve must also not drop where its segments join
+/// ([`para_joins_without_a_drop`]). Anything else, or a tag too short for
+/// its own header, is not SDR.
 #[cfg(any(test, target_os = "macos"))]
 fn is_sdr_trc_tag(data: &[u8]) -> bool {
     let be16 = |at: usize| {
@@ -456,18 +467,24 @@ fn is_sdr_trc_tag(data: &[u8]) -> bool {
                         .chunks_exact(2)
                         .map(|c| u16::from_be_bytes([c[0], c[1]]))
                         .collect();
-                    // An even table has no middle entry: interpolate
-                    // between the two either side of 0.5.
-                    let mid = if count % 2 == 0 {
-                        (f64::from(entries[count / 2 - 1]) + f64::from(entries[count / 2])) * 0.5
+                    // Linearly interpolate at any normalized input x in [0, 1].
+                    let sample = |x: f64| {
+                        let pos = x * (count - 1) as f64;
+                        let lo = (pos.floor() as usize).min(count - 1);
+                        let hi = (pos.ceil() as usize).min(count - 1);
+                        let frac = pos - lo as f64;
+                        (f64::from(entries[lo]) * (1.0 - frac) + f64::from(entries[hi]) * frac)
                             / 65535.0
-                    } else {
-                        f64::from(entries[count / 2]) / 65535.0
                     };
+                    let mid = sample(0.5);
                     entries[0] == 0
                         && entries[count - 1] == u16::MAX
                         && entries.windows(2).all(|w| w[0] <= w[1])
                         && (0.15..=0.35).contains(&mid)
+                        && (1..=9).all(|step| {
+                            let x = f64::from(step) / 10.0;
+                            in_sdr_envelope(x, sample(x))
+                        })
                 }
             }
         }
@@ -501,6 +518,7 @@ fn is_sdr_trc_tag(data: &[u8]) -> bool {
                 && (0.98..=1.02).contains(&ys[32])
                 && ys.windows(2).all(|w| w[0] <= w[1])
                 && (0.15..=0.35).contains(&ys[16])
+                && (3..=29).all(|i| in_sdr_envelope(i as f64 / 32.0, ys[i]))
                 && para_joins_without_a_drop(&params)
         }
         _ => false,
@@ -2380,11 +2398,12 @@ pub(crate) mod tests {
             ("curv gamma 1.8 table", curv_table(256, gamma(1.8))),
             ("curv three-entry table at 2.4", curv_table(3, gamma(2.4))),
             ("curv even table at 2.2", curv_table(16, gamma(2.2))),
-            // Entries 1 and 2 (0.2 and 0.4) straddle 0.5 and average to
-            // 0.3; entry 2 alone would read 0.4 and fail.
+            // Entries 1 and 2 (0.111 and 0.444, gamma 2.0 at 1/3 and 2/3)
+            // straddle 0.5 and average to 0.278; entry 2 alone would read
+            // 0.444 and fail.
             (
                 "curv four-entry table, midpoint between entries",
-                curv(&[0, 13_107, 26_214, u16::MAX]),
+                curv(&[0, 7_282, 29_127, u16::MAX]),
             ),
         ];
         for (name, tag) in &sdr {
@@ -2453,6 +2472,67 @@ pub(crate) mod tests {
         past_end.truncate(past_end.len() - 10);
         assert!(!has_verified_sdr_trc(&past_end));
         assert!(!has_verified_sdr_trc(b"not a profile at all"));
+    }
+
+    /// A monotonic `curv` table that stays flat at 0.22 across [0.1, 0.9]
+    /// passes an endpoints-and-midpoint-only check, but violates the SDR gamma
+    /// envelope at its other quantiles and keeps 16 bits.
+    #[test]
+    fn curv_plateau_matching_midpoint_is_not_sdr() {
+        let plateau = curv_table(256, |x| {
+            if x <= 0.0 {
+                0.0
+            } else if x >= 1.0 {
+                1.0
+            } else {
+                0.22
+            }
+        });
+        assert!(!is_sdr_trc_tag(&plateau));
+        let icc = icc_with_trc("Display P3", Some(plateau), &[]);
+        assert!(!icc_confirms_sdr(&icc));
+        assert!(!goes_to_eight_bits(&DeepPng {
+            icc: Some(&icc),
+            ..DeepPng::default()
+        }));
+    }
+
+    /// An authentic Apple Display P3 profile (matching macOS `sips` output:
+    /// v4.0 `para` type 3 with `[2.39999, 0.94786, 0.05214, 0.07739, 0.04045]`,
+    /// both alone and paired with `cICP = [12, 13, 0, 1]`) is confirmed SDR
+    /// and shrinks cleanly to 8 bits while keeping its color chunks intact.
+    #[test]
+    fn apple_display_p3_profile_normalizes_to_eight_bits() {
+        let apple_p3_para = para_tag(3, &[2.39999, 0.94786, 0.05214, 0.07739, 0.04045]);
+        assert!(is_sdr_trc_tag(&apple_p3_para));
+        let apple_p3_icc = icc_with_trc("Display P3", Some(apple_p3_para), &[]);
+        assert!(icc_confirms_sdr(&apple_p3_icc));
+
+        let p3_cicp = png::CodingIndependentCodePoints {
+            color_primaries: 12,
+            transfer_function: 13,
+            matrix_coefficients: 0,
+            is_video_full_range_image: true,
+        };
+        for cicp in [None, Some(p3_cicp)] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("p3.png");
+            deep_png(
+                &path,
+                32,
+                24,
+                &DeepPng {
+                    icc: Some(&apple_p3_icc),
+                    cicp,
+                    ..DeepPng::default()
+                },
+            );
+            optimize_heif_png(&path).unwrap();
+            let info = png_info(&path);
+            assert_eq!(info.bit_depth, png::BitDepth::Eight, "cicp={cicp:?}");
+            assert_eq!(info.icc_profile.as_deref(), Some(apple_p3_icc.as_slice()));
+            assert_eq!(info.coding_independent_code_points, cicp);
+        }
     }
 
     /// A `para` curve is judged by its shape, not its exponent: a type 4

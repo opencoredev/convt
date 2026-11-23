@@ -150,19 +150,29 @@ impl MainView {
         cx.notify();
     }
 
-    /// Opens the full message of the newest failed record of each input,
-    /// for the HUD's Details.
-    pub(super) fn expand_failures(&mut self, inputs: &[PathBuf], cx: &mut Context<Self>) {
+    /// Opens the full message of each failed conversion for Details, matching
+    /// its exact recorded id when known and falling back to the newest failed
+    /// record for that input.
+    pub(super) fn expand_failures(
+        &mut self,
+        failures: &[(Option<i64>, PathBuf)],
+        cx: &mut Context<Self>,
+    ) {
         let state = self.app.read(cx);
-        let ids: Vec<i64> = inputs
+        let ids: Vec<i64> = failures
             .iter()
-            .filter_map(|input| {
-                state
-                    .recent
-                    .iter()
-                    .filter(|r| r.input == *input && matches!(r.outcome, Outcome::Failed(_)))
-                    .max_by_key(|r| (r.finished_at, r.id))
-                    .map(|r| r.id)
+            .filter_map(|(id, input)| {
+                id.filter(|id| state.recent.iter().any(|r| r.id == *id))
+                    .or_else(|| {
+                        state
+                            .recent
+                            .iter()
+                            .filter(|r| {
+                                r.input == *input && matches!(r.outcome, Outcome::Failed(_))
+                            })
+                            .max_by_key(|r| (r.finished_at, r.id))
+                            .map(|r| r.id)
+                    })
             })
             .collect();
         self.details_open.extend(ids);
@@ -560,8 +570,6 @@ impl MainView {
                     .px(px(space::XXL))
                     .rounded(px(radius::PANEL))
                     .bg(p.recessed)
-                    .border_1()
-                    .border_color(p.border)
                     .shadow(theme::well(p))
                     .child(
                         div()
@@ -1108,9 +1116,10 @@ fn row(id: String, p: &Palette) -> Stateful<Div> {
 }
 
 /// The row actions: Copy, Open and Show, or Retry, Stop or Remove.
+/// Fixed width so Done, Failed and Running status columns align vertically.
 fn action_cell(actions: Vec<AnyElement>) -> Div {
     div()
-        .min_w(px(84.))
+        .w(px(164.))
         .flex_shrink_0()
         .flex()
         .items_center()
@@ -1135,7 +1144,7 @@ pub(super) fn size_delta(before: u64, after: u64) -> (String, Tone) {
         } else {
             Tone::Neutral
         };
-        let label = if times >= 10. {
+        let label = if times >= 9.95 {
             format!("{times:.0}× larger")
         } else if times >= 2. {
             format!("{times:.1}× larger")
