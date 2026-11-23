@@ -28,10 +28,20 @@ private struct Target: Decodable {
 /// container (see `send`), which only processes in the group can write, so a
 /// `convt://` link from a web page can never start a conversion.
 final class FinderSync: FIFinderSync {
-    /// The items the last menu was built for. By the time an item is
-    /// clicked, Finder may report a different selection or none at all
-    /// (right-clicking an item that wasn't selected targets it without
-    /// selecting it), and the click would otherwise do nothing.
+    /// The items each recent menu was built for, by the tag its items carry.
+    /// By the time an item is clicked, Finder may report a different
+    /// selection or none at all (right-clicking an item that wasn't selected
+    /// targets it without selecting it), and Finder can build another menu,
+    /// in another window, before the first one's click arrives. The tag ties
+    /// a click to the menu it came from. Only the newest `maxMenuSelections`
+    /// are kept, so the memory stays tiny.
+    private var menuSelections: [Int: [URL]] = [:]
+    /// `menuSelections`' tags, oldest first.
+    private var menuTagOrder: [Int] = []
+    private var nextMenuTag = 100
+    private let maxMenuSelections = 16
+    /// The items the last menu was built for, in case Finder drops the tag
+    /// when it copies the menu into its own process.
     private var lastMenuItems: [URL] = []
 
     override init() {
@@ -51,6 +61,9 @@ final class FinderSync: FIFinderSync {
         } else {
             return nil
         }
+        let tag = nextMenuTag
+        nextMenuTag = nextMenuTag >= 10000 ? 100 : nextMenuTag + 1
+        remember(items, tag: tag)
         lastMenuItems = items
 
         let submenu = NSMenu(title: "Convert with convt")
@@ -71,20 +84,21 @@ final class FinderSync: FIFinderSync {
             let isVideo = targets.contains { $0.category == "Video" }
             for target in targets {
                 let title = isVideo && target.category == "Audio" ? "\(target.name) (audio only)" : target.name
-                // Finder copies this menu into its own process and keeps only
-                // each item's title and action, so `convert` finds the
-                // target again by title.
+                // Finder copies this menu into its own process, so `convert`
+                // finds the target again by title, and the files by the tag
+                // (with fallbacks in `clickedItems` if the copy loses it).
                 let item = NSMenuItem(title: title, action: #selector(convert(_:)), keyEquivalent: "")
                 item.target = self
+                item.tag = tag
                 submenu.addItem(item)
             }
             submenu.addItem(.separator())
-            submenu.addItem(moreItem(title: "More options…"))
+            submenu.addItem(moreItem(title: "More options…", tag: tag))
         } else {
             // The app hasn't published its list yet (it has never run, or
             // the list is unreadable): let the app work out the targets
             // rather than guess from the format table.
-            submenu.addItem(moreItem(title: "Open in convt…"))
+            submenu.addItem(moreItem(title: "Open in convt…", tag: tag))
         }
 
         let menu = NSMenu(title: "")
@@ -110,19 +124,40 @@ final class FinderSync: FIFinderSync {
         return list
     }
 
-    private func moreItem(title: String) -> NSMenuItem {
+    private func moreItem(title: String, tag: Int) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(moreOptions(_:)), keyEquivalent: "")
         item.target = self
+        item.tag = tag
         return item
     }
 
-    /// The items a click applies to: exactly what the menu was built for,
+    /// Records the items the menu with `tag` was built for, forgetting the
+    /// oldest menu past `maxMenuSelections`.
+    private func remember(_ items: [URL], tag: Int) {
+        if menuSelections.updateValue(items, forKey: tag) != nil {
+            menuTagOrder.removeAll { $0 == tag }
+        }
+        menuTagOrder.append(tag)
+        while menuTagOrder.count > maxMenuSelections {
+            menuSelections.removeValue(forKey: menuTagOrder.removeFirst())
+        }
+    }
+
+    /// The items a click on `sender` applies to: exactly what its menu was
+    /// built for (found by its tag), else what the last menu was built for,
     /// else Finder's selection, else the item that was right-clicked. The
     /// menu's items come first because Finder's selection can change between
     /// opening the menu and clicking it, and converting what is selected by
     /// then would convert files the user never picked. They are used once,
     /// so a later click can't reuse an old menu's files.
-    private func clickedItems() -> [URL]? {
+    private func clickedItems(for sender: NSMenuItem) -> [URL]? {
+        if sender.tag != 0, let items = menuSelections.removeValue(forKey: sender.tag), !items.isEmpty {
+            menuTagOrder.removeAll { $0 == sender.tag }
+            if lastMenuItems == items {
+                lastMenuItems = []
+            }
+            return items
+        }
         if !lastMenuItems.isEmpty {
             let items = lastMenuItems
             lastMenuItems = []
@@ -141,7 +176,7 @@ final class FinderSync: FIFinderSync {
 
     /// Converts the selection in place, with no window.
     @objc private func convert(_ sender: NSMenuItem) {
-        guard let items = clickedItems() else { return }
+        guard let items = clickedItems(for: sender) else { return }
         let name = sender.title.replacingOccurrences(of: " (audio only)", with: "")
         let target = loadTargets().flatMap { list in
             list.targets.values.lazy.flatMap { $0 }.first { $0.name == name }
@@ -157,7 +192,7 @@ final class FinderSync: FIFinderSync {
 
     /// Opens Quick convert for the selection.
     @objc private func moreOptions(_ sender: NSMenuItem) {
-        guard let items = clickedItems() else { return }
+        guard let items = clickedItems(for: sender) else { return }
         send(to: nil, items: items, activate: true)
     }
 

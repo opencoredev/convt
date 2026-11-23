@@ -167,7 +167,9 @@ pub(crate) fn apply_background(
 /// background color, `strip_metadata` (the rewrite keeps only the color
 /// tags, dropping EXIF and text chunks) and `target_size` (the image shrinks
 /// until the file fits, color tags and pixel ratio included). With none of
-/// them the file is left alone.
+/// them the file is left alone. Any EXIF orientation is baked into the
+/// pixels; EXIF and text chunks stay unless `strip_metadata` is set, with
+/// the orientation reset so nothing rotates the picture again.
 pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
     let target = options
         .target_size
@@ -178,10 +180,24 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
     {
         return Ok(());
     }
-    let source = PngMeta::read(path)?;
+    let keep_metadata = !options.strip_metadata;
+    let mut source = PngMeta::read(path)?;
+    // `open_oriented` applies the EXIF orientation, so the kept EXIF must
+    // stop asking for it.
+    let mut orientation = None;
+    if let Some(exif) = &source.info.exif_metadata {
+        let mut exif = exif.to_vec();
+        orientation = image::metadata::Orientation::remove_from_exif_chunk(&mut exif);
+        source.info.exif_metadata = Some(exif.into());
+    }
+    if orientation.is_some_and(crate::orientation::swaps_dims)
+        && let Some(dims) = source.info.pixel_dims.as_mut()
+    {
+        std::mem::swap(&mut dims.xppu, &mut dims.yppu);
+    }
     let img = apply_background(crate::orientation::open_oriented(path)?, "png", options)?;
     let Some(target) = target else {
-        return write_png(&img, &source, path, false);
+        return write_png(&img, &source, path, keep_metadata);
     };
     let longest = img.width().max(img.height());
     fit_target(target, "png", None, longest, |_, edge| {
@@ -190,9 +206,9 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
                 &img.resize(edge, edge, FilterType::Lanczos3),
                 &source,
                 path,
-                false,
+                keep_metadata,
             )?,
-            None => write_png(&img, &source, path, false)?,
+            None => write_png(&img, &source, path, keep_metadata)?,
         }
         Ok(std::fs::metadata(path)?.len())
     })
@@ -265,13 +281,38 @@ fn to_eight_bits(img: DynamicImage) -> DynamicImage {
     }
 }
 
+/// The SDR transfer characteristics of ITU-T H.273 (`cICP`, ICC `cicp`):
+/// BT.709, gamma 2.2, gamma 2.8, BT.601 and sRGB. PQ (16), HLG (18) and
+/// linear (8) are not among them.
+#[cfg(any(test, target_os = "macos"))]
+fn is_sdr_transfer(transfer: u8) -> bool {
+    matches!(transfer, 1 | 4 | 5 | 6 | 13)
+}
+
+/// Descriptions of standard SDR ICC profiles, lowercase, matched as
+/// substrings of the profile's `desc`.
+#[cfg(any(test, target_os = "macos"))]
+const SDR_PROFILE_NAMES: [&str; 10] = [
+    "display p3",
+    "srgb",
+    "apple rgb",
+    "generic rgb",
+    "adobe rgb",
+    "color lcd",
+    "rec.709",
+    "bt.709",
+    "itu-r bt.709",
+    "camera rgb",
+];
+
 /// Whether a PNG says it is SDR, so 8 bits per channel lose nothing that a
-/// display shows. Any HDR chunk (`mDCV`, `cLLI`) means no. Otherwise the
-/// first color tag present decides: a `cICP` transfer must be an SDR one
-/// (BT.709, gamma 2.2 or 2.8, BT.601, sRGB; not PQ or HLG), an `sRGB` chunk
-/// is SDR, and an ICC profile is SDR unless it names HDR
-/// ([`icc_signals_hdr`]). A file with none of them is ambiguous and is not
-/// treated as SDR.
+/// display shows. Anything hinting at HDR or linear light means no: an
+/// `mDCV` or `cLLI` chunk, a `cICP` transfer that isn't SDR
+/// ([`is_sdr_transfer`]), or an ICC profile that [`icc_signals_hdr`]. Then
+/// the file needs positive evidence: an SDR `cICP` transfer, an `sRGB`
+/// chunk, or an ICC profile that [`icc_confirms_sdr`]. A file with none of
+/// them, such as one with a custom profile under a neutral name, is
+/// ambiguous and is not treated as SDR.
 #[cfg(any(test, target_os = "macos"))]
 fn is_confirmed_sdr_png(source: &PngMeta) -> bool {
     let info = &source.info;
@@ -281,28 +322,37 @@ fn is_confirmed_sdr_png(source: &PngMeta) -> bool {
     {
         return false;
     }
-    if let Some(cicp) = info.coding_independent_code_points {
-        return matches!(cicp.transfer_function, 1 | 4 | 5 | 6 | 13);
+    let cicp = info.coding_independent_code_points;
+    if cicp.is_some_and(|c| !is_sdr_transfer(c.transfer_function)) {
+        return false;
     }
-    if info.srgb.is_some() {
-        return true;
+    let icc = info.icc_profile.as_deref();
+    if icc.is_some_and(icc_signals_hdr) {
+        return false;
     }
-    info.icc_profile
-        .as_deref()
-        .is_some_and(|icc| !icc_signals_hdr(icc))
+    cicp.is_some() || info.srgb.is_some() || icc.is_some_and(icc_confirms_sdr)
 }
 
-/// Whether an ICC profile describes HDR: a `cicp` tag (ICC 4.4) with a PQ
-/// or HLG transfer, or a description naming PQ, HLG, HDR, BT.2100 or
-/// ST 2084, as Apple's and Adobe's HDR profiles do. In case the tag table
-/// can't be read, the whole profile is also searched, in ASCII and UTF-16,
-/// for the names too long to turn up by chance in binary data.
+/// The transfer characteristic of an ICC 4.4 `cicp` tag.
+#[cfg(any(test, target_os = "macos"))]
+fn icc_cicp_transfer(data: &[u8]) -> Option<u8> {
+    (data.len() >= 12 && data.starts_with(b"cicp")).then(|| data[9])
+}
+
+/// Whether an ICC profile describes HDR or linear light: a `cicp` tag
+/// (ICC 4.4) with a transfer that isn't SDR, or a description naming PQ,
+/// HLG, HDR, BT.2100, ST 2084, linear or scRGB, as Apple's and Adobe's HDR
+/// and linear profiles do. In case the tag table can't be read, the whole
+/// profile is also searched, in ASCII and UTF-16, for the names too long to
+/// turn up by chance in binary data.
 #[cfg(any(test, target_os = "macos"))]
 fn icc_signals_hdr(icc: &[u8]) -> bool {
     let mut text = String::new();
     for (signature, data) in icc_tags(icc) {
         match &signature {
-            b"cicp" if data.len() >= 12 && matches!(data[9], 16 | 18) => return true,
+            b"cicp" if icc_cicp_transfer(data).is_some_and(|t| !is_sdr_transfer(t)) => {
+                return true;
+            }
             b"desc" | b"dmdd" | b"dmnd" => {
                 text.push_str(&icc_text(data));
                 text.push('\n');
@@ -311,7 +361,7 @@ fn icc_signals_hdr(icc: &[u8]) -> bool {
         }
     }
     let text = text.to_ascii_uppercase();
-    if ["PQ", "HLG", "2100", "HDR", "2084"]
+    if ["PQ", "HLG", "2100", "HDR", "2084", "LINEAR", "SCRGB"]
         .iter()
         .any(|m| text.contains(m))
     {
@@ -319,10 +369,29 @@ fn icc_signals_hdr(icc: &[u8]) -> bool {
     }
     let upper: Vec<u8> = icc.iter().map(u8::to_ascii_uppercase).collect();
     let contains = |needle: &[u8]| upper.windows(needle.len()).any(|w| w == needle);
-    ["HLG", "2100", "HDR", "2084"].iter().any(|m| {
-        let utf16: Vec<u8> = m.bytes().flat_map(|b| [0, b]).collect();
-        contains(m.as_bytes()) || contains(&utf16)
-    })
+    ["HLG", "2100", "HDR", "2084", "LINEAR", "SCRGB"]
+        .iter()
+        .any(|m| {
+            let utf16: Vec<u8> = m.bytes().flat_map(|b| [0, b]).collect();
+            contains(m.as_bytes()) || contains(&utf16)
+        })
+}
+
+/// Whether an ICC profile that doesn't [`icc_signals_hdr`] is known to be
+/// SDR: a `cicp` tag with an SDR transfer, or a description from
+/// [`SDR_PROFILE_NAMES`]. A custom profile, whatever its curves, is not.
+#[cfg(any(test, target_os = "macos"))]
+fn icc_confirms_sdr(icc: &[u8]) -> bool {
+    icc_tags(icc)
+        .into_iter()
+        .any(|(signature, data)| match &signature {
+            b"cicp" => icc_cicp_transfer(data).is_some_and(is_sdr_transfer),
+            b"desc" => {
+                let name = icc_text(data).to_lowercase();
+                SDR_PROFILE_NAMES.iter().any(|n| name.contains(n))
+            }
+            _ => false,
+        })
 }
 
 #[cfg(any(test, target_os = "macos"))]
@@ -1617,7 +1686,7 @@ pub(crate) mod tests {
     fn heif_png_goes_to_eight_bits_with_its_profile() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("IMG_0001.png");
-        let icc: Vec<u8> = (0..548u32).map(|i| (i * 7 % 251) as u8).collect();
+        let icc = icc_named("Display P3");
         let deep = sips_like_png(&path, 320, 240, &icc, None);
         let before = std::fs::metadata(&path).unwrap().len();
         optimize_heif_png(&path).unwrap();
@@ -1683,12 +1752,23 @@ pub(crate) mod tests {
     #[test]
     fn only_png_confirmed_as_sdr_goes_to_eight_bits() {
         let p3 = icc_named("Display P3");
+        let srgb_icc = icc_named("sRGB IEC61966-2.1");
+        let adobe = icc_named("Adobe RGB (1998)");
         let cicp = |transfer_function| png::CodingIndependentCodePoints {
             color_primaries: 12,
             transfer_function,
             matrix_coefficients: 0,
             is_video_full_range_image: true,
         };
+        // An ICC 4.4 `cicp` tag with this transfer.
+        let cicp_tag = |transfer| {
+            (
+                *b"cicp",
+                [&b"cicp\0\0\0\0"[..], &[9, transfer, 0, 1]].concat(),
+            )
+        };
+        let custom_icc = icc_named("Custom Camera Profile");
+        let sdr_cicp_icc = icc_with("Custom Camera Profile", &[cicp_tag(13)]);
         let sdr = [
             (
                 "sRGB chunk",
@@ -1718,28 +1798,107 @@ pub(crate) mod tests {
                     ..DeepPng::default()
                 },
             ),
+            (
+                "sRGB ICC",
+                DeepPng {
+                    icc: Some(&srgb_icc),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "Adobe RGB ICC",
+                DeepPng {
+                    icc: Some(&adobe),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "custom ICC with an sRGB cicp tag",
+                DeepPng {
+                    icc: Some(&sdr_cicp_icc),
+                    ..DeepPng::default()
+                },
+            ),
         ];
         for (name, meta) in &sdr {
             assert!(goes_to_eight_bits(meta), "{name} should go to 8 bits");
         }
         let pq_icc = icc_named("Rec. ITU-R BT.2100 PQ");
         let hlg_icc = icc_named("Display P3 HLG");
-        // An ICC 4.4 `cicp` tag saying PQ, under a neutral name.
-        let cicp_tag = |transfer| {
-            (
-                *b"cicp",
-                [&b"cicp\0\0\0\0"[..], &[9, transfer, 0, 1]].concat(),
-            )
-        };
+        let linear_icc = icc_named("sRGB Linear");
+        let scrgb_icc = icc_named("scRGB");
+        // ICC 4.4 `cicp` tags saying PQ and linear, under a neutral name.
         let cicp_icc = icc_with("Display", &[cicp_tag(16)]);
+        let linear_cicp_icc = icc_with("Display", &[cicp_tag(8)]);
         assert!(icc_signals_hdr(&cicp_icc));
         assert!(icc_signals_hdr(&icc_with("Display", &[cicp_tag(18)])));
+        assert!(icc_signals_hdr(&linear_cicp_icc));
+        assert!(icc_signals_hdr(&linear_icc));
+        assert!(icc_signals_hdr(&scrgb_icc));
         assert!(!icc_signals_hdr(&icc_with("Display", &[cicp_tag(13)])));
         assert!(!icc_signals_hdr(&icc_named("Display P3")));
         assert!(!icc_signals_hdr(&icc_named("sRGB IEC61966-2.1")));
         assert!(!icc_signals_hdr(&icc_named("Adobe RGB (1998)")));
+        assert!(!icc_signals_hdr(&custom_icc));
+        assert!(icc_confirms_sdr(&icc_named("Display P3")));
+        assert!(icc_confirms_sdr(&icc_named("Color LCD")));
+        assert!(icc_confirms_sdr(&icc_named("ITU-R BT.709 Reference")));
+        assert!(icc_confirms_sdr(&sdr_cicp_icc));
+        assert!(!icc_confirms_sdr(&custom_icc));
+        assert!(!icc_confirms_sdr(&icc_with("Display", &[cicp_tag(16)])));
+        assert!(!icc_confirms_sdr(b"not a profile at all"));
         let kept = [
             ("no color tags", DeepPng::default()),
+            (
+                "custom ICC under a neutral name",
+                DeepPng {
+                    icc: Some(&custom_icc),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "unreadable ICC",
+                DeepPng {
+                    icc: Some(b"profile"),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "linear ICC",
+                DeepPng {
+                    icc: Some(&linear_icc),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "scRGB ICC",
+                DeepPng {
+                    icc: Some(&scrgb_icc),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "ICC with a linear cicp tag",
+                DeepPng {
+                    icc: Some(&linear_cicp_icc),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "cICP linear",
+                DeepPng {
+                    cicp: Some(cicp(8)),
+                    ..DeepPng::default()
+                },
+            ),
+            (
+                "SDR cICP beside a PQ ICC",
+                DeepPng {
+                    cicp: Some(cicp(13)),
+                    icc: Some(&pq_icc),
+                    ..DeepPng::default()
+                },
+            ),
             (
                 "cICP PQ",
                 DeepPng {
@@ -1795,6 +1954,27 @@ pub(crate) mod tests {
         for (name, meta) in &kept {
             assert!(!goes_to_eight_bits(meta), "{name} should keep 16 bits");
         }
+    }
+
+    #[test]
+    fn custom_neutral_icc_profile_keeps_sixteen_bits() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("camera.png");
+        let icc = icc_named("Custom Camera Profile");
+        let meta = DeepPng {
+            icc: Some(&icc),
+            ..DeepPng::default()
+        };
+        let deep = deep_png(&path, 96, 64, &meta);
+        assert!(!is_confirmed_sdr_png(&PngMeta::read(&path).unwrap()));
+        optimize_heif_png(&path).unwrap();
+        let info = png_info(&path);
+        assert_eq!(info.bit_depth, png::BitDepth::Sixteen);
+        assert_eq!(info.icc_profile.as_deref(), Some(&icc[..]));
+        assert_eq!(
+            image::open(&path).unwrap().to_rgb16(),
+            DynamicImage::ImageRgba16(deep).to_rgb16()
+        );
     }
 
     #[test]

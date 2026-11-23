@@ -119,6 +119,9 @@ pub struct QuickView {
     /// Where the files go. `None` is next to each file.
     pub(super) save_dir: Option<PathBuf>,
     pub(super) file_name: Entity<InputState>,
+    /// The last name committed with Enter or Done, or the default; Escape
+    /// puts the field back to it.
+    pub(super) saved_name: String,
     /// Why the typed file name can't be used, shown under it.
     pub(super) name_error: Option<String>,
     pub(super) jobs: Vec<JobId>,
@@ -251,6 +254,7 @@ impl QuickView {
             editing_name: false,
             save_dir,
             file_name,
+            saved_name: String::new(),
             name_error: None,
             jobs: Vec::new(),
             seen: HashMap::new(),
@@ -449,6 +453,7 @@ impl QuickView {
     fn reset_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.default_name().unwrap_or_default();
         self.name_error = None;
+        self.saved_name.clone_from(&name);
         self.file_name
             .update(cx, |s, cx| s.set_value(name, window, cx));
     }
@@ -662,7 +667,17 @@ impl QuickView {
             return;
         }
         match keys.key.as_str() {
-            "enter" if !self.editing_name && self.jobs.is_empty() && self.ready(cx) => {
+            // The file name field takes Enter and Escape for itself, so
+            // neither converts nor closes the window.
+            "enter" if self.editing_name => {
+                cx.stop_propagation();
+                self.commit_name(window, cx);
+            }
+            "escape" if self.editing_name => {
+                cx.stop_propagation();
+                self.cancel_name(window, cx);
+            }
+            "enter" if self.jobs.is_empty() && self.ready(cx) => {
                 cx.stop_propagation();
                 self.convert(cx);
             }
@@ -1200,7 +1215,7 @@ impl QuickView {
                 .id("png-size-hint")
                 .test_support()
                 .aria_label(title)
-                .pt(px(space::MD))
+                .pt(px(space::SM))
                 .child(
                     theme::callout(
                         IconName::TriangleAlert,
@@ -1208,7 +1223,7 @@ impl QuickView {
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(10.))
+                            .gap(px(6.))
                             .child(theme::callout_words(
                                 title,
                                 "PNG is lossless, so photos take much more space than JPEG or \
@@ -1220,7 +1235,8 @@ impl QuickView {
                             }),
                         p,
                     )
-                    .p(px(12.)),
+                    .py(px(10.))
+                    .px(px(12.)),
                 )
                 .into_any_element(),
         )
@@ -1259,9 +1275,38 @@ impl QuickView {
 
     /// Shows the file name as a field, focused, for typing a new one.
     pub(super) fn edit_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.editing_name {
+            self.saved_name = self.file_name.read(cx).value().to_string();
+        }
         self.editing_name = true;
         let focus = self.file_name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    /// Enter or Done: keeps a usable name and shows it as text again; an
+    /// unusable one stays in the field with the reason under it.
+    pub(super) fn commit_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Err(e) = self.output(cx) {
+            self.name_error = Some(e);
+            cx.notify();
+            return;
+        }
+        self.saved_name = self.file_name.read(cx).value().to_string();
+        self.name_error = None;
+        self.editing_name = false;
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    /// Escape: puts back the last committed name and shows it as text.
+    pub(super) fn cancel_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let saved = self.saved_name.clone();
+        self.file_name
+            .update(cx, |s, cx| s.set_value(saved, window, cx));
+        self.name_error = None;
+        self.editing_name = false;
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
@@ -1673,11 +1718,28 @@ impl QuickView {
         let name = (self.files.len() == 1 && self.to.is_some()).then(|| {
             let control = if self.editing_name {
                 div()
-                    .w(px(260.))
+                    .flex()
                     .flex_shrink_0()
-                    .font_family(theme::MONO)
-                    .text_size(px(12.))
-                    .child(theme::small_field(&self.file_name, "file-name"))
+                    .items_center()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .w(px(260.))
+                            .flex_shrink_0()
+                            .font_family(theme::MONO)
+                            .text_size(px(12.))
+                            .child(theme::small_field(&self.file_name, "file-name")),
+                    )
+                    .child(
+                        Button::ghost("file-name-done", "Done")
+                            .icon(IconName::Check)
+                            .small()
+                            .build(p)
+                            .h(px(theme::SMALL_FIELD_HEIGHT))
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.commit_name(window, cx)),
+                            ),
+                    )
                     .into_any_element()
             } else {
                 let current = SharedString::from(self.file_name.read(cx).value().to_string());

@@ -1266,11 +1266,14 @@ impl Engine for ImageIoEngine {
 }
 
 /// Finishes the PNG `sips` wrote at `output` from `input` (format `from`):
-/// shrinks a HEIC's oversized PNG, applies the options, and matches
-/// Preview's orientation. The shrinking is optional: when it fails, the
-/// valid PNG `sips` wrote is kept rather than failing the conversion. AVIF
-/// is left alone, since `optimize_heif_png` is tuned for what `sips` makes
-/// of iPhone HEIC.
+/// shrinks a HEIC's oversized PNG, matches Preview's orientation, then
+/// applies the options. Orientation comes before the options because
+/// [`crate::image::background_png`] bakes and resets any EXIF orientation,
+/// and `finish_heif_output` would then no longer see that `sips` copied the
+/// tag and apply the source's orientation a second time. The shrinking is
+/// optional: when it fails, the valid PNG `sips` wrote is kept rather than
+/// failing the conversion. AVIF is left alone, since `optimize_heif_png` is
+/// tuned for what `sips` makes of iPhone HEIC.
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) fn finish_sips_png(
     from: &str,
@@ -1283,8 +1286,8 @@ pub(crate) fn finish_sips_png(
     {
         tracing::warn!("could not shrink the PNG sips wrote, keeping it as is: {e}");
     }
-    crate::image::background_png(output, options)?;
-    crate::orientation::finish_heif_output(input, output, "png", options)
+    crate::orientation::finish_heif_output(input, output, "png", options)?;
+    crate::image::background_png(output, options)
 }
 
 #[cfg(test)]

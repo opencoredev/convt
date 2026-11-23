@@ -1098,6 +1098,109 @@ fn quick_convert_waits_for_a_click_and_applies_options(cx: &mut TestAppContext) 
     assert!(!shown(cx, window, "convert"), "the picker should be gone");
 }
 
+/// While the file name is a field, Enter keeps a usable name (and doesn't
+/// convert), refuses an unusable one, and Escape puts back the last kept
+/// name; neither closes Quick convert or the composer.
+#[gpui_kit::test]
+fn editing_filename_commits_on_enter_and_cancels_on_escape(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let windows = |cx: &mut TestAppContext| cx.update(|cx| cx.windows().len());
+    let (window, view) = f.quick(cli(vec![f.png("a.png")], None, None), cx);
+    click(cx, window, "to-webp");
+    let open = windows(cx);
+    let input = cx.read(|cx| view.read(cx).file_name.clone());
+
+    // Enter with a usable name keeps it and shows it as text.
+    click(cx, window, "file-name-edit");
+    assert!(shown(cx, window, "file-name-done"));
+    set_input(cx, window, &input, "renamed.webp");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(!v.editing_name);
+        assert!(v.name_error.is_none());
+        assert_eq!(v.saved_name, "renamed.webp");
+        assert_eq!(v.file_name.read(cx).value(), "renamed.webp");
+    });
+    assert_eq!(f.jobs(cx), 0, "Enter in the field must not convert");
+    assert_eq!(
+        label(cx, window, "file-name-edit").as_deref(),
+        Some("renamed.webp")
+    );
+
+    // Enter with an unusable name stays in the field with the reason.
+    click(cx, window, "file-name-edit");
+    set_input(cx, window, &input, "../x.webp");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    cx.read(|cx| assert!(view.read(cx).editing_name));
+    assert!(shown(cx, window, "file-name-error"));
+    assert_eq!(f.jobs(cx), 0);
+
+    // Escape goes back to the kept name and leaves the window open.
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert_eq!(
+        windows(cx),
+        open,
+        "Escape in the field closed Quick convert"
+    );
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(!v.editing_name);
+        assert!(v.name_error.is_none());
+        assert_eq!(v.file_name.read(cx).value(), "renamed.webp");
+    });
+    assert!(!shown(cx, window, "file-name-error"));
+
+    // Done commits like Enter.
+    click(cx, window, "file-name-edit");
+    set_input(cx, window, &input, "other");
+    click(cx, window, "file-name-done");
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert!(!v.editing_name);
+        assert_eq!(v.saved_name, "other");
+    });
+
+    // Once the name is text again, Escape closes as before.
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert_eq!(windows(cx), open - 1);
+
+    // The inline composer: Escape in the field reverts and keeps it open.
+    let png = f.png("b.png");
+    let (main, main_view) = f.main(cx);
+    main_view.update(cx, |v, cx| v.add(std::slice::from_ref(&png), cx));
+    let quick = composer(cx, &main_view);
+    let input = cx.read(|cx| quick.read(cx).file_name.clone());
+    let default = cx.read(|cx| input.read(cx).value().to_string());
+    click(cx, main, "file-name-edit");
+    set_input(cx, main, &input, "typed.webp");
+    cx.simulate_keystrokes(main, "escape");
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert!(
+            main_view.read(cx).composer.is_some(),
+            "Escape closed the composer"
+        );
+        let q = quick.read(cx);
+        assert!(!q.editing_name);
+        assert_eq!(q.file_name.read(cx).value(), default);
+    });
+    click(cx, main, "file-name-edit");
+    set_input(cx, main, &input, "typed.webp");
+    cx.simulate_keystrokes(main, "enter");
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert!(main_view.read(cx).composer.is_some(), "Enter converted");
+        assert!(!quick.read(cx).editing_name);
+        assert_eq!(quick.read(cx).saved_name, "typed.webp");
+    });
+    assert_eq!(f.jobs(cx), 0);
+}
+
 #[test]
 fn a_typed_output_name_stays_one_file_in_the_folder() {
     use super::quick::output_name;

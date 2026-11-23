@@ -437,7 +437,7 @@ pub fn show_about(cx: &mut App) {
 /// Quick convert's size: room for a typical image's popular formats (two
 /// rows), More formats, the Options row, where it runs and Save without
 /// scrolling. Opened options, more formats and long lists scroll.
-pub(super) const QUICK_SIZE: (f32, f32) = (580., 640.);
+pub(super) const QUICK_SIZE: (f32, f32) = (580., 618.);
 
 /// Quick convert's height, plus the title bar macOS draws inside it.
 pub(super) fn quick_height() -> Pixels {

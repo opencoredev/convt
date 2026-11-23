@@ -238,7 +238,6 @@ fn scale_to_max_side(src: (u32, u32), max_side: u32) -> (u32, u32) {
     )
 }
 
-#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn swaps_dims(orientation: Orientation) -> bool {
     matches!(
         orientation,
@@ -1743,6 +1742,139 @@ mod tests {
         file.extend_from_slice(&meta);
         file.extend_from_slice(&mdat);
         file
+    }
+
+    /// Big-endian TIFF EXIF with Make "Apple", Model "cvt" and
+    /// `orientation`; the orientation value sits at bytes 42..44.
+    fn exif_with_camera(orientation: u16) -> Vec<u8> {
+        let mut tiff = b"MM\0*".to_vec();
+        tiff.extend_from_slice(&8u32.to_be_bytes());
+        tiff.extend_from_slice(&3u16.to_be_bytes());
+        // Make, ASCII, six bytes at offset 50 (after the IFD).
+        tiff.extend_from_slice(&[0x01, 0x0f, 0, 2, 0, 0, 0, 6]);
+        tiff.extend_from_slice(&50u32.to_be_bytes());
+        // Model, ASCII, "cvt" inline.
+        tiff.extend_from_slice(&[0x01, 0x10, 0, 2, 0, 0, 0, 4]);
+        tiff.extend_from_slice(b"cvt\0");
+        // Orientation, SHORT, one value.
+        tiff.extend_from_slice(&[0x01, 0x12, 0, 3, 0, 0, 0, 1]);
+        tiff.extend_from_slice(&orientation.to_be_bytes());
+        tiff.extend_from_slice(&[0, 0]);
+        tiff.extend_from_slice(&0u32.to_be_bytes());
+        assert_eq!(tiff.len(), 50);
+        tiff.extend_from_slice(b"Apple\0");
+        tiff
+    }
+
+    /// sips copied the HEIC's EXIF orientation 3 onto a 16-bit Display P3
+    /// PNG of the stored frame. With a background or a size to meet, the
+    /// picture must turn exactly once, and the profile and the rest of the
+    /// EXIF must survive with the orientation reset to 1.
+    #[test]
+    fn sips_png_with_options_rotates_once_and_keeps_metadata() {
+        use crate::image::tests::{DeepPng, deep_png, icc_named, png_info};
+        use convt_core::Background;
+        let cases = [
+            (
+                "white background",
+                Options {
+                    background: Some(Background::WHITE),
+                    ..Options::default()
+                },
+            ),
+            (
+                "size to meet",
+                Options {
+                    target_size: Some(4_000),
+                    ..Options::default()
+                },
+            ),
+        ];
+        for (name, options) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let source = dir.path().join("IMG_0001.heic");
+            let heif = inject_heif_exif(&minimal_still_heif(), 3).unwrap();
+            assert_eq!(heif_exif_orientation(&heif), Some(Orientation::Rotate180));
+            assert_eq!(heif_display_orientation(&heif), None);
+            std::fs::write(&source, &heif).unwrap();
+            let dest = dir.path().join("IMG_0001.png");
+            let p3 = icc_named("Display P3");
+            let meta = DeepPng {
+                icc: Some(&p3),
+                exif: Some(exif_with_camera(3)),
+                ..DeepPng::default()
+            };
+            // The stored 64x48 frame `ispe` describes.
+            let deep = deep_png(&dest, 64, 48, &meta);
+            let before = std::fs::metadata(&dest).unwrap().len();
+            crate::heic::finish_sips_png("heic", &source, &dest, &options).unwrap();
+            let after = std::fs::metadata(&dest).unwrap().len();
+            assert!(after < before, "{name}: {after} >= {before}");
+
+            let info = png_info(&dest);
+            assert_eq!(info.bit_depth, png::BitDepth::Eight, "{name}");
+            assert_eq!(info.color_type, png::ColorType::Rgb, "{name}");
+            assert_eq!(info.icc_profile.as_deref(), Some(&p3[..]), "{name}");
+            let mut want_exif = exif_with_camera(3);
+            want_exif[42..44].copy_from_slice(&1u16.to_be_bytes());
+            assert_eq!(
+                info.exif_metadata.as_deref(),
+                Some(&want_exif[..]),
+                "{name}"
+            );
+            assert_eq!(
+                decoder_orientation(&dest).unwrap(),
+                Orientation::NoTransforms,
+                "{name}"
+            );
+            let dims = info.pixel_dims.unwrap();
+            assert_eq!((dims.xppu, dims.yppu), (2835, 5670), "{name}");
+
+            let unrotated = DynamicImage::ImageRgba16(deep);
+            let mut want = unrotated.clone();
+            want.apply_orientation(Orientation::Rotate180);
+            let back = open_stored(&dest).unwrap();
+            if options.target_size.is_some() {
+                // Shrunk to fit, still landscape.
+                assert!(after <= 4_000, "{name}: {after}");
+                assert!(back.width() > back.height(), "{name}");
+                let shrink = |img: &DynamicImage| {
+                    img.resize_exact(
+                        back.width(),
+                        back.height(),
+                        image::imageops::FilterType::Lanczos3,
+                    )
+                };
+                let (want, unrotated) = (shrink(&want), shrink(&unrotated));
+                let distance = |a: &DynamicImage| -> i64 {
+                    a.to_rgb8()
+                        .pixels()
+                        .zip(back.to_rgb8().pixels())
+                        .map(|(p, q)| {
+                            (0..3)
+                                .map(|i| (i64::from(p.0[i]) - i64::from(q.0[i])).abs())
+                                .sum::<i64>()
+                        })
+                        .sum()
+                };
+                assert!(
+                    distance(&want) < distance(&unrotated),
+                    "{name}: not turned once"
+                );
+                continue;
+            }
+            let want = want.to_rgb8();
+            let back = back.to_rgb8();
+            assert_eq!(back.dimensions(), want.dimensions(), "{name}");
+            for (a, b) in want.pixels().zip(back.pixels()) {
+                for i in 0..3 {
+                    assert!(
+                        (a.0[i] as i32 - b.0[i] as i32).abs() <= 1,
+                        "{name}: {a:?} vs {b:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// sips often writes the stored frame and drops `irot`, so the rotation

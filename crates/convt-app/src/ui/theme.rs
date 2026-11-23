@@ -175,7 +175,7 @@ impl Palette {
             amber_tint: c(0xFEF8EC),
             amber_border: c(0xF2DBAE),
             track: c(0xE4E4E7),
-            toggle_off: c(0xD4D4D8),
+            toggle_off: c(0xC8C8CF),
             // Dark enough for 3:1 on every ground a checkbox sits on.
             mark_off: c(0x7E7E87),
             thumb: c(0xFFFFFF),
@@ -898,8 +898,7 @@ pub fn switch(
         .p(px(2.))
         .rounded(px(h / 2.))
         .bg(if on { p.green } else { p.toggle_off })
-        // A recessed track: a faint shade along its top edge.
-        .shadow(vec![inset_edge(ca(0x0000001A), 1.)])
+        .shadow(switch_track_shadow(on, p))
         .when(on, |d| d.justify_end())
         .child(
             div()
@@ -912,6 +911,29 @@ pub fn switch(
                     shadow_s(p),
                 ]),
         )
+}
+
+/// The switch track's shadows. Both states are recessed: a soft shade along
+/// the top edge. An off track also gets a 1px `mark_off` ring, so its edge
+/// meets 3:1 against the card or window it sits on even though its fill
+/// does not.
+fn switch_track_shadow(on: bool, p: &Palette) -> Vec<BoxShadow> {
+    let recess = BoxShadow {
+        color: if p.dark {
+            ca(0x00000040)
+        } else {
+            ca(0x2021241A)
+        },
+        offset: point(px(0.), px(1.)),
+        blur_radius: px(2.),
+        spread_radius: px(0.),
+        inset: true,
+    };
+    if on {
+        vec![recess]
+    } else {
+        vec![inset_ring(p.mark_off, 1.), recess]
+    }
 }
 
 /// A 15px checkbox with its label.
@@ -1852,6 +1874,26 @@ mod contrast {
                 assert!(
                     r >= 3.,
                     "mark_off on {ground} is {r:.2}:1 (dark: {})",
+                    p.dark
+                );
+            }
+        }
+    }
+
+    /// An off switch's track is outlined in `mark_off`, which carries its
+    /// 3:1 boundary on cards and windows; its fill alone does not.
+    #[test]
+    fn inactive_switch_ring_meets_three_to_one() {
+        for p in [Palette::light(), Palette::dark()] {
+            let shadows = super::switch_track_shadow(false, &p);
+            let ring = &shadows[0];
+            assert!(ring.inset && ring.blur_radius == super::px(0.));
+            assert_eq!(ring.color, p.mark_off);
+            for (ground, bg) in [("surface", p.surface), ("window", p.window)] {
+                let r = ratio(ring.color, bg);
+                assert!(
+                    r >= 3.,
+                    "off switch ring on {ground} is {r:.2}:1 (dark: {})",
                     p.dark
                 );
             }

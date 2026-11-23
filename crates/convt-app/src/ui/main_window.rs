@@ -55,6 +55,8 @@ pub struct MainView {
 impl MainView {
     pub fn new(app: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let settings = cx.new(|cx| SettingsView::new_embedded(app.clone(), window, cx));
+        #[cfg(all(debug_assertions, not(test)))]
+        dev_stage(window, cx);
         Self {
             _observe: cx.observe(&app, |_, _, cx| cx.notify()),
             _appearance: theme::observe_appearance(window, cx),
@@ -1056,6 +1058,27 @@ pub(super) fn size_delta(before: u64, after: u64) -> (String, Tone) {
         return (label, tone);
     }
     ("Same size".into(), Tone::Neutral)
+}
+
+/// Debug builds only: `CONVT_DEV_STAGE=<path>` opens the composer with that
+/// file at startup, so the Xvfb screenshot harness can capture it without a
+/// drop. Not compiled into release builds or tests.
+#[cfg(all(debug_assertions, not(test)))]
+fn dev_stage(window: &Window, cx: &mut Context<MainView>) {
+    let Some(path) = std::env::var_os("CONVT_DEV_STAGE").map(PathBuf::from) else {
+        return;
+    };
+    if !path.exists() {
+        return;
+    }
+    let request = add_request(&[path]);
+    let handle = window.window_handle();
+    let this = cx.entity().downgrade();
+    cx.defer(move |cx| {
+        let _ = handle.update(cx, |_, window, cx| {
+            this.update(cx, |this, cx| this.compose(request, window, cx))
+        });
+    });
 }
 
 /// What a drop or Add files hands the composer.
