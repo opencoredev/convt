@@ -51,16 +51,16 @@ export const guides = [
   },
   {
     slug: "mov-to-mp4-mac",
-    title: "How to convert MOV to MP4 on Mac: rename, iMovie, FFmpeg or batch",
+    title: "Convert MOV (QuickTime) to MP4 on Mac: rename, iMovie, FFmpeg",
     heading: "How to convert MOV to MP4 on a Mac",
     footerLabel: "MOV to MP4 on Mac",
     description:
-      "Convert MOV videos to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg without losing quality, or batch-convert and shrink folders with convt.",
+      "QuickTime Player can't export MP4. Convert MOV to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg or batch folders with convt.",
     summary:
       "When renaming works, iMovie, FFmpeg remux vs re-encode with tested commands, and whole folders plus smaller files with the convt CLI. Covers Windows too.",
     category: "video",
     published: "2026-10-30",
-    updated: "2026-11-12",
+    updated: "2026-11-23",
   },
   {
     slug: "webp-to-png-jpg",
