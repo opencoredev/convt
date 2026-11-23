@@ -47,7 +47,10 @@ impl WatchState {
     /// Files that are new, stable and match an enabled rule, as
     /// `(rule index, path)` in rule order.
     pub fn drain_ready(&mut self, rules: &[Automation]) -> Vec<(usize, PathBuf)> {
-        let mut ready = Vec::new();
+        // Group enabled rules by watched directory so each directory is listed
+        // once per tick and a non-matching rule never marks a file handled
+        // before a later rule for the same folder sees it.
+        let mut by_dir: Vec<(PathBuf, Vec<usize>)> = Vec::new();
         for (index, rule) in rules.iter().enumerate() {
             if !rule.is_watched() {
                 continue;
@@ -55,6 +58,15 @@ impl WatchState {
             let WatchStatus::Folder(dir) = watch_status(rule) else {
                 continue;
             };
+            if let Some((_, indices)) = by_dir.iter_mut().find(|(d, _)| *d == dir) {
+                indices.push(index);
+            } else {
+                by_dir.push((dir, vec![index]));
+            }
+        }
+
+        let mut ready = Vec::new();
+        for (dir, rule_indices) in by_dir {
             let Ok(entries) = list_dir(&dir) else {
                 continue;
             };
@@ -78,19 +90,22 @@ impl WatchState {
                         self.seen.insert(path, len);
                     }
                     Some(_) => {
-                        if matches_rule(rule, &path, &dir) {
-                            self.submitted.insert(path.clone());
-                            if let Some(to) = format_by_id(&rule.to) {
+                        let matched = rule_indices
+                            .iter()
+                            .copied()
+                            .find(|&index| matches_rule(&rules[index], &path, &dir));
+                        self.submitted.insert(path.clone());
+                        if let Some(index) = matched {
+                            if let Some(to) = format_by_id(&rules[index].to) {
                                 self.submitted.insert(path.with_extension(to.extension()));
                             }
                             ready.push((index, path));
-                        } else {
-                            self.submitted.insert(path);
                         }
                     }
                 }
             }
         }
+        ready.sort_by_key(|(index, _)| *index);
         ready
     }
 }
@@ -194,9 +209,14 @@ fn matches_rule(rule: &Automation, path: &Path, dir: &Path) -> bool {
             from.category == Category::Video
                 && (looks_like_recording(path) || !is_catch_all_folder(dir))
         }
-        WatchKind::Folder => match format_by_id(&rule.name) {
-            Some(only) => from.id == only.id,
-            None => true,
+        WatchKind::Folder => match rule.name.trim().to_ascii_lowercase().as_str() {
+            "image" | "images" => is_still(from),
+            "video" | "videos" => from.category == Category::Video,
+            "audio" => from.category == Category::Audio,
+            _ => match format_by_id(&rule.name) {
+                Some(only) => from.id == only.id,
+                None => true,
+            },
         },
     }
 }
@@ -601,5 +621,37 @@ mod tests {
             assert!(is_too_broad(&home));
             assert!(!is_too_broad(&home.join("Desktop")));
         }
+    }
+
+    #[test]
+    fn category_folder_rules_only_match_their_category() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path();
+        let images = rule("Images", "jpeg", WatchKind::Folder, dir);
+        assert!(matches_rule(&images, &dir.join("photo.png"), dir));
+        assert!(!matches_rule(&images, &dir.join("clip.mp4"), dir));
+
+        let video = rule("Video", "mp3", WatchKind::Folder, dir);
+        assert!(matches_rule(&video, &dir.join("clip.mp4"), dir));
+        assert!(!matches_rule(&video, &dir.join("photo.png"), dir));
+    }
+
+    #[test]
+    fn disjoint_rules_on_same_folder_do_not_block_each_other() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path();
+        let rules = vec![
+            rule("HEIC", "jpeg", WatchKind::Folder, dir),
+            rule("Video", "mp3", WatchKind::Folder, dir),
+        ];
+        let mut state = WatchState::default();
+        assert!(state.drain_ready(&rules).is_empty());
+
+        let clip = dir.join("clip.mp4");
+        std::fs::write(&clip, b"video bytes").unwrap();
+        // First tick records size; second tick settles and matches rule 1 (Video).
+        assert!(state.drain_ready(&rules).is_empty());
+        let ready = state.drain_ready(&rules);
+        assert_eq!(ready, vec![(1, clip)]);
     }
 }

@@ -24,6 +24,7 @@ mod pack;
 mod placeholder;
 mod request;
 mod settings;
+mod telemetry;
 // Tests never track the real System Settings window.
 #[cfg(all(target_os = "macos", not(test)))]
 mod system_settings;
@@ -135,13 +136,14 @@ fn run(primary: instance::Primary, first: Request) {
         #[cfg(target_os = "macos")]
         macos::init(&state, tx.clone(), cx);
         cx.set_global(Shared(state.clone()));
+        let telemetry = state.read(cx).telemetry.clone();
+        cx.on_app_quit(move |_| {
+            telemetry.shutdown();
+            async {}
+        })
+        .detach();
         tray::init(&state, tray::platform::spawn, cx);
         cx.on_window_closed(last_window_closed).detach();
-        // The two network calls the app makes by itself: while signed in, at
-        // most once a UTC day, the Pro key renewal; while automatic update
-        // checks are on, at launch and then every few hours, the signed list
-        // of releases. convt keeps running in the background, so both are
-        // looked at again on a schedule.
         state.update(cx, |s, cx| s.start_update_checks(cx));
 
         primary.listen(move |req| drop(tx.unbounded_send(req)));
@@ -158,10 +160,11 @@ fn run(primary: instance::Primary, first: Request) {
         for req in first {
             ui::route(req, cx);
         }
-        // A launch that opened no window (a Finder or command-line
-        // conversion) stays out of the Dock while the tray keeps it running.
+        // A launch that opened no regular window (a Finder or command-line
+        // conversion) stays out of the Dock so silent conversions don't bounce
+        // it. The progress HUD such a launch shows doesn't count as one.
         #[cfg(target_os = "macos")]
-        if cx.windows().is_empty() && tray::shown(cx) {
+        if !ui::has_regular_windows(cx) {
             macos::show_in_dock(false);
         }
     });
@@ -175,7 +178,34 @@ fn run(primary: instance::Primary, first: Request) {
 fn last_window_closed(cx: &mut App, _: gpui_kit::WindowId) {
     if cx.windows().is_empty() {
         nothing_open(cx);
+    } else {
+        only_the_hud_left(cx);
     }
+}
+
+/// With only the progress HUD left open and the tray keeping convt running,
+/// leaves the Dock now rather than once the HUD closes too.
+fn only_the_hud_left(cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if !ui::has_regular_windows(cx) && after_last_window(cx) == AfterLastWindow::KeepRunning {
+        hide_from_dock_once_closed(cx);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = cx;
+}
+
+/// Leaves the Dock after AppKit has finished closing the window, if no
+/// window but the HUD came up meanwhile.
+#[cfg(target_os = "macos")]
+fn hide_from_dock_once_closed(cx: &mut App) {
+    cx.spawn(async |cx| {
+        cx.update(|cx| {
+            if !ui::has_regular_windows(cx) {
+                macos::show_in_dock(false);
+            }
+        })
+    })
+    .detach();
 }
 
 /// No window is open: hide from the Dock if the tray keeps convt running,
@@ -183,16 +213,8 @@ fn last_window_closed(cx: &mut App, _: gpui_kit::WindowId) {
 fn nothing_open(cx: &mut App) {
     match after_last_window(cx) {
         AfterLastWindow::KeepRunning => {
-            // Leave the Dock after AppKit has finished closing the window.
             #[cfg(target_os = "macos")]
-            cx.spawn(async |cx| {
-                cx.update(|cx| {
-                    if cx.windows().is_empty() {
-                        macos::show_in_dock(false);
-                    }
-                })
-            })
-            .detach();
+            hide_from_dock_once_closed(cx);
         }
         AfterLastWindow::Quit => {
             // Calling cx.quit() from the window-closed observer starts GPUI's

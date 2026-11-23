@@ -104,6 +104,7 @@ describe("device sign-in", () => {
     );
     expect(res.status).toBe(200);
     expect(res.body.email).toBe(fixture("pro"));
+    expect(res.body.user_id).toBe(pro);
     const token = res.body.token as string;
     expect(bearer(`Bearer ${token}`)).toBe(token);
     const [device] = await h.owner
@@ -127,6 +128,7 @@ describe("device sign-in", () => {
       new Date(),
     );
     expect(renewed.status).toBe(200);
+    expect(renewed.body.user_id).toBe(pro);
     const expected = await h.owner.execute<{ token: string }>(sql`
       select token from licenses where user_id = ${pro} and plan = 'pro' and revoked_at is null
       order by updates_until desc limit 1`);

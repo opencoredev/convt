@@ -1,7 +1,12 @@
 //! Quick convert: the window for files sent without a target, from "More
 //! options…" in the Finder menu, a `convt://` link, "Open with" or the
-//! command line. It shows the files, lets the user pick a target and options,
-//! and follows the conversion until it is done.
+//! command line. It shows the files, picks the format most people want from
+//! them (the user can pick another), offers options, and follows the
+//! conversion until it is done.
+//!
+//! The same view is the main window's composer ([`QuickView::new_inline`]):
+//! a card at the top of Activity for files dropped or added there. It hands
+//! the conversion to Activity as soon as it starts, and emits [`Dismissed`].
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -17,9 +22,11 @@ use gpui_kit::*;
 use super::theme::IconName;
 
 use super::theme::{
-    self, Button, Choice, Palette, Tile, Tone, icon, mono, radius, size, space, styled,
+    self, Button, Choice, Palette, Segment, Tone, icon, mono, radius, size, space, styled,
 };
-use super::{blocked_banner, error_text, file_size, human_size, time_left};
+use super::{
+    QUICK_SIZE, blocked_banner, error_text, file_size, human_size, quick_height_for, time_left,
+};
 use crate::cloud::CloudAccess;
 use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState, PackPhase, Targets};
@@ -63,8 +70,26 @@ enum Open {
     Background,
 }
 
+/// The inline composer is done: its conversion started, or it was closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Dismissed;
+
+/// The formats offered first, in this order, before "More formats". Formats
+/// of the source's own kind come first.
+const POPULAR: [&str; 19] = [
+    "jpeg", "webp", "png", "avif", "gif", "heic", "pdf", "mp4", "webm", "mov", "mkv", "mp3", "m4a",
+    "wav", "flac", "aac", "docx", "xlsx", "pptx",
+];
+
 pub struct QuickView {
     app: Entity<AppState>,
+    /// The main window's composer rather than a window of its own.
+    pub(super) inline: bool,
+    pub(super) focus: FocusHandle,
+    /// "More formats" is open, showing the less common targets.
+    pub(super) more_open: bool,
+    /// Copy file was clicked; the button says Copied.
+    pub(super) copied: bool,
     pub(super) files: Vec<PathBuf>,
     pub(super) targets: Targets,
     pub(super) to: Option<&'static Format>,
@@ -96,6 +121,9 @@ pub struct QuickView {
     /// Where the files go. `None` is next to each file.
     pub(super) save_dir: Option<PathBuf>,
     pub(super) file_name: Entity<InputState>,
+    /// The last name committed with Enter or Done, or the default; Escape
+    /// puts the field back to it.
+    pub(super) saved_name: String,
     /// Why the typed file name can't be used, shown under it.
     pub(super) name_error: Option<String>,
     pub(super) jobs: Vec<JobId>,
@@ -118,13 +146,31 @@ pub struct QuickView {
     pub(super) cloud: bool,
     /// The registry the targets were computed with.
     generation: u64,
+    /// The height the window was last sized to for its content, so a window
+    /// the user resized keeps its size until what it shows changes.
+    sized_for: Option<Pixels>,
     _observe: Subscription,
     _appearance: Subscription,
     /// Clears the file name's error once it's edited.
     _name: Subscription,
 }
 
+impl EventEmitter<Dismissed> for QuickView {}
+
 impl QuickView {
+    /// Quick convert as the main window's composer.
+    pub fn new_inline(
+        app: Entity<AppState>,
+        request: Request,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self {
+            inline: true,
+            ..Self::new(app, request, window, cx)
+        }
+    }
+
     pub fn new(
         app: Entity<AppState>,
         request: Request,
@@ -150,6 +196,7 @@ impl QuickView {
                     (None, Options::default())
                 }
             };
+        let asked = request.to.is_some() || request.preset.is_some();
         let to = to.filter(|f| {
             let reachable = targets.formats.contains(f);
             if targets.pack.contains(f) {
@@ -164,6 +211,13 @@ impl QuickView {
             }
             reachable
         });
+        // Nothing asked for: start from what most people want from these
+        // files. Documents waiting for the pack wait for a pick.
+        let to = match to {
+            None if !asked && !file_needs_pack => recommended_target(&files, &targets),
+            to => to,
+        };
+        let more_open = to.or(wanted).is_some_and(|f| !is_popular(f));
         if !expanded.unreadable.is_empty() {
             error = Some(expanded.unreadable.join("\n"));
         } else if files.is_empty() {
@@ -180,10 +234,16 @@ impl QuickView {
             _observe: cx.observe_in(&app, window, |this: &mut Self, app, window, cx| {
                 this.remember(&app, cx);
                 this.follow_registry(window, cx);
+                // A license banner or the pack card came or went.
+                this.sync_window_height(window, cx);
                 cx.notify();
             }),
             _appearance: theme::observe_appearance(window, cx),
             app,
+            inline: false,
+            focus: cx.focus_handle(),
+            more_open,
+            copied: false,
             files,
             targets,
             to,
@@ -201,6 +261,7 @@ impl QuickView {
             editing_name: false,
             save_dir,
             file_name,
+            saved_name: String::new(),
             name_error: None,
             jobs: Vec::new(),
             seen: HashMap::new(),
@@ -210,10 +271,67 @@ impl QuickView {
             convert_when_ready: false,
             cloud: false,
             generation,
+            sized_for: None,
         };
         view.load_controls();
         view.reset_name(window, cx);
         view
+    }
+
+    /// Adds more files, from another drop or Add files while the composer is
+    /// open. Files already listed are listed once. The picked format, the
+    /// options, the folder and Cloud stay, as long as every file can still
+    /// become that format; otherwise the usual one for the files is picked.
+    pub fn add_files(&mut self, paths: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
+        if paths.is_empty() || !self.jobs.is_empty() {
+            return;
+        }
+        let state = self.app.read(cx);
+        let expanded = model::expand_keeping_documents(&state.registry, paths);
+        let before = self.files.len();
+        for file in expanded.files {
+            if !self.files.contains(&file) {
+                self.files.push(file);
+            }
+        }
+        if !expanded.unreadable.is_empty() {
+            self.error = Some(expanded.unreadable.join("\n"));
+        }
+        if self.files.len() == before {
+            cx.notify();
+            return;
+        }
+        let state = self.app.read(cx);
+        self.targets = state.targets_with_pack(&self.files);
+        self.generation = state.registry_generation;
+        let file_needs_pack = self
+            .files
+            .iter()
+            .any(|f| pack::needs_pack(&state.registry, f));
+        if file_needs_pack {
+            self.waited_for_pack = true;
+        }
+        let kept = self.to.filter(|to| self.targets.formats.contains(to));
+        if kept.is_none() {
+            let to = if file_needs_pack {
+                None
+            } else {
+                recommended_target(&self.files, &self.targets)
+            };
+            self.to = to;
+            self.size = self.preset_size();
+            self.convert_when_ready = false;
+            if let Some(to) = to {
+                self.set_target(to);
+            }
+        }
+        if self.files.is_empty() {
+            self.error = Some("There are no files to convert here.".into());
+        } else if expanded.unreadable.is_empty() {
+            self.error = None;
+        }
+        self.reset_name(window, cx);
+        cx.notify();
     }
 
     /// Recomputes the targets after the document pack was installed or
@@ -343,6 +461,7 @@ impl QuickView {
     fn reset_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.default_name().unwrap_or_default();
         self.name_error = None;
+        self.saved_name.clone_from(&name);
         self.file_name
             .update(cx, |s, cx| s.set_value(name, window, cx));
     }
@@ -354,6 +473,9 @@ impl QuickView {
             self.convert_when_ready = false;
         }
         self.to = Some(to);
+        if !is_popular(to) {
+            self.more_open = true;
+        }
         if self.targets.pack.contains(&to) {
             self.waited_for_pack = true;
             // The pack's targets convert on this computer once it's in.
@@ -375,6 +497,7 @@ impl QuickView {
         }
         self.error = None;
         self.reset_name(window, cx);
+        self.sync_window_height(window, cx);
         cx.notify();
     }
 
@@ -397,6 +520,7 @@ impl QuickView {
             }
             Err(e) => self.error = Some(e),
         }
+        self.sync_window_height(window, cx);
         cx.notify();
     }
 
@@ -529,6 +653,76 @@ impl QuickView {
         let app = self.app.clone();
         self.remember(&app, cx);
         cx.notify();
+        // Activity follows the conversion from here.
+        if self.inline {
+            cx.emit(Dismissed);
+        }
+    }
+
+    /// Cancel, ×, Escape and Close: the window closes, or the composer
+    /// leaves Activity.
+    pub(super) fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.inline {
+            cx.emit(Dismissed);
+        } else {
+            window.remove_window();
+        }
+    }
+
+    /// Enter converts once a target is picked and nothing else is being
+    /// typed; Escape cancels.
+    fn on_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let keys = &event.keystroke;
+        if keys.modifiers.modified() {
+            return;
+        }
+        match keys.key.as_str() {
+            // The file name field takes Enter and Escape for itself, so
+            // neither converts nor closes the window.
+            "enter" if self.editing_name => {
+                cx.stop_propagation();
+                self.commit_name(window, cx);
+            }
+            "escape" if self.editing_name => {
+                cx.stop_propagation();
+                self.cancel_name(window, cx);
+            }
+            "enter" if self.jobs.is_empty() && self.ready(cx) => {
+                cx.stop_propagation();
+                self.convert(cx);
+            }
+            "escape" if self.open.is_some() => {
+                cx.stop_propagation();
+                self.open = None;
+                cx.notify();
+            }
+            "escape" => {
+                cx.stop_propagation();
+                self.dismiss(window, cx);
+            }
+            _ => {}
+        }
+    }
+
+    /// Whether Convert would run now.
+    pub(super) fn ready(&self, cx: &App) -> bool {
+        let state = self.app.read(cx);
+        self.to.is_some()
+            && !self.needs_pack()
+            && !self.supported().is_empty()
+            && state.license.allows_conversion()
+            && (state.settings.cloud_consent || !self.in_cloud(cx))
+    }
+
+    /// Puts the finished files on the clipboard.
+    fn copy_outputs(&mut self, cx: &mut Context<Self>) {
+        let outputs = self.outputs();
+        if outputs.is_empty() {
+            return;
+        }
+        crate::clipboard::copy_files(&outputs, cx);
+        self.copied = true;
+        cx.notify();
     }
 
     /// Whether Cloud conversions can run, and if not, why.
@@ -591,7 +785,7 @@ impl QuickView {
                 .flex_shrink_0()
                 .items_center()
                 .gap(px(space::LG))
-                .px(px(GUTTER))
+                .px(px(self.gutter()))
                 .pt(px(14.))
                 .pb(px(2.))
                 .bg(p.chrome)
@@ -675,11 +869,17 @@ impl QuickView {
             .collect()
     }
 
+    /// Space between the edge and the content: the window's gutter, or the
+    /// composer card's tighter one.
+    fn gutter(&self) -> f32 {
+        if self.inline { INLINE_GUTTER } else { GUTTER }
+    }
+
     pub(super) fn finished(&self) -> bool {
         !self.jobs.is_empty() && self.entries().all(|e| e.status.is_finished())
     }
 
-    fn header(&self, p: &Palette) -> Div {
+    fn header(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let (title, meta) = match self.files.as_slice() {
             [one] => (
                 model::file_name(one).to_string(),
@@ -701,51 +901,142 @@ impl QuickView {
             }
         };
         let thumb = match self.files.first() {
-            Some(first) => theme::thumbnail(first, 56., 42., p),
-            None => div().w(px(56.)).h(px(42.)).into_any_element(),
+            Some(first) => theme::thumbnail(first, 48., 36., p),
+            None => div().w(px(48.)).h(px(36.)).into_any_element(),
+        };
+        let inline = self.inline;
+        let close = inline.then(|| {
+            let hover = p.hover;
+            theme::clickable("composer-close", "Clear")
+                .flex()
+                .flex_shrink_0()
+                .items_center()
+                .justify_center()
+                .size(px(28.))
+                .rounded(px(radius::CONTROL))
+                .hover(move |s| s.bg(hover))
+                .tooltip(|window, cx| Tooltip::new("Clear").build(window, cx))
+                .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx)))
+                .child(icon(IconName::Close, 14., p.secondary))
+        });
+        // Single-file transform preview right in the hero: clicking the output
+        // filename edits it inline, eliminating a whole row from the Save card.
+        let output_preview = (self.files.len() == 1 && self.to.is_some() && self.jobs.is_empty())
+            .then(|| {
+                if self.editing_name {
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(icon(IconName::ArrowRight, 12., p.tertiary))
+                        .child(
+                            div()
+                                .w(px(200.))
+                                .flex_shrink_0()
+                                .font_family(theme::MONO)
+                                .text_size(px(12.))
+                                .child(theme::small_field(&self.file_name, "file-name")),
+                        )
+                        .child(
+                            Button::ghost("file-name-done", "Done")
+                                .icon(IconName::Check)
+                                .small()
+                                .build(p)
+                                .h(px(theme::SMALL_FIELD_HEIGHT))
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.commit_name(window, cx)),
+                                ),
+                        )
+                        .into_any_element()
+                } else {
+                    let current = SharedString::from(self.file_name.read(cx).value().to_string());
+                    div()
+                        .flex()
+                        .items_center()
+                        .min_w_0()
+                        .gap(px(6.))
+                        .child(icon(IconName::ArrowRight, 12., p.tertiary))
+                        .child(
+                            theme::clickable("file-name-edit", current.clone())
+                                .flex()
+                                .items_center()
+                                .min_w_0()
+                                .gap(px(5.))
+                                .h(px(24.))
+                                .px(px(7.))
+                                .rounded(px(radius::SM))
+                                .bg(p.green_tint)
+                                .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                                .hover(|s| s.bg(p.hover))
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.edit_name(window, cx)),
+                                )
+                                .child(
+                                    mono(12., 16., p.green_text)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .min_w_0()
+                                        .truncate()
+                                        .child(current),
+                                )
+                                .child(icon(IconName::Edit, 11., p.green_text)),
+                        )
+                        .into_any_element()
+                }
+            });
+        let name_error = self.name_error.clone().map(|e| {
+            div()
+                .id("file-name-error")
+                .test_support()
+                .aria_label(SharedString::from(e.clone()))
+                .px(px(self.gutter()))
+                .pb(px(8.))
+                .child(error_text(e, p))
+        });
+        let meta_line = match common_folder(&self.files) {
+            Some(dir) if !meta.is_empty() => format!("{meta} · {dir}"),
+            Some(dir) => dir,
+            None => meta,
         };
         div()
             .flex()
+            .flex_col()
             .flex_shrink_0()
-            .items_center()
-            .gap(px(14.))
-            .px(px(GUTTER))
-            .pt(px(space::XS))
-            .pb(px(space::LG))
-            .child(thumb)
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(3.))
-                    .child(
-                        styled(size::TITLE, p.text)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .truncate()
-                            .child(title),
-                    )
-                    .child(mono(11., 14., p.secondary).truncate().child(meta)),
-            )
-            .children(common_folder(&self.files).map(|dir| {
-                div()
-                    .flex()
-                    .flex_shrink_0()
                     .items_center()
-                    .gap(px(5.))
-                    .max_w(px(180.))
-                    .child(icon(IconName::Folder, 13., p.tertiary))
+                    .gap(px(14.))
+                    .px(px(self.gutter()))
+                    .pt(px(if inline { space::LG } else { space::XS }))
+                    .pb(px(12.))
+                    .child(thumb)
                     .child(
-                        div().min_w_0().child(
-                            styled(size::SMALL, p.secondary)
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis_start()
-                                .child(dir),
-                        ),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(3.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .min_w_0()
+                                    .gap(px(8.))
+                                    .child(
+                                        styled(size::TITLE, p.text)
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .truncate()
+                                            .child(title),
+                                    )
+                                    .children(output_preview),
+                            )
+                            .child(mono(11., 14., p.secondary).truncate().child(meta_line)),
                     )
-            }))
+                    .children(close),
+            )
+            .children(name_error)
     }
 
     fn picker(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
@@ -756,77 +1047,65 @@ impl QuickView {
         let video_input = self.files.iter().any(|f| {
             convt_core::format_by_extension(f).is_some_and(|f| f.category == Category::Video)
         });
-        let cards = self.targets.formats.iter().map(|&format| {
-            let on = self.to == Some(format);
-            // A file's own format makes a smaller or cleaner copy of it.
-            let same = sources(&self.files).all(|f| f == format);
-            let needs_pack = self.targets.pack.contains(&format);
-            let weak = cx.entity().downgrade();
-            let blurb = if same {
-                "Compress"
-            } else {
-                blurb(format, video_input)
-            };
-            theme::choice(
-                theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name),
-                on,
-                radius::CARD,
-                p,
-            )
-            .aria_selected(on)
-            .relative()
-            .flex()
-            .flex_col()
-            .min_w_0()
-            .gap(px(3.))
-            .px(px(space::MD))
-            .py(px(10.))
-            .on_click(move |_, window, cx| {
-                let _ = weak.update(cx, |this, cx| this.pick(format, window, cx));
-            })
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        mono(13., 16., p.text)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(format.name),
-                    )
-                    .children(on.then(|| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .size(px(16.))
-                            .rounded(px(8.))
-                            .bg(p.green)
-                            .child(icon(IconName::Check, 10., p.on_green))
-                    })),
-            )
-            .map(|d| {
-                if needs_pack {
-                    d.child(super::pack::tag(
-                        SharedString::from(format!("pack-tag-{}", format.id)),
-                        on,
-                        p,
-                    ))
-                } else {
-                    d.child(
-                        div()
-                            .id(SharedString::from(format!("blurb-{}", format.id)))
-                            .test_support()
-                            .aria_label(blurb)
-                            .child(
-                                styled(size::CAPTION, if on { p.green_text } else { p.secondary })
-                                    .truncate()
-                                    .child(blurb),
-                            ),
-                    )
-                }
-            })
+        let (popular, more) = popular_and_more(&self.targets, &self.files);
+        let card = |format: &'static Format, cx: &mut Context<Self>| {
+            self.format_card(format, video_input, p, cx)
+        };
+        let grid = |cards: Vec<AnyElement>| {
+            // Four to a row, whatever the window's width.
+            div()
+                .grid()
+                .grid_cols(CARDS_PER_ROW)
+                .gap(px(space::SM))
+                .children(cards)
+        };
+        let popular_cards: Vec<AnyElement> = popular.iter().map(|&f| card(f, cx)).collect();
+        // With nothing popular to show, or only a couple of others, every
+        // target shows, with no toggle.
+        let toggle = (more.len() >= MIN_HIDDEN && !popular.is_empty()).then(|| {
+            let open = self.more_open;
+            let label = SharedString::from(format!("More formats ({})", more.len()));
+            theme::clickable("more-formats-toggle", label.clone())
+                .aria_expanded(open)
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .h(px(22.))
+                .px(px(6.))
+                .mr(px(-6.))
+                .rounded(px(radius::SM))
+                .hover(|s| s.bg(p.hover))
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.more_open = !this.more_open;
+                    this.sync_window_height(window, cx);
+                    cx.notify();
+                }))
+                .child(
+                    styled(size::SMALL, p.secondary)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(label),
+                )
+                .child(icon(
+                    if open {
+                        IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
+                    },
+                    12.,
+                    p.tertiary,
+                ))
         });
+        let more_cards: Vec<AnyElement> = if self.more_open || toggle.is_none() {
+            more.iter().map(|&f| card(f, cx)).collect()
+        } else {
+            Vec::new()
+        };
+        let more_grid = (!more_cards.is_empty()).then(|| {
+            div()
+                .when(!popular.is_empty(), |d| d.pt(px(space::SM)))
+                .child(grid(more_cards))
+        });
+        let png_hint = self.png_hint(p, cx);
         let presets: Vec<(String, String)> = self
             .app
             .read(cx)
@@ -845,7 +1124,7 @@ impl QuickView {
                 .items_center()
                 .flex_wrap()
                 .gap(px(6.))
-                .pt(px(space::MD))
+                .pt(px(10.))
                 .child(
                     styled(size::SMALL, p.secondary)
                         .font_weight(FontWeight::MEDIUM)
@@ -863,7 +1142,7 @@ impl QuickView {
                         .gap(px(4.))
                         .h(px(26.))
                         .px(px(11.))
-                        .rounded_full()
+                        .rounded(px(radius::CONTROL))
                         .bg(if on { p.green_tint } else { p.surface })
                         .shadow(vec![theme::inset_ring(
                             if on { p.green } else { p.border },
@@ -882,7 +1161,7 @@ impl QuickView {
                         )
                 }))
         });
-        let picker = section("Convert to", p)
+        let picker = section_with("Convert to", self.gutter(), toggle, p)
             .child(if self.targets.formats.is_empty() {
                 theme::callout(
                     IconName::Info,
@@ -896,16 +1175,241 @@ impl QuickView {
                 )
                 .into_any_element()
             } else {
-                // Four to a row, whatever the window's width.
                 div()
-                    .grid()
-                    .grid_cols(CARDS_PER_ROW)
-                    .gap(px(space::SM))
-                    .children(cards)
+                    .flex()
+                    .flex_col()
+                    .children((!popular_cards.is_empty()).then(|| grid(popular_cards)))
+                    .children(more_grid)
                     .into_any_element()
             })
+            .children(png_hint)
             .children(preset_row);
         Some(picker)
+    }
+
+    /// One format card of the picker.
+    fn format_card(
+        &self,
+        format: &'static Format,
+        video_input: bool,
+        p: &Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let on = self.to == Some(format);
+        // A file's own format makes a smaller or cleaner copy of it.
+        let same = sources(&self.files).all(|f| f == format);
+        let needs_pack = self.targets.pack.contains(&format);
+        let weak = cx.entity().downgrade();
+        let blurb = if same {
+            "Compress"
+        } else {
+            blurb(format, video_input)
+        };
+        theme::choice(
+            theme::clickable(SharedString::from(format!("to-{}", format.id)), format.name),
+            on,
+            radius::CARD,
+            p,
+        )
+        .aria_selected(on)
+        .relative()
+        .flex()
+        .flex_col()
+        .min_w_0()
+        .gap(px(3.))
+        .px(px(space::MD))
+        .py(px(8.))
+        .on_click(move |_, window, cx| {
+            let _ = weak.update(cx, |this, cx| this.pick(format, window, cx));
+        })
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    mono(13., 16., p.text)
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(format.name),
+                )
+                .children(on.then(|| {
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .size(px(16.))
+                        .rounded(px(8.))
+                        .bg(p.green)
+                        .child(icon(IconName::Check, 10., p.on_green))
+                })),
+        )
+        .map(|d| {
+            if needs_pack {
+                d.child(super::pack::tag(
+                    SharedString::from(format!("pack-tag-{}", format.id)),
+                    on,
+                    p,
+                ))
+            } else {
+                d.child(
+                    div()
+                        .id(SharedString::from(format!("blurb-{}", format.id)))
+                        .test_support()
+                        .aria_label(blurb)
+                        .child(styled(size::CAPTION, p.secondary).truncate().child(blurb)),
+                )
+            }
+        })
+        .into_any_element()
+    }
+
+    /// A photo becoming PNG grows a lot; says so and offers the formats
+    /// that keep it small.
+    fn png_hint(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.shows_png_hint() {
+            return None;
+        }
+        let switch = |id: &'static str, label: &'static str, cx: &mut Context<Self>| {
+            let to = self.targets.formats.iter().copied().find(|f| f.id == id)?;
+            let weak = cx.entity().downgrade();
+            Some(
+                Button::secondary(SharedString::from(format!("switch-to-{id}")), label)
+                    .small()
+                    .build(p)
+                    .on_click(move |_, window, cx| {
+                        let _ = weak.update(cx, |this, cx| this.pick(to, window, cx));
+                    }),
+            )
+        };
+        let actions: Vec<_> = [
+            switch("jpeg", "Switch to JPEG", cx),
+            switch("webp", "Switch to WebP", cx),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let title = "PNG files are much larger for photos";
+        Some(
+            div()
+                .id("png-size-hint")
+                .test_support()
+                .aria_label(title)
+                .pt(px(space::SM))
+                .child(
+                    theme::callout(
+                        IconName::TriangleAlert,
+                        Tone::Amber,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .child(theme::callout_words(
+                                title,
+                                "PNG is lossless, so photos take much more space than JPEG or \
+                                 WebP.",
+                                p,
+                            ))
+                            .when(!actions.is_empty(), |d| {
+                                d.child(div().flex().flex_wrap().gap(px(8.)).children(actions))
+                            }),
+                        p,
+                    )
+                    .py(px(10.))
+                    .px(px(12.)),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// Whether the PNG size warning shows.
+    fn shows_png_hint(&self) -> bool {
+        self.jobs.is_empty()
+            && self.to.is_some_and(|t| t.id == "png")
+            && sources(&self.files).any(is_photo)
+    }
+
+    /// How many rows the open Options show.
+    fn option_rows(&self) -> usize {
+        let Some(to) = self.to else {
+            return 0;
+        };
+        [
+            quality_applies(to),
+            size_choices(to).is_some(),
+            target_size_applies(to),
+            codec_applies(to),
+            background_applies(to, &self.files),
+            audio_applies(to),
+            media(to),
+        ]
+        .into_iter()
+        .filter(|applies| *applies)
+        .count()
+    }
+
+    /// The window height, before the title bar, that shows everything
+    /// without scrolling, with the same air above the footer as the opening
+    /// size: [`QUICK_SIZE`] plus what shows beyond it. `None` while the
+    /// window shows its conversions, which keep the size it had.
+    fn wanted_height(&self, cx: &App) -> Option<f32> {
+        if self.inline || !self.jobs.is_empty() {
+            return None;
+        }
+        let state = self.app.read(cx);
+        let mut height = QUICK_SIZE.1;
+        if state.license.blocked_reason().is_some() {
+            height += BANNER_HEIGHT;
+        }
+        if self.shows_png_hint() {
+            height += PNG_HINT_HEIGHT;
+        }
+        if self.options_open {
+            height += self.option_rows() as f32 * OPTION_ROW_HEIGHT + 1.;
+        }
+        let (popular, more) = popular_and_more(&self.targets, &self.files);
+        if self.more_open && more.len() >= MIN_HIDDEN && !popular.is_empty() {
+            height += more.len().div_ceil(CARDS_PER_ROW.into()) as f32 * CARD_ROW_HEIGHT;
+        }
+        let waiting = self.waiting_for_pack(cx);
+        let saves = !self.supported().is_empty() || waiting == 0 || self.to.is_some();
+        if (waiting > 0 || self.needs_pack()) && saves {
+            height += PACK_CARD_HEIGHT;
+        }
+        Some(height)
+    }
+
+    /// Fits the window's height to what it shows now: tight by default, and
+    /// taller for the PNG warning, open Options or More formats, a license
+    /// banner or the pack card, at most 90% of the display's usable height.
+    /// It changes the window only when that height changes, so a window the
+    /// user resized stays as it is until then.
+    pub(super) fn sync_window_height(&mut self, window: &mut Window, cx: &mut App) {
+        let Some(wanted) = self.wanted_height(cx) else {
+            return;
+        };
+        let mut height = quick_height_for(wanted);
+        if let Some(display) = window.display(cx) {
+            let visible = display.visible_bounds();
+            let max_by_display = (visible.size.height * 0.9).floor();
+            let room_below = (visible.bottom() - window.bounds().origin.y - px(16.)).floor();
+            let cap = if room_below >= quick_height_for(QUICK_SIZE.1) {
+                max_by_display.min(room_below)
+            } else {
+                max_by_display
+            };
+            height = height.min(cap);
+        }
+        if self.sized_for == Some(height) {
+            return;
+        }
+        self.sized_for = Some(height);
+        let current = window.viewport_size();
+        if current.height != height {
+            window.resize(size(current.width, height));
+            // The test platform resizes without telling the window.
+            #[cfg(test)]
+            window.bounds_changed(cx);
+        }
     }
 
     /// The document pack card, or the line saying it was installed.
@@ -933,7 +1437,7 @@ impl QuickView {
             div()
                 .flex()
                 .flex_col()
-                .px(px(GUTTER))
+                .px(px(self.gutter()))
                 .pb(px(space::XL))
                 .child(content),
         )
@@ -941,9 +1445,38 @@ impl QuickView {
 
     /// Shows the file name as a field, focused, for typing a new one.
     pub(super) fn edit_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.editing_name {
+            self.saved_name = self.file_name.read(cx).value().to_string();
+        }
         self.editing_name = true;
         let focus = self.file_name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    /// Enter or Done: keeps a usable name and shows it as text again; an
+    /// unusable one stays in the field with the reason under it.
+    pub(super) fn commit_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Err(e) = self.output(cx) {
+            self.name_error = Some(e);
+            cx.notify();
+            return;
+        }
+        self.saved_name = self.file_name.read(cx).value().to_string();
+        self.name_error = None;
+        self.editing_name = false;
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    /// Escape: puts back the last committed name and shows it as text.
+    pub(super) fn cancel_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let saved = self.saved_name.clone();
+        self.file_name
+            .update(cx, |s, cx| s.set_value(saved, window, cx));
+        self.name_error = None;
+        self.editing_name = false;
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
@@ -1197,12 +1730,13 @@ impl QuickView {
             .flex()
             .items_center()
             .gap(px(space::MD))
-            .min_h(px(46.))
+            .min_h(px(42.))
             .px(px(space::LG))
             .hover(|s| s.bg(p.hover))
-            .on_click(cx.listener(|this, _, _, cx| {
+            .on_click(cx.listener(|this, _, window, cx| {
                 this.options_open = !this.options_open;
                 this.open = None;
+                this.sync_window_height(window, cx);
                 cx.notify();
             }))
             .child(
@@ -1246,8 +1780,8 @@ impl QuickView {
             div()
                 .flex()
                 .flex_col()
-                .px(px(GUTTER))
-                .pb(px(20.))
+                .px(px(self.gutter()))
+                .pb(px(SECTION_GAP))
                 .child(theme::group(rows, p)),
         )
     }
@@ -1292,11 +1826,20 @@ impl QuickView {
         }
         if background_applies(to, &self.files) {
             let default = default_background(&self.app.read(cx).registry, to, &self.files);
-            parts.push(
-                shown_background(to, self.background)
-                    .or(default)
-                    .map_or_else(|| "Automatic".to_string(), |b| b.name().to_string()),
-            );
+            let effective = shown_background(to, self.background).or(default);
+            // Only show "Transparent" when a source can actually carry alpha
+            // (or the user picked a non-default background explicitly): a JPEG
+            // photo going to PNG has no transparency to preserve.
+            let sources_can_have_alpha = sources(&self.files)
+                .any(|f| f.keeps_transparency() || f.category == Category::Vector);
+            if !(self.background.is_none()
+                && effective == Some(Background::Transparent)
+                && !sources_can_have_alpha)
+            {
+                parts.push(
+                    effective.map_or_else(|| "Automatic".to_string(), |b| b.name().to_string()),
+                );
+            }
         }
         if audio_applies(to) && self.strip_audio {
             parts.push("No audio".into());
@@ -1304,31 +1847,30 @@ impl QuickView {
         parts.join(" · ")
     }
 
-    /// Where the conversion runs, as two tiles.
-    fn where_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        let access = self.cloud_access(cx);
-        let cloud = self.in_cloud(cx);
-        let weak = cx.entity().downgrade();
-        div()
-            .flex()
-            .flex_col()
-            .px(px(GUTTER))
-            .pb(px(20.))
-            .child(theme::tiles(
+    /// Destination folder and Local/Cloud toggle in one compact strip (the
+    /// output filename lives right in the top transform hero).
+    fn save_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let place = match &self.save_dir {
+            Some(dir) => super::tilde(dir),
+            None => "Same folder".to_string(),
+        };
+        let where_control = (self.to.is_some() && !self.needs_pack()).then(|| {
+            let access = self.cloud_access(cx);
+            let cloud = self.in_cloud(cx);
+            let weak = cx.entity().downgrade();
+            div().flex_shrink_0().child(theme::segmented_with(
                 "where",
                 &[
-                    Tile {
+                    Segment {
                         key: "local",
-                        icon: IconName::Computer,
-                        title: theme::this_machine_label().into(),
-                        line: "Private, works offline".into(),
+                        icon: Some(IconName::Computer),
+                        label: theme::this_machine_label().into(),
                         disabled: None,
                     },
-                    Tile {
+                    Segment {
                         key: "cloud",
-                        icon: IconName::Cloud,
-                        title: "Cloud".into(),
-                        line: "Faster for big videos".into(),
+                        icon: Some(IconName::Cloud),
+                        label: "Cloud".into(),
                         disabled: access
                             .reason()
                             .or_else(|| self.cloud_blocked().map(Into::into))
@@ -1343,103 +1885,63 @@ impl QuickView {
                     let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
                 },
             ))
-    }
-
-    fn save_section(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
-        let place = match &self.save_dir {
-            Some(dir) => super::tilde(dir),
-            None => "Same folder".to_string(),
-        };
-        let name = (self.files.len() == 1 && self.to.is_some()).then(|| {
-            let control = if self.editing_name {
+        });
+        let strip = theme::card(p)
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(space::SM))
+            .min_h(px(46.))
+            .px(px(space::MD))
+            .py(px(8.))
+            .child(
                 div()
-                    .w(px(260.))
-                    .flex_shrink_0()
-                    .font_family(theme::MONO)
-                    .text_size(px(12.))
-                    .child(theme::small_field(&self.file_name, "file-name"))
-                    .into_any_element()
-            } else {
-                let current = SharedString::from(self.file_name.read(cx).value().to_string());
-                theme::clickable("file-name-edit", current.clone())
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .max_w(px(320.))
-                    .h(px(theme::SMALL_FIELD_HEIGHT))
-                    .px(px(8.))
-                    .mr(px(-8.))
-                    .rounded(px(radius::CONTROL))
-                    .hover(|s| s.bg(p.hover))
-                    .on_click(cx.listener(|this, _, window, cx| this.edit_name(window, cx)))
-                    .child(mono(12., 16., p.text).min_w_0().truncate().child(current))
-                    .child(icon(IconName::Edit, 13., p.tertiary))
-                    .into_any_element()
-            };
-            let error = self.name_error.clone().map(|e| {
-                div()
-                    .id("file-name-error")
-                    .test_support()
-                    .aria_label(SharedString::from(e.clone()))
-                    .flex()
-                    .justify_end()
-                    .px(px(space::LG))
-                    .pb(px(10.))
-                    .mt(px(-4.))
-                    .child(error_text(e, p))
-            });
-            div()
-                .flex()
-                .flex_col()
-                .child(row_label("File name", control, p))
-                .children(error)
-                .into_any_element()
-        });
-        let folder = row_label(
-            "Save to",
-            div()
-                .flex()
-                .items_center()
-                .gap(px(space::SM))
-                .max_w(px(360.))
-                .child(icon(IconName::Folder, 13., p.tertiary))
-                .child(
-                    div()
-                        .id("save-to")
-                        .test_support()
-                        .aria_label(SharedString::from(place.clone()))
-                        .min_w_0()
-                        .child(
-                            styled(size::SMALL, p.text)
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis_start()
-                                .child(place),
-                        ),
-                )
-                .when(self.save_dir.is_some(), |d| {
-                    d.child(
-                        Button::ghost("same-folder", "Same folder")
+                    .min_w_0()
+                    .flex_1()
+                    .gap(px(space::SM))
+                    .child(icon(IconName::Folder, 14., p.tertiary))
+                    .child(
+                        div()
+                            .id("save-to")
+                            .test_support()
+                            .aria_label(SharedString::from(place.clone()))
+                            .min_w_0()
+                            .child(
+                                styled(size::SMALL, p.text)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis_start()
+                                    .child(place),
+                            ),
+                    )
+                    .when(self.save_dir.is_some(), |d| {
+                        d.child(
+                            Button::ghost("same-folder", "Reset")
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.save_dir = None;
+                                    cx.notify();
+                                })),
+                        )
+                    })
+                    .child(
+                        Button::secondary("change-folder", "Change…")
                             .small()
                             .build(p)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.save_dir = None;
-                                cx.notify();
-                            })),
-                    )
-                })
-                .child(
-                    Button::secondary("change-folder", "Change…")
-                        .small()
-                        .build(p)
-                        .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
-                ),
-            p,
-        );
-        section("Save", p).child(theme::group(
-            name.into_iter().chain(std::iter::once(folder)),
-            p,
-        ))
+                            .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
+                    ),
+            )
+            .children(where_control);
+        div()
+            .flex()
+            .flex_col()
+            .px(px(self.gutter()))
+            .pb(px(SECTION_GAP))
+            .child(strip)
     }
 
     fn progress_section(&self, p: &Palette) -> Stateful<Div> {
@@ -1467,7 +1969,7 @@ impl QuickView {
                     [one] => format!("Saved {}", model::file_name(one)),
                     many => format!("Saved {} files", many.len()),
                 },
-                Status::Failed(e) => e.message.clone(),
+                Status::Failed(e) => super::friendly_error(&e.message),
                 Status::Cancelled => "Cancelled".into(),
             };
             let (color, glyph) = match entry.status {
@@ -1531,7 +2033,7 @@ impl QuickView {
             .flex()
             .flex_col()
             .flex_1()
-            .px(px(GUTTER))
+            .px(px(self.gutter()))
             .pb(px(space::XL))
             .overflow_y_scroll()
             .child(
@@ -1551,35 +2053,75 @@ impl QuickView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        let gutter = self.gutter();
         let bar = div()
             .flex()
             .flex_shrink_0()
             .items_center()
             .gap(px(space::SM))
-            .px(px(GUTTER))
-            .h(px(60.))
-            .bg(p.chrome)
-            .when(!asking, |d| d.border_t_1().border_color(p.chrome_border));
+            .px(px(gutter))
+            .h(px(56.))
+            .bg(if self.inline { p.recessed } else { p.chrome })
+            // The card's overflow clip is square, so the fill takes the
+            // card's corners itself, less its 1px border.
+            .when(self.inline, |d| d.rounded_b(px(radius::CARD - 1.)))
+            .when(!asking, |d| {
+                d.border_t_1().border_color(if self.inline {
+                    p.border
+                } else {
+                    p.chrome_border
+                })
+            });
         if !self.jobs.is_empty() {
             let outputs = self.outputs();
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
+            let state = self.app.read(cx);
+            let failed: Vec<(Option<i64>, PathBuf)> = self
+                .entries()
+                .filter(|e| matches!(e.status, Status::Failed(_)))
+                .map(|e| (state.record_id(e.id), e.input.clone()))
+                .collect();
+            let saved = self
+                .entries()
+                .filter(|e| matches!(e.status, Status::Done(_)))
+                .count();
             // Where the jobs run, not what was picked: a same-format
             // target stays here even with Cloud chosen.
-            let status = match (done, self.in_cloud(cx)) {
-                (true, _) => "Done",
-                (false, true) => "Converting in the cloud…",
-                (false, false) => "Converting…",
+            let status: SharedString = match (done, self.in_cloud(cx)) {
+                (true, _) if !failed.is_empty() && saved == 0 => "Failed".into(),
+                (true, _) if !failed.is_empty() => {
+                    format!("{saved} saved · {} failed", failed.len()).into()
+                }
+                (true, _)
+                    if self
+                        .entries()
+                        .all(|e| matches!(e.status, Status::Cancelled)) =>
+                {
+                    "Cancelled".into()
+                }
+                (true, _) => "Done".into(),
+                (false, true) => "Converting in the cloud…".into(),
+                (false, false) => "Converting…".into(),
             };
+            // The full error waits in Activity, with Retry beside it.
+            let details = (done && !failed.is_empty()).then(|| {
+                Button::secondary("quick-details", "Details")
+                    .build(p)
+                    .on_click(move |_, _, cx| super::show_failures(failed.clone(), cx))
+            });
             return bar
                 .child(
-                    styled(size::SMALL, p.secondary)
+                    div()
+                        .id("quick-status")
+                        .test_support()
+                        .aria_label(status.clone())
                         .flex_1()
                         .min_w_0()
-                        .truncate()
-                        .child(status),
+                        .child(styled(size::SMALL, p.secondary).truncate().child(status)),
                 )
+                .children(details)
                 .children(first.filter(|_| done).map(|path| {
                     Button::secondary("show-in-folder", "Show in folder")
                         .icon(IconName::FolderOpen)
@@ -1591,14 +2133,21 @@ impl QuickView {
                         .build(p)
                         .on_click(move |_, _, cx| cx.open_with_system(&path))
                 }))
+                .children((done && !outputs.is_empty()).then(|| {
+                    Button::secondary(
+                        "copy-output",
+                        if self.copied { "Copied" } else { "Copy file" },
+                    )
+                    .build(p)
+                    .on_click(cx.listener(|this, _, _, cx| this.copy_outputs(cx)))
+                }))
                 .child(
                     Button::primary("close", "Close")
                         .build(p)
                         .px(px(20.))
-                        .on_click(|_, window, _| window.remove_window()),
+                        .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
                 );
         }
-        let cloud = self.in_cloud(cx);
         let state = self.app.read(cx);
         let allowed = state.license.allows_conversion();
         let convert = if self.needs_pack() {
@@ -1620,10 +2169,7 @@ impl QuickView {
             super::pack::install_and_convert_button(&self.app, label.into(), disabled, after, p)
                 .px(px(20.))
         } else {
-            let disabled = self.to.is_none()
-                || self.supported().is_empty()
-                || !allowed
-                || (cloud && !state.settings.cloud_consent);
+            let disabled = !self.ready(cx);
             let label = match self.to {
                 Some(to) if !disabled => format!("Convert to {}", to.name),
                 _ => "Convert".to_string(),
@@ -1641,7 +2187,7 @@ impl QuickView {
             .child(
                 Button::secondary("cancel", "Cancel")
                     .build(p)
-                    .on_click(|_, window, _| window.remove_window()),
+                    .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
             )
             .child(convert)
     }
@@ -1656,18 +2202,44 @@ impl Global for TestCloud {}
 
 /// Space between the window edge and the content.
 const GUTTER: f32 = 24.;
-/// Format cards to a row.
-const CARDS_PER_ROW: u16 = 4;
+/// The composer card's gutter.
+const INLINE_GUTTER: f32 = 20.;
+/// Space under each part of the window.
+const SECTION_GAP: f32 = 16.;
+/// Format cards to a row (3x2 balanced grid for the 6 popular image targets).
+const CARDS_PER_ROW: u16 = 3;
+/// The fewest formats "More formats" hides; fewer show with the rest.
+const MIN_HIDDEN: usize = 3;
+/// What each part adds to Quick convert's height beyond [`QUICK_SIZE`], as
+/// drawn at its width: the license banner, the PNG warning, an open Options
+/// row, a row of format cards with the gap above it, and the pack card.
+const BANNER_HEIGHT: f32 = 118.;
+const PNG_HINT_HEIGHT: f32 = 112.;
+const OPTION_ROW_HEIGHT: f32 = 47.;
+const CARD_ROW_HEIGHT: f32 = 57.;
+const PACK_CARD_HEIGHT: f32 = 96.;
 const SELECT_WIDTH: f32 = 190.;
 
-/// A titled part of the window.
-fn section(label: &'static str, p: &Palette) -> Div {
+/// A titled part of the window with a control at the right of its title.
+fn section_with(
+    label: &'static str,
+    gutter: f32,
+    trailing: Option<impl IntoElement>,
+    p: &Palette,
+) -> Div {
     div()
         .flex()
         .flex_col()
-        .px(px(GUTTER))
-        .pb(px(20.))
-        .child(theme::section_label(label, p))
+        .px(px(gutter))
+        .pb(px(SECTION_GAP))
+        .child(
+            div()
+                .flex()
+                .items_end()
+                .justify_between()
+                .child(theme::section_label(label, p))
+                .children(trailing.map(|t| div().pb(px(4.)).child(t))),
+        )
 }
 
 /// An option row: the label on the left, the control on the right.
@@ -1676,7 +2248,7 @@ fn row_label(label: &'static str, control: impl IntoElement, p: &Palette) -> Any
         .flex()
         .items_center()
         .gap(px(space::LG))
-        .min_h(px(42.))
+        .min_h(px(40.))
         .px(px(space::LG))
         .py(px(6.))
         .child(
@@ -1731,6 +2303,74 @@ pub(super) fn output_name(typed: &str, extension: &str) -> Result<String, String
     }
 }
 
+/// The target picked for files sent without one: what most people want
+/// from the first file's kind, else the first target, never one that waits
+/// for the document pack.
+pub(super) fn recommended_target(files: &[PathBuf], targets: &Targets) -> Option<&'static Format> {
+    let from = sources(files).next()?;
+    let wanted: &[&str] = match from.id {
+        "heic" => &["jpeg", "webp", "png"],
+        "png" => &["webp", "jpeg"],
+        "jpeg" => &["webp", "png"],
+        "webp" | "avif" => &["jpeg", "png"],
+        "bmp" | "tiff" | "tga" | "ppm" | "qoi" | "exr" | "gif" => &["png", "jpeg"],
+        "svg" => &["png", "pdf"],
+        "mov" | "mkv" | "avi" | "webm" => &["mp4", "webm"],
+        "mp4" => &["webm", "mp3", "gif"],
+        "mp3" => &["m4a", "wav"],
+        "wav" | "flac" | "aiff" | "caf" | "m4a" | "m4r" | "ogg" | "opus" | "aac" => &["mp3", "m4a"],
+        "pdf" => &["png", "jpeg"],
+        _ if matches!(
+            from.category,
+            Category::Document | Category::Presentation | Category::Spreadsheet
+        ) =>
+        {
+            &["pdf"]
+        }
+        _ => &[],
+    };
+    let usable = |f: &&'static Format| !targets.pack.contains(f);
+    wanted
+        .iter()
+        .find_map(|id| {
+            targets
+                .formats
+                .iter()
+                .copied()
+                .find(|f| f.id == *id)
+                .filter(usable)
+        })
+        .or_else(|| targets.formats.iter().copied().find(usable))
+}
+
+/// Whether `to` is one of the formats the picker offers first.
+fn is_popular(to: &Format) -> bool {
+    POPULAR.contains(&to.id)
+}
+
+/// The targets split into the popular ones, those of the source's own kind
+/// first, and the rest, in the registry's order.
+pub(super) fn popular_and_more(
+    targets: &Targets,
+    files: &[PathBuf],
+) -> (Vec<&'static Format>, Vec<&'static Format>) {
+    let kind = sources(files).next().map(|f| f.category);
+    let (mut popular, more): (Vec<&'static Format>, Vec<&'static Format>) =
+        targets.formats.iter().partition(|f| is_popular(f));
+    popular.sort_by_key(|f| {
+        (
+            Some(f.category) != kind,
+            POPULAR.iter().position(|id| *id == f.id),
+        )
+    });
+    (popular, more)
+}
+
+/// Photos, which grow several times over as PNG.
+fn is_photo(from: &'static Format) -> bool {
+    matches!(from.id, "heic" | "jpeg" | "webp" | "avif")
+}
+
 /// Whether the Codec control does anything for `to`.
 fn codec_applies(to: &Format) -> bool {
     matches!(to.id, "mp4" | "mov" | "mkv")
@@ -1744,10 +2384,24 @@ fn sources(files: &[PathBuf]) -> impl Iterator<Item = &'static Format> + '_ {
 }
 
 /// Whether the Background control applies: image targets, except GIF from
-/// video, where the engines don't take a background color yet.
+/// video (no background support yet) and opaque raster images going to a
+/// transparency-capable target (e.g. JPEG -> WebP/PNG, where "Background:
+/// Transparent" is noise).
 fn background_applies(to: &Format, files: &[PathBuf]) -> bool {
-    to.category == Category::Image
-        && !(to.id == "gif" && sources(files).any(|f| f.category == Category::Video))
+    if to.category != Category::Image {
+        return false;
+    }
+    if to.id == "gif" && sources(files).any(|f| f.category == Category::Video) {
+        return false;
+    }
+    let mut srcs = sources(files).peekable();
+    if to.keeps_transparency()
+        && srcs.peek().is_some()
+        && srcs.all(|f| f.category == Category::Image && !f.keeps_transparency())
+    {
+        return false;
+    }
+    true
 }
 
 /// What the Background control shows with nothing picked: what the engines
@@ -1969,7 +2623,7 @@ impl Render for QuickView {
                 .flex_col()
                 .flex_shrink_0()
                 .gap(px(space::SM))
-                .px(px(GUTTER))
+                .px(px(self.gutter()))
                 .pb(px(space::LG))
                 .children(notices)
         });
@@ -1987,11 +2641,7 @@ impl Render for QuickView {
             // Nothing to save while every file waits for the document pack
             // and no target is picked yet.
             if !self.supported().is_empty() || waiting == 0 || self.to.is_some() {
-                // A target that needs the pack converts here once it's in.
-                if self.to.is_some() && !self.needs_pack() {
-                    body.push(self.where_section(&p, window, cx).into_any_element());
-                }
-                body.push(self.save_section(&p, cx).into_any_element());
+                body.push(self.save_section(&p, window, cx).into_any_element());
             }
             body
         } else {
@@ -1999,8 +2649,39 @@ impl Render for QuickView {
         };
         let consent = self.consent(&p, cx);
         let asking = consent.is_some();
+        let header = self.header(&p, cx);
+        let footer = self.footer(asking, &p, window, cx);
+        let on_key = cx.listener(Self::on_key);
+        if self.inline {
+            // A card at the top of Activity; the page scrolls, not the card.
+            return div()
+                .id("composer")
+                .test_support()
+                .aria_label("Convert")
+                .track_focus(&self.focus)
+                .on_key_down(on_key)
+                .flex()
+                .flex_col()
+                .w_full()
+                .overflow_hidden()
+                .rounded(px(radius::CARD))
+                .bg(p.surface)
+                .border_1()
+                .border_color(p.border)
+                .shadow(theme::soft(&p))
+                .font_family(theme::SANS)
+                .text_color(p.text)
+                .child(header)
+                .children(notices)
+                .child(div().id("composer-body").flex().flex_col().children(body))
+                .children(consent)
+                .child(footer)
+                .into_any_element();
+        }
         div()
             .id("quick")
+            .track_focus(&self.focus)
+            .on_key_down(on_key)
             .flex()
             .flex_col()
             .size_full()
@@ -2013,8 +2694,8 @@ impl Render for QuickView {
                 p.dark.then_some(p.chrome),
                 &p,
             ))
-            .when(!theme::transparent_titlebar(), |d| d.pt(px(20.)))
-            .child(self.header(&p))
+            .when(!theme::transparent_titlebar(), |d| d.pt(px(16.)))
+            .child(header)
             .children(notices)
             .child(
                 div()
@@ -2028,6 +2709,7 @@ impl Render for QuickView {
                     .children(body),
             )
             .children(consent)
-            .child(self.footer(asking, &p, window, cx))
+            .child(footer)
+            .into_any_element()
     }
 }

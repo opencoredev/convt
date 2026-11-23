@@ -8,24 +8,23 @@
 
 use std::path::Path;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
 use convt_core::Options;
 use convt_core::Result;
 use image::metadata::Orientation;
-use image::{DynamicImage, ImageDecoder, ImageReader};
+use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 
-#[cfg(target_os = "macos")]
-use crate::image::encode;
 use crate::image::failed;
+#[cfg(any(test, target_os = "macos"))]
+use crate::image::{PngMeta, encode, write_png};
 
 /// Decodes `input` the way Preview would show it: pixels after EXIF
 /// orientation, with the tag consumed so a later encode cannot apply it twice.
 pub(crate) fn open_oriented(input: &Path) -> Result<DynamicImage> {
-    let mut decoder = ImageReader::open(input)?
-        .with_guessed_format()?
-        .into_decoder()
-        .map_err(failed)?;
-    let orientation = decoder.orientation().map_err(failed)?;
+    let reader = ImageReader::open(input)?.with_guessed_format()?;
+    let format = reader.format();
+    let mut decoder = reader.into_decoder().map_err(failed)?;
+    let orientation = file_orientation(input, format, &mut decoder)?;
     // `ImageReader::decode` checks the pixel buffer against the decoding
     // limits before allocating it; going through the decoder skips that, so
     // a small file declaring huge dimensions would allocate gigabytes.
@@ -37,15 +36,31 @@ pub(crate) fn open_oriented(input: &Path) -> Result<DynamicImage> {
     Ok(img)
 }
 
-/// The EXIF orientation the decoder reports, or `NoTransforms` when the
-/// format has no tag. Does not apply it.
+/// The EXIF orientation of `input` ([`file_orientation`]), or
+/// `NoTransforms` when the format has no tag. Does not apply it.
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) fn decoder_orientation(input: &Path) -> Result<Orientation> {
-    let mut decoder = ImageReader::open(input)?
-        .with_guessed_format()?
-        .into_decoder()
-        .map_err(failed)?;
-    decoder.orientation().map_err(failed)
+    let reader = ImageReader::open(input)?.with_guessed_format()?;
+    let format = reader.format();
+    let mut decoder = reader.into_decoder().map_err(failed)?;
+    file_orientation(input, format, &mut decoder)
+}
+
+/// The EXIF orientation the decoder reports for `input`. A PNG's decoder
+/// reads only an `eXIf` before the image data, while PNG also allows it
+/// after; for a PNG the decoder sees no orientation in, the one EXIF that
+/// [`crate::image::PngMeta`] keeps decides, so detection, baking and the
+/// orientation reset all look at the same chunk.
+fn file_orientation(
+    input: &Path,
+    format: Option<ImageFormat>,
+    decoder: &mut impl ImageDecoder,
+) -> Result<Orientation> {
+    let orientation = decoder.orientation().map_err(failed)?;
+    if orientation != Orientation::NoTransforms || format != Some(ImageFormat::Png) {
+        return Ok(orientation);
+    }
+    Ok(crate::image::png_exif_orientation(input).unwrap_or(orientation))
 }
 
 /// Reads pixels without applying EXIF, for comparing baked output against a
@@ -59,13 +74,68 @@ pub(crate) fn open_stored(input: &Path) -> Result<DynamicImage> {
 }
 
 /// Rewrites `path` with EXIF orientation baked in and the tag gone.
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn bake_pending_orientation(path: &Path, to: &str, options: &Options) -> Result<()> {
-    if decoder_orientation(path)? == Orientation::NoTransforms {
+    let orientation = decoder_orientation(path)?;
+    if orientation == Orientation::NoTransforms {
         return Ok(());
+    }
+    if to == "png" {
+        return orient_png(path, orientation, options);
     }
     let img = open_oriented(path)?;
     encode(img, to, options, path)
+}
+
+/// Rewrites the PNG at `path` with `orientation` applied to its stored
+/// pixels. A generic encode would drop everything but the pixels; this keeps
+/// the depth, the color tags (ICC, sRGB, gAMA, cHRM, cICP, mDCV, cLLI), the
+/// pixel ratio (swapped with the axes), text, and EXIF with only its
+/// orientation reset, so nothing rotates the picture again; with
+/// `options.strip_metadata`, EXIF and text go. With
+/// `options.target_size` set and no longer met, the image shrinks to fit as
+/// [`crate::image::background_png`] does.
+#[cfg(any(test, target_os = "macos"))]
+fn orient_png(path: &Path, orientation: Orientation, options: &Options) -> Result<()> {
+    let mut source = PngMeta::read(path)?;
+    let mut img = open_stored(path)?;
+    img.apply_orientation(orientation);
+    if let Some(exif) = &source.info.exif_metadata {
+        let mut exif = exif.to_vec();
+        // `None` leaves an invalid value alone, which readers ignore.
+        let _ = Orientation::remove_from_exif_chunk(&mut exif);
+        source.info.exif_metadata = Some(exif.into());
+    }
+    if swaps_dims(orientation)
+        && let Some(dims) = source.info.pixel_dims.as_mut()
+    {
+        std::mem::swap(&mut dims.xppu, &mut dims.yppu);
+    }
+    let name = path
+        .file_name()
+        .map_or_else(Default::default, |n| n.to_string_lossy().into_owned());
+    let tmp = path.with_file_name(format!(".{name}.orienting.png"));
+    let written = write_png(&img, &source, &tmp, !options.strip_metadata).and_then(|()| {
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    });
+    let _ = std::fs::remove_file(&tmp);
+    written?;
+    if options.background.is_none()
+        && options
+            .target_size
+            .is_some_and(|t| std::fs::metadata(path).is_ok_and(|m| m.len() > t))
+    {
+        // Only the size: stripping already ran, and when a background color is
+        // requested the caller flattens transparency before fitting target_size.
+        let fit = Options {
+            background: None,
+            strip_metadata: false,
+            ..options.clone()
+        };
+        crate::image::background_png(path, &fit)?;
+    }
+    Ok(())
 }
 
 /// After a tool such as `sips` writes `dest` from `source`, make the pixels
@@ -73,7 +143,7 @@ pub(crate) fn bake_pending_orientation(path: &Path, to: &str, options: &Options)
 /// EXIF, and sometimes drops both. Stored size (`ispe`) versus output size
 /// tells us whether a 90° transform already ran; leftover EXIF on the output
 /// is always baked in.
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn finish_heif_output(
     source: &Path,
     dest: &Path,
@@ -113,7 +183,7 @@ fn should_apply_source_exif(dest_had_pending: bool, dest_now: Orientation) -> bo
     !dest_had_pending && dest_now == Orientation::NoTransforms
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos"))]
 fn apply_if_still_stored(
     dest: &Path,
     to: &str,
@@ -121,12 +191,17 @@ fn apply_if_still_stored(
     orientation: Orientation,
     stored: Option<(u32, u32)>,
 ) -> Result<()> {
-    let img = open_stored(dest)?;
-    let (w, h) = (img.width(), img.height());
-    if !needs_source_orientation(orientation, (w, h), stored) {
+    let size = ImageReader::open(dest)?
+        .with_guessed_format()?
+        .into_dimensions()
+        .map_err(failed)?;
+    if !needs_source_orientation(orientation, size, stored) {
         return Ok(());
     }
-    let mut img = img;
+    if to == "png" {
+        return orient_png(dest, orientation, options);
+    }
+    let mut img = open_stored(dest)?;
     img.apply_orientation(orientation);
     encode(img, to, options, dest)
 }
@@ -181,7 +256,6 @@ fn scale_to_max_side(src: (u32, u32), max_side: u32) -> (u32, u32) {
     )
 }
 
-#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn swaps_dims(orientation: Orientation) -> bool {
     matches!(
         orientation,
@@ -1686,6 +1760,340 @@ mod tests {
         file.extend_from_slice(&meta);
         file.extend_from_slice(&mdat);
         file
+    }
+
+    /// Big-endian TIFF EXIF with Make "Apple", Model "cvt" and
+    /// `orientation`; the orientation value sits at bytes 42..44.
+    fn exif_with_camera(orientation: u16) -> Vec<u8> {
+        let mut tiff = b"MM\0*".to_vec();
+        tiff.extend_from_slice(&8u32.to_be_bytes());
+        tiff.extend_from_slice(&3u16.to_be_bytes());
+        // Make, ASCII, six bytes at offset 50 (after the IFD).
+        tiff.extend_from_slice(&[0x01, 0x0f, 0, 2, 0, 0, 0, 6]);
+        tiff.extend_from_slice(&50u32.to_be_bytes());
+        // Model, ASCII, "cvt" inline.
+        tiff.extend_from_slice(&[0x01, 0x10, 0, 2, 0, 0, 0, 4]);
+        tiff.extend_from_slice(b"cvt\0");
+        // Orientation, SHORT, one value.
+        tiff.extend_from_slice(&[0x01, 0x12, 0, 3, 0, 0, 0, 1]);
+        tiff.extend_from_slice(&orientation.to_be_bytes());
+        tiff.extend_from_slice(&[0, 0]);
+        tiff.extend_from_slice(&0u32.to_be_bytes());
+        assert_eq!(tiff.len(), 50);
+        tiff.extend_from_slice(b"Apple\0");
+        tiff
+    }
+
+    /// sips copied the HEIC's EXIF orientation 3 onto a 16-bit Display P3
+    /// PNG of the stored frame. With a background or a size to meet, the
+    /// picture must turn exactly once, and the profile and the rest of the
+    /// EXIF must survive with the orientation reset to 1.
+    #[test]
+    fn sips_png_with_options_rotates_once_and_keeps_metadata() {
+        use crate::image::tests::{DeepPng, deep_png, icc_named, png_info};
+        use convt_core::Background;
+        let cases = [
+            (
+                "white background",
+                Options {
+                    background: Some(Background::WHITE),
+                    ..Options::default()
+                },
+            ),
+            (
+                "size to meet",
+                Options {
+                    target_size: Some(4_000),
+                    ..Options::default()
+                },
+            ),
+        ];
+        for (name, options) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let source = dir.path().join("IMG_0001.heic");
+            let heif = inject_heif_exif(&minimal_still_heif(), 3).unwrap();
+            assert_eq!(heif_exif_orientation(&heif), Some(Orientation::Rotate180));
+            assert_eq!(heif_display_orientation(&heif), None);
+            std::fs::write(&source, &heif).unwrap();
+            let dest = dir.path().join("IMG_0001.png");
+            let p3 = icc_named("Display P3");
+            let meta = DeepPng {
+                icc: Some(&p3),
+                exif: Some(exif_with_camera(3)),
+                ..DeepPng::default()
+            };
+            // The stored 64x48 frame `ispe` describes.
+            let deep = deep_png(&dest, 64, 48, &meta);
+            let before = std::fs::metadata(&dest).unwrap().len();
+            crate::heic::finish_sips_png("heic", &source, &dest, &options, true).unwrap();
+            let after = std::fs::metadata(&dest).unwrap().len();
+            assert!(after < before, "{name}: {after} >= {before}");
+
+            let info = png_info(&dest);
+            assert_eq!(info.bit_depth, png::BitDepth::Eight, "{name}");
+            assert_eq!(info.color_type, png::ColorType::Rgb, "{name}");
+            assert_eq!(info.icc_profile.as_deref(), Some(&p3[..]), "{name}");
+            let mut want_exif = exif_with_camera(3);
+            want_exif[42..44].copy_from_slice(&1u16.to_be_bytes());
+            assert_eq!(
+                info.exif_metadata.as_deref(),
+                Some(&want_exif[..]),
+                "{name}"
+            );
+            assert_eq!(
+                decoder_orientation(&dest).unwrap(),
+                Orientation::NoTransforms,
+                "{name}"
+            );
+            let dims = info.pixel_dims.unwrap();
+            assert_eq!((dims.xppu, dims.yppu), (2835, 5670), "{name}");
+
+            let unrotated = DynamicImage::ImageRgba16(deep);
+            let mut want = unrotated.clone();
+            want.apply_orientation(Orientation::Rotate180);
+            let back = open_stored(&dest).unwrap();
+            if options.target_size.is_some() {
+                // Shrunk to fit, still landscape.
+                assert!(after <= 4_000, "{name}: {after}");
+                assert!(back.width() > back.height(), "{name}");
+                let shrink = |img: &DynamicImage| {
+                    img.resize_exact(
+                        back.width(),
+                        back.height(),
+                        image::imageops::FilterType::Lanczos3,
+                    )
+                };
+                let (want, unrotated) = (shrink(&want), shrink(&unrotated));
+                let distance = |a: &DynamicImage| -> i64 {
+                    a.to_rgb8()
+                        .pixels()
+                        .zip(back.to_rgb8().pixels())
+                        .map(|(p, q)| {
+                            (0..3)
+                                .map(|i| (i64::from(p.0[i]) - i64::from(q.0[i])).abs())
+                                .sum::<i64>()
+                        })
+                        .sum()
+                };
+                assert!(
+                    distance(&want) < distance(&unrotated),
+                    "{name}: not turned once"
+                );
+                continue;
+            }
+            let want = want.to_rgb8();
+            let back = back.to_rgb8();
+            assert_eq!(back.dimensions(), want.dimensions(), "{name}");
+            for (a, b) in want.pixels().zip(back.pixels()) {
+                for i in 0..3 {
+                    assert!(
+                        (a.0[i] as i32 - b.0[i] as i32).abs() <= 1,
+                        "{name}: {a:?} vs {b:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// PNG allows `eXIf` after the image data, where the decoder never looks.
+    /// Such a tag asking for 90° clockwise must still be found, applied to
+    /// the pixels exactly once, and reset to 1 in the single EXIF written
+    /// back (no stale second `eXIf`), or dropped with the rest of the
+    /// metadata when stripping.
+    #[test]
+    fn trailing_exif_orientation_is_applied_once_and_reset() {
+        use crate::image::tests::{DeepPng, chunk_order, deep_png, png_info};
+        use convt_core::Background;
+        let comment = (*b"tEXt", b"Comment\0after IDAT".to_vec());
+        let make = |dir: &Path| {
+            let path = dir.join("trailing.png");
+            let meta = DeepPng {
+                trailing: vec![comment.clone(), (*b"eXIf", exif_with_camera(6))],
+                ..DeepPng::default()
+            };
+            let deep = deep_png(&path, 64, 48, &meta);
+            let order = chunk_order(&path);
+            let idat = order.iter().position(|k| k == "IDAT").unwrap();
+            assert!(order.iter().position(|k| k == "eXIf").unwrap() > idat);
+            assert!(png_info(&path).exif_metadata.is_none());
+            assert_eq!(decoder_orientation(&path).unwrap(), Orientation::Rotate90);
+            (path, DynamicImage::ImageRgba16(deep))
+        };
+        let strip = Options {
+            strip_metadata: true,
+            ..Options::default()
+        };
+        let white = Options {
+            background: Some(Background::WHITE),
+            ..Options::default()
+        };
+        type Run = fn(&Path, &Path, &Options) -> Result<()>;
+        let bake: Run = |_, png, o| bake_pending_orientation(png, "png", o);
+        let background: Run = |_, png, o| crate::image::background_png(png, o);
+        let sips: Run = |heif, png, o| crate::heic::finish_sips_png("heic", heif, png, o, true);
+        let cases: [(&str, Run, &Options, bool); 6] = [
+            ("orient_png", bake, &Options::default(), true),
+            ("orient_png, strip", bake, &strip, false),
+            ("background_png", background, &white, true),
+            ("background_png, strip", background, &strip, false),
+            ("finish_sips_png", sips, &Options::default(), true),
+            ("finish_sips_png, strip", sips, &strip, false),
+        ];
+        for (name, run, options, kept) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let (path, stored) = make(dir.path());
+            // A HEIC with no transforms or EXIF of its own, as `ispe` 64x48.
+            let heif = dir.path().join("IMG_0001.heic");
+            std::fs::write(&heif, minimal_still_heif()).unwrap();
+            run(&heif, &path, options).unwrap();
+
+            let mut want = stored.clone();
+            want.apply_orientation(Orientation::Rotate90);
+            let back = open_stored(&path).unwrap();
+            assert_eq!((back.width(), back.height()), (48, 64), "{name}");
+            let (want, back) = (want.to_rgb8(), back.to_rgb8());
+            for (a, b) in want.pixels().zip(back.pixels()) {
+                for i in 0..3 {
+                    assert!(
+                        (a.0[i] as i32 - b.0[i] as i32).abs() <= 1,
+                        "{name}: {a:?} vs {b:?}"
+                    );
+                }
+            }
+            assert_eq!(
+                decoder_orientation(&path).unwrap(),
+                Orientation::NoTransforms,
+                "{name}"
+            );
+            // Opening it the way every later hop does turns nothing again.
+            assert_eq!(
+                open_oriented(&path).unwrap().to_rgb8().as_raw(),
+                back.as_raw(),
+                "{name}"
+            );
+
+            let info = png_info(&path);
+            let order = chunk_order(&path);
+            let idat = order.iter().position(|k| k == "IDAT").unwrap();
+            let exifs: Vec<usize> = (0..order.len()).filter(|&i| order[i] == "eXIf").collect();
+            let source = crate::image::PngMeta::read(&path).unwrap();
+            if kept {
+                let mut want_exif = exif_with_camera(6);
+                want_exif[42..44].copy_from_slice(&1u16.to_be_bytes());
+                assert_eq!(
+                    info.exif_metadata.as_deref(),
+                    Some(&want_exif[..]),
+                    "{name}"
+                );
+                assert_eq!(exifs.len(), 1, "{name}: {order:?}");
+                assert!(exifs[0] < idat, "{name}: {order:?}");
+                assert_eq!(source.trailing_chunks, vec![comment.clone()], "{name}");
+            } else {
+                assert!(exifs.is_empty(), "{name}: {order:?}");
+                assert!(source.info.exif_metadata.is_none(), "{name}");
+                assert!(source.trailing_chunks.is_empty(), "{name}");
+            }
+        }
+    }
+
+    /// sips often writes the stored frame and drops `irot`, so the rotation
+    /// is applied afterwards; for PNG that rewrite keeps the profile, depth
+    /// and HDR tags.
+    #[test]
+    fn heif_irot_applied_to_png_keeps_color_tags() {
+        use crate::image::tests::{DeepPng, PQ, deep_png, hdr10_chunks, icc_named, png_info};
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("in.heic");
+        let heif = inject_heif_transforms(&minimal_still_heif(), Some(3), None).unwrap();
+        assert_eq!(heif_display_orientation(&heif), Some(Orientation::Rotate90));
+        std::fs::write(&source, &heif).unwrap();
+        let dest = dir.path().join("out.png");
+        let icc = icc_named("Rec. ITU-R BT.2100 PQ");
+        let meta = DeepPng {
+            icc: Some(&icc),
+            cicp: Some(PQ),
+            chunks: hdr10_chunks(),
+            ..DeepPng::default()
+        };
+        // The stored 64x48 frame `ispe` describes.
+        let deep = deep_png(&dest, 64, 48, &meta);
+        finish_heif_output(&source, &dest, "png", &Options::default()).unwrap();
+        let info = png_info(&dest);
+        assert_eq!((info.width, info.height), (48, 64));
+        assert_eq!(info.bit_depth, png::BitDepth::Sixteen);
+        assert_eq!(info.icc_profile.as_deref(), Some(&icc[..]));
+        assert_eq!(info.coding_independent_code_points, Some(PQ));
+        assert!(info.mastering_display_color_volume.is_some());
+        assert!(info.content_light_level.is_some());
+        let mut want = DynamicImage::ImageRgba16(deep);
+        want.apply_orientation(Orientation::Rotate90);
+        assert_eq!(open_stored(&dest).unwrap().to_rgb16(), want.to_rgb16());
+    }
+
+    #[test]
+    fn finish_sips_png_flattens_background_before_fitting_target_size() {
+        use convt_core::Background;
+        let dir = tempfile::tempdir().unwrap();
+        // Noisy RGB under mostly-transparent alpha: as RGBA it compresses
+        // poorly, while flattened onto white it becomes tiny at full size.
+        let rgba = image::RgbaImage::from_fn(240, 160, |x, y| {
+            let n = ((x.wrapping_mul(73) ^ y.wrapping_mul(151)).wrapping_mul(31) & 0xff) as u8;
+            let a = if x < 12 && y < 12 { 255 } else { 0 };
+            image::Rgba([n, n.wrapping_add(53), n.wrapping_add(137), a])
+        });
+        let raw_png = dir.path().join("raw.png");
+        {
+            let file = std::fs::File::create(&raw_png).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 240, 160);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().unwrap();
+            writer
+                .write_chunk(png::chunk::ChunkType(*b"eXIf"), &exif_with_camera(6))
+                .unwrap();
+            writer.write_image_data(rgba.as_raw()).unwrap();
+        }
+        let heif = dir.path().join("IMG_0002.heic");
+        std::fs::write(&heif, minimal_still_heif()).unwrap();
+
+        let flat_png = dir.path().join("flat.png");
+        std::fs::copy(&raw_png, &flat_png).unwrap();
+        let white_only = Options {
+            background: Some(Background::WHITE),
+            ..Options::default()
+        };
+        crate::heic::finish_sips_png("heic", &heif, &flat_png, &white_only, true).unwrap();
+        let flat_len = std::fs::metadata(&flat_png).unwrap().len();
+
+        let rgba_rot = dir.path().join("rgba_rot.png");
+        std::fs::copy(&raw_png, &rgba_rot).unwrap();
+        crate::heic::finish_sips_png("heic", &heif, &rgba_rot, &Options::default(), true).unwrap();
+        let rgba_len = std::fs::metadata(&rgba_rot).unwrap().len();
+        assert!(
+            flat_len * 2 < rgba_len,
+            "fixture must shrink sharply when flattened: flat={flat_len}, rgba={rgba_len}"
+        );
+
+        // Pick a target between flattened size and RGBA size: flattening first
+        // fits at full rotated resolution (160x240); shrinking before flattening
+        // would have downscaled unnecessarily.
+        let target = flat_len + (rgba_len - flat_len) / 4;
+        let out = dir.path().join("out.png");
+        std::fs::copy(&raw_png, &out).unwrap();
+        let opts = Options {
+            background: Some(Background::WHITE),
+            target_size: Some(target),
+            ..Options::default()
+        };
+        crate::heic::finish_sips_png("heic", &heif, &out, &opts, true).unwrap();
+        let len = std::fs::metadata(&out).unwrap().len();
+        assert!(len <= target, "len={len} > target={target}");
+        let img = open_stored(&out).unwrap();
+        assert_eq!(
+            (img.width(), img.height()),
+            (160, 240),
+            "should keep full rotated resolution once flattened"
+        );
     }
 
     #[test]

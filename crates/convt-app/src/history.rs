@@ -85,6 +85,19 @@ pub struct Record {
     pub outcome: Outcome,
     /// How it ran; `None` for records from before the app kept it.
     pub setup: Option<Setup>,
+    /// The input's size when the conversion finished; `None` for records
+    /// from before the app kept it, or when it couldn't be read.
+    pub input_bytes: Option<u64>,
+    /// The outputs' total size when the conversion finished.
+    pub output_bytes: Option<u64>,
+}
+
+/// The sizes kept with a record, so Activity shows what the conversion did
+/// even after its files are moved, edited or deleted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Sizes {
+    pub input: Option<u64>,
+    pub output: Option<u64>,
 }
 
 pub struct History {
@@ -137,15 +150,44 @@ impl History {
         if !has_setup {
             db.execute("ALTER TABLE history ADD COLUMN setup TEXT", [])?;
         }
+        for column in ["input_bytes", "output_bytes"] {
+            let has = db
+                .query_row(
+                    "SELECT 1 FROM pragma_table_info('history') WHERE name = ?1",
+                    [column],
+                    |_| Ok(()),
+                )
+                .optional()?
+                .is_some();
+            if !has {
+                db.execute(
+                    &format!("ALTER TABLE history ADD COLUMN {column} INTEGER"),
+                    [],
+                )?;
+            }
+        }
         Ok(Self { db })
     }
 
+    #[cfg(test)]
     pub fn add(
         &self,
         input: &Path,
         to: &str,
         setup: &Setup,
         outcome: &Outcome,
+    ) -> rusqlite::Result<i64> {
+        self.add_sized(input, to, setup, outcome, Sizes::default())
+    }
+
+    /// Records a finished conversion with the sizes it had.
+    pub fn add_sized(
+        &self,
+        input: &Path,
+        to: &str,
+        setup: &Setup,
+        outcome: &Outcome,
+        sizes: Sizes,
     ) -> rusqlite::Result<i64> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -156,8 +198,10 @@ impl History {
             Outcome::Cancelled => ("cancelled", "[]".into(), None),
         };
         self.db.execute(
-            "INSERT INTO history (finished_at, input, target, status, outputs, error, setup)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO history
+                 (finished_at, input, target, status, outputs, error, setup, input_bytes,
+                  output_bytes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 now,
                 path_bytes(input),
@@ -165,7 +209,9 @@ impl History {
                 status,
                 outputs,
                 error,
-                setup.to_json()
+                setup.to_json(),
+                sizes.input.and_then(|b| i64::try_from(b).ok()),
+                sizes.output.and_then(|b| i64::try_from(b).ok()),
             ],
         )?;
         let id = self.db.last_insert_rowid();
@@ -177,7 +223,8 @@ impl History {
     /// The newest `limit` records, newest first.
     pub fn recent(&self, limit: usize) -> rusqlite::Result<Vec<Record>> {
         let mut stmt = self.db.prepare(
-            "SELECT id, finished_at, input, target, status, outputs, error, setup
+            "SELECT id, finished_at, input, target, status, outputs, error, setup, input_bytes,
+                    output_bytes
              FROM history ORDER BY id DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
@@ -185,6 +232,11 @@ impl History {
             let outputs: String = row.get(5)?;
             let error: Option<String> = row.get(6)?;
             let setup: Option<String> = row.get(7)?;
+            let bytes = |i: usize| -> rusqlite::Result<Option<u64>> {
+                Ok(row
+                    .get::<_, Option<i64>>(i)?
+                    .and_then(|b| u64::try_from(b).ok()))
+            };
             let outcome = match status.as_str() {
                 "done" => Outcome::Done(paths_from_json(&outputs)),
                 "cancelled" => Outcome::Cancelled,
@@ -197,6 +249,8 @@ impl History {
                 to: row.get(3)?,
                 outcome,
                 setup: setup.as_deref().and_then(Setup::from_json),
+                input_bytes: bytes(8)?,
+                output_bytes: bytes(9)?,
             })
         })?;
         rows.collect()
@@ -370,5 +424,31 @@ mod tests {
         let old = &h.recent(10).unwrap()[0];
         assert_eq!(old.input, PathBuf::from("/a.png"));
         assert_eq!(old.setup, None);
+        assert_eq!((old.input_bytes, old.output_bytes), (None, None));
+    }
+
+    #[test]
+    fn keeps_the_sizes_a_conversion_had() {
+        let h = History::in_memory().unwrap();
+        let sizes = Sizes {
+            input: Some(2_900_000),
+            output: Some(920_000),
+        };
+        h.add_sized(
+            Path::new("/in/IMG_0990.HEIC"),
+            "jpeg",
+            &Setup::default(),
+            &Outcome::Done(vec![PathBuf::from("/in/IMG_0990.jpg")]),
+            sizes,
+        )
+        .unwrap();
+        let record = &h.recent(1).unwrap()[0];
+        assert_eq!(
+            (record.input_bytes, record.output_bytes),
+            (sizes.input, sizes.output)
+        );
+        // Reopened, the columns are already there.
+        let h = History::init(h.db).unwrap();
+        assert_eq!(h.recent(1).unwrap()[0].output_bytes, Some(920_000));
     }
 }

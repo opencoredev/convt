@@ -409,13 +409,21 @@ fn unoriented_photo_keeps_alpha_size_and_bit_depth() {
         let decoded = image::open(&out).unwrap();
         assert_eq!(
             decoded.color(),
-            if to == "exr" {
-                image::ColorType::Rgba32F
-            } else {
-                image::ColorType::Rgba16
+            match to {
+                "exr" => image::ColorType::Rgba32F,
+                // The alpha is opaque everywhere, so PNG leaves it out.
+                "png" => image::ColorType::Rgb16,
+                _ => image::ColorType::Rgba16,
             },
             "{to} bit depth"
         );
+        if to != "exr" {
+            assert_eq!(
+                decoded.to_rgba16().get_pixel(0, 0).0,
+                [12345, 45678, 23456, 65535],
+                "{to}"
+            );
+        }
     }
 }
 

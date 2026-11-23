@@ -32,6 +32,18 @@ fn open(url: String) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     move |_, _, cx| cx.open_url(&url)
 }
 
+fn purchase(
+    app: &Entity<AppState>,
+    url: String,
+    source: &'static str,
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let app = app.clone();
+    move |_, _, cx| {
+        app.read(cx).upgrade_clicked(source);
+        cx.open_url(&url);
+    }
+}
+
 /// "Last checked today at 4:08 PM", or nothing before the first check.
 pub(super) fn last_checked(at: Option<u64>) -> Option<String> {
     let at = at?;
@@ -94,7 +106,7 @@ fn actions(app: &Entity<AppState>, state: &AppState) -> Vec<(Button, OnClick)> {
         )],
         Update::NotCovered { purchase_url, .. } => vec![(
             Button::secondary("update-renew", "Renew to update"),
-            Box::new(open(purchase_url.clone())),
+            Box::new(purchase(app, purchase_url.clone(), "update_card")),
         )],
         _ => Vec::new(),
     };
@@ -502,7 +514,7 @@ fn status(app: &Entity<AppState>, state: &AppState, on: bool, p: &Palette) -> An
             let renew = Button::secondary("update-renew", "Renew")
                 .small()
                 .build(p)
-                .on_click(open(purchase_url.clone()));
+                .on_click(purchase(app, purchase_url.clone(), "settings_update"));
             offer(
                 IconName::ArrowDown,
                 format!("convt {version} is out"),

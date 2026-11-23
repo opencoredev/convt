@@ -15,7 +15,7 @@
 
 use std::time::Duration;
 
-use convt_license::client::{BUY_URL, State};
+use convt_license::client::State;
 use gpui_kit::component::Sizable;
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::spinner::Spinner;
@@ -26,13 +26,12 @@ use super::theme::{self, IconName, Look, Palette, icon, styled, text};
 use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::model::{AppState, PackPhase};
 
-/// How long the "Setting convt up" moment lasts before the main window
+/// How long the "Setting up convt" transition lasts before the main window
 /// opens, its fade included. It never waits for anything: the document
-/// download, the one slow thing, carries on in the background, and Activity
-/// shows it.
-pub const CALIBRATE: Duration = Duration::from_millis(2300);
+/// download carries on in the background, and Activity shows it.
+pub const CALIBRATE: Duration = Duration::from_millis(500);
 /// The last part of [`CALIBRATE`], while the screen fades out.
-const FADE: Duration = Duration::from_millis(300);
+const FADE: Duration = Duration::from_millis(160);
 
 /// The site's terms and privacy pages, linked under the sign-in buttons.
 const TERMS_URL: &str = "https://convt.app/terms";
@@ -323,8 +322,21 @@ impl FirstRunView {
     /// Ends onboarding: only here, so closing earlier shows it again. The
     /// main window opens first, so the app never sees its last window close.
     pub(super) fn finish(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Only record the enabled disclosure as shown when DO_NOT_TRACK didn't
+        // suppress it; otherwise removing DO_NOT_TRACK later must still show
+        // the notice before anything sends.
+        let dnt = crate::telemetry::do_not_track();
         self.app.update(cx, |s, cx| {
-            s.update_settings(|s| s.first_run_done = true, cx)
+            s.update_settings(
+                |s| {
+                    s.first_run_done = true;
+                    if !dnt {
+                        s.telemetry_notice_version = 1;
+                    }
+                },
+                cx,
+            );
+            s.observe_trial(cx);
         });
         super::show_main_after_finder_guide(cx);
         window.remove_window();
@@ -477,7 +489,7 @@ impl FirstRunView {
                 ))
                 .child(
                     pill("onboarding-primary", "Renew", Look::Brand, p)
-                        .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                        .on_click(|_, _, cx| super::open_upgrade("first_run", cx)),
                 )
                 .child(self.secondary_links(p, cx)),
             Stage::Trial { ends_on } => self
@@ -522,7 +534,7 @@ impl FirstRunView {
                 .child(line("Buy convt once to keep converting, or use a license key.", p))
                 .child(
                     pill("onboarding-primary", "See pricing", Look::Brand, p)
-                        .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                        .on_click(|_, _, cx| super::open_upgrade("first_run", cx)),
                 )
                 .child(self.secondary_links(p, cx))
                 .children(signed_in),
@@ -555,12 +567,12 @@ impl FirstRunView {
     fn sign_in_buttons(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let notice = self.app.read(cx).account.notice.clone();
         column()
-            .child(
-                text(17., 24., p.secondary)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child("Sign in or create your account"),
-            )
-            .child(div().h(px(14.)))
+            .child(heading("Convert any file locally", p))
+            .child(line(
+                "Fast, private conversions on your machine. Sign in to start your 7-day trial or use a license key.",
+                p,
+            ))
+            .child(div().h(px(6.)))
             .child(
                 pill(
                     "onboarding-google",
@@ -571,32 +583,17 @@ impl FirstRunView {
                 .on_click(cx.listener(|this, _, _, cx| this.sign_in(Some(Provider::Google), cx))),
             )
             .children(notice.map(|n| problem(n, p)))
-            .child(div().h(px(6.)))
             // Email, GitHub and the rest are on convt.app's sign-in page, so
             // there is no separate email step here.
             .child(
                 actions()
+                    .pt(px(2.))
                     .child(
                         link("onboarding-other", "Other ways to sign in", p)
                             .on_click(cx.listener(|this, _, _, cx| this.sign_in(None, cx))),
                     )
                     .child(div().size(px(3.)).rounded_full().bg(p.tertiary))
                     .child(self.key_link(p, cx)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .justify_center()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(
-                        styled(theme::size::CAPTION, p.tertiary)
-                            .child("By continuing, you agree to the"),
-                    )
-                    .child(underlined("terms", "Terms", TERMS_URL, p))
-                    .child(styled(theme::size::CAPTION, p.tertiary).child("and"))
-                    .child(underlined("privacy", "Privacy Policy", PRIVACY_URL, p)),
             )
     }
 
@@ -673,17 +670,17 @@ impl FirstRunView {
                     .aria_label(SharedString::from(detail.clone()))
                     .child(line(&detail, p)),
             )
-            .child(div().h(px(8.)))
             .child(
                 div()
                     .flex()
-                    .gap(px(16.))
+                    .pt(px(4.))
+                    .gap(px(14.))
                     .child(tile("question-yes", true, yes_icon, yes_label))
                     .child(tile("question-no", false, IconName::Close, no_label)),
             )
             .child(
                 styled(theme::size::CAPTION, p.tertiary)
-                    .pt(px(6.))
+                    .pt(px(2.))
                     .child("Use the arrow keys and Return"),
             )
     }
@@ -702,45 +699,14 @@ impl FirstRunView {
             })
             .into_any_element()
     }
-
-    /// The dithered glow behind every screen.
-    fn backdrop(&self, p: &Palette, window: &Window, cx: &App) -> Div {
-        let theme = if p.dark { "dark" } else { "light" };
-        let still = cx.reduce_motion();
-        // Behind other windows nothing needs to move, so nothing asks for
-        // frames.
-        let breathing = !still && window.is_window_active();
-        let glow = img(SharedString::from(format!("onboarding/glow-{theme}.png")))
-            .absolute()
-            .bottom_0()
-            .left(relative(0.5))
-            .ml(px(-GLOW.0 / 2.))
-            .w(px(GLOW.0))
-            .h(px(GLOW.1));
-        let glow = if breathing {
-            // A slow breath, about once every seven seconds. Only the
-            // opacity changes: nothing moves, so nothing around it does.
-            glow.with_animation(
-                "glow",
-                Animation::new(Duration::from_secs(7)).repeat(),
-                |img, t| img.opacity(breath(t)),
-            )
-            .into_any_element()
-        } else {
-            glow.opacity(breath(0.)).into_any_element()
-        };
-        div().absolute().inset_0().overflow_hidden().child(glow)
-    }
 }
 
-/// The glow's opacity `t` of the way through a breath: dimmest at the start
-/// and end, so a still glow and a breathing one meet without a jump.
+/// Kept for unit tests verifying smooth periodic easing.
+#[cfg(test)]
 pub(super) fn breath(t: f32) -> f32 {
     let wave = (1. - (t * std::f32::consts::TAU).cos()) / 2.;
     0.78 + 0.22 * wave
 }
-
-use theme::GLOW;
 
 const PILL_WIDTH: f32 = 340.;
 
@@ -906,7 +872,7 @@ fn friendly_date(day: &str) -> String {
 }
 
 impl Render for FirstRunView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = theme::palette(cx);
         let content = match self.screen {
             Screen::Account => self.account_screen(&p, cx).into_any_element(),
@@ -915,6 +881,43 @@ impl Render for FirstRunView {
             Screen::Calibrating => self.calibrating(&p, cx),
         };
         let calibrating = self.screen == Screen::Calibrating;
+        let show_terms = self.screen == Screen::Account && self.stage(cx) == Stage::SignIn;
+        let mark_tile = div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(44.))
+            .rounded(px(theme::radius::CARD))
+            .bg(p.surface)
+            .shadow(theme::bevel(p.border, &p))
+            .child(theme::mark(22., &p));
+        let card = theme::card(&p)
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(16.))
+            .w_full()
+            .max_w(px(448.))
+            .px(px(32.))
+            .py(px(26.))
+            .rounded(px(theme::radius::PANEL))
+            .when(!calibrating, |d| d.child(mark_tile))
+            .child(content);
+        let terms_footer = show_terms.then(|| {
+            div()
+                .flex()
+                .flex_wrap()
+                .justify_center()
+                .items_center()
+                .gap(px(4.))
+                .child(
+                    styled(theme::size::CAPTION, p.tertiary)
+                        .child("By continuing, you agree to the"),
+                )
+                .child(underlined("terms", "Terms", TERMS_URL, &p))
+                .child(styled(theme::size::CAPTION, p.tertiary).child("and"))
+                .child(underlined("privacy", "Privacy Policy", PRIVACY_URL, &p))
+        });
         div()
             .id("first-run")
             .track_focus(&self.focus)
@@ -922,26 +925,43 @@ impl Render for FirstRunView {
             .relative()
             .flex()
             .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(14.))
             .size_full()
             .overflow_hidden()
-            .bg(p.window)
+            .bg(p.recessed)
+            .px(px(24.))
+            .pt(px(if theme::transparent_titlebar() {
+                32.
+            } else {
+                20.
+            }))
+            .pb(px(20.))
             .font_family(theme::SANS)
             .text_color(p.text)
-            .child(self.backdrop(&p, window, cx))
-            .child(
-                div()
-                    .relative()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(36.))
-                    // Sit a little above the middle, as the eye expects.
-                    .pb(px(if calibrating { 0. } else { 96. }))
-                    .px(px(32.))
-                    .when(!calibrating, |d| d.child(theme::lockup(30., &p)))
-                    .child(content),
-            )
+            .child(card)
+            .children(terms_footer)
+            .when(!calibrating, |d| {
+                let disclosure = if self.app.read(cx).settings.telemetry
+                    && !crate::telemetry::do_not_track()
+                {
+                    "Usage statistics are on. Signing in links usage to your account. No file names, paths or content are sent. Turn off in Settings → General → Usage statistics."
+                } else {
+                    "Usage statistics are off. You can change this in Settings → General → Usage statistics."
+                };
+                d.child(
+                    div()
+                        .id("telemetry-first-run")
+                        .test_support()
+                        .aria_label(disclosure)
+                        .max_w(px(448.))
+                        .child(
+                            styled(theme::size::CAPTION, p.tertiary)
+                                .text_center()
+                                .child(disclosure),
+                        ),
+                )
+            })
     }
 }
