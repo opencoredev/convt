@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into otp_send_limits (key,window_start,count,expires_at) values ($1,now(),1,now()+interval '1 minute') on conflict (key) do update set count=case when otp_send_limits.expires_at<=now() then 1 else otp_send_limits.count+1 end, expires_at=case when otp_send_limits.expires_at<=now() then now()+interval '1 minute' else otp_send_limits.expires_at end returning count, ceil(extract(epoch from expires_at-now()))::bigint as \"reset!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "otp_send_limits",
+            "name": "count"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reset!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "b58bf6c8a5909f255a95b6348f0faf3c6210b84f313211dd48a1653bf9567092"
+}

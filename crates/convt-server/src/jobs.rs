@@ -25,10 +25,45 @@ impl Principal {
 pub struct CreateJob {
     pub input_format: String,
     pub target_format: String,
-    pub input_bytes: i64,
+    /// Exact upload size. Absent when `source_url` supplies the input.
+    #[serde(default)]
+    pub input_bytes: Option<i64>,
     /// Conversion settings. Omitted means the engines' defaults.
     #[serde(default)]
     pub options: convt_core::Options,
+    /// An https URL the worker downloads instead of an upload. API keys only.
+    #[serde(default)]
+    pub source_url: Option<String>,
+    /// An https URL that gets a signed POST when the job finishes.
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+}
+impl CreateJob {
+    /// The parameters that identify a request for `Idempotency-Key` reuse checks.
+    pub fn fingerprint(&self, route: &str, extra: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let canonical = serde_json::json!([
+            route,
+            self.input_format,
+            self.target_format,
+            self.input_bytes,
+            self.options,
+            self.source_url,
+            self.webhook_url,
+            extra,
+        ]);
+        hex::encode(Sha256::digest(canonical.to_string().as_bytes()))
+    }
+}
+/// A client-chosen key and the fingerprint of the request that carried it.
+pub struct Idempotency {
+    pub key: String,
+    pub request_hash: String,
+}
+pub struct Created {
+    pub job: Job,
+    /// The key matched an earlier request; no new reservation was made.
+    pub replayed: bool,
 }
 #[derive(FromRow, Serialize, Clone, Debug)]
 pub struct Job {
@@ -55,6 +90,8 @@ pub struct Job {
     pub error_code: Option<String>,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub source_url: Option<String>,
+    pub webhook_url: Option<String>,
 }
 #[derive(FromRow)]
 struct Subscription {
@@ -64,11 +101,50 @@ struct Subscription {
 }
 
 pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<Job, ApiError> {
-    if data.input_bytes <= 0 || data.input_bytes > MAX_FILE_BYTES {
-        return Err(ApiError::bad(
-            "file_too_large",
-            "Files must contain 1 byte to 2 GB.",
-        ));
+    Ok(create_with(pool, who, data, None).await?.job)
+}
+
+pub async fn create_with(
+    pool: &PgPool,
+    who: &Principal,
+    data: &CreateJob,
+    idempotency: Option<&Idempotency>,
+) -> Result<Created, ApiError> {
+    let policy = crate::net_guard::Policy::from_env();
+    match (&data.source_url, data.input_bytes) {
+        (Some(_), Some(_)) => {
+            return Err(ApiError::bad(
+                "invalid_request",
+                "Send input_bytes for an upload or source_url for a download, not both.",
+            ));
+        }
+        (Some(url), None) => {
+            if who.key_id.is_none() {
+                return Err(ApiError::bad(
+                    "invalid_request",
+                    "source_url needs an API key.",
+                ));
+            }
+            crate::net_guard::check(url, policy)
+                .map_err(|e| ApiError::bad("invalid_source_url", &format!("source_url {e}.")))?;
+        }
+        (None, None) => {
+            return Err(ApiError::bad(
+                "invalid_request",
+                "input_bytes is required unless source_url is set.",
+            ));
+        }
+        (None, Some(bytes)) if bytes <= 0 || bytes > MAX_FILE_BYTES => {
+            return Err(ApiError::bad(
+                "file_too_large",
+                "Files must contain 1 byte to 2 GB.",
+            ));
+        }
+        (None, Some(_)) => {}
+    }
+    if let Some(url) = &data.webhook_url {
+        crate::net_guard::check(url, policy)
+            .map_err(|e| ApiError::bad("invalid_webhook_url", &format!("webhook_url {e}.")))?;
     }
     let formats = convt_core::FORMATS;
     if !formats.iter().any(|f| f.id == data.input_format)
@@ -109,8 +185,35 @@ pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<
     )
     .fetch_one(&mut *tx)
     .await?;
+    // Under the account lock, a key either names a live job or is free. A key
+    // whose job expired is released so it can be used again.
+    if let Some(idem) = idempotency {
+        sqlx::query!(r#"update cloud_jobs set idempotency_key=null where user_id=$1 and idempotency_key=$2 and expires_at<=now()"#, &who.user_id, &idem.key).execute(&mut *tx).await?;
+        let existing = sqlx::query!(
+            r#"select id, request_hash from cloud_jobs where user_id=$1 and idempotency_key=$2"#,
+            &who.user_id,
+            &idem.key
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(existing) = existing {
+            tx.commit().await?;
+            if existing.request_hash.as_deref() != Some(idem.request_hash.as_str()) {
+                return Err(ApiError::conflict(
+                    "idempotency_key_reused",
+                    "This Idempotency-Key was used for a different request in the last 24 hours. Use a new key.",
+                ));
+            }
+            return Ok(Created {
+                job: owned(pool, who, &existing.id).await?,
+                replayed: true,
+            });
+        }
+    }
     let stored = sqlx::query!(r#"select count(*)::bigint as "count!", coalesce(sum(input_bytes),0)::bigint as "bytes!" from cloud_jobs where user_id=$1 and input_key is not null"#, &who.user_id).fetch_one(&mut *tx).await?;
-    if stored.count >= MAX_STORED_JOBS || stored.bytes + data.input_bytes > MAX_STORED_INPUT_BYTES {
+    if stored.count >= MAX_STORED_JOBS
+        || stored.bytes + data.input_bytes.unwrap_or(0) > MAX_STORED_INPUT_BYTES
+    {
         return Err(ApiError::forbidden(
             "storage_limit_reached",
             "Outstanding uploads have reached the storage limit. Try again after their 24-hour cleanup.",
@@ -125,10 +228,11 @@ pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<
     // per account: usage and reservations count across all of its Pro rows
     // (a subscription and prepaid Desktop + Cloud years), under the user lock above.
     let reserved: i64 = sqlx::query_scalar!(r#"select coalesce(sum(case when $2='api' then reserved_cents else reserved_bytes end),0)::bigint as "value!" from cloud_jobs where (subscription_id=$1 or ($2='pro' and subscription_id in (select s.id from subscriptions s where s.user_id=$3 and s.kind='pro'))) and reservation='open'"#, &sub.id, kind, &who.user_id).fetch_one(&mut *tx).await?;
+    let input_bytes = data.input_bytes.unwrap_or(0);
     let charge = if kind == "api" {
         i64::from(API_CENTS)
     } else {
-        data.input_bytes
+        input_bytes
     };
     let cap = if kind == "api" {
         i64::from(sub.spend_cap_cents.unwrap_or(0))
@@ -142,9 +246,19 @@ pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<
         ));
     }
     let id = new_id("job");
-    let job = sqlx::query_as!(Job, r#"insert into cloud_jobs (id,user_id,source,api_key_id,subscription_id,quota_period_start,input_format,target_format,options,input_key,input_bytes,reserved_bytes,reserved_cents,expires_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now()+interval '24 hours') returning id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at"#, &id, &who.user_id, who.source(), who.key_id.as_deref(), &sub.id, sub.period, &data.input_format, &data.target_format, sqlx::types::Json(&data.options) as _, format!("{id}/upload"), data.input_bytes, if kind=="pro" {data.input_bytes} else {0}, if kind=="api" {API_CENTS} else {0}).fetch_one(&mut *tx).await?;
+    // A source_url job is queued at once: the worker downloads its input. Its
+    // input_key names the prefix expiry cleanup deletes; nothing is uploaded there.
+    let (status, input_key) = if data.source_url.is_some() {
+        ("queued", format!("{id}/source"))
+    } else {
+        ("created", format!("{id}/upload"))
+    };
+    let job = sqlx::query_as!(Job, r#"insert into cloud_jobs (id,user_id,source,api_key_id,subscription_id,quota_period_start,input_format,target_format,options,input_key,input_bytes,reserved_bytes,reserved_cents,expires_at,status,queued_at,source_url,webhook_url,idempotency_key,request_hash) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now()+interval '24 hours',$14,case when $14='queued' then now() end,$15,$16,$17,$18) returning id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url"#, &id, &who.user_id, who.source(), who.key_id.as_deref(), &sub.id, sub.period, &data.input_format, &data.target_format, sqlx::types::Json(&data.options) as _, input_key, data.input_bytes, if kind=="pro" {input_bytes} else {0}, if kind=="api" {API_CENTS} else {0}, status, data.source_url.as_deref(), data.webhook_url.as_deref(), idempotency.map(|i| i.key.as_str()), idempotency.map(|i| i.request_hash.as_str())).fetch_one(&mut *tx).await?;
     tx.commit().await?;
-    Ok(job)
+    Ok(Created {
+        job,
+        replayed: false,
+    })
 }
 /// The same checks the CLI makes before converting, so a bad option fails
 /// at reservation instead of in the worker.
@@ -163,10 +277,22 @@ pub fn validate_options(options: &convt_core::Options, target: &str) -> Result<(
     Ok(())
 }
 pub async fn owned(pool: &PgPool, who: &Principal, id: &str) -> Result<Job, ApiError> {
-    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()"#, id, &who.user_id)
+    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()"#, id, &who.user_id)
         .fetch_optional(pool)
         .await?
         .ok_or_else(|| ApiError::not_found("Job not found."))
+}
+/// Any job by id, for background delivery. Never use it to answer a request.
+pub async fn by_id(pool: &PgPool, id: &str) -> sqlx::Result<Option<Job>> {
+    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url from cloud_jobs where id=$1"#, id)
+        .fetch_optional(pool)
+        .await
+}
+/// Hands a running attempt back to the queue when its worker shuts down, so a
+/// deploy does not fail the job. `max_attempts` grows with `attempt`, so the
+/// handoff costs no retry and the fencing token keeps increasing.
+pub async fn requeue(pool: &PgPool, job: &Job) -> sqlx::Result<bool> {
+    Ok(sqlx::query!(r#"update cloud_jobs set status='queued',max_attempts=max_attempts+1,lease_owner=null,lease_expires_at=null,queued_at=now(),updated_at=now() where id=$1 and attempt=$2 and lease_owner=$3 and status='running' and expires_at>now() and reservation='open'"#, &job.id, job.attempt, job.lease_owner.as_deref()).execute(pool).await?.rows_affected()==1)
 }
 pub async fn cancel(pool: &PgPool, who: &Principal, id: &str) -> Result<Job, ApiError> {
     let _ = owned(pool, who, id).await?;
@@ -175,7 +301,7 @@ pub async fn cancel(pool: &PgPool, who: &Principal, id: &str) -> Result<Job, Api
 }
 pub async fn claim(pool: &PgPool, worker: &str) -> sqlx::Result<Option<Job>> {
     sqlx::query!(r#"update cloud_jobs set status='failed',reservation='released',error_code='expired_or_exhausted',lease_expires_at=null,finished_at=now() where reservation='open' and (expires_at<=now() or (status='running' and lease_expires_at<=now() and attempt>=max_attempts))"#).execute(pool).await?;
-    sqlx::query_as!(Job, r#"with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.options as "options: _",j.input_key,j.input_bytes,j.output_keys as "output_keys: _",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at"#, worker).fetch_optional(pool).await
+    sqlx::query_as!(Job, r#"with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.options as "options: _",j.input_key,j.input_bytes,j.output_keys as "output_keys: _",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at,j.source_url,j.webhook_url"#, worker).fetch_optional(pool).await
 }
 pub async fn renew(pool: &PgPool, job: &Job) -> sqlx::Result<bool> {
     Ok(sqlx::query!(r#"update cloud_jobs set lease_expires_at=now()+interval '30 seconds',updated_at=now() where id=$1 and attempt=$2 and lease_owner=$3 and status='running' and lease_expires_at>now() and expires_at>now()"#, &job.id, job.attempt, job.lease_owner.as_deref()).execute(pool).await?.rows_affected()==1)

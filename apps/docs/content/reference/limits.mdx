@@ -9,13 +9,24 @@ Each API key can make **120 requests per minute** across every job route. The wi
 
 The limit is per key, not per account. Uploads and downloads through signed URLs do not count, and neither does `GET /v1/formats`.
 
-The API sends no `Retry-After` or `RateLimit` headers. Back off on your side, as shown in [Errors and retries](/guides/errors-and-retries#backoff).
+Every response to a job route carries the window's state:
+
+| Header                  | Value                                          |
+| ----------------------- | ---------------------------------------------- |
+| `X-RateLimit-Limit`     | `120`                                          |
+| `X-RateLimit-Remaining` | Requests left in this window                   |
+| `X-RateLimit-Reset`     | Seconds until the window resets                |
+| `Retry-After`           | On `429` only: seconds to wait before retrying |
+
+A `POST /v1/convert` that waits for its result counts as one request, however long it waits.
 
 ## Sizes and counts
 
 | Limit                                               | Value                                |
 | --------------------------------------------------- | ------------------------------------ |
-| Input file size                                     | 1 byte to 2,000,000,000 bytes (2 GB) |
+| Input file size, jobs routes and `source_url`       | 1 byte to 2,000,000,000 bytes (2 GB) |
+| Input file size, body of `POST /v1/convert`         | 1 byte to 25,000,000 bytes (25 MB)   |
+| Wait for a `POST /v1/convert` result                | 120 seconds by default, at most 300  |
 | Unexpired jobs with uploads, per account            | 100                                  |
 | Declared input bytes across those jobs, per account | 50 GB                                |
 | Outputs per job                                     | 256 files, 4 GB in total             |

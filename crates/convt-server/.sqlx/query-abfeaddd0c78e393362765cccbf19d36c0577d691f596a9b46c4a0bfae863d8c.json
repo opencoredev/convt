@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set idempotency_key=null where user_id=$1 and idempotency_key=$2 and expires_at<=now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abfeaddd0c78e393362765cccbf19d36c0577d691f596a9b46c4a0bfae863d8c"
+}

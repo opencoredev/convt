@@ -1,0 +1,317 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as \"options: _\",input_key,input_bytes,output_keys as \"output_keys: _\",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "api_key_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "api_key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subscription_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "subscription_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "quota_period_start",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "quota_period_start"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "input_format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "input_format"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "target_format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "target_format"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "options: _",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "options"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "input_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "input_key"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "input_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "input_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "output_keys: _",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "output_keys"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "attempt"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "max_attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "max_attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "lease_owner",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "lease_owner"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "lease_expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "lease_expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "reserved_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "reserved_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "reserved_cents",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "reserved_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "reservation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "reservation"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "error_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "error_code"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "source_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "source_url"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "webhook_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "webhook_url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "349bc5d01cdb11a48c054c0a42384724d841751fb2c69dd62dfae94a7358a374"
+}

@@ -11,17 +11,21 @@ actions:
     update:
       title: convt API
       description: |
-        The convt API converts files on convt's servers. A conversion is a **job**: you reserve it, upload the file to a signed URL, start it, poll until it finishes, then fetch signed download URLs for its outputs.
+        The convt API converts files on convt's servers. `POST /v1/convert` takes a file of up to 25 MB, or a `source_url`, and answers with the converted file in one request. For files up to 2 GB, a conversion is a **job**: you reserve it, upload the file to a signed URL, start it, poll until it finishes (or get a webhook), then fetch signed download URLs for its outputs.
+
+        Send an `Idempotency-Key` on creates so retries never reserve twice. Every response carries `X-Request-Id` and, on job routes, `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
 
         Every job route takes a `cvt_live_` API key as a Bearer token. Create keys in the [dashboard](https://convt.app/dashboard/api). Each successful job is billed once; failed and cancelled jobs are free.
-
-        Until `api.convt.app` resolves, use the first server listed in this spec. The paths, keys and responses are the same on both hosts.
 
   - target: $
     update:
       tags:
+        - name: Convert
+          description: One request in, the converted file out. Every route needs a `cvt_live_` key.
         - name: Jobs
           description: Reserve, upload, start, poll, cancel and download a conversion. Every route needs a `cvt_live_` key.
+        - name: Webhooks
+          description: The secret that signs job webhooks.
         - name: Formats
           description: The formats convt knows. Public, no key needed.
 
@@ -102,6 +106,48 @@ actions:
               code: limit_reached
               message: Your allowance or spend cap has been reached.
 
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.source_url
+    update:
+      description: A public https URL convt downloads instead of an upload, up to 2 GB. Leave out `input_bytes`; the job is queued at once and needs no start. See [Remote files](https://convt.app/docs/guides/remote-files).
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.webhook_url
+    update:
+      description: A public https URL that gets one signed POST when the job finishes. See [Webhooks](https://convt.app/docs/guides/webhooks).
+  - target: $.paths['/v1/jobs'].post.responses['409']
+    update:
+      description: "`idempotency_key_reused`: the `Idempotency-Key` was used for a different request in the last 24 hours."
+
+  # Convert
+  - target: $.paths['/v1/convert'].post
+    update:
+      tags: [Convert]
+      description: |
+        Converts a file in one request: reserve, upload, queue, wait and return the result, on the same pipeline, spend cap and billing as the jobs routes.
+
+        Send the file as a multipart `file` field (with `to`, and optionally `from` and `options`), as the raw body with `to` in the query, or send JSON with `source_url`. `to` and `from` take format ids or extensions; `from` is inferred from the file name, URL or `Content-Type` when left out.
+
+        When the job succeeds with one output and `Accept` does not ask for JSON, the response is the file, named after yours in `Content-Disposition`. With several outputs (a multi-page PDF to PNG) or `Accept: application/json`, it is JSON with signed URLs. A job still running after `wait` seconds answers `202`; it keeps running and you poll it.
+
+        Without an `Idempotency-Key`, hanging up before the answer cancels the job, so you are not charged. With one, the job keeps running and a retry with the same key collects it.
+  - target: $.paths['/v1/convert'].post.responses['400']
+    update:
+      description: "`invalid_request`, `input_format_required`, `unsupported_format`, `invalid_options`, `invalid_source_url`, `invalid_idempotency_key` or an empty file (`file_too_large`)."
+  - target: $.paths['/v1/convert'].post.responses['409']
+    update:
+      description: "`cancelled` (the job was cancelled first) or `idempotency_key_reused`."
+  - target: $.paths['/v1/convert'].post.responses['413']
+    update:
+      description: "`file_too_large`: over 25 MB. Use `POST /v1/jobs` or `source_url`."
+  - target: $.paths['/v1/convert'].post.responses['422']
+    update:
+      description: "The conversion failed. `code` is the job's `error_code`, such as `conversion_failed` or `source_fetch_failed`. Not charged."
+
+  # Webhooks
+  - target: $.paths['/v1/webhooks/secret'].get
+    update:
+      tags: [Webhooks]
+      description: |
+        Returns the secret that signs your account's webhook deliveries in the `Convt-Signature` header. Fetch it once and store it with your other secrets. See [Webhooks](https://convt.app/docs/guides/webhooks).
+
   # Read
   - target: $.paths['/v1/jobs/{id}'].get
     update:
@@ -136,7 +182,7 @@ actions:
 
         Calling start again is safe: a job that is no longer `created` is returned as it is. If the uploaded size does not match, the job is cancelled and the call fails with `size_mismatch`. Reserve a new job to try again.
 
-        If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` succeeded before you retry.
+        If nothing was uploaded, start fails with `409 upload_missing` and the job stays `created`. Upload, then call start again.
   - target: $.paths['/v1/jobs/{id}/start'].post.responses['200']
     update:
       description: The job, now `queued`, or unchanged if it was already started.
@@ -269,7 +315,7 @@ actions:
     update: { description: How many times a worker has picked up the job. Starts at 0. }
   - target: $.components.schemas.Job.properties.error_code
     update:
-      description: Why a `failed` job failed (`conversion_failed`, `expired_or_exhausted` or `worker_shutdown`), otherwise `null`.
+      description: Why a `failed` job failed (`conversion_failed`, `source_fetch_failed`, `expired_or_exhausted` or `expired`), otherwise `null`.
   - target: $.components.schemas.Job.properties.input_bytes
     update: { description: Size you reserved, in bytes. }
   - target: $.components.schemas.Job.properties.expires_at

@@ -11,12 +11,13 @@ Every JSON error has the same shape:
 {
   "error": {
     "code": "unsupported_format",
-    "message": "This input cannot reach the chosen target format."
+    "message": "This input cannot reach the chosen target format.",
+    "request_id": "req_01k6z7v4q8m3x2a9b5c0d1e2f3"
   }
 }
 ```
 
-Branch on `code`. It is stable. `message` is written for people and may change.
+Branch on `code`. It is stable. `message` is written for people and may change. Log `request_id` (also the `X-Request-Id` header): it finds the request in convt's logs.
 
 Two errors mean the body of `POST /v1/jobs` itself is wrong:
 
@@ -29,14 +30,15 @@ Fix these in your code. Retrying will not help.
 
 ## What to retry
 
-| Response                   | Retry?           | What to do                                                                                                                      |
-| -------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `429 rate_limited`         | Yes              | Wait, then retry. The limit resets within a minute.                                                                             |
-| `502 storage_unavailable`  | Yes              | Retry with backoff. On start, first check that the upload succeeded, because start also returns this when nothing was uploaded. |
-| `500 internal`             | Yes, a few times | Retry with backoff. Report it if it persists.                                                                                   |
-| Network error or timeout   | Yes              | Retry reads freely. For `POST /v1/jobs`, see below.                                                                             |
-| `400`, `401`, `403`, `404` | No               | Fix the request, the key or your billing.                                                                                       |
-| Job `failed`               | No               | Create a new job if the cause was temporary, such as `worker_shutdown`.                                                         |
+| Response                   | Retry?           | What to do                                                                                    |
+| -------------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `429 rate_limited`         | Yes              | Wait `Retry-After` seconds, then retry.                                                       |
+| `502 storage_unavailable`  | Yes              | Retry with backoff.                                                                           |
+| `409 upload_missing`       | After the upload | `PUT` the file to `upload_url`, then call start again.                                        |
+| `500 internal`             | Yes, a few times | Retry with backoff. Report it if it persists.                                                 |
+| Network error or timeout   | Yes              | Retry reads freely. Retry creates with the same `Idempotency-Key`; see below.                 |
+| `400`, `401`, `403`, `404` | No               | Fix the request, the key or your billing.                                                     |
+| Job `failed`               | No               | Create a new job if the cause was temporary, such as `source_fetch_failed` on a flaky origin. |
 
 ## Backoff
 
@@ -48,7 +50,8 @@ async function withRetry(fn, tries = 5) {
     try {
       return await fn();
     } catch (error) {
-      const retryable = [429, 500, 502].includes(error.status) || error.name === "TypeError";
+      const retryable =
+        [429, 500, 502, 503, 504].includes(error.status) || error.name === "TypeError";
       if (!retryable || attempt + 1 >= tries) throw error;
       const delay = Math.min(30_000, 1000 * 2 ** attempt) * (0.5 + Math.random() / 2);
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -57,7 +60,7 @@ async function withRetry(fn, tries = 5) {
 }
 ```
 
-The API does not send `Retry-After` or rate-limit headers. Use your own backoff.
+A `429` also carries `Retry-After` in seconds; wait at least that long. The `@convt/sdk` client retries rate limits and gateway errors for you.
 
 ## Which calls are safe to repeat
 
@@ -68,6 +71,7 @@ The API does not send `Retry-After` or rate-limit headers. Use your own backoff.
 | `POST /v1/jobs/{id}/start`   | Yes. A started job is returned unchanged.  |
 | `POST /v1/jobs/{id}/cancel`  | Yes. A finished job is returned unchanged. |
 | `PUT upload_url`             | Yes, until you call start.                 |
-| `POST /v1/jobs`              | **No.** Each call reserves a new job.      |
+| `POST /v1/jobs`              | Only with an `Idempotency-Key`.            |
+| `POST /v1/convert`           | Only with an `Idempotency-Key`.            |
 
-If `POST /v1/jobs` times out, you cannot tell whether a job was created. The unknown job expires on its own after 24 hours and is never charged, because it was never started. It does hold 1 cent of your spend cap and one storage slot until then.
+Without a key, each create reserves a new job. If one times out, you cannot tell whether it was created; the unknown job expires after 24 hours and is never charged, but holds 1 cent of your spend cap and one storage slot until then. Send an [`Idempotency-Key`](/guides/idempotency) and the retry returns the original job instead.

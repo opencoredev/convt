@@ -93,6 +93,18 @@ export const cloudJobs = pgTable(
     ...timestamps,
     subscriptionId: text().references(() => subscriptions.id, { onDelete: "set null" }),
     quotaPeriodStart: tstz(),
+    /** The client's `Idempotency-Key`, unique per account while the job exists. */
+    idempotencyKey: text(),
+    /** SHA-256 of the route and parameters that created the job, to refuse a reused key. */
+    requestHash: text(),
+    /** An https URL the worker fetches instead of an upload. */
+    sourceUrl: text(),
+    /** An https URL that gets a signed POST when the job finishes. */
+    webhookUrl: text(),
+    webhookAttempts: integer().notNull().default(0),
+    /** Earliest next delivery; also a short lease while one is in flight. */
+    webhookNextAt: tstz(),
+    webhookDeliveredAt: tstz(),
   },
   (t) => [
     index("cloud_jobs_queued_idx")
@@ -106,6 +118,12 @@ export const cloudJobs = pgTable(
     index("cloud_jobs_subscription_open_idx")
       .on(t.subscriptionId)
       .where(sql`${t.reservation} = 'open'`),
+    uniqueIndex("cloud_jobs_user_idempotency_key")
+      .on(t.userId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
+    index("cloud_jobs_webhook_pending_idx")
+      .on(t.webhookNextAt)
+      .where(sql`${t.webhookUrl} is not null and ${t.webhookDeliveredAt} is null`),
     check("cloud_jobs_source_check", sql`${t.source} in ('api', 'web', 'desktop')`),
     check(
       "cloud_jobs_status_check",

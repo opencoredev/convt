@@ -2,11 +2,23 @@
 use async_trait::async_trait;
 use s3::{Bucket, Region, creds::Credentials};
 use std::path::Path;
+use std::pin::Pin;
+
+/// An object's bytes as they arrive from storage.
+pub type ByteStream =
+    Pin<Box<dyn futures_util::Stream<Item = std::io::Result<bytes::Bytes>> + Send>>;
+
 #[async_trait]
 pub trait Storage: Send + Sync {
     async fn upload_url(&self, key: &str, bytes: i64) -> anyhow::Result<String>;
     async fn download_url(&self, key: &str, seconds: u32) -> anyhow::Result<String>;
     async fn size(&self, key: &str) -> anyhow::Result<i64>;
+    /// The object's size, or None when nothing is stored under `key`.
+    async fn head(&self, key: &str) -> anyhow::Result<Option<i64>>;
+    /// Stores a small object the API received in a request body.
+    async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()>;
+    /// Streams an object, for responses that return a converted file directly.
+    async fn open(&self, key: &str) -> anyhow::Result<ByteStream>;
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()>;
     async fn download(&self, key: &str, path: &Path) -> anyhow::Result<()>;
     async fn upload(&self, key: &str, path: &Path) -> anyhow::Result<()>;
@@ -91,6 +103,31 @@ impl Storage for S3Storage {
         success(c)?;
         h.content_length
             .ok_or_else(|| anyhow::anyhow!("missing content length"))
+    }
+    async fn head(&self, key: &str) -> anyhow::Result<Option<i64>> {
+        match self.bucket.head_object(key).await {
+            Ok((h, 200..=299)) => {
+                Ok(Some(h.content_length.ok_or_else(|| {
+                    anyhow::anyhow!("missing content length")
+                })?))
+            }
+            Ok((_, 404)) | Err(s3::error::S3Error::HttpFailWithBody(404, _)) => Ok(None),
+            Ok((_, code)) => anyhow::bail!("object storage HTTP {code}"),
+            Err(e) => Err(e.into()),
+        }
+    }
+    async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        success(self.bucket.put_object(key, &bytes).await?.status_code())
+    }
+    async fn open(&self, key: &str) -> anyhow::Result<ByteStream> {
+        use futures_util::StreamExt as _;
+        let response = self.bucket.get_object_stream(key).await?;
+        success(response.status_code)?;
+        Ok(Box::pin(
+            response
+                .bytes
+                .map(|chunk| chunk.map_err(std::io::Error::other)),
+        ))
     }
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()> {
         success(self.bucket.copy_object_internal(from, to).await?)

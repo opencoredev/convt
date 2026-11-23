@@ -137,3 +137,101 @@ test("conversion options are sent with the job, and left out when unset", async 
     { input_format: "png", target_format: "jpeg", input_bytes: 3 },
   ]);
 });
+test("every convert sends an Idempotency-Key and retries a lost create with it", async () => {
+  const keys: (string | null)[] = [];
+  let creates = 0;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs")) {
+      keys.push(new Headers(init?.headers).get("idempotency-key"));
+      creates++;
+      if (creates === 1) return new Response("bad gateway", { status: 502 });
+      return Response.json({ job, upload_url: "https://objects.test/input" });
+    }
+    if (url.includes("objects.test")) return new Response("", { status: 200 });
+    if (url.endsWith("/download"))
+      return Response.json({ outputs: [{ name: "input.png", url: "https://objects.test/out" }] });
+    return Response.json({ ...job, status: "succeeded" });
+  }) as typeof fetch;
+  await new Convt({ apiKey: "test", baseUrl: "https://api.test" }).convert(new Blob(["x"]), {
+    from: "svg",
+    to: "png",
+  });
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBeTruthy();
+  expect(keys[1]).toBe(keys[0]);
+});
+test("a create without a key is never retried", async () => {
+  let creates = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    creates++;
+    return new Response("bad gateway", { status: 502 });
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create({ input_format: "png", target_format: "webp", input_bytes: 1 })
+    .catch((e) => e);
+  expect(creates).toBe(1);
+  expect(error.code).toBe("request_failed");
+  expect(error.status).toBe(502);
+});
+test("rate limits honor Retry-After and errors carry the request id", async () => {
+  const started = Date.now();
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    calls++;
+    if (calls === 1)
+      return Response.json(
+        { error: { code: "rate_limited", message: "slow down" } },
+        { status: 429, headers: { "retry-after": "1" } },
+      );
+    return Response.json(
+      { error: { code: "not_found", message: "Job not found." } },
+      { status: 404, headers: { "x-request-id": "req_abc" } },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .status("job_x")
+    .catch((e) => e);
+  expect(calls).toBe(2);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(900);
+  expect(error.code).toBe("not_found");
+  expect(error.requestId).toBe("req_abc");
+});
+test("convertUrl sends source_url, skips the upload and infers the input format", async () => {
+  const calls: string[] = [];
+  const bodies: unknown[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/v1/jobs")) {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ job, upload_url: null, upload_expires_in: null });
+    }
+    if (url.endsWith("/download"))
+      return Response.json({ outputs: [{ name: "input.webp", url: "https://objects.test/out" }] });
+    return Response.json({ ...job, status: "succeeded" });
+  }) as typeof fetch;
+  const result = await new Convt({ apiKey: "test", baseUrl: "https://api.test" }).convertUrl(
+    "https://cdn.example.com/a/photo.PNG?X-Amz-Signature=1",
+    { to: "webp", webhookUrl: "https://example.com/hook" },
+  );
+  expect(result.outputs).toHaveLength(1);
+  expect(bodies).toEqual([
+    {
+      input_format: "png",
+      target_format: "webp",
+      source_url: "https://cdn.example.com/a/photo.PNG?X-Amz-Signature=1",
+      webhook_url: "https://example.com/hook",
+    },
+  ]);
+  expect(calls.some((u) => u.endsWith("/start") || u.includes("objects.test/input"))).toBe(false);
+});
+test("a non-JSON error page becomes a ConvtError, not a SyntaxError", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("<html>oops</html>", { status: 500 })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .status("job_x")
+    .catch((e) => e);
+  expect(error.name).toBe("ConvtError");
+  expect(error.status).toBe(500);
+});

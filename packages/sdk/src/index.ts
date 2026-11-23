@@ -1,5 +1,7 @@
 import { formats, type Format } from "./formats.js";
 export { formats, type Format };
+export { verifyWebhook, type WebhookEvent } from "./webhooks.js";
+
 /** Conversion settings. Every field is optional; ones that don't apply to the target are ignored. */
 export type JobOptions = {
   /** Lossy quality from 1 to 100 for JPEG, WebP, AVIF, HEIC and video. */
@@ -30,23 +32,38 @@ export type JobOptions = {
   /** Frames per second for video and GIF output, from 1 to 120. */
   fps?: number | null;
 };
+export type JobStatus =
+  | "created"
+  | "uploaded"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
 export type Job = {
   id: string;
-  status: "created" | "uploaded" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  status: JobStatus;
   input_format: Format;
   target_format: Format;
   /** Absent from servers that predate options. */
   options?: JobOptions;
-  input_bytes: number;
+  /** Null for a job whose input comes from `source_url`. */
+  input_bytes: number | null;
   attempt: number;
   error_code: string | null;
+  /** Absent from servers that predate it. */
+  created_at?: string;
   expires_at: string;
+  source_url?: string;
+  webhook_url?: string;
 };
 export class ConvtError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly status?: number,
+    /** The `X-Request-Id` of the failed call. Quote it when you contact support. */
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = "ConvtError";
@@ -71,16 +88,64 @@ async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): P
       .finally(() => signal.removeEventListener("abort", abort));
   });
 }
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+  });
+}
+function newIdempotencyKey(): string {
+  return globalThis.crypto.randomUUID();
+}
+/** Reads the API's `{ error: { code, message } }` shape from an unknown JSON body. */
+function errorFields(value: unknown): { code?: string; message?: string } {
+  if (typeof value !== "object" || value === null || !("error" in value)) return {};
+  const error = value.error;
+  if (typeof error !== "object" || error === null) return {};
+  return {
+    code: "code" in error && typeof error.code === "string" ? error.code : undefined,
+    message: "message" in error && typeof error.message === "string" ? error.message : undefined,
+  };
+}
+const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+
 export type ConvertOptions = {
   to: Format;
   from?: Format;
   /** Conversion settings sent with the job. */
   options?: JobOptions;
+  /** An https URL that gets a signed POST when the job finishes. See verifyWebhook. */
+  webhookUrl?: string;
   signal?: AbortSignal;
   onProgress?: (job: Job) => void;
   timeoutMs?: number;
 };
 export type Output = { name: string; url: string };
+export type CreateInput = {
+  input_format: Format;
+  target_format: Format;
+  options?: JobOptions;
+  webhook_url?: string;
+} & ({ input_bytes: number; source_url?: never } | { source_url: string; input_bytes?: never });
+export type Created = {
+  job: Job;
+  /** Null when the job needs no upload (`source_url`) or was already started. */
+  upload_url: string | null;
+  upload_expires_in: number | null;
+};
+export type RequestOptions = {
+  signal?: AbortSignal;
+  /** Sent as `Idempotency-Key`, so a retried create never reserves twice. */
+  idempotencyKey?: string;
+};
 export class Conversion {
   constructor(
     readonly job: Job,
@@ -120,13 +185,16 @@ export class Conversion {
       );
   }
 }
+export type ConvtClientOptions =
+  | { apiKey: string; baseUrl?: string; maxRetries?: number }
+  | { token: () => Promise<string>; baseUrl: string; maxRetries?: number };
+
 export class Convt {
   private readonly credential: string | (() => Promise<string>);
   private readonly baseUrl: string;
+  private readonly maxRetries: number;
   constructor(
-    options:
-      | { apiKey: string; baseUrl?: string }
-      | { token: () => Promise<string>; baseUrl: string } = {
+    options: ConvtClientOptions = {
       apiKey:
         typeof process !== "undefined"
           ? (process.env.CONVT_API_KEY ?? process.env.CONVT_KEY ?? "")
@@ -135,69 +203,128 @@ export class Convt {
   ) {
     this.credential = "apiKey" in options ? options.apiKey : options.token;
     this.baseUrl = (options.baseUrl ?? "https://api.convt.app").replace(/\/$/, "");
+    this.maxRetries = Math.max(0, options.maxRetries ?? 2);
     if (!this.credential)
       throw new ConvtError("api_key_required", "Pass apiKey or set CONVT_API_KEY.");
   }
-  private async request<T>(
-    path: string,
+  /**
+   * One API call. Rate limits (429) and gateway errors (502, 503, 504) are retried
+   * with backoff, honoring `Retry-After`, but only for calls that are safe to repeat:
+   * reads, start and cancel (which the API makes idempotent), and creates that carry
+   * an `Idempotency-Key`.
+   */
+  private async request<T>({
+    path,
     method = "GET",
-    data?: unknown,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    signal ??= AbortSignal.timeout(30_000);
-    const credential = this.credential;
-    const key = typeof credential === "function" ? await abortable(credential, signal) : credential;
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      signal: signal ?? AbortSignal.timeout(30_000),
-      headers: {
-        authorization: `Bearer ${key}`,
-        ...(data ? { "content-type": "application/json" } : {}),
-      },
-      ...(data ? { body: JSON.stringify(data) } : {}),
-    });
-    const value = await response.json();
-    if (!response.ok)
-      throw new ConvtError(
-        value.error?.code ?? "request_failed",
-        value.error?.message ?? "Request failed.",
-        response.status,
-      );
-    return value as T;
+    data,
+    signal = AbortSignal.timeout(30_000),
+    idempotencyKey,
+  }: {
+    path: string;
+    method?: "GET" | "POST";
+    data?: unknown;
+    signal?: AbortSignal;
+    idempotencyKey?: string;
+  }): Promise<T> {
+    const retryable = method === "GET" || idempotencyKey !== undefined || data === undefined;
+    for (let attempt = 0; ; attempt++) {
+      const credential = this.credential;
+      const key =
+        typeof credential === "function" ? await abortable(credential, signal) : credential;
+      let response: Response;
+      try {
+        response = await fetch(`${this.baseUrl}${path}`, {
+          method,
+          signal,
+          headers: {
+            authorization: `Bearer ${key}`,
+            accept: "application/json",
+            ...(data ? { "content-type": "application/json" } : {}),
+            ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+          },
+          ...(data ? { body: JSON.stringify(data) } : {}),
+        });
+      } catch (error) {
+        if (signal.aborted || !retryable || attempt >= this.maxRetries) throw error;
+        await sleep(250 * 2 ** attempt, signal);
+        continue;
+      }
+      const requestId = response.headers.get("x-request-id") ?? undefined;
+      if (
+        !response.ok &&
+        retryable &&
+        attempt < this.maxRetries &&
+        RETRYABLE_STATUS.has(response.status)
+      ) {
+        const after = Number(response.headers.get("retry-after"));
+        await response.body?.cancel();
+        await sleep(
+          Number.isFinite(after) && after > 0 ? Math.min(after, 60) * 1000 : 500 * 2 ** attempt,
+          signal,
+        );
+        continue;
+      }
+      let value: unknown;
+      try {
+        value = await response.json();
+      } catch {
+        throw new ConvtError(
+          response.ok ? "invalid_response" : "request_failed",
+          `The API answered HTTP ${response.status} without a JSON body.`,
+          response.status,
+          requestId,
+        );
+      }
+      if (!response.ok) {
+        const { code, message } = errorFields(value);
+        throw new ConvtError(
+          code ?? "request_failed",
+          message ?? "Request failed.",
+          response.status,
+          requestId,
+        );
+      }
+      // The API's JSON matches the documented shape for each route.
+      return value as T;
+    }
   }
-  create(
-    input: {
-      input_format: Format;
-      target_format: Format;
-      input_bytes: number;
-      options?: JobOptions;
-    },
-    signal?: AbortSignal,
-  ) {
-    return this.request<{ job: Job; upload_url: string; upload_expires_in: number }>(
-      "/v1/jobs",
-      "POST",
-      input,
+  create(input: CreateInput, { signal, idempotencyKey }: RequestOptions = {}) {
+    return this.request<Created>({
+      path: "/v1/jobs",
+      method: "POST",
+      data: input,
       signal,
-    );
+      idempotencyKey,
+    });
   }
   start(id: string, signal?: AbortSignal) {
-    return this.request<Job>(`/v1/jobs/${encodeURIComponent(id)}/start`, "POST", undefined, signal);
+    return this.request<Job>({
+      path: `/v1/jobs/${encodeURIComponent(id)}/start`,
+      method: "POST",
+      signal,
+    });
   }
   status(id: string, signal?: AbortSignal) {
-    return this.request<Job>(`/v1/jobs/${encodeURIComponent(id)}`, "GET", undefined, signal);
+    return this.request<Job>({ path: `/v1/jobs/${encodeURIComponent(id)}`, signal });
   }
   cancel(id: string) {
-    return this.request<Job>(`/v1/jobs/${encodeURIComponent(id)}/cancel`, "POST");
+    return this.request<Job>({ path: `/v1/jobs/${encodeURIComponent(id)}/cancel`, method: "POST" });
   }
   download(id: string, signal?: AbortSignal) {
-    return this.request<{ outputs: Output[] }>(
-      `/v1/jobs/${encodeURIComponent(id)}/download`,
-      "GET",
-      undefined,
+    return this.request<{ outputs: Output[]; expires_in: number }>({
+      path: `/v1/jobs/${encodeURIComponent(id)}/download`,
       signal,
-    );
+    });
   }
+  /** The account's webhook signing secret, for verifyWebhook. */
+  webhookSecret(signal?: AbortSignal) {
+    return this.request<{ secret: string }>({ path: "/v1/webhooks/secret", signal });
+  }
+  /**
+   * Converts a file: a path (Node, Bun, Deno), a Blob or File, or bytes. Uploads
+   * go straight to storage, so files up to 2 GB work. Retries are safe: the job is
+   * created with a fresh `Idempotency-Key`.
+   */
   async convert(input: string | Blob | Uint8Array, options: ConvertOptions): Promise<Conversion> {
     let body: Blob;
     let name = "";
@@ -214,31 +341,63 @@ export class Convt {
     } else {
       body = new Blob([new Uint8Array(input)]);
     }
-    const extension = name.split(".").pop()?.toLowerCase();
-    const from =
-      options.from ??
-      formats.find((f) => (f.extensions as readonly string[]).includes(extension ?? ""))?.id;
+    const from = options.from ?? formatFromName(name);
     if (!from)
       throw new ConvtError(
         "input_format_required",
         "Provide from for an input without a recognized extension.",
       );
-    const deadline = AbortSignal.timeout(options.timeoutMs ?? 660_000);
-    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-    const created = await this.create(
+    return this.run(
       {
         input_format: from,
         target_format: options.to,
         input_bytes: body.size,
         ...(options.options ? { options: options.options } : {}),
+        ...(options.webhookUrl ? { webhook_url: options.webhookUrl } : {}),
       },
-      signal,
+      body,
+      options,
     );
+  }
+  /**
+   * Converts a file convt downloads from a public https URL, such as a presigned S3
+   * or R2 link. Nothing is uploaded from this machine.
+   */
+  async convertUrl(sourceUrl: string, options: ConvertOptions): Promise<Conversion> {
+    const from = options.from ?? formatFromName(new URL(sourceUrl).pathname);
+    if (!from)
+      throw new ConvtError(
+        "input_format_required",
+        "Provide from for a URL whose path has no recognized extension.",
+      );
+    return this.run(
+      {
+        input_format: from,
+        target_format: options.to,
+        source_url: sourceUrl,
+        ...(options.options ? { options: options.options } : {}),
+        ...(options.webhookUrl ? { webhook_url: options.webhookUrl } : {}),
+      },
+      undefined,
+      options,
+    );
+  }
+  private async run(
+    input: CreateInput,
+    body: Blob | undefined,
+    options: ConvertOptions,
+  ): Promise<Conversion> {
+    const deadline = AbortSignal.timeout(options.timeoutMs ?? 660_000);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    const created = await this.create(input, { signal, idempotencyKey: newIdempotencyKey() });
     try {
-      const uploaded = await fetch(created.upload_url, { method: "PUT", body, signal });
-      if (!uploaded.ok)
-        throw new ConvtError("upload_failed", "Upload failed. Try again.", uploaded.status);
-      let job = await this.start(created.job.id, signal);
+      if (body && created.upload_url) {
+        const uploaded = await fetch(created.upload_url, { method: "PUT", body, signal });
+        if (!uploaded.ok)
+          throw new ConvtError("upload_failed", "Upload failed. Try again.", uploaded.status);
+      }
+      let job = body ? await this.start(created.job.id, signal) : created.job;
+      let pause = 500;
       while (true) {
         options.onProgress?.(job);
         if (job.status === "succeeded")
@@ -248,20 +407,12 @@ export class Convt {
             job.error_code ?? job.status,
             job.status === "cancelled"
               ? "Conversion cancelled."
-              : "Conversion failed. Try another format or use the desktop app.",
+              : job.error_code === "source_fetch_failed"
+                ? "convt could not download source_url. Check that it is public and returns the file."
+                : "Conversion failed. Try another format or use the desktop app.",
           );
-        await new Promise<void>((resolve, reject) => {
-          const abort = () => {
-            clearTimeout(timer);
-            reject(signal.reason);
-          };
-          const timer = setTimeout(() => {
-            signal.removeEventListener("abort", abort);
-            resolve();
-          }, 1000);
-          if (signal.aborted) abort();
-          else signal.addEventListener("abort", abort, { once: true });
-        });
+        await sleep(pause, signal);
+        pause = Math.min(pause * 1.5, 2000);
         job = await this.status(job.id, signal);
       }
     } catch (error) {
@@ -284,4 +435,11 @@ export class Convt {
       throw error;
     }
   }
+}
+
+function formatFromName(name: string): Format | undefined {
+  const file = name.split(/[\\/]/).pop() ?? "";
+  if (!file.includes(".")) return undefined;
+  const extension = file.split(".").pop()?.toLowerCase() ?? "";
+  return formats.find((f) => (f.extensions as readonly string[]).includes(extension))?.id;
 }

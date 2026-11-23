@@ -1,0 +1,38 @@
+---
+title: Idempotent requests
+description: Send an Idempotency-Key so a retried create or convert never reserves or bills a second job.
+---
+
+Networks drop responses. If `POST /v1/jobs` or `POST /v1/convert` times out, you cannot tell whether convt created the job. Send an `Idempotency-Key` header and you don't have to: retry with the same key, and convt returns the job the first request made instead of reserving another.
+
+```bash
+curl -fsS {{api}}/v1/convert \
+  -H "Authorization: Bearer $CONVT_API_KEY" \
+  -H "Idempotency-Key: 7f1c2e4a-order-1042" \
+  -F file=@photo.png -F to=webp -o photo.webp
+```
+
+## Rules
+
+- A key is any 1 to 255 visible ASCII characters. A UUID per logical request works well. Use a value tied to your own record, such as an order id, when you want the same job back after your process restarts.
+- Keys belong to your account and last as long as the job: 24 hours. After the job expires, the key is free again.
+- A retry must send the same request. convt fingerprints the route, formats, options, `source_url`, `webhook_url` and, for `/v1/convert`, the file's bytes. The same key with a different request fails with `409 idempotency_key_reused`.
+- A replay answers with the original job and an `Idempotent-Replayed: true` header. It never touches your spend cap.
+
+## What a replay returns
+
+| Route              | Original job state           | Replay returns                                                         |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------------- |
+| `POST /v1/jobs`    | `created` (not uploaded yet) | The job and a fresh `upload_url`.                                      |
+| `POST /v1/jobs`    | Started or finished          | The job, with `upload_url: null`. Its input can no longer be replaced. |
+| `POST /v1/convert` | Not uploaded yet             | convt stores the file from the retry and runs the job.                 |
+| `POST /v1/convert` | Queued or running            | Waits for the same job, then answers as the first request would have.  |
+| `POST /v1/convert` | Finished                     | The same answer: the file, the JSON outputs or the failure.            |
+
+## Hanging up
+
+Without a key, closing the connection to `POST /v1/convert` before the answer cancels the job, so an abandoned request is never billed. With a key, the job keeps running, because a retry with that key is expected to collect it. It is billed once if it succeeds.
+
+## The SDK does this for you
+
+`convt.convert()` and `convt.convertUrl()` create every job with a fresh key and retry rate limits and gateway errors with it. Pass your own with `convt.create(input, { idempotencyKey })`.

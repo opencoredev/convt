@@ -1,40 +1,48 @@
 ---
 title: JavaScript SDK
-description: The status of @convt/sdk, and what to use until it is published.
+description: Convert files from Node, Bun, Deno or a server route with @convt/sdk.
 ---
 
-:::note[Not on npm yet]
-`@convt/sdk` lives in the [convt repository](https://github.com/opencoredev/convt/tree/main/packages/sdk) but has not been published to npm, so `npm install @convt/sdk` does not work yet. Until it is, call the HTTP API directly as the [Quick start](/quick-start) does. The API is the stable contract, and the SDK is a thin layer over it.
-:::
+`@convt/sdk` wraps the HTTP API: one call reserves the job, uploads, starts, polls and returns the outputs. It has no dependencies.
 
-Once it is published, the SDK runs all five steps in one call. Pass `baseUrl` while `api.convt.app` is not live, because the SDK defaults to that host:
+```bash
+npm install @convt/sdk
+```
 
 ```ts
 import { Convt } from "@convt/sdk";
 
-const apiKey = process.env.CONVT_API_KEY;
-if (!apiKey) throw new Error("set CONVT_API_KEY");
-
-const convt = new Convt({
-  apiKey,
-  baseUrl: "{{api}}",
-});
-
+const convt = new Convt(); // reads CONVT_API_KEY, or pass { apiKey }
 const result = await convt.convert("report.docx", { to: "pdf" });
 await result.save("report.pdf");
 ```
 
-`convert()` detects the input format from the file extension, reserves the job, uploads, starts, polls once a second and returns the outputs. If anything fails or you abort it, it cancels the job so the reservation is released.
+`convert()` takes a file path (Node, Bun and Deno), a `Blob` or `File`, or a `Uint8Array`, up to 2 GB. It reads the input format from the file name's extension. If anything fails or you abort it, it cancels the job so the reservation is released.
+
+To convert a file that is already online, pass its URL. convt downloads it, so nothing goes through your machine:
+
+```ts
+const result = await convt.convertUrl(
+  "https://my-bucket.s3.amazonaws.com/clip.mov?X-Amz-Signature=...",
+  {
+    to: "mp4",
+  },
+);
+```
 
 ## Options
 
-| Option       | Type            | Description                                                             |
-| ------------ | --------------- | ----------------------------------------------------------------------- |
-| `to`         | `Format`        | Target format id. Required.                                             |
-| `from`       | `Format`        | Input format id. Needed when the file name has no recognized extension. |
-| `signal`     | `AbortSignal`   | Cancels the conversion and the job.                                     |
-| `onProgress` | `(job) => void` | Called with the job after each poll.                                    |
-| `timeoutMs`  | `number`        | Gives up and cancels after this long. Defaults to 660,000 (11 minutes). |
+| Option       | Type            | Description                                                                    |
+| ------------ | --------------- | ------------------------------------------------------------------------------ |
+| `to`         | `Format`        | Target format id. Required.                                                    |
+| `from`       | `Format`        | Input format id. Needed when the file name or URL has no recognized extension. |
+| `options`    | `JobOptions`    | Conversion settings such as `quality`, `max_size`, `pages` or `trim_start`.    |
+| `webhookUrl` | `string`        | Gets a signed POST when the job finishes. See [Webhooks](/guides/webhooks).    |
+| `signal`     | `AbortSignal`   | Cancels the conversion and the job.                                            |
+| `onProgress` | `(job) => void` | Called with the job after each poll.                                           |
+| `timeoutMs`  | `number`        | Gives up and cancels after this long. Defaults to 660,000 (11 minutes).        |
+
+The client takes `{ apiKey, baseUrl, maxRetries }`. `baseUrl` defaults to `{{api}}`; `maxRetries` (default 2) bounds retries of rate limits and gateway errors.
 
 ## Results
 
@@ -44,6 +52,27 @@ await result.save("report.pdf");
 - `save(path)` writes the only output to disk. Node only.
 - `saveAll(directory)` writes every output into a folder under the names the API returns, such as `input.png` and `input-2.png`. Node only.
 
-Errors are `ConvtError` instances with the API's `code` and the HTTP `status`.
+## Retries and errors
 
-The lower-level methods `create`, `start`, `status`, `cancel` and `download` map one to one onto the [API routes](/api).
+Every job is created with a fresh [`Idempotency-Key`](/guides/idempotency), so the SDK can retry a create whose response was lost without reserving twice. It retries `429`, `502`, `503` and `504` with backoff, honoring `Retry-After`, on calls that are safe to repeat.
+
+Errors are `ConvtError` instances with the API's `code`, the HTTP `status` and the `requestId` from `X-Request-Id`. Quote `requestId` when you contact us.
+
+## Webhooks
+
+```ts
+import { verifyWebhook } from "@convt/sdk";
+
+const { secret } = await convt.webhookSecret(); // fetch once, store it
+const event = await verifyWebhook({ body: rawBody, signature: headers["convt-signature"], secret });
+```
+
+`verifyWebhook` checks the HMAC and the timestamp, then returns the typed event. See [Webhooks](/guides/webhooks).
+
+## Lower-level calls
+
+`create`, `start`, `status`, `cancel`, `download` and `webhookSecret` map one to one onto the [API routes](/api). `create(input, { idempotencyKey })` takes your own key.
+
+## Browser apps
+
+Never put a `cvt_live_` key in browser code. Run the SDK in your server route, or issue short-lived tokens and pass `new Convt({ token, baseUrl })`. See [Browser apps](/guides/browser-apps).
