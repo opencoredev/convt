@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { GuideArticle } from "#/components/site/guide";
+
 import { guideDownloadUrl, guideHead, guidePath, guides, relatedGuides } from "#/lib/guides";
 import { Route as BatchHeicToJpgWindows } from "../../src/routes/_site/guides/batch-heic-to-jpg-windows";
 import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg-mac";
@@ -45,8 +47,8 @@ test("the HEIC guide's download link carries the guide campaign", () => {
   const Page = HeicToJpgMac.options.component;
   if (!Page) throw new Error("guide route has no component");
   const html = renderToStaticMarkup(<Page />);
-  const downloads = [...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]);
-  expect(downloads).toEqual([
+  const downloads = new Set([...html.matchAll(/href="(\/download[^"]*)"/g)].map((m) => m[1]));
+  expect([...downloads]).toEqual([
     "/download?utm_source=convt_guides&amp;utm_medium=organic&amp;utm_campaign=heic-to-jpg-mac",
   ]);
 });
@@ -121,19 +123,50 @@ test("the WebP guide tags its download link and prints the tested folder command
   expect(html).toContain('href="/guides/heic-to-jpg-mac"');
 });
 
-test("every guide links to every other guide, same kind of file first", () => {
-  const routes = {
-    "heic-to-jpg-mac": HeicToJpgMac,
-    "batch-heic-to-jpg-windows": BatchHeicToJpgWindows,
-    "mov-to-mp4-mac": MovToMp4Mac,
-    "webp-to-png-jpg": WebpToPngJpg,
-    "pdf-to-png-mac-windows": PdfToPngMacWindows,
-    "mp4-flac-wav-to-mp3-mac": Mp4FlacWavToMp3Mac,
-    "svg-to-png-mac": SvgToPngMac,
-    "mkv-to-mp4-mac": MkvToMp4Mac,
-  } satisfies Record<(typeof guides)[number]["slug"], unknown>;
+const guideRoutes = {
+  "heic-to-jpg-mac": HeicToJpgMac,
+  "batch-heic-to-jpg-windows": BatchHeicToJpgWindows,
+  "mov-to-mp4-mac": MovToMp4Mac,
+  "webp-to-png-jpg": WebpToPngJpg,
+  "pdf-to-png-mac-windows": PdfToPngMacWindows,
+  "mp4-flac-wav-to-mp3-mac": Mp4FlacWavToMp3Mac,
+  "svg-to-png-mac": SvgToPngMac,
+  "mkv-to-mp4-mac": MkvToMp4Mac,
+} satisfies Record<(typeof guides)[number]["slug"], unknown>;
+
+/** A guide's tagged download link as it appears in rendered markup. */
+const downloadHref = (slug: (typeof guides)[number]["slug"]) =>
+  `href="${guideDownloadUrl(slug).replaceAll("&", "&amp;")}"`;
+
+test("every guide offers its download above the first section and in the side rail", () => {
   for (const guide of guides) {
-    const html = renderGuide(routes[guide.slug]);
+    const html = renderGuide(guideRoutes[guide.slug]);
+    const href = downloadHref(guide.slug);
+    const firstSection = html.indexOf("<section");
+    expect(firstSection).toBeGreaterThan(0);
+    expect(html.slice(0, firstSection)).toContain(href);
+    expect(html.slice(0, firstSection)).toContain('href="/#pricing"');
+    const rail = html.split('aria-label="On this page"')[1] ?? "";
+    expect(rail).toContain(href);
+    // The jump link only points at a section that exists.
+    if (html.includes('href="#convt"')) expect(html).toContain('id="convt"');
+    expect(html.slice(0, firstSection)).toContain('href="#convt"');
+  }
+});
+
+test("a guide without a convt section gets no jump link to one", () => {
+  const html = renderToStaticMarkup(
+    <GuideArticle guide={guides[0]} lead="Lead." sections={[{ id: "compare", title: "Compare" }]}>
+      <section id="compare">Body</section>
+    </GuideArticle>,
+  );
+  expect(html).not.toContain('href="#convt"');
+  expect(html).toContain(downloadHref(guides[0].slug));
+});
+
+test("every guide links to every other guide, same kind of file first", () => {
+  for (const guide of guides) {
+    const html = renderGuide(guideRoutes[guide.slug]);
     expect(html).toContain("Related guides");
     for (const other of guides) {
       if (other.slug === guide.slug) continue;

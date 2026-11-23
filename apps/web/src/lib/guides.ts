@@ -131,9 +131,12 @@ export const guides = [
 
 export type GuideSlug = (typeof guides)[number]["slug"];
 
+/** A guide from `guides`, whose slug is known to be one of theirs. */
+export type ListedGuide = Guide & { slug: GuideSlug };
+
 export const guidePath = (slug: GuideSlug) => `${routes.guides}/${slug}`;
 
-export function guideBySlug(slug: GuideSlug): Guide {
+export function guideBySlug(slug: GuideSlug): ListedGuide {
   const guide = guides.find((g) => g.slug === slug);
   if (!guide) throw new Error(`unknown guide: ${slug}`);
   return guide;
