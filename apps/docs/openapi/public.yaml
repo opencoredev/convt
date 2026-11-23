@@ -35,7 +35,7 @@ actions:
       tags: [Jobs]
       summary: Create a job
       description: |
-        Reserves one conversion and returns a signed `upload_url` that stays valid for 15 minutes (`upload_expires_in` is 900 seconds).
+        Reserves one conversion and returns a signed `upload_url`, valid for `upload_expires_in` seconds: 900 for a new job, less (or no URL) for an idempotent replay close to the job's 24-hour expiry.
 
         `input_bytes` must be the exact size of the file you will upload, from 1 byte to 2 GB. The upload signature binds `Content-Length`, so a different size fails at upload or at start.
 

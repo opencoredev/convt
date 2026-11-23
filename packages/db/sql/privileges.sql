@@ -17,7 +17,11 @@ grant select, insert, update on devices to convt_web;
 --> statement-breakpoint
 grant select on orders, subscriptions, licenses, invoices to convt_web;
 --> statement-breakpoint
-grant select on api_keys, cloud_jobs, usage_events to convt_web;
+grant select on api_keys, usage_events to convt_web;
+--> statement-breakpoint
+-- Not the customer URLs (presigned links, receivers' tokens) or idempotency data:
+-- only convt_server reads those.
+grant select (id, user_id, source, api_key_id, status, input_format, target_format, options, input_key, input_bytes, output_keys, attempt, max_attempts, lease_owner, lease_expires_at, reserved_bytes, reserved_cents, reservation, error_code, error_detail, queued_at, started_at, finished_at, expires_at, created_at, updated_at, subscription_id, quota_period_start, webhook_attempts, webhook_next_at, webhook_delivered_at) on cloud_jobs to convt_web;
 --> statement-breakpoint
 grant select on users, subscriptions, licenses to convt_server;
 --> statement-breakpoint
@@ -89,7 +93,9 @@ grant select, insert, update on orders, subscriptions, licenses, invoices, payme
 -- Only the retention jobs delete, and only these two tables.
 grant delete on email_outbox, webhook_events to convt_billing;
 --> statement-breakpoint
-grant select on users, usage_events, cloud_jobs to convt_billing;
+grant select on users, usage_events to convt_billing;
+--> statement-breakpoint
+grant select (id, user_id, source, api_key_id, status, input_format, target_format, options, input_key, input_bytes, output_keys, attempt, max_attempts, lease_owner, lease_expires_at, reserved_bytes, reserved_cents, reservation, error_code, error_detail, queued_at, started_at, finished_at, expires_at, created_at, updated_at, subscription_id, quota_period_start, webhook_attempts, webhook_next_at, webhook_delivered_at) on cloud_jobs to convt_billing;
 --> statement-breakpoint
 -- Attaches purchases made before the account existed: locks the user, requires a
 -- verified email, and attaches unclaimed rows with exactly that email. Called for

@@ -415,3 +415,26 @@ test("a reset upload keeps the job id and key", async () => {
   expect(error.jobId).toBe(job.id);
   expect(error.idempotencyKey).toBe("order-12");
 });
+test("an abort while hashing a caller-keyed file stops at once and sends nothing", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    calls++;
+    return Response.json({});
+  }) as typeof fetch;
+  // A file whose bytes never arrive, like a stalled network drive.
+  class StalledBlob extends Blob {
+    override stream(): ReadableStream<Uint8Array<ArrayBuffer>> {
+      return new ReadableStream<Uint8Array<ArrayBuffer>>({ pull: () => new Promise(() => {}) });
+    }
+  }
+  const stalled = new StalledBlob(["0123456789"]);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(new Error("user cancelled")), 15);
+  const started = Date.now();
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convert(stalled, { from: "svg", to: "png", idempotencyKey: "k", signal: controller.signal })
+    .catch((e) => e);
+  expect(Date.now() - started).toBeLessThan(200);
+  expect(String(error.message ?? error)).toContain("user cancelled");
+  expect(calls).toBe(0);
+});

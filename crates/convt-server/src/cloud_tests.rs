@@ -38,6 +38,9 @@ impl Storage for MemoryStorage {
             .copied()
             .ok_or_else(|| anyhow::anyhow!("not uploaded"))
     }
+    async fn check(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
     async fn head(&self, key: &str) -> anyhow::Result<Option<i64>> {
         Ok(self.objects.lock().unwrap().get(key).copied())
     }
@@ -1640,4 +1643,26 @@ async fn a_keyed_upload_with_different_bytes_is_refused_and_metadata_is_capped()
             .contains("16 KB")
     );
     db.drop().await;
+}
+
+#[tokio::test]
+async fn errors_after_a_job_exists_name_it() {
+    use axum::response::IntoResponse as _;
+    let response = routes::ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "internal",
+        "Request failed.",
+    )
+    .with_job_id("job_abc")
+    .into_response();
+    assert_eq!(response.headers()["convt-job-id"], "job_abc");
+    assert_eq!(response.headers()["location"], "/v1/jobs/job_abc");
+    let body = json(&to_bytes(response.into_body(), 10_000).await.unwrap());
+    assert_eq!(body["job_id"], "job_abc");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("GET /v1/jobs/job_abc")
+    );
 }

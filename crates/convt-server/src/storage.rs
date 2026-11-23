@@ -20,6 +20,10 @@ pub trait Storage: Send + Sync {
     async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()>;
     /// Streams an object, for responses that return a converted file directly.
     async fn open(&self, key: &str) -> anyhow::Result<ByteStream>;
+    /// Proves the configured bucket exists and these credentials can list it,
+    /// which expiry cleanup needs. A missing object is not enough: a missing
+    /// bucket answers 404 too.
+    async fn check(&self) -> anyhow::Result<()>;
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()>;
     async fn download(&self, key: &str, path: &Path) -> anyhow::Result<()>;
     async fn upload(&self, key: &str, path: &Path) -> anyhow::Result<()>;
@@ -119,6 +123,13 @@ impl Storage for S3Storage {
     }
     async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()> {
         success(self.bucket.put_object(key, &bytes).await?.status_code())
+    }
+    async fn check(&self) -> anyhow::Result<()> {
+        let (_, code) = self
+            .bucket
+            .list_page("readiness/".into(), None, None, None, Some(1))
+            .await?;
+        success(code)
     }
     async fn open(&self, key: &str) -> anyhow::Result<ByteStream> {
         use futures_util::StreamExt as _;
@@ -244,6 +255,7 @@ mod integration_tests {
         }
         assert_eq!(read, bytes);
         assert!(storage.open(&format!("{key}-missing")).await.is_err());
+        storage.check().await.unwrap();
         storage.delete_prefix(&key).await.unwrap();
         assert_eq!(storage.head(&key).await.unwrap(), None);
     }

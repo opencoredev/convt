@@ -125,7 +125,7 @@ const production: [ReactNode, ReactNode][] = [
   ],
   [
     "Debuggable",
-    "Every response has an X-Request-Id; every error has a stable code. Rate-limit headers on every call.",
+    "Every response has an X-Request-Id and every error a stable code. Authenticated calls carry rate-limit headers.",
   ],
   [
     "Isolated",
@@ -407,17 +407,17 @@ function ApiPage() {
 
 function CodePanel() {
   const [active, setActive] = useState(samples[0].id);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const base = useId();
   const sample = samples.find((s) => s.id === active) ?? samples[0];
   async function copy() {
     try {
       await navigator.clipboard.writeText(sample.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      setCopyState("copied");
     } catch {
-      setCopied(false);
+      setCopyState("failed");
     }
+    setTimeout(() => setCopyState("idle"), 2000);
   }
   return (
     // The code stays dark in both themes, like a terminal.
@@ -464,9 +464,16 @@ function CodePanel() {
             focusRing,
           )}
         >
-          {copied ? "Copied" : "Copy"}
+          {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
         </button>
       </div>
+      <span role="status" className="sr-only">
+        {copyState === "copied"
+          ? "Code copied"
+          : copyState === "failed"
+            ? "Copying failed. Select the code and copy it by hand."
+            : ""}
+      </span>
       <pre
         id={`${base}-panel`}
         role="tabpanel"

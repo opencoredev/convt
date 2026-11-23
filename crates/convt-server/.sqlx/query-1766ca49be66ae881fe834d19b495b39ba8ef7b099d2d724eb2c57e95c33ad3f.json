@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update cloud_jobs j set webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as \"webhook_url!\", j.webhook_attempts, j.webhook_next_at as \"lease!\", coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as \"secret_version!\"",
+  "query": "update cloud_jobs j set webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by coalesce(webhook_next_at, updated_at) limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as \"webhook_url!\", j.webhook_attempts, j.webhook_next_at as \"lease!\", coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as \"secret_version!\"",
   "describe": {
     "columns": [
       {
@@ -80,5 +80,5 @@
       null
     ]
   },
-  "hash": "e00c5254e58c3d18af2be219ae61c4ce16c9551ccdeee74e22298e037e0e5175"
+  "hash": "1766ca49be66ae881fe834d19b495b39ba8ef7b099d2d724eb2c57e95c33ad3f"
 }

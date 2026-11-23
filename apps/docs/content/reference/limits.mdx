@@ -11,12 +11,12 @@ The limit is per key, not per account. Uploads and downloads through signed URLs
 
 Every response to a job route carries the window's state:
 
-| Header                  | Value                                          |
-| ----------------------- | ---------------------------------------------- |
-| `X-RateLimit-Limit`     | `120`                                          |
-| `X-RateLimit-Remaining` | Requests left in this window                   |
-| `X-RateLimit-Reset`     | Seconds until the window resets                |
-| `Retry-After`           | On `429` only: seconds to wait before retrying |
+| Header                  | Value                                                                                                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-RateLimit-Limit`     | `120`                                                                                                                                                          |
+| `X-RateLimit-Remaining` | Requests left in this window                                                                                                                                   |
+| `X-RateLimit-Reset`     | Seconds until the window resets                                                                                                                                |
+| `Retry-After`           | On `429`: seconds to wait before retrying. Also sent on `503 server_busy` and on `/v1/convert` answers that ask you to come back (`202`, `409 still_running`). |
 
 A `POST /v1/convert` that waits for its result counts as one request, however long it waits.
 
@@ -37,11 +37,11 @@ Every job holds one of those slots until it expires, so the default allows about
 
 ## Lifetimes
 
-| Item                              | Valid for                                                          |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `upload_url`                      | 15 minutes after the job is created                                |
-| Output download URLs              | `expires_in` seconds, at most 5 minutes; request new ones any time |
-| A job, its upload and its outputs | 24 hours after creation                                            |
+| Item                              | Valid for                                                                                          |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `upload_url`                      | `upload_expires_in` seconds: 15 minutes for a new job, less for a replay close to the job's expiry |
+| Output download URLs              | `expires_in` seconds, at most 5 minutes; request new ones any time                                 |
+| A job, its upload and its outputs | 24 hours after creation                                                                            |
 
 ## Spend cap
 

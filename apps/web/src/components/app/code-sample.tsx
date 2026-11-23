@@ -31,15 +31,18 @@ curl -fsS ${apiBaseUrl}/v1/convert \\
   {
     id: "browser",
     label: "Browser",
-    code: `import { Convt } from "@convt/sdk";
+    code: `// Your server route: the browser posts the file here,
+// and the API key never leaves the server.
+import { Convt } from "@convt/sdk";
 
-// Use a short-lived token issued by your server.
-const convt = new Convt({
-  token: () => fetchToken(),
-  baseUrl: "${apiBaseUrl}",
-});
-const out = await convt.convert(file, { to: "pdf" });
-const blob = await out.blob();`,
+const convt = new Convt();
+
+export async function POST(request: Request) {
+  const file = (await request.formData()).get("file");
+  if (!(file instanceof File)) return new Response("file required", { status: 400 });
+  const out = await convt.convert(file, { to: "pdf" });
+  return Response.json({ url: out.outputs[0].url });
+}`,
   },
   {
     id: "cli",

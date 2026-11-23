@@ -523,6 +523,10 @@ async fn convert(
     };
     let replayed = created.replayed;
     let mut job = created.job;
+    let job_id = job.id.clone();
+    // Any error from here on concerns a job that exists and may still run and
+    // bill, so every answer names it and says where to look before retrying.
+    let outcome: Result<Response, ApiError> = async {
     if job.status == "created"
         && let Some(bytes) = bytes
     {
@@ -683,6 +687,15 @@ async fn convert(
         h.insert(header::CONTENT_DISPOSITION, value);
     }
     Ok(finish(response, &id, replayed))
+    }
+    .await;
+    Ok(outcome.unwrap_or_else(|error| {
+        finish(
+            error.with_job_id(&job_id).into_response(),
+            &job_id,
+            replayed,
+        )
+    }))
 }
 
 /// A storage error after the job succeeded: it was billed, so the answer must

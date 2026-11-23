@@ -120,22 +120,37 @@ function withContext(error: unknown, context: { jobId: string; idempotencyKey: s
   );
 }
 
-/** Hex SHA-256 of a Blob, streamed in Node, Bun and Deno. */
-async function sha256Hex(blob: Blob): Promise<string> {
+/** Hex SHA-256 of a Blob, streamed in Node, Bun and Deno. Stops on abort. */
+async function sha256Hex(blob: Blob, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted();
+  let crypto: typeof import("node:crypto") | undefined;
   try {
-    const { createHash } = await import("node:crypto");
-    const hash = createHash("sha256");
-    const reader = blob.stream().getReader();
+    crypto = await import("node:crypto");
+  } catch {
+    crypto = undefined;
+  }
+  if (!crypto) {
+    const digest = await abortable(
+      async () => globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer()),
+      signal,
+    );
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const hash = crypto.createHash("sha256");
+  const reader = blob.stream().getReader();
+  const stop = () => void reader.cancel(signal.reason).catch(() => {});
+  signal.addEventListener("abort", stop, { once: true });
+  try {
     for (;;) {
       const { done, value } = await reader.read();
+      signal.throwIfAborted();
       if (done) break;
       hash.update(value);
     }
-    return hash.digest("hex");
-  } catch {
-    const digest = await globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
-    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  } finally {
+    signal.removeEventListener("abort", stop);
   }
+  return hash.digest("hex");
 }
 async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
@@ -568,7 +583,7 @@ export class Convt {
     // aborted. Otherwise errors carry the job id, to resume or cancel explicitly.
     const ownsJob = options.idempotencyKey === undefined;
     const idempotencyKey = options.idempotencyKey ?? newIdempotencyKey();
-    if (!ownsJob && body) input = { ...input, input_sha256: await sha256Hex(body) };
+    if (!ownsJob && body) input = { ...input, input_sha256: await sha256Hex(body, signal) };
     const created = await this.create(input, { signal, idempotencyKey });
     const context = { jobId: created.job.id, idempotencyKey };
     try {

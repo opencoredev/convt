@@ -54,6 +54,7 @@ pub struct ApiError {
     headers: Vec<(HeaderName, HeaderValue)>,
     /// The job the failed request created or touched, so the caller can recover it.
     job: Option<Box<JobView>>,
+    job_id: Option<String>,
 }
 impl ApiError {
     pub fn new(status: StatusCode, code: &'static str, message: &str) -> Self {
@@ -63,6 +64,7 @@ impl ApiError {
             message: message.into(),
             headers: Vec::new(),
             job: None,
+            job_id: None,
         }
     }
     pub fn bad(code: &'static str, message: &str) -> Self {
@@ -86,6 +88,18 @@ impl ApiError {
     pub fn with_job(mut self, job: jobs::Job) -> Self {
         self.job = Some(Box::new(job.into()));
         self
+    }
+    /// Names a job the caller can't be handed in full (the database is what
+    /// failed): its id in the body and headers, and where to check it.
+    pub fn with_job_id(mut self, id: &str) -> Self {
+        if self.job.is_none() {
+            self.job_id = Some(id.to_owned());
+            self.message.push_str(&format!(
+                " The job {id} exists and may still finish and be billed: check GET /v1/jobs/{id} before retrying."
+            ));
+            self = self.header(header::LOCATION, format!("/v1/jobs/{id}"));
+        }
+        self.header(HeaderName::from_static("convt-job-id"), id.to_owned())
     }
     pub fn with_header(self, name: HeaderName, value: String) -> Self {
         self.header(name, value)
@@ -127,6 +141,9 @@ impl IntoResponse for ApiError {
         }});
         if let Some(job) = self.job {
             body["job"] = serde_json::json!(job);
+        }
+        if let Some(id) = self.job_id {
+            body["job_id"] = serde_json::json!(id);
         }
         let mut response = (self.status, Json(body)).into_response();
         response.headers_mut().extend(self.headers);
@@ -596,7 +613,7 @@ async fn ready(State(s): State<CloudState>) -> Response {
     let database = tokio::time::timeout(limit, sqlx::query_scalar!("select 1").fetch_one(&s.pool))
         .await
         .is_ok_and(|r| r.is_ok());
-    let storage = tokio::time::timeout(limit, s.storage.head("readiness-probe"))
+    let storage = tokio::time::timeout(limit, s.storage.check())
         .await
         .is_ok_and(|r| r.is_ok());
     let ok = database && storage && !draining();
