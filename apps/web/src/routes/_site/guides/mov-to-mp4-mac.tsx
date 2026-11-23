@@ -100,7 +100,8 @@ function MovToMp4Mac() {
           MOV and MP4 are both containers, and the video inside an iPhone or screen recording MOV is
           usually H.264 or HEVC, which MP4 can hold as is. So the fastest conversion often copies
           the video into a new file without touching a frame. When that won't work, or you want a
-          smaller file, the video has to be encoded again.
+          smaller file, the video has to be encoded again. QuickTime Player won't make an MP4 either
+          way: its Export As menu only saves video as MOV (Audio Only saves MPEG-4 audio with AAC).
         </p>
       }
     >
@@ -140,8 +141,14 @@ function MovToMp4Mac() {
         </ul>
         <Prose>
           <p>
-            QuickTime Player isn't on the list: its Export As menu saves a new MOV at a different
-            resolution, not an MP4.
+            QuickTime Player isn't on the list. In{" "}
+            <TextLink href="https://support.apple.com/guide/quicktime-player/export-movies-qtp20e395859/mac">
+              Apple's words
+            </TextLink>
+            , <q>QuickTime Player doesn't export movies as MP4 videos.</q> File › Export As saves a
+            new QuickTime movie (.mov) with H.264 or HEVC at the size you pick, and Audio Only saves
+            an AAC audio file. If an export comes out as H.264, you can rename it as shown below;
+            otherwise remux or convert it.
           </p>
         </Prose>
       </GuideSection>
@@ -492,6 +499,16 @@ videos/a.MOV -> mp4/a.mp4
               Not if you remux: the video is copied, not encoded again. Re-encoding loses a little,
               and at sensible settings it's hard to see. Converting the same file over and over adds
               up, so always start from the original.
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <dt className="text-[16px]/6 font-semibold">Can QuickTime Player export MP4?</dt>
+            <dd className="text-[16px]/[26px] text-ink-2">
+              No. Apple's QuickTime Player guide says its exports are QuickTime movies (.mov) using
+              H.264 or HEVC, and audio-only exports are AAC audio files. To get a real MP4
+              container, export from iMovie, remux with FFmpeg, or convert with convt as above.
+              Renaming an H.264 MOV to .mp4 only changes the file extension and can still be
+              rejected by apps that check the container.
             </dd>
           </div>
           <div className="flex flex-col gap-1.5">

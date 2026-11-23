@@ -30,6 +30,18 @@ export function siteOrigin(): string {
   return typeof window === "undefined" ? "https://convt.app" : window.location.origin;
 }
 
+/**
+ * True when `redirect` is a same-origin path to /download, with or without a query or
+ * hash: the guides and landing pages send `/download?utm_source=...`, not bare /download.
+ */
+export function isDownloadRedirect(
+  redirect: string | undefined,
+  origin: string = siteOrigin(),
+): boolean {
+  if (!redirect) return false;
+  return new URL(safeRedirect(redirect, origin), origin).pathname === routes.download;
+}
+
 /** An account this young was created by the sign-in that just finished. */
 const newAccountMs = 10 * 60 * 1000;
 

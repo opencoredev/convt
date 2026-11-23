@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 
 import { CommandBlock } from "#/components/app/command-block";
 import { cx, focusRing } from "#/components/app/ui";
-import { guideDownloadUrl, relatedGuides, type Guide, type GuideSlug } from "#/lib/guides";
+import {
+  guideDownloadUrl,
+  relatedGuides,
+  type Guide,
+  type GuideSlug,
+  type ListedGuide,
+} from "#/lib/guides";
 import { commandLineConverter, macFileConverter, type LandingPage } from "#/lib/landing-pages";
 import { routes } from "#/lib/site";
 
@@ -20,18 +26,28 @@ const dateFormat = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** Article frame: breadcrumb, title, lead, the contents rail on wide screens, then the body. */
+/** The section id every guide gives its convt steps; the header strip links to it when present. */
+const convtSectionId = "convt";
+
+const primaryButton =
+  "btn-primary inline-flex shrink-0 items-center justify-center rounded-lg px-4 py-2.5 text-sm/4.5 font-medium";
+
+/**
+ * Article frame: breadcrumb, title, lead and a short convt strip, then the body, with the
+ * contents list and a convt card in a rail on wide screens.
+ */
 export function GuideArticle({
   guide,
   lead,
   sections,
   children,
 }: {
-  guide: Guide;
+  guide: ListedGuide;
   lead: ReactNode;
   sections: GuideSectionLink[];
   children: ReactNode;
 }) {
+  const downloadUrl = guideDownloadUrl(guide.slug);
   return (
     <article className={cx(siteColumn, "pt-10 pb-20 md:pt-14")}>
       <nav aria-label="Breadcrumb" className="font-mono text-xs/4 text-ink-2 uppercase">
@@ -47,34 +63,105 @@ export function GuideArticle({
         <p className="text-[13px]/5 text-ink-2">
           Updated <time dateTime={guide.updated}>{dateFormat.format(new Date(guide.updated))}</time>
         </p>
+        <GuideStrip
+          downloadUrl={downloadUrl}
+          hasConvtSection={sections.some((section) => section.id === convtSectionId)}
+        />
       </header>
       <div className="mt-12 grid gap-12 lg:grid-cols-[minmax(0,720px)_220px] lg:justify-between">
         <div className="flex min-w-0 flex-col gap-16">
           {children}
           <RelatedGuides guide={guide} />
         </div>
-        <nav aria-label="On this page" className="max-lg:hidden">
-          <div className="sticky top-8 flex flex-col gap-3">
-            <p className="font-mono text-[11px]/4 text-ink-2 uppercase">On this page</p>
-            <ol className="flex flex-col gap-2.5 border-l border-line">
-              {sections.map((section) => (
-                <li key={section.id}>
-                  <a
-                    href={`#${section.id}`}
-                    className={cx(
-                      "-ml-px block border-l border-transparent pl-3 text-[13px]/[18px] text-ink-2 hover:border-ink-2 hover:text-ink",
-                      focusRing,
-                    )}
-                  >
-                    {section.title}
-                  </a>
-                </li>
-              ))}
-            </ol>
+        <div className="max-lg:hidden">
+          <div className="sticky top-8 flex flex-col gap-8">
+            <nav aria-label="On this page" className="flex flex-col gap-3">
+              <p className="font-mono text-[11px]/4 text-ink-2 uppercase">On this page</p>
+              <ol className="flex flex-col gap-2.5 border-l border-line">
+                {sections.map((section) => (
+                  <li key={section.id}>
+                    <a
+                      href={`#${section.id}`}
+                      className={cx(
+                        "-ml-px block border-l border-transparent pl-3 text-[13px]/[18px] text-ink-2 hover:border-ink-2 hover:text-ink",
+                        focusRing,
+                      )}
+                    >
+                      {section.title}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+            <GuideRailCard downloadUrl={downloadUrl} />
           </div>
-        </nav>
+        </div>
       </div>
     </article>
+  );
+}
+
+/** Under the lead, above the fold: what convt saves over the manual steps, and the download. */
+function GuideStrip({
+  downloadUrl,
+  hasConvtSection,
+}: {
+  downloadUrl: string;
+  hasConvtSection: boolean;
+}) {
+  const secondaryLink = cx(
+    "rounded-sm text-[13px]/5 text-ink-2 underline underline-offset-2 hover:text-ink",
+    focusRing,
+  );
+  return (
+    <aside
+      aria-label="Get convt"
+      className="mt-1 flex flex-col gap-4 rounded-2xl bg-panel p-5 shadow-[inset_0_0_0_1px_var(--line)]"
+    >
+      <p className="text-[14px]/[22px] text-pretty text-ink-2">
+        <span className="font-semibold text-ink">Want to skip the manual steps?</span> convt
+        converts from a right-click in Finder on a Mac, or whole folders in one command. Local
+        conversions never leave your computer.
+      </p>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <a href={downloadUrl} className={cx(primaryButton, focusRing)}>
+          Get convt
+        </a>
+        {hasConvtSection ? (
+          <a href={`#${convtSectionId}`} className={secondaryLink}>
+            Jump to convt steps
+          </a>
+        ) : null}
+        <a href={routes.pricing} className={secondaryLink}>
+          $39 once
+        </a>
+      </div>
+    </aside>
+  );
+}
+
+/** Below the contents list on wide screens, so the download stays in reach while reading. */
+function GuideRailCard({ downloadUrl }: { downloadUrl: string }) {
+  return (
+    <aside
+      aria-label="convt"
+      className="flex flex-col gap-3 rounded-2xl bg-panel p-4 shadow-[inset_0_0_0_1px_var(--line)]"
+    >
+      <p className="font-mono text-[11px]/4 text-ink-2 uppercase">convt</p>
+      <p className="text-[13px]/5 text-pretty text-ink-2">
+        One app for video, audio, images and documents. Local conversions stay on your machine.{" "}
+        <a
+          href={routes.pricing}
+          className={cx("rounded-sm text-ink underline underline-offset-2", focusRing)}
+        >
+          $39 once
+        </a>
+        , every future desktop update.
+      </p>
+      <a href={downloadUrl} className={cx(primaryButton, "w-full", focusRing)}>
+        Get convt
+      </a>
+    </aside>
   );
 }
 
@@ -242,13 +329,7 @@ export function GuideCta({ slug, children }: { slug: GuideSlug; children: ReactN
   return (
     <aside className="flex flex-col gap-5 rounded-2xl bg-panel p-6 shadow-[inset_0_0_0_1px_var(--line)] sm:flex-row sm:items-center sm:justify-between sm:gap-8">
       <div className="flex flex-col gap-1.5 text-[14px]/[22px] text-ink-2">{children}</div>
-      <a
-        href={guideDownloadUrl(slug)}
-        className={cx(
-          "btn-primary inline-flex shrink-0 items-center justify-center rounded-lg px-4 py-2.5 text-sm/4.5 font-medium",
-          focusRing,
-        )}
-      >
+      <a href={guideDownloadUrl(slug)} className={cx(primaryButton, focusRing)}>
         Get convt
       </a>
     </aside>

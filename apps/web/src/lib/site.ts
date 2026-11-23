@@ -82,20 +82,25 @@ type IsoDate = `${number}-${number}-${number}`;
  * `lastmod` is the day the page's content last changed, taken from git (the route file, the
  * content or components it renders, and the shared site header and footer), never the build
  * time. Move it when you change what the page says, not for refactors that leave the page
- * the same. `listsGuides` marks a page that renders links to every guide: the sitemap dates it
- * from the newest guide when that is later, so adding a guide moves it without a hand edit.
+ * the same. `listsGuides` marks a page that renders links to every guide: `"headings"` (only
+ * headings and links, like /formats) advances when a guide is added; `"cards"` (headings and
+ * descriptions) also advances when a guide's listing copy changes.
  */
 export const sitemapPages = [
   { path: "/", lastmod: "2026-10-30" },
-  { path: routes.formats, lastmod: "2026-10-30", listsGuides: true },
+  { path: routes.formats, lastmod: "2026-10-30", listsGuides: "headings" },
   { path: routes.changelog, lastmod: "2026-10-26" },
   { path: routes.contact, lastmod: "2026-10-30" },
   { path: routes.brand, lastmod: "2026-10-23" },
-  { path: routes.macFileConverter, lastmod: "2026-11-03", listsGuides: true },
-  { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: true },
+  { path: routes.macFileConverter, lastmod: "2026-11-12", listsGuides: "cards" },
+  { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: "cards" },
   { path: routes.privacy, lastmod: "2026-10-27" },
   { path: routes.terms, lastmod: "2026-10-30" },
-] as const satisfies readonly { path: string; lastmod: IsoDate; listsGuides?: true }[];
+] as const satisfies readonly {
+  path: string;
+  lastmod: IsoDate;
+  listsGuides?: "headings" | "cards";
+}[];
 
 /** The docs Worker's own sitemap, referenced from robots.txt. */
 export const DOCS_SITEMAP_URL = `${SITE_ORIGIN}/docs/sitemap.xml`;
