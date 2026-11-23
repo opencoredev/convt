@@ -1,5 +1,5 @@
 {
-  "cargo_lock_sha256": "b4746e12b43a8edd1ea37da8082e638c15f6360137cad89c89d19597a51bb29c",
+  "cargo_lock_sha256": "e8a9597395bd1afdfae898f49c73b432d36ce76f21b19fbc81e4127ed6f1dfd7",
   "scope": "Conservative normal transitive graph rooted at convt-cli, convt-app for x86_64-unknown-linux-gnu. Excludes dev/build edges; workspace feature unification and proc macros may overinclude. This is not a per-file licence or linkage audit.",
   "targets": [
     "x86_64-unknown-linux-gnu"
@@ -24815,11 +24815,11 @@
     },
     {
       "name": "ctutils",
-      "version": "0.4.2",
+      "version": "0.4.4",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR MIT",
-      "manifest_sha256": "aafad7883015f7b4daf7e2ba40416a0176663c47167ca1a132614db11dcb8639",
-      "original_manifest_sha256": "aafad7883015f7b4daf7e2ba40416a0176663c47167ca1a132614db11dcb8639",
+      "manifest_sha256": "0e7a80338f6195bd85c0d0dad3c0d258c626d95da17a29a82307b2f6092902f1",
+      "original_manifest_sha256": "0e7a80338f6195bd85c0d0dad3c0d258c626d95da17a29a82307b2f6092902f1",
       "holders": [
         "Copyright (c) 2025-2026 The RustCrypto Project Developers"
       ],
@@ -28014,11 +28014,11 @@
     },
     {
       "name": "form_urlencoded",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "118b1d87e862ea329b8bc84b389085a2f8e049d4c0b8b3c38ac2bffbe3501928",
-      "original_manifest_sha256": "118b1d87e862ea329b8bc84b389085a2f8e049d4c0b8b3c38ac2bffbe3501928",
+      "manifest_sha256": "47a39fced5fea0239010d6cc5e65bdd6312ef348e029be8389e4be8a14b5ce99",
+      "original_manifest_sha256": "47a39fced5fea0239010d6cc5e65bdd6312ef348e029be8389e4be8a14b5ce99",
       "holders": [
         "Copyright (c) 2013-2016 The rust-url developers",
         "Copyright 2013-2016 The rust-url developers."
@@ -28036,7 +28036,7 @@
         },
         {
           "source_path": "src/lib.rs (notice comment blocks)",
-          "source_sha256": "766b5d679064e01f7e6cce6f127a23885f79806ce3bccc49e4fe41933b83fd8d",
+          "source_sha256": "99f16d4890b77f5a809476ff957babda3c08b7f3455726915162fdeb50d87da3",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         }
@@ -28045,7 +28045,7 @@
       "source_headers": [
         {
           "source_path": "src/lib.rs",
-          "source_sha256": "766b5d679064e01f7e6cce6f127a23885f79806ce3bccc49e4fe41933b83fd8d",
+          "source_sha256": "99f16d4890b77f5a809476ff957babda3c08b7f3455726915162fdeb50d87da3",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         }
@@ -35911,11 +35911,11 @@
     },
     {
       "name": "heapless",
-      "version": "0.9.3",
+      "version": "0.9.4",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
-      "original_manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
+      "manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
+      "original_manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
       "holders": [
         "Copyright (c) 2017 Jorge Aparicio"
       ],
@@ -35938,7 +35938,7 @@
         },
         {
           "source_path": "src/pool/arc.rs (notice comment blocks)",
-          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
+          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -35953,7 +35953,7 @@
         },
         {
           "source_path": "src/pool/arc.rs",
-          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
+          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -68434,11 +68434,11 @@
     },
     {
       "name": "roxmltree",
-      "version": "0.21.1",
+      "version": "0.21.2",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "3a97805983ebb9268c929dfdbe7654dea4494b923a3451fac3ab2a5962f8d131",
-      "original_manifest_sha256": "3a97805983ebb9268c929dfdbe7654dea4494b923a3451fac3ab2a5962f8d131",
+      "manifest_sha256": "5a361401f9e83ab9ca2a604a303b9e2b871b0ddfa0382b5943e0751405f04a98",
+      "original_manifest_sha256": "5a361401f9e83ab9ca2a604a303b9e2b871b0ddfa0382b5943e0751405f04a98",
       "holders": [
         "Copyright (c) 2018 Yevhenii Reizner"
       ],
@@ -72404,11 +72404,11 @@
     },
     {
       "name": "tar",
-      "version": "0.4.45",
+      "version": "0.4.46",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "0e3ed0433a1bddcdf9ced37cea1b8f9527526b630f61d0c8af666c946c56950b",
-      "original_manifest_sha256": "0e3ed0433a1bddcdf9ced37cea1b8f9527526b630f61d0c8af666c946c56950b",
+      "manifest_sha256": "6185fe2807daac38478968f7fc596d5b82d90be70a5856f557fac4f0da53bf91",
+      "original_manifest_sha256": "6185fe2807daac38478968f7fc596d5b82d90be70a5856f557fac4f0da53bf91",
       "holders": [
         "Copyright (c) The tar-rs Project Contributors"
       ],
@@ -76192,11 +76192,11 @@
     },
     {
       "name": "url",
-      "version": "2.5.8",
+      "version": "2.5.9",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "7003e5562b5ab8454b9d78376303151af79011f5dd684c1891e0f46bc9112016",
-      "original_manifest_sha256": "7003e5562b5ab8454b9d78376303151af79011f5dd684c1891e0f46bc9112016",
+      "manifest_sha256": "8f084b776440d30dd3c1334d0a35126ecf2d2fa8ef18d3ac6c4318ec747adbbd",
+      "original_manifest_sha256": "8f084b776440d30dd3c1334d0a35126ecf2d2fa8ef18d3ac6c4318ec747adbbd",
       "holders": [
         "Copyright (c) 2013-2025 The rust-url developers",
         "Copyright 2013-2014 The rust-url developers.",
@@ -76223,25 +76223,25 @@
         },
         {
           "source_path": "src/lib.rs (notice comment blocks)",
-          "source_sha256": "51f47a93654528f3b8cb92c94fc26ad25775860d84197fff0c3124a687f8c5e3",
+          "source_sha256": "208c0d522e74e04bafe1107b58acd2c932095b013a86de60e9126f15cb73f0c8",
           "text": "// Copyright 2013-2015 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "f5cbe693d113f7e741c7fcff6320e653cf93d6268c9cafa89c52d2ceb98c3c2f"
         },
         {
           "source_path": "src/origin.rs (notice comment blocks)",
-          "source_sha256": "e8ffaf759aa78c92574c6ae49f76999a751064621c399059b3d4eb819cb0d821",
+          "source_sha256": "53d1fb0b3832609ba6be7001df906f03226a501acee1d114e22c6d572ebfadad",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
         {
           "source_path": "src/parser.rs (notice comment blocks)",
-          "source_sha256": "2dd4210e1773fc5d3fdc15ce506ecff30dbf8eb358a79bbbc2835cc30d513c3a",
+          "source_sha256": "9f868941a6291c323bf8020db4a733b0b460397b693164cb7da863e69ecfc69e",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         },
         {
           "source_path": "src/path_segments.rs (notice comment blocks)",
-          "source_sha256": "28c8b6ffa880c7da76dcf43af8dcae2c46cd74389472e6e43efdf2973026a462",
+          "source_sha256": "a9c23a17afa6551b87b789a28407b83493ce73251d8cb16b9268ebb5f499eac9",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
@@ -76259,13 +76259,13 @@
         },
         {
           "source_path": "tests/unit.rs (notice comment blocks)",
-          "source_sha256": "7eb96c1194fba03fd7f469c44cbbe28699dae14399be72e4c5c675a90fe08dc7",
+          "source_sha256": "3c95ebee99f84189407ec0ec68e3a10903249d09fe59957eb4711ecb76d287e2",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         },
         {
           "source_path": "tests/wpt.rs (notice comment blocks)",
-          "source_sha256": "2d083ab72ad8cc9b116dd164e63440dd120f07977ac306377633cfe214f34a62",
+          "source_sha256": "1a8e313fd63b93a263dc58cfd09dcbc0598618b8f8b736ffff05d4b33a1e7ada",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         }
@@ -76280,25 +76280,25 @@
         },
         {
           "source_path": "src/lib.rs",
-          "source_sha256": "51f47a93654528f3b8cb92c94fc26ad25775860d84197fff0c3124a687f8c5e3",
+          "source_sha256": "208c0d522e74e04bafe1107b58acd2c932095b013a86de60e9126f15cb73f0c8",
           "text": "// Copyright 2013-2015 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "f5cbe693d113f7e741c7fcff6320e653cf93d6268c9cafa89c52d2ceb98c3c2f"
         },
         {
           "source_path": "src/origin.rs",
-          "source_sha256": "e8ffaf759aa78c92574c6ae49f76999a751064621c399059b3d4eb819cb0d821",
+          "source_sha256": "53d1fb0b3832609ba6be7001df906f03226a501acee1d114e22c6d572ebfadad",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
         {
           "source_path": "src/parser.rs",
-          "source_sha256": "2dd4210e1773fc5d3fdc15ce506ecff30dbf8eb358a79bbbc2835cc30d513c3a",
+          "source_sha256": "9f868941a6291c323bf8020db4a733b0b460397b693164cb7da863e69ecfc69e",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         },
         {
           "source_path": "src/path_segments.rs",
-          "source_sha256": "28c8b6ffa880c7da76dcf43af8dcae2c46cd74389472e6e43efdf2973026a462",
+          "source_sha256": "a9c23a17afa6551b87b789a28407b83493ce73251d8cb16b9268ebb5f499eac9",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
@@ -76316,13 +76316,13 @@
         },
         {
           "source_path": "tests/unit.rs",
-          "source_sha256": "7eb96c1194fba03fd7f469c44cbbe28699dae14399be72e4c5c675a90fe08dc7",
+          "source_sha256": "3c95ebee99f84189407ec0ec68e3a10903249d09fe59957eb4711ecb76d287e2",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         },
         {
           "source_path": "tests/wpt.rs",
-          "source_sha256": "2d083ab72ad8cc9b116dd164e63440dd120f07977ac306377633cfe214f34a62",
+          "source_sha256": "1a8e313fd63b93a263dc58cfd09dcbc0598618b8f8b736ffff05d4b33a1e7ada",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         }
@@ -112782,11 +112782,11 @@
     },
     {
       "name": "ctutils",
-      "version": "0.4.2",
+      "version": "0.4.4",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "Apache-2.0 OR MIT",
-      "manifest_sha256": "aafad7883015f7b4daf7e2ba40416a0176663c47167ca1a132614db11dcb8639",
-      "original_manifest_sha256": "aafad7883015f7b4daf7e2ba40416a0176663c47167ca1a132614db11dcb8639",
+      "manifest_sha256": "0e7a80338f6195bd85c0d0dad3c0d258c626d95da17a29a82307b2f6092902f1",
+      "original_manifest_sha256": "0e7a80338f6195bd85c0d0dad3c0d258c626d95da17a29a82307b2f6092902f1",
       "holders": [
         "Copyright (c) 2025-2026 The RustCrypto Project Developers"
       ],
@@ -116806,11 +116806,11 @@
     },
     {
       "name": "form_urlencoded",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "118b1d87e862ea329b8bc84b389085a2f8e049d4c0b8b3c38ac2bffbe3501928",
-      "original_manifest_sha256": "118b1d87e862ea329b8bc84b389085a2f8e049d4c0b8b3c38ac2bffbe3501928",
+      "manifest_sha256": "47a39fced5fea0239010d6cc5e65bdd6312ef348e029be8389e4be8a14b5ce99",
+      "original_manifest_sha256": "47a39fced5fea0239010d6cc5e65bdd6312ef348e029be8389e4be8a14b5ce99",
       "holders": [
         "Copyright (c) 2013-2016 The rust-url developers",
         "Copyright 2013-2016 The rust-url developers."
@@ -116828,7 +116828,7 @@
         },
         {
           "source_path": "src/lib.rs (notice comment blocks)",
-          "source_sha256": "766b5d679064e01f7e6cce6f127a23885f79806ce3bccc49e4fe41933b83fd8d",
+          "source_sha256": "99f16d4890b77f5a809476ff957babda3c08b7f3455726915162fdeb50d87da3",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         }
@@ -116837,7 +116837,7 @@
       "source_headers": [
         {
           "source_path": "src/lib.rs",
-          "source_sha256": "766b5d679064e01f7e6cce6f127a23885f79806ce3bccc49e4fe41933b83fd8d",
+          "source_sha256": "99f16d4890b77f5a809476ff957babda3c08b7f3455726915162fdeb50d87da3",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         }
@@ -125196,11 +125196,11 @@
     },
     {
       "name": "heapless",
-      "version": "0.9.3",
+      "version": "0.9.4",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
-      "original_manifest_sha256": "21463bf53d8b8505eb7a48a11c92b7bb04771f4cf4ab71b9f79ca85d0f447197",
+      "manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
+      "original_manifest_sha256": "bbd4cf05fe5e1c1340470820ed18d689eebf20fa69b40fe429780560d541c39c",
       "holders": [
         "Copyright (c) 2017 Jorge Aparicio"
       ],
@@ -125223,7 +125223,7 @@
         },
         {
           "source_path": "src/pool/arc.rs (notice comment blocks)",
-          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
+          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -125238,7 +125238,7 @@
         },
         {
           "source_path": "src/pool/arc.rs",
-          "source_sha256": "7eaf0a082231c944d99f68d970b528c2cbf67204975bbab6d74b87ceab4bed6e",
+          "source_sha256": "300c7647fc332345b0ef81606d9cb8cd9bc04fe4b951605e67348d6f2a24b1bc",
           "text": "// reference counting logic is based on version 1.63.0 of the Rust standard library (`alloc`  crate)\n// which is licensed under 'MIT or APACHE-2.0'\n// https://github.com/rust-lang/rust/blob/1.63.0/library/alloc/src/sync.rs#L235 (last visited\n// 2022-09-05)\n",
           "sha256": "c6c13da5d3b0c55e2a4ee907a15752c4c5c086b190826b0173f0fe406f140e36"
         }
@@ -166071,11 +166071,11 @@
     },
     {
       "name": "roxmltree",
-      "version": "0.21.1",
+      "version": "0.21.2",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "3a97805983ebb9268c929dfdbe7654dea4494b923a3451fac3ab2a5962f8d131",
-      "original_manifest_sha256": "3a97805983ebb9268c929dfdbe7654dea4494b923a3451fac3ab2a5962f8d131",
+      "manifest_sha256": "5a361401f9e83ab9ca2a604a303b9e2b871b0ddfa0382b5943e0751405f04a98",
+      "original_manifest_sha256": "5a361401f9e83ab9ca2a604a303b9e2b871b0ddfa0382b5943e0751405f04a98",
       "holders": [
         "Copyright (c) 2018 Yevhenii Reizner"
       ],
@@ -171884,11 +171884,11 @@
     },
     {
       "name": "tar",
-      "version": "0.4.45",
+      "version": "0.4.46",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "0e3ed0433a1bddcdf9ced37cea1b8f9527526b630f61d0c8af666c946c56950b",
-      "original_manifest_sha256": "0e3ed0433a1bddcdf9ced37cea1b8f9527526b630f61d0c8af666c946c56950b",
+      "manifest_sha256": "6185fe2807daac38478968f7fc596d5b82d90be70a5856f557fac4f0da53bf91",
+      "original_manifest_sha256": "6185fe2807daac38478968f7fc596d5b82d90be70a5856f557fac4f0da53bf91",
       "holders": [
         "Copyright (c) The tar-rs Project Contributors"
       ],
@@ -174389,11 +174389,11 @@
     },
     {
       "name": "tokio",
-      "version": "1.53.1",
+      "version": "1.53.3",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT",
-      "manifest_sha256": "e0194904acf8d55946b949cacca2b266051bb2a99844c606829fb0159c39cfb1",
-      "original_manifest_sha256": "e0194904acf8d55946b949cacca2b266051bb2a99844c606829fb0159c39cfb1",
+      "manifest_sha256": "6e6a777fce6800a5ed2a0efb672d7751445556ee40d258157938ba4506b78c35",
+      "original_manifest_sha256": "6e6a777fce6800a5ed2a0efb672d7751445556ee40d258157938ba4506b78c35",
       "holders": [
         "Copyright (c) Tokio Contributors"
       ],
@@ -178931,11 +178931,11 @@
     },
     {
       "name": "url",
-      "version": "2.5.8",
+      "version": "2.5.9",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "license": "MIT OR Apache-2.0",
-      "manifest_sha256": "7003e5562b5ab8454b9d78376303151af79011f5dd684c1891e0f46bc9112016",
-      "original_manifest_sha256": "7003e5562b5ab8454b9d78376303151af79011f5dd684c1891e0f46bc9112016",
+      "manifest_sha256": "8f084b776440d30dd3c1334d0a35126ecf2d2fa8ef18d3ac6c4318ec747adbbd",
+      "original_manifest_sha256": "8f084b776440d30dd3c1334d0a35126ecf2d2fa8ef18d3ac6c4318ec747adbbd",
       "holders": [
         "Copyright (c) 2013-2025 The rust-url developers",
         "Copyright 2013-2014 The rust-url developers.",
@@ -178962,25 +178962,25 @@
         },
         {
           "source_path": "src/lib.rs (notice comment blocks)",
-          "source_sha256": "51f47a93654528f3b8cb92c94fc26ad25775860d84197fff0c3124a687f8c5e3",
+          "source_sha256": "208c0d522e74e04bafe1107b58acd2c932095b013a86de60e9126f15cb73f0c8",
           "text": "// Copyright 2013-2015 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "f5cbe693d113f7e741c7fcff6320e653cf93d6268c9cafa89c52d2ceb98c3c2f"
         },
         {
           "source_path": "src/origin.rs (notice comment blocks)",
-          "source_sha256": "e8ffaf759aa78c92574c6ae49f76999a751064621c399059b3d4eb819cb0d821",
+          "source_sha256": "53d1fb0b3832609ba6be7001df906f03226a501acee1d114e22c6d572ebfadad",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
         {
           "source_path": "src/parser.rs (notice comment blocks)",
-          "source_sha256": "2dd4210e1773fc5d3fdc15ce506ecff30dbf8eb358a79bbbc2835cc30d513c3a",
+          "source_sha256": "9f868941a6291c323bf8020db4a733b0b460397b693164cb7da863e69ecfc69e",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         },
         {
           "source_path": "src/path_segments.rs (notice comment blocks)",
-          "source_sha256": "28c8b6ffa880c7da76dcf43af8dcae2c46cd74389472e6e43efdf2973026a462",
+          "source_sha256": "a9c23a17afa6551b87b789a28407b83493ce73251d8cb16b9268ebb5f499eac9",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
@@ -178998,13 +178998,13 @@
         },
         {
           "source_path": "tests/unit.rs (notice comment blocks)",
-          "source_sha256": "7eb96c1194fba03fd7f469c44cbbe28699dae14399be72e4c5c675a90fe08dc7",
+          "source_sha256": "3c95ebee99f84189407ec0ec68e3a10903249d09fe59957eb4711ecb76d287e2",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         },
         {
           "source_path": "tests/wpt.rs (notice comment blocks)",
-          "source_sha256": "2d083ab72ad8cc9b116dd164e63440dd120f07977ac306377633cfe214f34a62",
+          "source_sha256": "1a8e313fd63b93a263dc58cfd09dcbc0598618b8f8b736ffff05d4b33a1e7ada",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         }
@@ -179019,25 +179019,25 @@
         },
         {
           "source_path": "src/lib.rs",
-          "source_sha256": "51f47a93654528f3b8cb92c94fc26ad25775860d84197fff0c3124a687f8c5e3",
+          "source_sha256": "208c0d522e74e04bafe1107b58acd2c932095b013a86de60e9126f15cb73f0c8",
           "text": "// Copyright 2013-2015 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "f5cbe693d113f7e741c7fcff6320e653cf93d6268c9cafa89c52d2ceb98c3c2f"
         },
         {
           "source_path": "src/origin.rs",
-          "source_sha256": "e8ffaf759aa78c92574c6ae49f76999a751064621c399059b3d4eb819cb0d821",
+          "source_sha256": "53d1fb0b3832609ba6be7001df906f03226a501acee1d114e22c6d572ebfadad",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
         {
           "source_path": "src/parser.rs",
-          "source_sha256": "2dd4210e1773fc5d3fdc15ce506ecff30dbf8eb358a79bbbc2835cc30d513c3a",
+          "source_sha256": "9f868941a6291c323bf8020db4a733b0b460397b693164cb7da863e69ecfc69e",
           "text": "// Copyright 2013-2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "891519f4249e526687d08cdbd096a2dcb96be60b408870b2f722fcf3915daec1"
         },
         {
           "source_path": "src/path_segments.rs",
-          "source_sha256": "28c8b6ffa880c7da76dcf43af8dcae2c46cd74389472e6e43efdf2973026a462",
+          "source_sha256": "a9c23a17afa6551b87b789a28407b83493ce73251d8cb16b9268ebb5f499eac9",
           "text": "// Copyright 2016 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "2783634945c09a84be6e10ebee557dd377beb699a168eaeb8a3026ba0f25ecf8"
         },
@@ -179055,13 +179055,13 @@
         },
         {
           "source_path": "tests/unit.rs",
-          "source_sha256": "7eb96c1194fba03fd7f469c44cbbe28699dae14399be72e4c5c675a90fe08dc7",
+          "source_sha256": "3c95ebee99f84189407ec0ec68e3a10903249d09fe59957eb4711ecb76d287e2",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         },
         {
           "source_path": "tests/wpt.rs",
-          "source_sha256": "2d083ab72ad8cc9b116dd164e63440dd120f07977ac306377633cfe214f34a62",
+          "source_sha256": "1a8e313fd63b93a263dc58cfd09dcbc0598618b8f8b736ffff05d4b33a1e7ada",
           "text": "// Copyright 2013-2014 The rust-url developers.\n//\n// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or\n// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your\n// option. This file may not be copied, modified, or distributed\n// except according to those terms.\n",
           "sha256": "454f6f9525490bd6421568b9a3ecc5642b2d43ff41f2199a7836ac480a9b4386"
         }
