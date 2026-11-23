@@ -212,7 +212,8 @@ impl HwEncoder {
         let mut args = vec!["-c:v".to_string(), self.encoder(codec).to_string()];
         match (self, kbps) {
             // VideoToolbox has no -maxrate on every macOS, so its average
-            // is the whole cap; the retry loop catches an overshoot.
+            // is the whole cap; the retry loop re-encodes an overshoot in
+            // software.
             (HwEncoder::VideoToolbox, Some(v)) => {
                 args.extend(["-b:v".into(), format!("{v}k")]);
             }
@@ -939,8 +940,11 @@ impl FfmpegEngine {
             Some((target, target_secs)) => {
                 // Bitrate control overshoots on short or noisy clips, and a
                 // GIF has no bitrate at all, so measure and retry smaller.
-                // Each attempt fills most of the progress that's left.
-                let attempts = if to == "gif" { 6 } else { 3 };
+                // A hardware encoder that overshoots can sit far above any
+                // bitrate it's given, so it gets one retry in software at the
+                // same budget instead. Each attempt fills most of the
+                // progress that's left.
+                let attempts = if to == "gif" { 6 } else { 3 } + usize::from(hw.get().is_some());
                 let mut from = 0.0;
                 let mut size = 0;
                 for attempt in 0..attempts {
@@ -953,7 +957,9 @@ impl FfmpegEngine {
                         break;
                     }
                     let ratio = target as f64 / size as f64;
-                    if to == "gif" {
+                    if hw.get().is_some() {
+                        hw.set(None);
+                    } else if to == "gif" {
                         plan.gif_scale = Some(plan.gif_scale.unwrap_or(1.0) * ratio.sqrt() * 0.9);
                     } else {
                         total_kbps *= ratio * 0.95;
