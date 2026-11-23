@@ -235,3 +235,44 @@ test("a non-JSON error page becomes a ConvtError, not a SyntaxError", async () =
   expect(error.name).toBe("ConvtError");
   expect(error.status).toBe(500);
 });
+test("a create whose body breaks off is retried under the same key", async () => {
+  const keys: (string | null)[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs")) {
+      keys.push(new Headers(init?.headers).get("idempotency-key"));
+      if (keys.length === 1)
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"job":'));
+              controller.error(new Error("connection reset"));
+            },
+          }),
+          { status: 200 },
+        );
+      return Response.json({ job, upload_url: null, upload_expires_in: null });
+    }
+    if (url.endsWith("/download"))
+      return Response.json({ outputs: [{ name: "input.png", url: "https://objects.test/out" }] });
+    return Response.json({ ...job, status: "succeeded" });
+  }) as typeof fetch;
+  await new Convt({ apiKey: "test", baseUrl: "https://api.test" }).convertUrl(
+    "https://cdn.example.com/a.svg",
+    { to: "png", idempotencyKey: "order-7" },
+  );
+  expect(keys).toEqual(["order-7", "order-7"]);
+});
+test("a create that keeps failing reports its idempotency key", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request): Promise<Response> => {
+    throw new TypeError("fetch failed");
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 1 })
+    .create(
+      { input_format: "png", target_format: "webp", input_bytes: 1 },
+      { idempotencyKey: "k-1" },
+    )
+    .catch((e) => e);
+  expect(error.code).toBe("network_error");
+  expect(error.idempotencyKey).toBe("k-1");
+});

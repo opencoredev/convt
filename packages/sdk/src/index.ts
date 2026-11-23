@@ -64,6 +64,11 @@ export class ConvtError extends Error {
     readonly status?: number,
     /** The `X-Request-Id` of the failed call. Quote it when you contact support. */
     readonly requestId?: string,
+    /**
+     * The `Idempotency-Key` a failed create was sent with. When the outcome is
+     * unknown, retry with the same key to get the original job instead of a new one.
+     */
+    readonly idempotencyKey?: string,
   ) {
     super(message);
     this.name = "ConvtError";
@@ -124,6 +129,11 @@ export type ConvertOptions = {
   options?: JobOptions;
   /** An https URL that gets a signed POST when the job finishes. See verifyWebhook. */
   webhookUrl?: string;
+  /**
+   * Sent as `Idempotency-Key`. Defaults to a fresh UUID. Pass a stable value, such
+   * as your own record id, so calling again after a crash returns the same job.
+   */
+  idempotencyKey?: string;
   signal?: AbortSignal;
   onProgress?: (job: Job) => void;
   timeoutMs?: number;
@@ -227,10 +237,15 @@ export class Convt {
     idempotencyKey?: string;
   }): Promise<T> {
     const retryable = method === "GET" || idempotencyKey !== undefined || data === undefined;
+    const fail = (code: string, message: string, status?: number, requestId?: string) =>
+      new ConvtError(code, message, status, requestId, idempotencyKey);
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
       const key =
         typeof credential === "function" ? await abortable(credential, signal) : credential;
+      const again = async (delay: number) => {
+        await sleep(delay, signal);
+      };
       let response: Response;
       try {
         response = await fetch(`${this.baseUrl}${path}`, {
@@ -245,9 +260,12 @@ export class Convt {
           ...(data ? { body: JSON.stringify(data) } : {}),
         });
       } catch (error) {
-        if (signal.aborted || !retryable || attempt >= this.maxRetries) throw error;
-        await sleep(250 * 2 ** attempt, signal);
-        continue;
+        if (signal.aborted) throw error;
+        if (retryable && attempt < this.maxRetries) {
+          await again(250 * 2 ** attempt);
+          continue;
+        }
+        throw fail("network_error", `The request did not complete: ${String(error)}`);
       }
       const requestId = response.headers.get("x-request-id") ?? undefined;
       if (
@@ -258,9 +276,8 @@ export class Convt {
       ) {
         const after = Number(response.headers.get("retry-after"));
         await response.body?.cancel();
-        await sleep(
+        await again(
           Number.isFinite(after) && after > 0 ? Math.min(after, 60) * 1000 : 500 * 2 ** attempt,
-          signal,
         );
         continue;
       }
@@ -268,16 +285,23 @@ export class Convt {
       try {
         value = await response.json();
       } catch {
-        throw new ConvtError(
+        if (signal.aborted) throw signal.reason;
+        // The body broke off or was not JSON. For a create that already reserved a
+        // job, retrying under the same key returns that job rather than a new one.
+        if (retryable && attempt < this.maxRetries) {
+          await again(250 * 2 ** attempt);
+          continue;
+        }
+        throw fail(
           response.ok ? "invalid_response" : "request_failed",
-          `The API answered HTTP ${response.status} without a JSON body.`,
+          `The API answered HTTP ${response.status} without a readable JSON body.`,
           response.status,
           requestId,
         );
       }
       if (!response.ok) {
         const { code, message } = errorFields(value);
-        throw new ConvtError(
+        throw fail(
           code ?? "request_failed",
           message ?? "Request failed.",
           response.status,
@@ -389,7 +413,10 @@ export class Convt {
   ): Promise<Conversion> {
     const deadline = AbortSignal.timeout(options.timeoutMs ?? 660_000);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-    const created = await this.create(input, { signal, idempotencyKey: newIdempotencyKey() });
+    const created = await this.create(input, {
+      signal,
+      idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
+    });
     try {
       if (body && created.upload_url) {
         const uploaded = await fetch(created.upload_url, { method: "PUT", body, signal });

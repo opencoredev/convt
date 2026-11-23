@@ -4,10 +4,11 @@ What the `api-hill-climb` branch changes about running the cloud API, what a dep
 
 ## Deploy order
 
-1. **Migrate first.** `0009_api_dx` adds nullable columns and two indexes to `cloud_jobs` (idempotency key and request hash, `source_url`, webhook delivery state). convt-server and convt-worker refuse to start until the database has every migration they were built with, so run `bun run db:migrate` against production before the new images roll out. The old server keeps working on the migrated database: it never reads the new columns.
-2. **Set `CONVT_WEBHOOK_SECRET`** (at least 32 random characters) on convt-api. Without it the API starts, refuses `webhook_url` with `400 webhooks_unavailable`, and logs a warning. Rotating it changes every account's webhook signing secret at once; there is no per-account rotation yet.
-3. **Deploy convt-worker, then convt-api.** A new worker understands `source_url` jobs; a new API is the only thing that creates them. Rolling the API first would queue `source_url` jobs that an old worker fails as a missing upload.
-4. Check: `GET /ready` returns `{"status":"ready","database":true,"storage":true}`, `POST /v1/convert` converts a small PNG end to end with a real key, and a job with `webhook_url` delivers to a request bin.
+1. **Migrate first.** `0009_api_dx` adds the `webhook_secrets` table, and nullable columns and two indexes to `cloud_jobs` (idempotency key and request hash, `source_url`, webhook delivery state). convt-server and convt-worker refuse to start until the database has every migration they were built with, so run `bun run db:migrate` against production before the new images roll out. The old server keeps working on the migrated database: it never reads the new columns. The migration sets `lock_timeout = 5s`, so if a long transaction holds `cloud_jobs` it fails fast instead of stalling the queue; rerun it. The index builds are not concurrent: measure `select count(*) from cloud_jobs` first, and if it is in the millions, build the two indexes `CONCURRENTLY` by hand with the same names before migrating; the migration creates them only if they are missing.
+2. **Set `CONVT_WEBHOOK_SECRET`** (at least 32 random characters) on convt-api. Without it the API starts, refuses `webhook_url` with `400 webhooks_unavailable`, and logs a warning. Rotating it changes every account's webhook signing secret at once; a single account rotates its own with `POST /v1/webhooks/secret/rotate`.
+3. **Deploy convt-worker, then convt-api.** Order matters less than it seems: the API refuses `source_url` with `400 source_url_unavailable` until `CONVT_SOURCE_URLS=1` is set on it, so an older worker never sees a job it can't download.
+4. **Set `CONVT_SOURCE_URLS=1` on convt-api** once every worker replica runs the new image.
+5. Check: `GET /ready` returns `{"status":"ready","database":true,"storage":true}`, `POST /v1/convert` converts a small PNG end to end with a real key, and a job with `webhook_url` delivers to a request bin.
 
 `railway.json` for convt-api now gates deploys on `/ready` instead of `/health`, so a release that cannot reach Postgres or the bucket never takes traffic.
 

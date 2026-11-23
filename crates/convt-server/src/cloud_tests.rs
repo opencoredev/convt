@@ -159,6 +159,7 @@ async fn cross_account_read_download_cancel_and_start_are_denied() {
         storage: Arc::new(MemoryStorage::default()),
         web_secret: "s".repeat(32),
         webhook_secret: None,
+        source_urls: true,
     };
     for (suffix, method) in [
         ("", "GET"),
@@ -414,6 +415,7 @@ async fn actual_size_mismatch_releases_reservation_and_expiry_fences_completion(
         storage: storage.clone(),
         web_secret: "s".repeat(32),
         webhook_secret: None,
+        source_urls: true,
     };
     assert_eq!(
         call(&state, &format!("/v1/jobs/{}/start", job.id), "POST")
@@ -615,6 +617,7 @@ async fn cancelled_upload_urls_remain_in_the_storage_budget_until_expiry() {
         storage: Arc::new(MemoryStorage::default()),
         web_secret: "s".repeat(32),
         webhook_secret: None,
+        source_urls: true,
     };
     routes::expire(&state).await.unwrap();
     assert!(
@@ -659,6 +662,7 @@ async fn malformed_job_requests_get_json_errors() {
         storage: Arc::new(MemoryStorage::default()),
         web_secret: "s".repeat(32),
         webhook_secret: None,
+        source_urls: true,
     };
     let with = |options: &str| {
         format!(
@@ -789,6 +793,7 @@ fn state_with(db: &crate::testing::TestDb, storage: Arc<MemoryStorage>) -> Cloud
         storage,
         web_secret: "s".repeat(32),
         webhook_secret: Some("w".repeat(32)),
+        source_urls: true,
     }
 }
 
@@ -804,6 +809,20 @@ async fn send(
     let headers = r.headers().clone();
     let body = to_bytes(r.into_body(), 50_000_000).await.unwrap().to_vec();
     (status, headers, body)
+}
+
+/// A web credential as the site Worker mints them (see tokens.rs).
+fn web_token(secret: &str, user: &str) -> String {
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use hmac::{Hmac, Mac};
+    let claims = serde_json::json!({"sub": user, "exp": chrono::Utc::now().timestamp() + 120, "aud": "convt-cloud-web"});
+    let body = URL_SAFE_NO_PAD.encode(claims.to_string());
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(body.as_bytes());
+    format!(
+        "cvt_web_{body}.{}",
+        hex::encode(mac.finalize().into_bytes())
+    )
 }
 
 fn json(body: &[u8]) -> serde_json::Value {
@@ -1050,9 +1069,34 @@ async fn convert_validates_and_can_return_early() {
     .await;
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(json(&response)["error"]["code"], "file_too_large");
+    // A file request without a key that can't finish in time is cancelled.
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::GATEWAY_TIMEOUT);
+    assert_eq!(json(&response)["error"]["code"], "timeout");
+    assert_eq!(json(&response)["job"]["status"], "cancelled");
+    // With a key it keeps running and says so without a 2xx, so curl -f writes nothing.
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .header("idempotency-key", "slow-1")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(&response)["error"]["code"], "still_running");
+    assert_eq!(json(&response)["job"]["status"], "queued");
+    // A JSON caller gets 202 and the job keeps running.
     let (status, headers, response) = send(
         &state,
         authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .header("accept", "application/json")
             .body(Body::from("png"))
             .unwrap(),
     )
@@ -1148,7 +1192,7 @@ async fn urls_are_checked_and_webhooks_need_the_server_secret() {
     assert_eq!(response["job"]["status"], "queued");
     assert_eq!(response["job"]["input_format"], "png");
     assert!(response["upload_url"].is_null());
-    let (status, _, secret) = send(
+    let (status, headers, secret) = send(
         &state,
         authed("GET", "/v1/webhooks/secret")
             .body(Body::empty())
@@ -1156,10 +1200,59 @@ async fn urls_are_checked_and_webhooks_need_the_server_secret() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["cache-control"], "no-store");
     assert_eq!(
         json(&secret)["secret"],
-        crate::webhooks::account_secret(&"w".repeat(32), "usr_a").as_str()
+        crate::webhooks::account_secret(&"w".repeat(32), "usr_a", 1).as_str()
     );
+    let (status, _, rotated) = send(
+        &state,
+        authed("POST", "/v1/webhooks/secret/rotate")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&rotated)["version"], 2);
+    assert_ne!(json(&rotated)["secret"], json(&secret)["secret"]);
+    // The browser converter's five-minute credential can't read the secret.
+    let web = web_token(&state.web_secret, "usr_a");
+    let (status, _, refused) = send(
+        &state,
+        Request::get("/v1/webhooks/secret")
+            .header("authorization", format!("Bearer {web}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(json(&refused)["error"]["code"], "api_key_required");
+    // A server that hasn't switched source_url on refuses it.
+    let mut off = state.clone();
+    off.source_urls = false;
+    let (status, _, refused) = send(
+        &off,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"target_format":"webp","source_url":"https://cdn.example.com/a.png"}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&refused)["error"]["code"], "source_url_unavailable");
+    // An undecodable job id is a JSON 404, not plain text.
+    let (status, headers, missing) = send(
+        &state,
+        authed("GET", "/v1/jobs/%FF%FE")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(headers["content-type"], "application/json");
+    assert_eq!(json(&missing)["error"]["code"], "not_found");
     state.webhook_secret = None;
     let (status, _, response) = send(
         &state,
@@ -1269,7 +1362,11 @@ async fn finished_jobs_deliver_one_signed_webhook() {
         .unwrap();
     assert_eq!(
         signature,
-        crate::webhooks::signature(&crate::webhooks::account_secret(&master, "usr_a"), t, body)
+        crate::webhooks::signature(
+            &crate::webhooks::account_secret(&master, "usr_a", 1),
+            t,
+            body
+        )
     );
     assert_eq!(headers["convt-event-type"], "job.succeeded");
     assert_eq!(headers["convt-delivery-attempt"], "2");

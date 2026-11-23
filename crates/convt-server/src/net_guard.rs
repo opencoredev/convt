@@ -23,6 +23,8 @@ pub enum UrlError {
     Credentials,
     #[error("must point at a public internet host")]
     PrivateHost,
+    #[error("must use the standard https port (443)")]
+    Port,
     #[error("host did not resolve")]
     Unresolved,
 }
@@ -57,6 +59,11 @@ pub fn check(raw: &str, policy: Policy) -> Result<Url, UrlError> {
     }
     if policy.allow_private {
         return Ok(url);
+    }
+    // Only 443: other ports reach services that were never meant to be public
+    // HTTP endpoints, such as a database exposed on a provider's public IP.
+    if url.port().is_some_and(|p| p != 443) {
+        return Err(UrlError::Port);
     }
     match url.host() {
         Some(url::Host::Ipv4(ip)) if !is_public(IpAddr::V4(ip)) => Err(UrlError::PrivateHost),
@@ -102,14 +109,16 @@ pub async fn client_for(
     .map_err(|_| UrlError::Unresolved)?
     .map_err(|_| UrlError::Unresolved)?
     .collect();
-    let Some(first) = addresses.first().copied() else {
+    if addresses.is_empty() {
         return Err(UrlError::Unresolved);
-    };
+    }
     if !policy.allow_private && addresses.iter().any(|a| !is_public(a.ip())) {
         return Err(UrlError::PrivateHost);
     }
+    // Every checked address, so the connector can fall back from an unreachable
+    // IPv6 address to IPv4 without resolving again.
     builder
-        .resolve(lookup, first)
+        .resolve_to_addrs(lookup, &addresses)
         .build()
         .map_err(|_| UrlError::Invalid)
 }
@@ -187,6 +196,8 @@ mod tests {
             "https://[fe80::1]/a",
             "https://[::ffff:10.0.0.1]/a",
             "https://[64:ff9b::a00:1]/a",
+            "https://example.com:5432/a.png",
+            "https://example.com:8443/a.png",
             "not a url",
         ] {
             assert!(check(bad, STRICT).is_err(), "{bad} should be refused");
@@ -201,6 +212,7 @@ mod tests {
             "https://bucket.s3.amazonaws.com/a.png?X-Amz-Signature=abc",
             "https://93.184.216.34/a.png",
             "https://[2606:4700::1111]/a",
+            "https://example.com:443/a.png",
         ] {
             assert!(check(good, STRICT).is_ok(), "{good} should be accepted");
         }

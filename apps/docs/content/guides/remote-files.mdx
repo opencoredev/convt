@@ -38,4 +38,6 @@ const out = await convt.convertUrl("https://cdn.example.com/talk.mov", { to: "mp
 - The file may be up to 2 GB, on both routes. The download counts toward the job's 10-minute limit.
 - `source_url` needs an API key; the browser converter's web credentials can't use it.
 
+If `source_url` is not switched on for the server yet, creating the job fails with `400 source_url_unavailable`; upload the file instead.
+
 If the download fails (an HTTP error, an empty body, a file over 2 GB, a refused address), the job fails with `error_code: "source_fetch_failed"` and you are not charged.

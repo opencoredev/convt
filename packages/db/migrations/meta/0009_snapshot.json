@@ -1,5 +1,5 @@
 {
-  "id": "99c0b785-d915-4151-8094-7c15c7ebd90a",
+  "id": "fe063481-9d59-4aaf-ad90-8522b388f3ce",
   "prevId": "77c2d38d-a853-425b-9b47-2e6cea108b73",
   "version": "7",
   "dialect": "postgresql",
@@ -2540,6 +2540,60 @@
           "value": "(\"usage_events\".\"kind\" = 'correction') = (\"usage_events\".\"corrects\" is not null)"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.webhook_secrets": {
+      "name": "webhook_secrets",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "webhook_secrets_user_id_users_id_fk": {
+          "name": "webhook_secrets_user_id_users_id_fk",
+          "tableFrom": "webhook_secrets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.account_deletions": {

@@ -133,6 +133,19 @@ export const cloudJobs = pgTable(
   ],
 );
 
+/**
+ * Each account's webhook signing secret is derived from the server's
+ * CONVT_WEBHOOK_SECRET, the account id and this version; rotating bumps the version.
+ * Accounts that never rotated have no row and use version 1.
+ */
+export const webhookSecrets = pgTable("webhook_secrets", {
+  userId: text()
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  version: integer().notNull().default(1),
+  ...timestamps,
+});
+
 export const usageEvents = pgTable(
   "usage_events",
   {

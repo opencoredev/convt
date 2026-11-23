@@ -22,6 +22,8 @@ curl -fsS {{api}}/v1/convert \
 
 `-f` makes curl exit non-zero on an error, so a JSON error never lands in `photo.webp`. Drop it while you experiment to see the error body.
 
+Add `-H "Idempotency-Key: $(uuidgen)"` once you script it, so a retry can't run the conversion twice. See [Idempotent requests](/guides/idempotency).
+
 </Tab>
 <Tab title="JavaScript SDK">
 
@@ -56,8 +58,9 @@ with open("photo.png", "rb") as f:
         data={"to": "webp"},
         timeout=180,
     )
-if not r.ok:
-    raise SystemExit(f"{r.status_code} {r.json()['error']}")
+# 200 with a non-JSON body is the file; anything else is JSON describing the job.
+if r.status_code != 200 or r.headers["content-type"].startswith("application/json"):
+    raise SystemExit(f"{r.status_code} {r.text}")
 with open("photo.webp", "wb") as out:
     out.write(r.content)
 ```
@@ -77,6 +80,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -99,7 +103,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
+	// 200 with a non-JSON body is the file; anything else is JSON describing the job.
+	if res.StatusCode != http.StatusOK || strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
 		msg, _ := io.ReadAll(res.Body)
 		log.Fatalf("%s: %s", res.Status, msg)
 	}
@@ -125,7 +130,9 @@ const res = await fetch("{{api}}/v1/convert", {
   headers: { Authorization: `Bearer ${process.env.CONVT_API_KEY}` },
   body: form,
 });
-if (!res.ok) throw new Error(JSON.stringify(await res.json()));
+// 200 with a non-JSON body is the file; anything else is JSON describing the job.
+if (res.status !== 200 || res.headers.get("content-type")?.startsWith("application/json"))
+  throw new Error(`${res.status} ${await res.text()}`);
 await writeFile("photo.webp", Buffer.from(await res.arrayBuffer()));
 ```
 
@@ -158,19 +165,23 @@ The job, its upload and its output are deleted 24 hours after it was created.
 - `to` and `from` take a format id or an extension, so `to=jpg` works. convt reads the input format from the file name; pass `from` when it has none. [Formats](/reference/formats) lists every pair.
 - Send the file as the raw body instead of a form: `curl --data-binary @photo.png "{{api}}/v1/convert?to=webp&from=png" ...`.
 - Convert a file already in S3, R2 or on a CDN without downloading it first: send `{"source_url": "https://...", "to": "webp"}` as JSON. See [Remote files](/guides/remote-files).
-- A PDF with several pages produces several files, so the answer is JSON with a signed URL for each. Send `Accept: application/json` to always get JSON.
+- A PDF with several pages produces several files, so the answer is JSON with a signed URL for each. Send `Accept: application/json` to always get JSON, or `options={"pages":"1"}` for one page.
 
 ## When the answer is not a file
 
-| Status | Meaning                                                                                                                                       |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `200`  | The converted file, or JSON when there are several outputs or you asked for JSON.                                                             |
-| `202`  | Still running after `wait` seconds (default 120, at most 300). The job keeps going; poll the `Location` it returns. `wait=0` answers at once. |
-| `413`  | Over 25 MB. Use [the jobs routes](/guides/uploading), which take 2 GB, or `source_url`.                                                       |
-| `422`  | The conversion failed. You are not charged.                                                                                                   |
-| `4xx`  | A bad request, key or spend cap. The JSON `error.code` says which; see [Errors](/reference/errors).                                           |
+convt waits up to `wait` seconds for the result (default 120, at most 300). What happens next depends on what you asked for:
 
-If you hang up before the answer, convt cancels the job and you are not charged. To retry a request safely instead, send an [`Idempotency-Key`](/guides/idempotency): a retry with the same key picks up the same job rather than starting another.
+| Status | Meaning                                                                                                                                            |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200`  | The converted file, or JSON when there are several outputs or you sent `Accept: application/json`.                                                 |
+| `202`  | You asked for JSON and the job is still running. It keeps going; poll the `Location` it returns. `wait=0` answers at once.                         |
+| `409`  | `still_running`: you asked for the file and sent an `Idempotency-Key`. The job keeps going; send the same request with the same key to collect it. |
+| `504`  | `timeout`: you asked for the file without a key. The job was cancelled and you were not charged. Raise `wait`, send a key, or use the jobs routes. |
+| `413`  | Over 25 MB. Use [the jobs routes](/guides/uploading), which take 2 GB, or `source_url`.                                                            |
+| `422`  | The conversion failed. You are not charged.                                                                                                        |
+| `4xx`  | A bad request, key or spend cap. The JSON `error.code` says which; see [Errors](/reference/errors).                                                |
+
+Without an `Idempotency-Key`, hanging up before the answer cancels the job. That is best effort: if the conversion already succeeded, it is billed. To retry safely instead, send an [`Idempotency-Key`](/guides/idempotency); a retry with the same key picks up the same job rather than starting another.
 
 ## Next steps
 

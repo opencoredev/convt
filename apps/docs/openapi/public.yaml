@@ -83,10 +83,10 @@ actions:
             upload_expires_in: 900
   - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_url
     update:
-      description: Signed URL. Send the file bytes to it with `PUT`.
+      description: Signed URL. Send the file bytes to it with `PUT`. `null` for a `source_url` job, and for an idempotent replay of a job that was already started.
   - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_expires_in
     update:
-      description: Seconds until `upload_url` stops accepting uploads. Always 900.
+      description: Seconds until `upload_url` stops accepting uploads, 900, or `null` when there is no `upload_url`.
   - target: $.paths['/v1/jobs'].post.responses['400']
     update:
       description: "`invalid_request` (the body is not JSON or misses a required field), `unsupported_format`, `invalid_options` or `file_too_large`."
@@ -133,20 +133,30 @@ actions:
       description: "`invalid_request`, `input_format_required`, `unsupported_format`, `invalid_options`, `invalid_source_url`, `invalid_idempotency_key` or an empty file (`file_too_large`)."
   - target: $.paths['/v1/convert'].post.responses['409']
     update:
-      description: "`cancelled` (the job was cancelled first) or `idempotency_key_reused`."
+      description: "`cancelled` (the job was cancelled first), `still_running` (a file request with an `Idempotency-Key` that isn't done after `wait`; retry with the key) or `idempotency_key_reused`."
   - target: $.paths['/v1/convert'].post.responses['413']
     update:
       description: "`file_too_large`: over 25 MB. Use `POST /v1/jobs` or `source_url`."
+  - target: $.paths['/v1/convert'].post.responses['503']
+    update:
+      description: "`server_busy`: too many uploads in progress. Retry after `Retry-After` seconds."
+  - target: $.paths['/v1/convert'].post.responses['504']
+    update:
+      description: "`timeout`: a file request without an `Idempotency-Key` did not finish within `wait`. The job was cancelled; not charged."
   - target: $.paths['/v1/convert'].post.responses['422']
     update:
       description: "The conversion failed. `code` is the job's `error_code`, such as `conversion_failed` or `source_fetch_failed`. Not charged."
 
   # Webhooks
+  - target: $.paths['/v1/webhooks/secret/rotate'].post
+    update:
+      tags: [Webhooks]
+      description: Replaces the account's webhook signing secret and returns the new one. Deliveries from then on are signed with it. API keys only.
   - target: $.paths['/v1/webhooks/secret'].get
     update:
       tags: [Webhooks]
       description: |
-        Returns the secret that signs your account's webhook deliveries in the `Convt-Signature` header. Fetch it once and store it with your other secrets. See [Webhooks](https://convt.app/docs/guides/webhooks).
+        Returns the secret that signs your account's webhook deliveries in the `Convt-Signature` header, and its version. API keys only. Fetch it once and store it with your other secrets. See [Webhooks](https://convt.app/docs/guides/webhooks).
 
   # Read
   - target: $.paths['/v1/jobs/{id}'].get

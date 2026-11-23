@@ -36,6 +36,9 @@ pub struct CloudState {
     pub web_secret: String,
     /// `CONVT_WEBHOOK_SECRET`. Without it, `webhook_url` is refused.
     pub webhook_secret: Option<String>,
+    /// `CONVT_SOURCE_URLS=1`. Off until every worker can download `source_url`
+    /// inputs, because an older worker would fail those jobs.
+    pub source_urls: bool,
 }
 
 tokio::task_local! {
@@ -49,6 +52,8 @@ pub struct ApiError {
     code: &'static str,
     message: String,
     headers: Vec<(HeaderName, HeaderValue)>,
+    /// The job the failed request created or touched, so the caller can recover it.
+    job: Option<Box<JobView>>,
 }
 impl ApiError {
     pub fn new(status: StatusCode, code: &'static str, message: &str) -> Self {
@@ -57,6 +62,7 @@ impl ApiError {
             code,
             message: message.into(),
             headers: Vec::new(),
+            job: None,
         }
     }
     pub fn bad(code: &'static str, message: &str) -> Self {
@@ -76,6 +82,13 @@ impl ApiError {
     }
     pub fn status(&self) -> StatusCode {
         self.status
+    }
+    pub fn with_job(mut self, job: jobs::Job) -> Self {
+        self.job = Some(Box::new(job.into()));
+        self
+    }
+    pub fn with_header(self, name: HeaderName, value: String) -> Self {
+        self.header(name, value)
     }
     fn header(mut self, name: HeaderName, value: String) -> Self {
         if let Ok(value) = HeaderValue::from_str(&value) {
@@ -107,15 +120,15 @@ impl From<anyhow::Error> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let request_id = REQUEST_ID.try_with(Clone::clone).ok();
-        let mut response = (
-            self.status,
-            Json(serde_json::json!({"error":{
-                "code": self.code,
-                "message": self.message,
-                "request_id": request_id,
-            }})),
-        )
-            .into_response();
+        let mut body = serde_json::json!({"error":{
+            "code": self.code,
+            "message": self.message,
+            "request_id": request_id,
+        }});
+        if let Some(job) = self.job {
+            body["job"] = serde_json::json!(job);
+        }
+        let mut response = (self.status, Json(body)).into_response();
         response.headers_mut().extend(self.headers);
         response
     }
@@ -212,7 +225,7 @@ async fn auth(State(s): State<CloudState>, mut request: Request, next: Next) -> 
     response
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct JobView {
     pub id: String,
     pub status: String,
@@ -245,6 +258,21 @@ impl From<jobs::Job> for JobView {
             source_url: j.source_url,
             webhook_url: j.webhook_url,
         }
+    }
+}
+
+/// The `{id}` path segment, with the JSON error shape when it can't be decoded.
+pub struct JobId(pub String);
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for JobId {
+    type Rejection = ApiError;
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Path::<String>::from_request_parts(parts, state)
+            .await
+            .map(|Path(id)| JobId(id))
+            .map_err(|_| ApiError::not_found("Job not found."))
     }
 }
 
@@ -316,6 +344,12 @@ pub async fn create_job(
     route: &str,
     extra: &str,
 ) -> Result<jobs::Created, ApiError> {
+    if data.source_url.is_some() && !s.source_urls {
+        return Err(ApiError::bad(
+            "source_url_unavailable",
+            "source_url is not enabled on this server yet. Upload the file instead.",
+        ));
+    }
     if data.webhook_url.is_some() && s.webhook_secret.is_none() {
         return Err(ApiError::bad(
             "webhooks_unavailable",
@@ -374,7 +408,7 @@ async fn create(
 async fn status(
     State(s): State<CloudState>,
     Extension(who): Extension<Principal>,
-    Path(id): Path<String>,
+    JobId(id): JobId,
 ) -> Result<Json<JobView>, ApiError> {
     Ok(Json(jobs::owned(&s.pool, &who, &id).await?.into()))
 }
@@ -430,7 +464,7 @@ pub async fn queue_uploaded(
 async fn start(
     State(s): State<CloudState>,
     Extension(who): Extension<Principal>,
-    Path(id): Path<String>,
+    JobId(id): JobId,
 ) -> Result<Json<JobView>, ApiError> {
     let job = jobs::owned(&s.pool, &who, &id).await?;
     Ok(Json(queue_uploaded(&s, &who, job).await?.into()))
@@ -438,7 +472,7 @@ async fn start(
 async fn cancel(
     State(s): State<CloudState>,
     Extension(who): Extension<Principal>,
-    Path(id): Path<String>,
+    JobId(id): JobId,
 ) -> Result<Json<JobView>, ApiError> {
     Ok(Json(jobs::cancel(&s.pool, &who, &id).await?.into()))
 }
@@ -461,7 +495,7 @@ pub async fn output_links(
 async fn download(
     State(s): State<CloudState>,
     Extension(who): Extension<Principal>,
-    Path(id): Path<String>,
+    JobId(id): JobId,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let job = jobs::owned(&s.pool, &who, &id).await?;
     if job.status != "succeeded" {
@@ -476,19 +510,49 @@ async fn download(
     ))
 }
 
-async fn webhook_secret(
-    State(s): State<CloudState>,
-    Extension(who): Extension<Principal>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let master = s.webhook_secret.as_deref().ok_or_else(|| {
+/// The webhook secret is a long-lived account credential: only an API key may
+/// read or rotate it, never the five-minute web credential the browser converter
+/// holds, and responses are never cached.
+fn secret_response(master: &str, who: &Principal, version: i32) -> Response {
+    let mut response = Json(serde_json::json!({
+        "secret": crate::webhooks::account_secret(master, &who.user_id, version),
+        "version": version,
+    }))
+    .into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+fn webhook_master<'a>(s: &'a CloudState, who: &Principal) -> Result<&'a str, ApiError> {
+    if who.key_id.is_none() {
+        return Err(ApiError::forbidden(
+            "api_key_required",
+            "Use an API key to read or rotate the webhook secret.",
+        ));
+    }
+    s.webhook_secret.as_deref().ok_or_else(|| {
         ApiError::bad(
             "webhooks_unavailable",
             "Webhooks are not enabled on this server yet.",
         )
-    })?;
-    Ok(Json(serde_json::json!({
-        "secret": crate::webhooks::account_secret(master, &who.user_id),
-    })))
+    })
+}
+async fn webhook_secret(
+    State(s): State<CloudState>,
+    Extension(who): Extension<Principal>,
+) -> Result<Response, ApiError> {
+    let master = webhook_master(&s, &who)?;
+    let version = crate::webhooks::secret_version(&s.pool, &who.user_id).await?;
+    Ok(secret_response(master, &who, version))
+}
+async fn rotate_webhook_secret(
+    State(s): State<CloudState>,
+    Extension(who): Extension<Principal>,
+) -> Result<Response, ApiError> {
+    let master = webhook_master(&s, &who)?;
+    let version = crate::webhooks::rotate(&s.pool, &who.user_id).await?;
+    Ok(secret_response(master, &who, version))
 }
 
 pub fn router(state: CloudState) -> Router {
@@ -499,6 +563,7 @@ pub fn router(state: CloudState) -> Router {
         .route("/v1/jobs/{id}/cancel", post(cancel))
         .route("/v1/jobs/{id}/download", get(download))
         .route("/v1/webhooks/secret", get(webhook_secret))
+        .route("/v1/webhooks/secret/rotate", post(rotate_webhook_secret))
         .merge(crate::convert::router())
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .layer(tower_http::cors::CorsLayer::permissive())

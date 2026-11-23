@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update cloud_jobs j set webhook_attempts=j.webhook_attempts+1, webhook_next_at=now()+interval '60 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit 20 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as \"webhook_url!\", j.webhook_attempts",
+  "query": "update cloud_jobs j set webhook_attempts=j.webhook_attempts+1, webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as \"webhook_url!\", j.webhook_attempts, coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as \"secret_version!\"",
   "describe": {
     "columns": [
       {
@@ -46,19 +46,27 @@
             "name": "webhook_attempts"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "secret_version!",
+        "type_info": "Int4",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       true,
-      false
+      false,
+      null
     ]
   },
-  "hash": "b96b0340395ef800f468695935b7cb3f3b8da0d9c523ac32ae9695beeaf14ec9"
+  "hash": "12b555228f014bb27f89283b9ecf00ff8cafccd6fbf406069dc1c73af2a41953"
 }

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select version from webhook_secrets where user_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "webhook_secrets",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d186a22b175479b440dbfb1361544a8d12508a21c6d07f9e07506d03695b45aa"
+}

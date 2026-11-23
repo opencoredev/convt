@@ -7,12 +7,19 @@
 //! The input is a multipart `file` field, a raw request body, or a JSON body with
 //! `source_url`. When the job succeeds with one output the response is that file;
 //! with several outputs, or `Accept: application/json`, it is JSON with signed
-//! URLs. A job still running after `wait` seconds answers `202` with the job, which
-//! keeps running and can be polled. Without an `Idempotency-Key`, closing the
-//! connection before the answer cancels the job, so an abandoned request is not
-//! billed; with one, the job keeps going so a retry with the same key picks it up.
+//! URLs.
+//!
+//! A job still running after `wait` seconds: a JSON caller gets `202` and the job
+//! keeps running. A file caller with an `Idempotency-Key` gets `409 still_running`
+//! and the job keeps running, so a retry with the key collects it. A file caller
+//! without a key gets `504 timeout` and the job is cancelled, because nothing else
+//! could ever fetch its result.
+//!
+//! Without an `Idempotency-Key`, hanging up before the answer cancels the job. That
+//! is best effort: a job that already succeeded is billed.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::{
@@ -33,6 +40,43 @@ use crate::routes::{self, ApiError, CloudState, JobView};
 pub const MAX_INLINE_BYTES: usize = 25_000_000;
 pub const DEFAULT_WAIT_SECONDS: u64 = 120;
 pub const MAX_WAIT_SECONDS: u64 = 300;
+
+/// Request bodies held in memory at once across this process, in MB. Each inline
+/// request holds its share from before the body is read until the bytes are
+/// stored, so many large uploads at once queue instead of exhausting memory.
+fn inline_budget() -> &'static tokio::sync::Semaphore {
+    static BUDGET: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    BUDGET.get_or_init(|| {
+        let mb = std::env::var("CONVT_INLINE_BUDGET_MB")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(512)
+            .max(32);
+        tokio::sync::Semaphore::new(mb)
+    })
+}
+
+async fn reserve_memory(
+    headers: &HeaderMap,
+) -> Result<tokio::sync::SemaphorePermit<'static>, ApiError> {
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<usize>().ok());
+    if declared.is_some_and(|n| n > MAX_INLINE_BYTES + 64 * 1024) {
+        return Err(too_large());
+    }
+    let mb = declared.map_or(26, |n| n.div_ceil(1_000_000).clamp(1, 26)) as u32;
+    match tokio::time::timeout(Duration::from_secs(10), inline_budget().acquire_many(mb)).await {
+        Ok(Ok(permit)) => Ok(permit),
+        _ => Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "server_busy",
+            "Too many uploads are in progress. Retry in a few seconds.",
+        )
+        .with_header(header::RETRY_AFTER, "5".into())),
+    }
+}
 
 pub fn router() -> Router<CloudState> {
     Router::new().route(
@@ -202,29 +246,66 @@ async fn read_body(request: Request, s: &CloudState) -> Result<Parsed, ApiError>
     Ok(parsed)
 }
 
-/// Cancels the job if the handler is dropped before it answers: the client hung
-/// up. Disarmed once there is an answer or when the client sent an
-/// `Idempotency-Key` (a retry may still want the job).
-struct CancelOnDrop(Option<(sqlx::PgPool, Principal, String)>);
-impl CancelOnDrop {
-    fn disarm(&mut self) {
-        self.0 = None;
+/// Cancels the job when the client hangs up before the answer. The job id is
+/// registered under the same lock that records the hang-up, from a task that
+/// outlives the request, so a disconnect during job creation still cancels the
+/// job the creation commits. Best effort: a job that already succeeded stays billed.
+#[derive(Default)]
+struct Hangup {
+    gone: bool,
+    armed: bool,
+    job: Option<String>,
+}
+struct HangupGuard {
+    state: Arc<Mutex<Hangup>>,
+    pool: sqlx::PgPool,
+    who: Principal,
+}
+fn cancel_later(pool: sqlx::PgPool, who: Principal, id: String) {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        handle.spawn(async move {
+            if let Err(error) = jobs::cancel(&pool, &who, &id).await {
+                tracing::warn!(
+                    job_id = id,
+                    error = error.code(),
+                    "cancel after hang-up failed"
+                );
+            }
+        });
     }
 }
-impl Drop for CancelOnDrop {
+impl HangupGuard {
+    fn new(pool: sqlx::PgPool, who: Principal, armed: bool) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(Hangup {
+                armed,
+                ..Default::default()
+            })),
+            pool,
+            who,
+        }
+    }
+    /// Called by the creating task once the job is committed.
+    fn register(state: &Mutex<Hangup>, pool: &sqlx::PgPool, who: &Principal, id: &str) {
+        let mut hangup = state.lock().unwrap_or_else(|e| e.into_inner());
+        if hangup.gone && hangup.armed {
+            cancel_later(pool.clone(), who.clone(), id.to_owned());
+        } else {
+            hangup.job = Some(id.to_owned());
+        }
+    }
+    fn disarm(&self) {
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).armed = false;
+    }
+}
+impl Drop for HangupGuard {
     fn drop(&mut self) {
-        if let Some((pool, who, id)) = self.0.take()
-            && let Ok(handle) = tokio::runtime::Handle::try_current()
+        let mut hangup = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        hangup.gone = true;
+        if hangup.armed
+            && let Some(id) = hangup.job.take()
         {
-            handle.spawn(async move {
-                if let Err(error) = jobs::cancel(&pool, &who, &id).await {
-                    tracing::warn!(
-                        job_id = id,
-                        error = error.code(),
-                        "cancel after disconnect failed"
-                    );
-                }
-            });
+            cancel_later(self.pool.clone(), self.who.clone(), id);
         }
     }
 }
@@ -280,6 +361,7 @@ async fn convert(
                 )
             })?,
     };
+    let _memory = reserve_memory(&headers).await?;
     let mut body = read_body(request, &s).await?;
     body.to = body.to.or_else(|| query.get("to").cloned());
     body.from = body.from.or_else(|| query.get("from").cloned());
@@ -375,39 +457,107 @@ async fn convert(
         ),
     };
     let has_key = routes::idempotency_key(&headers)?.is_some();
-    let created = routes::create_job(&s, &who, &headers, &data, "convert", &extra).await?;
+    let guard = HangupGuard::new(s.pool.clone(), who.clone(), !has_key);
+    // Creation runs in its own task so a hang-up mid-transaction cannot leave a
+    // committed job that nobody cancels.
+    let created = {
+        let (s, who, headers, state) =
+            (s.clone(), who.clone(), headers.clone(), guard.state.clone());
+        tokio::spawn(async move {
+            let created = routes::create_job(&s, &who, &headers, &data, "convert", &extra).await;
+            if let Ok(created) = &created
+                && !created.replayed
+            {
+                HangupGuard::register(&state, &s.pool, &who, &created.job.id);
+            }
+            created
+        })
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                "Request failed.",
+            )
+        })??
+    };
     let replayed = created.replayed;
     let mut job = created.job;
-    let mut guard = CancelOnDrop(
-        (!has_key && !replayed).then(|| (s.pool.clone(), who.clone(), job.id.clone())),
-    );
     if job.status == "created"
         && let Some(bytes) = bytes
     {
-        s.storage
-            .put(job.input_key.as_deref().unwrap(), bytes)
-            .await?;
-        job = routes::queue_uploaded(&s, &who, job).await?;
+        let stored = async {
+            s.storage
+                .put(job.input_key.as_deref().unwrap(), bytes)
+                .await?;
+            routes::queue_uploaded(&s, &who, job.clone()).await
+        }
+        .await;
+        job = match stored {
+            Ok(job) => job,
+            // Without a key the guard cancels the job as this returns; with one, a
+            // retry under the key uploads again. Either way the caller learns the id.
+            Err(error) => {
+                let id = job.id.clone();
+                let job = jobs::owned(&s.pool, &who, &id).await.unwrap_or(job);
+                return Ok(finish(error.with_job(job).into_response(), &id, replayed));
+            }
+        };
+    } else {
+        drop(bytes);
     }
+    drop(_memory);
+    let wants_json = headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|a| a.contains("application/json"));
     let deadline = tokio::time::Instant::now() + Duration::from_secs(wait);
     let mut pause = Duration::from_millis(150);
     while !matches!(job.status.as_str(), "succeeded" | "failed" | "cancelled") {
         let now = tokio::time::Instant::now();
-        // A draining server answers 202 rather than holding the request until it
-        // is killed, so the client always learns the job id.
+        // A draining server answers now rather than holding the request until it
+        // is killed, so the client always learns what happened to the job.
         if now >= deadline || routes::draining() {
             guard.disarm();
-            let mut response = (
-                StatusCode::ACCEPTED,
-                Json(serde_json::json!({"job": JobView::from(job.clone())})),
-            )
-                .into_response();
-            let h = response.headers_mut();
-            if let Ok(location) = HeaderValue::from_str(&format!("/v1/jobs/{}", job.id)) {
-                h.insert(header::LOCATION, location);
+            if wants_json || has_key {
+                let (status, body) = if wants_json {
+                    (
+                        StatusCode::ACCEPTED,
+                        serde_json::json!({"job": JobView::from(job.clone())}),
+                    )
+                } else {
+                    (
+                        StatusCode::CONFLICT,
+                        serde_json::json!({
+                            "error": {"code": "still_running", "message": "The job is still running. Retry with the same Idempotency-Key, or poll the job.", "request_id": routes::REQUEST_ID.try_with(Clone::clone).ok()},
+                            "job": JobView::from(job.clone()),
+                        }),
+                    )
+                };
+                let mut response = (status, Json(body)).into_response();
+                let h = response.headers_mut();
+                if let Ok(location) = HeaderValue::from_str(&format!("/v1/jobs/{}", job.id)) {
+                    h.insert(header::LOCATION, location);
+                }
+                h.insert(header::RETRY_AFTER, HeaderValue::from_static("2"));
+                return Ok(finish(response, &job.id, replayed));
             }
-            h.insert(header::RETRY_AFTER, HeaderValue::from_static("2"));
-            return Ok(finish(response, &job.id, replayed));
+            // A file caller without a key could never fetch this job's result, so
+            // stop it. If it finished in the meantime, serve it after all.
+            job = jobs::cancel(&s.pool, &who, &job.id).await?;
+            if job.status != "succeeded" {
+                return Ok(finish(
+                    job_error(
+                        StatusCode::GATEWAY_TIMEOUT,
+                        "timeout",
+                        "The conversion did not finish within `wait` seconds and was cancelled; you were not charged. Raise `wait` (up to 300), send an Idempotency-Key, or use the jobs routes.",
+                        job.clone(),
+                    ),
+                    &job.id,
+                    replayed,
+                ));
+            }
+            break;
         }
         tokio::time::sleep(pause.min(deadline - now)).await;
         pause = (pause * 2).min(Duration::from_millis(1000));
@@ -452,10 +602,6 @@ async fn convert(
         }
         _ => {}
     }
-    let wants_json = headers
-        .get(header::ACCEPT)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|a| a.contains("application/json"));
     if wants_json || job.output_keys.0.len() != 1 {
         let (outputs, ttl) = routes::output_links(&s, &job).await?;
         let response = Json(serde_json::json!({
@@ -496,7 +642,9 @@ fn source_name_owned(job: &jobs::Job) -> Option<&str> {
 
 fn finish(mut response: Response, job_id: &str, replayed: bool) -> Response {
     let h = response.headers_mut();
-    if let Ok(id) = HeaderValue::from_str(job_id) {
+    if !job_id.is_empty()
+        && let Ok(id) = HeaderValue::from_str(job_id)
+    {
         h.insert("convt-job-id", id);
     }
     if replayed {

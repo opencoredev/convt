@@ -9,4 +9,5 @@ ALTER TABLE "cloud_jobs" DROP COLUMN "webhook_attempts";--> statement-breakpoint
 ALTER TABLE "cloud_jobs" DROP COLUMN "webhook_url";--> statement-breakpoint
 ALTER TABLE "cloud_jobs" DROP COLUMN "source_url";--> statement-breakpoint
 ALTER TABLE "cloud_jobs" DROP COLUMN "request_hash";--> statement-breakpoint
-ALTER TABLE "cloud_jobs" DROP COLUMN "idempotency_key";
+ALTER TABLE "cloud_jobs" DROP COLUMN "idempotency_key";--> statement-breakpoint
+DROP TABLE "webhook_secrets";

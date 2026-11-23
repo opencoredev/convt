@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into webhook_secrets (user_id, version) values ($1, 2) on conflict (user_id) do update set version=webhook_secrets.version+1, updated_at=now() returning version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "webhook_secrets",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "beb69fe78ec219f85e289c4c3e148681fa862ef13deb88d0d3e1f955ec8cf416"
+}

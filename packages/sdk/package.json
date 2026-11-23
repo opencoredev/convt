@@ -38,12 +38,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./formats": {
       "types": "./dist/formats.d.ts",
       "bun": "./src/formats.ts",
-      "import": "./dist/formats.js"
+      "import": "./dist/formats.js",
+      "default": "./dist/formats.js"
     },
     "./package.json": "./package.json"
   },

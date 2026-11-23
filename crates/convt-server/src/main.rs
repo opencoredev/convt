@@ -43,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
             storage: storage.clone(),
             web_secret: secret,
             webhook_secret: webhook_secret.clone(),
+            source_urls: std::env::var("CONVT_SOURCE_URLS").as_deref() == Ok("1"),
         };
         if let Some(master) = webhook_secret {
             convt_server::webhooks::spawn(

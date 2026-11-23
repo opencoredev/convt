@@ -3,9 +3,11 @@
 //! row, so any API replica can deliver and a restart loses nothing. Delivery is at
 //! least once; receivers dedupe on the `Convt-Event-Id` header.
 //!
-//! Each account's signing secret is derived from `CONVT_WEBHOOK_SECRET` and the
-//! account id, so the database holds no webhook secret. `GET /v1/webhooks/secret`
-//! returns it. Rotating the server secret rotates every account's.
+//! Each account's signing secret is derived from `CONVT_WEBHOOK_SECRET`, the
+//! account id and a version in `webhook_secrets`, so the database holds no secret.
+//! `GET /v1/webhooks/secret` returns it to an API key (never to the browser
+//! converter's short-lived web credential); `POST /v1/webhooks/secret/rotate`
+//! bumps the version. Rotating the server secret rotates every account's.
 
 use std::time::Duration;
 
@@ -21,11 +23,38 @@ use crate::storage::Storage;
 pub const MAX_ATTEMPTS: i32 = 8;
 const BACKOFF_SECONDS: [i64; 8] = [10, 30, 120, 600, 1800, 3600, 3600, 3600];
 
-pub fn account_secret(master: &str, user_id: &str) -> String {
+/// Rows claimed per pass. Each send is bounded (10 s DNS plus 10 s HTTP) and they
+/// run concurrently, so a pass ends well inside the claim's lease.
+const BATCH: i64 = 10;
+
+pub fn account_secret(master: &str, user_id: &str, version: i32) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(master.as_bytes()).expect("any key length");
     mac.update(b"convt-webhook-v1:");
     mac.update(user_id.as_bytes());
+    mac.update(b":");
+    mac.update(version.to_string().as_bytes());
     format!("whsec_{}", hex::encode(mac.finalize().into_bytes()))
+}
+
+/// The account's current secret version (1 until it first rotates).
+pub async fn secret_version(pool: &PgPool, user_id: &str) -> sqlx::Result<i32> {
+    Ok(sqlx::query_scalar!(
+        r#"select version from webhook_secrets where user_id=$1"#,
+        user_id
+    )
+    .fetch_optional(pool)
+    .await?
+    .unwrap_or(1))
+}
+
+/// Moves the account to a new secret and returns its version.
+pub async fn rotate(pool: &PgPool, user_id: &str) -> sqlx::Result<i32> {
+    sqlx::query_scalar!(
+        r#"insert into webhook_secrets (user_id, version) values ($1, 2) on conflict (user_id) do update set version=webhook_secrets.version+1, updated_at=now() returning version"#,
+        user_id
+    )
+    .fetch_one(pool)
+    .await
 }
 
 /// `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`, Stripe's scheme.
@@ -46,6 +75,7 @@ struct Due {
     user_id: String,
     webhook_url: String,
     webhook_attempts: i32,
+    secret_version: i32,
 }
 
 /// Claims due deliveries and sends them. Returns how many were delivered.
@@ -55,35 +85,41 @@ pub async fn deliver_due(
     master: &str,
     policy: Policy,
 ) -> anyhow::Result<usize> {
-    // The claim moves `webhook_next_at` a minute ahead, a lease that keeps other
+    // The claim bumps `webhook_attempts`, which is also the claim's fencing token,
+    // and moves `webhook_next_at` two minutes ahead: a lease that keeps other
     // replicas off the row while this one sends.
-    let due = sqlx::query_as!(Due, r#"update cloud_jobs j set webhook_attempts=j.webhook_attempts+1, webhook_next_at=now()+interval '60 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit 20 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as "webhook_url!", j.webhook_attempts"#, MAX_ATTEMPTS).fetch_all(pool).await?;
+    let due = sqlx::query_as!(Due, r#"update cloud_jobs j set webhook_attempts=j.webhook_attempts+1, webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as "webhook_url!", j.webhook_attempts, coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as "secret_version!""#, MAX_ATTEMPTS, BATCH).fetch_all(pool).await?;
+    let sends = due.iter().map(|row| async move {
+        let result = send(pool, storage, master, policy, row).await;
+        (row, result)
+    });
     let mut delivered = 0;
-    for row in due {
-        let ok = match send(pool, storage, master, policy, &row).await {
-            Ok(()) => true,
-            Err(error) => {
-                tracing::info!(job_id = row.id, attempt = row.webhook_attempts, %error, "webhook delivery failed");
-                false
+    for (row, result) in futures_util::future::join_all(sends).await {
+        match result {
+            Ok(()) => {
+                delivered += 1;
+                // Fenced: a newer claim of the same row owns its state.
+                sqlx::query!(
+                    r#"update cloud_jobs set webhook_delivered_at=now(), webhook_next_at=null where id=$1 and webhook_attempts=$2"#,
+                    &row.id,
+                    row.webhook_attempts
+                )
+                .execute(pool)
+                .await?;
             }
-        };
-        if ok {
-            delivered += 1;
-            sqlx::query!(
-                r#"update cloud_jobs set webhook_delivered_at=now(), webhook_next_at=null where id=$1"#,
-                &row.id
-            )
-            .execute(pool)
-            .await?;
-        } else {
-            let wait = BACKOFF_SECONDS[(row.webhook_attempts.max(1) as usize - 1).min(7)];
-            sqlx::query!(
-                r#"update cloud_jobs set webhook_next_at=now()+make_interval(secs => $2) where id=$1"#,
-                &row.id,
-                wait as f64
-            )
-            .execute(pool)
-            .await?;
+            Err(error) => {
+                // Never log the URL: it may carry a receiver's token.
+                tracing::info!(job_id = row.id, attempt = row.webhook_attempts, error = %error, "webhook delivery failed");
+                let wait = BACKOFF_SECONDS[(row.webhook_attempts.max(1) as usize - 1).min(7)];
+                sqlx::query!(
+                    r#"update cloud_jobs set webhook_next_at=now()+make_interval(secs => $3) where id=$1 and webhook_attempts=$2 and webhook_delivered_at is null"#,
+                    &row.id,
+                    row.webhook_attempts,
+                    wait as f64
+                )
+                .execute(pool)
+                .await?;
+            }
         }
     }
     Ok(delivered)
@@ -111,11 +147,14 @@ pub async fn event_body(
         expires_in = Some(ttl);
     }
     let id = job.id.clone();
+    let mut view = JobView::from(job);
+    // A presigned source_url is a live credential; receivers don't need it.
+    view.source_url = None;
     Ok(Some(serde_json::json!({
         "id": format!("evt_{}", id.trim_start_matches("job_")),
         "type": kind,
         "created_at": chrono::Utc::now(),
-        "data": {"job": JobView::from(job), "outputs": outputs, "expires_in": expires_in},
+        "data": {"job": view, "outputs": outputs, "expires_in": expires_in},
     })))
 }
 
@@ -133,7 +172,7 @@ async fn send(
     let url = net_guard::check(&row.webhook_url, policy)?;
     let client = net_guard::client_for(&url, policy, Duration::from_secs(10)).await?;
     let now = chrono::Utc::now().timestamp();
-    let secret = account_secret(master, &row.user_id);
+    let secret = account_secret(master, &row.user_id, row.secret_version);
     let response = client
         .post(url)
         .header("content-type", "application/json")
@@ -146,7 +185,8 @@ async fn send(
         .header("convt-signature", signature(&secret, now, &body))
         .body(body)
         .send()
-        .await?;
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e.without_url()))?;
     anyhow::ensure!(
         response.status().is_success(),
         "receiver answered HTTP {}",
@@ -180,13 +220,18 @@ mod tests {
     #[test]
     fn signature_matches_reference_vector() {
         // Same vectors as packages/sdk/test/webhooks.test.ts, computed with Python's hmac.
+        let master = "master-secret-for-tests-only-0000";
         assert_eq!(
-            account_secret("master-secret-for-tests-only-0000", "usr_a"),
-            "whsec_8d51d0e89e4893fe0d9bf302df9badafa854a3119b513ada671d8a744984351d"
+            account_secret(master, "usr_a", 1),
+            "whsec_dacde83eb7c9531aa139eecf38be9e532cbfb6dec953176e73788d13e24fedb3"
         );
         assert_ne!(
-            account_secret("master-secret-for-tests-only-0000", "usr_a"),
-            account_secret("master-secret-for-tests-only-0000", "usr_b")
+            account_secret(master, "usr_a", 1),
+            account_secret(master, "usr_b", 1)
+        );
+        assert_ne!(
+            account_secret(master, "usr_a", 1),
+            account_secret(master, "usr_a", 2)
         );
         assert_eq!(
             signature("whsec_test", 1_700_000_000, br#"{"ok":true}"#),

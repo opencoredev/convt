@@ -448,6 +448,32 @@ pub async fn run_job_backend(
             }
         }
     };
+    let handoff = stopping && matches!(&result, Err(e) if e.to_string() == "worker shutdown");
+    if handoff {
+        // Hand the job back before any cleanup: if the platform kills this process
+        // during cleanup, the job is already queued for another worker instead of
+        // waiting out its lease and losing an attempt.
+        let requeued = jobs::requeue(pool, job).await?;
+        tracing::info!(
+            job_id = job.id,
+            requeued,
+            "shutdown: handed the job back to the queue"
+        );
+        let cleanup = async {
+            sandbox.stop(&name).await?;
+            storage
+                .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
+                .await
+        };
+        // The attempt's prefix is unique to it and expiry removes the job's whole
+        // prefix, so a cut-short cleanup leaks nothing lasting.
+        match tokio::time::timeout(Duration::from_secs(5), cleanup).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => tracing::warn!(job_id = job.id, %error, "shutdown cleanup failed"),
+            Err(_) => tracing::warn!(job_id = job.id, "shutdown cleanup timed out"),
+        }
+        return Ok(true);
+    }
     sandbox.stop(&name).await?;
     match result {
         Ok(keys) => {
@@ -456,17 +482,6 @@ pub async fn run_job_backend(
                     storage.delete(&key).await?;
                 }
             }
-        }
-        Err(e) if stopping && e.to_string() == "worker shutdown" => {
-            storage
-                .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
-                .await?;
-            let requeued = jobs::requeue(pool, job).await?;
-            tracing::info!(
-                job_id = job.id,
-                requeued,
-                "shutdown: handed the job back to the queue"
-            );
         }
         Err(e) => {
             tracing::warn!(job_id=job.id,error=%e,"conversion failed");

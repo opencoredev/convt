@@ -34,7 +34,7 @@ curl -fsS {{api}}/v1/jobs \
 }
 ```
 
-`type` is `job.succeeded`, `job.failed` or `job.cancelled`. `data.job` is the job as `GET /v1/jobs/{id}` shows it. For a succeeded job, `outputs` holds signed URLs valid for `expires_in` seconds; after that, call `GET /v1/jobs/{id}/download` for fresh ones.
+`type` is `job.succeeded`, `job.failed` or `job.cancelled`. `data.job` is the job as `GET /v1/jobs/{id}` shows it, minus `source_url`: a presigned input link is a credential, so events never carry it. For a succeeded job, `outputs` holds signed URLs valid for `expires_in` seconds; after that, call `GET /v1/jobs/{id}/download` for fresh ones.
 
 Headers on every delivery:
 
@@ -51,11 +51,11 @@ Answer with any `2xx` within 10 seconds. Anything else, a timeout or a refused c
 
 ## Verify the signature
 
-Get your account's signing secret once and keep it with your other secrets:
+Get your account's signing secret once with an API key and keep it with your other secrets:
 
 ```bash
 curl -fsS {{api}}/v1/webhooks/secret -H "Authorization: Bearer $CONVT_API_KEY"
-# {"secret":"whsec_..."}
+# {"secret":"whsec_...","version":1}
 ```
 
 The signature is an HMAC-SHA256, keyed with that secret, of the timestamp, a `.`, and the raw request body. Compute it over the body exactly as received, before parsing JSON, and refuse old timestamps so a captured event can't be replayed.
@@ -127,4 +127,13 @@ func verify(body []byte, header, secret string) error {
 </Tab>
 </Tabs>
 
-The secret is the same for every job on your account. Rotating it is not self-serve yet: if it leaks, [contact us](https://convt.app/contact).
+## Rotate the secret
+
+The secret is the same for every job on your account. If it leaks, rotate it:
+
+```bash
+curl -fsS -X POST {{api}}/v1/webhooks/secret/rotate -H "Authorization: Bearer $CONVT_API_KEY"
+# {"secret":"whsec_...","version":2}
+```
+
+Deliveries sent from then on use the new secret, and the old one stops verifying. To switch without dropping events, accept both secrets in your receiver for a few minutes, then remove the old one.

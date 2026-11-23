@@ -23,7 +23,7 @@ grant select on users, subscriptions, licenses to convt_server;
 --> statement-breakpoint
 grant select, delete on verifications, rate_limits, otp_send_limits to convt_server;
 --> statement-breakpoint
-grant select, insert, update on devices, cloud_jobs to convt_server;
+grant select, insert, update on devices, cloud_jobs, webhook_secrets to convt_server;
 --> statement-breakpoint
 grant select on api_keys to convt_server;
 --> statement-breakpoint
