@@ -373,6 +373,37 @@ pub fn show_main_after_finder_guide(cx: &mut App) {
 /// launch shows it again. A build from source that doesn't check licenses
 /// never shows the first-run window.
 pub fn show_main(cx: &mut App) {
+    #[cfg(all(debug_assertions, not(test)))]
+    if let Ok(screen) = std::env::var("CONVT_DEV_SCREEN") {
+        let app = model::shared(cx);
+        let (display, size) = first_run_bounds(cx);
+        match screen.as_str() {
+            "onboarding-signin" => {
+                show_on(display, size, None, "Welcome to convt", cx, |window, cx| {
+                    cx.new(|cx| FirstRunView::new(app, first_run::Screen::Account, window, cx))
+                });
+                return;
+            }
+            "onboarding-question" => {
+                show_on(display, size, None, "Welcome to convt", cx, |window, cx| {
+                    cx.new(|cx| {
+                        FirstRunView::new(
+                            app,
+                            first_run::Screen::Question(first_run::Question::Documents),
+                            window,
+                            cx,
+                        )
+                    })
+                });
+                return;
+            }
+            "finder-guide" => {
+                show_finder_guide(cx);
+                return;
+            }
+            _ => {}
+        }
+    }
     if first_run_pending(cx) {
         open_first_run(cx);
     } else {
@@ -457,16 +488,15 @@ pub fn show_about(cx: &mut App) {
 }
 
 /// Quick convert's opening size: room for a typical image's popular formats
-/// (two rows), More formats, the Options row, where it runs and Save, with a
-/// little air above the footer. The window grows when more shows
+/// (3x2 grid), More formats, the Options row and the compact destination/engine
+/// strip, with a little air above the footer. The window grows when more shows
 /// (`QuickView::sync_window_height`); long lists scroll.
-pub(super) const QUICK_SIZE: (f32, f32) = (580., 524.);
+pub(super) const QUICK_SIZE: (f32, f32) = (580., 396.);
 
 /// The smallest each window can be resized to: room for Activity's status
-/// column, Quick convert's four-column format grid, and the forms of
-/// Settings and Feedback.
+/// column, Quick convert's format grid, and the forms of Settings and Feedback.
 pub(super) const MAIN_MIN_SIZE: (f32, f32) = (820., 520.);
-pub(super) const QUICK_MIN_SIZE: (f32, f32) = (520., 460.);
+pub(super) const QUICK_MIN_SIZE: (f32, f32) = (520., 370.);
 pub(super) const SETTINGS_MIN_SIZE: (f32, f32) = (560., 480.);
 pub(super) const FEEDBACK_MIN_SIZE: (f32, f32) = (420., 440.);
 
@@ -486,9 +516,8 @@ pub(super) fn quick_height() -> Pixels {
     quick_height_for(QUICK_SIZE.1)
 }
 
-/// The size onboarding would like at least; it opens at three quarters of
-/// the display, centered.
-pub(super) const FIRST_RUN_SIZE: (f32, f32) = (900., 640.);
+/// Onboarding's focused window size, centered on the display.
+pub(super) const FIRST_RUN_SIZE: (f32, f32) = (600., 520.);
 
 /// The display onboarding opens on: the one with the window in front (the
 /// user is looking there), else the primary one. GPUI can't tell where the
@@ -500,14 +529,13 @@ fn first_run_display(cx: &mut App) -> Option<std::rc::Rc<dyn PlatformDisplay>> {
         .or_else(|| cx.primary_display())
 }
 
-/// Onboarding's size on a display whose usable area is `visible`: three
-/// quarters of it, at least [`FIRST_RUN_SIZE`] where that fits, and never
-/// more than 95% of it, so a small screen still shows the whole window.
+/// Onboarding's size on a display whose usable area is `visible`: compact
+/// [`FIRST_RUN_SIZE`], clamped to 95% on small displays so it never crosses
+/// the edges.
 pub(super) fn first_run_fit(visible: Size<Pixels>) -> Size<Pixels> {
-    let side = |room: Pixels, least: f32| (room * 0.75).max(px(least)).min(room * 0.95).round();
     size(
-        side(visible.width, FIRST_RUN_SIZE.0),
-        side(visible.height, FIRST_RUN_SIZE.1),
+        px(FIRST_RUN_SIZE.0).min(visible.width * 0.95).round(),
+        px(FIRST_RUN_SIZE.1).min(visible.height * 0.95).round(),
     )
 }
 
@@ -586,7 +614,12 @@ fn open_settings(
         let shown = handle.update(cx, |_, window, cx| {
             window.activate_window();
             let settings = main.update(cx, |main, cx| {
-                main.set_page(main_window::Page::Settings, cx);
+                let page = match tab {
+                    SettingsTab::Presets => main_window::Page::Presets,
+                    SettingsTab::Menu => main_window::Page::Menu,
+                    SettingsTab::General | SettingsTab::License => main_window::Page::Settings,
+                };
+                main.set_page(page, cx);
                 main.settings.clone()
             });
             settings.update(cx, |view, cx| {

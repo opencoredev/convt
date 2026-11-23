@@ -919,49 +919,124 @@ impl QuickView {
                 .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx)))
                 .child(icon(IconName::Close, 14., p.secondary))
         });
+        // Single-file transform preview right in the hero: clicking the output
+        // filename edits it inline, eliminating a whole row from the Save card.
+        let output_preview = (self.files.len() == 1 && self.to.is_some() && self.jobs.is_empty())
+            .then(|| {
+                if self.editing_name {
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(icon(IconName::ArrowRight, 12., p.tertiary))
+                        .child(
+                            div()
+                                .w(px(200.))
+                                .flex_shrink_0()
+                                .font_family(theme::MONO)
+                                .text_size(px(12.))
+                                .child(theme::small_field(&self.file_name, "file-name")),
+                        )
+                        .child(
+                            Button::ghost("file-name-done", "Done")
+                                .icon(IconName::Check)
+                                .small()
+                                .build(p)
+                                .h(px(theme::SMALL_FIELD_HEIGHT))
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.commit_name(window, cx)),
+                                ),
+                        )
+                        .into_any_element()
+                } else {
+                    let current = SharedString::from(self.file_name.read(cx).value().to_string());
+                    div()
+                        .flex()
+                        .items_center()
+                        .min_w_0()
+                        .gap(px(6.))
+                        .child(icon(IconName::ArrowRight, 12., p.tertiary))
+                        .child(
+                            theme::clickable("file-name-edit", current.clone())
+                                .flex()
+                                .items_center()
+                                .min_w_0()
+                                .gap(px(5.))
+                                .h(px(24.))
+                                .px(px(7.))
+                                .rounded(px(radius::SM))
+                                .bg(p.green_tint)
+                                .shadow(vec![theme::inset_ring(p.green_border, 1.)])
+                                .hover(|s| s.bg(p.hover))
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.edit_name(window, cx)),
+                                )
+                                .child(
+                                    mono(12., 16., p.green_text)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .min_w_0()
+                                        .truncate()
+                                        .child(current),
+                                )
+                                .child(icon(IconName::Edit, 11., p.green_text)),
+                        )
+                        .into_any_element()
+                }
+            });
+        let name_error = self.name_error.clone().map(|e| {
+            div()
+                .id("file-name-error")
+                .test_support()
+                .aria_label(SharedString::from(e.clone()))
+                .px(px(self.gutter()))
+                .pb(px(8.))
+                .child(error_text(e, p))
+        });
+        let meta_line = match common_folder(&self.files) {
+            Some(dir) if !meta.is_empty() => format!("{meta} · {dir}"),
+            Some(dir) => dir,
+            None => meta,
+        };
         div()
             .flex()
+            .flex_col()
             .flex_shrink_0()
-            .items_center()
-            .gap(px(14.))
-            .px(px(self.gutter()))
-            .pt(px(if inline { space::LG } else { space::XS }))
-            .pb(px(12.))
-            .child(thumb)
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(3.))
-                    .child(
-                        styled(size::TITLE, p.text)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .truncate()
-                            .child(title),
-                    )
-                    .child(mono(11., 14., p.secondary).truncate().child(meta)),
-            )
-            .children(common_folder(&self.files).map(|dir| {
-                div()
-                    .flex()
-                    .flex_shrink_0()
                     .items_center()
-                    .gap(px(5.))
-                    .max_w(px(180.))
-                    .child(icon(IconName::Folder, 13., p.tertiary))
+                    .gap(px(14.))
+                    .px(px(self.gutter()))
+                    .pt(px(if inline { space::LG } else { space::XS }))
+                    .pb(px(12.))
+                    .child(thumb)
                     .child(
-                        div().min_w_0().child(
-                            styled(size::SMALL, p.secondary)
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis_start()
-                                .child(dir),
-                        ),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(3.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .min_w_0()
+                                    .gap(px(8.))
+                                    .child(
+                                        styled(size::TITLE, p.text)
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .truncate()
+                                            .child(title),
+                                    )
+                                    .children(output_preview),
+                            )
+                            .child(mono(11., 14., p.secondary).truncate().child(meta_line)),
                     )
-            }))
-            .children(close)
+                    .children(close),
+            )
+            .children(name_error)
     }
 
     fn picker(&self, p: &Palette, cx: &mut Context<Self>) -> Option<Div> {
@@ -1776,15 +1851,18 @@ impl QuickView {
         parts.join(" · ")
     }
 
-    /// Where the conversion runs: "Convert on", then This computer or
-    /// Cloud. Cloud stays readable while it can't run and says why on hover.
-    fn where_row(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let access = self.cloud_access(cx);
-        let cloud = self.in_cloud(cx);
-        let weak = cx.entity().downgrade();
-        row_label(
-            "Convert on",
-            theme::segmented_with(
+    /// Destination folder and Local/Cloud toggle in one compact strip (the
+    /// output filename lives right in the top transform hero).
+    fn save_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let place = match &self.save_dir {
+            Some(dir) => super::tilde(dir),
+            None => "Same folder".to_string(),
+        };
+        let where_control = (self.to.is_some() && !self.needs_pack()).then(|| {
+            let access = self.cloud_access(cx);
+            let cloud = self.in_cloud(cx);
+            let weak = cx.entity().downgrade();
+            div().flex_shrink_0().child(theme::segmented_with(
                 "where",
                 &[
                     Segment {
@@ -1810,130 +1888,64 @@ impl QuickView {
                 move |key, _, cx| {
                     let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
                 },
-            ),
-            p,
-        )
-    }
-
-    /// Where it runs, the file name and the folder, in one group.
-    fn save_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        // A target that needs the pack converts here once it's in.
-        let place_to_run =
-            (self.to.is_some() && !self.needs_pack()).then(|| self.where_row(p, window, cx));
-        let place = match &self.save_dir {
-            Some(dir) => super::tilde(dir),
-            None => "Same folder".to_string(),
-        };
-        let name = (self.files.len() == 1 && self.to.is_some()).then(|| {
-            let control = if self.editing_name {
+            ))
+        });
+        let strip = theme::card(p)
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(space::SM))
+            .min_h(px(46.))
+            .px(px(space::MD))
+            .py(px(8.))
+            .child(
                 div()
                     .flex()
-                    .flex_shrink_0()
                     .items_center()
-                    .gap(px(6.))
+                    .min_w_0()
+                    .flex_1()
+                    .gap(px(space::SM))
+                    .child(icon(IconName::Folder, 14., p.tertiary))
                     .child(
                         div()
-                            .w(px(260.))
-                            .flex_shrink_0()
-                            .font_family(theme::MONO)
-                            .text_size(px(12.))
-                            .child(theme::small_field(&self.file_name, "file-name")),
-                    )
-                    .child(
-                        Button::ghost("file-name-done", "Done")
-                            .icon(IconName::Check)
-                            .small()
-                            .build(p)
-                            .h(px(theme::SMALL_FIELD_HEIGHT))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.commit_name(window, cx)),
+                            .id("save-to")
+                            .test_support()
+                            .aria_label(SharedString::from(place.clone()))
+                            .min_w_0()
+                            .child(
+                                styled(size::SMALL, p.text)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis_start()
+                                    .child(place),
                             ),
                     )
-                    .into_any_element()
-            } else {
-                let current = SharedString::from(self.file_name.read(cx).value().to_string());
-                theme::clickable("file-name-edit", current.clone())
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .max_w(px(320.))
-                    .h(px(theme::SMALL_FIELD_HEIGHT))
-                    .px(px(8.))
-                    .mr(px(-8.))
-                    .rounded(px(radius::CONTROL))
-                    .hover(|s| s.bg(p.hover))
-                    .on_click(cx.listener(|this, _, window, cx| this.edit_name(window, cx)))
-                    .child(mono(12., 16., p.text).min_w_0().truncate().child(current))
-                    .child(icon(IconName::Edit, 13., p.tertiary))
-                    .into_any_element()
-            };
-            let error = self.name_error.clone().map(|e| {
-                div()
-                    .id("file-name-error")
-                    .test_support()
-                    .aria_label(SharedString::from(e.clone()))
-                    .flex()
-                    .justify_end()
-                    .px(px(space::LG))
-                    .pb(px(10.))
-                    .mt(px(-4.))
-                    .child(error_text(e, p))
-            });
-            div()
-                .flex()
-                .flex_col()
-                .child(row_label("File name", control, p))
-                .children(error)
-                .into_any_element()
-        });
-        let folder = row_label(
-            "Save to",
-            div()
-                .flex()
-                .items_center()
-                .gap(px(space::SM))
-                .max_w(px(360.))
-                .child(icon(IconName::Folder, 13., p.tertiary))
-                .child(
-                    div()
-                        .id("save-to")
-                        .test_support()
-                        .aria_label(SharedString::from(place.clone()))
-                        .min_w_0()
-                        .child(
-                            styled(size::SMALL, p.text)
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis_start()
-                                .child(place),
-                        ),
-                )
-                .when(self.save_dir.is_some(), |d| {
-                    d.child(
-                        Button::ghost("same-folder", "Same folder")
+                    .when(self.save_dir.is_some(), |d| {
+                        d.child(
+                            Button::ghost("same-folder", "Reset")
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.save_dir = None;
+                                    cx.notify();
+                                })),
+                        )
+                    })
+                    .child(
+                        Button::secondary("change-folder", "Change…")
                             .small()
                             .build(p)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.save_dir = None;
-                                cx.notify();
-                            })),
-                    )
-                })
-                .child(
-                    Button::secondary("change-folder", "Change…")
-                        .small()
-                        .build(p)
-                        .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
-                ),
-            p,
-        );
-        section("Save", self.gutter(), p).child(theme::group(
-            place_to_run
-                .into_iter()
-                .chain(name)
-                .chain(std::iter::once(folder)),
-            p,
-        ))
+                            .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
+                    ),
+            )
+            .children(where_control);
+        div()
+            .flex()
+            .flex_col()
+            .px(px(self.gutter()))
+            .pb(px(SECTION_GAP))
+            .child(strip)
     }
 
     fn progress_section(&self, p: &Palette) -> Stateful<Div> {
@@ -2198,24 +2210,19 @@ const GUTTER: f32 = 24.;
 const INLINE_GUTTER: f32 = 20.;
 /// Space under each part of the window.
 const SECTION_GAP: f32 = 16.;
-/// Format cards to a row.
-const CARDS_PER_ROW: u16 = 4;
+/// Format cards to a row (3x2 balanced grid for the 6 popular image targets).
+const CARDS_PER_ROW: u16 = 3;
 /// The fewest formats "More formats" hides; fewer show with the rest.
 const MIN_HIDDEN: usize = 3;
 /// What each part adds to Quick convert's height beyond [`QUICK_SIZE`], as
 /// drawn at its width: the license banner, the PNG warning, an open Options
 /// row, a row of format cards with the gap above it, and the pack card.
 const BANNER_HEIGHT: f32 = 118.;
-const PNG_HINT_HEIGHT: f32 = 100.;
-const OPTION_ROW_HEIGHT: f32 = 44.;
+const PNG_HINT_HEIGHT: f32 = 112.;
+const OPTION_ROW_HEIGHT: f32 = 47.;
 const CARD_ROW_HEIGHT: f32 = 57.;
 const PACK_CARD_HEIGHT: f32 = 96.;
 const SELECT_WIDTH: f32 = 190.;
-
-/// A titled part of the window.
-fn section(label: &'static str, gutter: f32, p: &Palette) -> Div {
-    section_with(label, gutter, None::<Div>, p)
-}
 
 /// A titled part of the window with a control at the right of its title.
 fn section_with(
@@ -2381,10 +2388,24 @@ fn sources(files: &[PathBuf]) -> impl Iterator<Item = &'static Format> + '_ {
 }
 
 /// Whether the Background control applies: image targets, except GIF from
-/// video, where the engines don't take a background color yet.
+/// video (no background support yet) and opaque raster images going to a
+/// transparency-capable target (e.g. JPEG -> WebP/PNG, where "Background:
+/// Transparent" is noise).
 fn background_applies(to: &Format, files: &[PathBuf]) -> bool {
-    to.category == Category::Image
-        && !(to.id == "gif" && sources(files).any(|f| f.category == Category::Video))
+    if to.category != Category::Image {
+        return false;
+    }
+    if to.id == "gif" && sources(files).any(|f| f.category == Category::Video) {
+        return false;
+    }
+    let mut srcs = sources(files).peekable();
+    if to.keeps_transparency()
+        && srcs.peek().is_some()
+        && srcs.all(|f| f.category == Category::Image && !f.keeps_transparency())
+    {
+        return false;
+    }
+    true
 }
 
 /// What the Background control shows with nothing picked: what the engines

@@ -15,17 +15,20 @@ use super::quick::{Dismissed, QuickView};
 use super::settings_window::SettingsView;
 use super::theme::{self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text};
 use super::{LICENSE_PRICE, SettingsTab, file_size, friendly_error, human_size, time_left};
-use crate::automation;
+use crate::automation::{self, WatchStatus};
 use crate::clock::Local;
 use crate::history::{Outcome, Record};
 use crate::jobs::{Entry, Status};
 use crate::model::{self, AppState};
 use crate::request::Request;
+use crate::settings::{Automation, WatchKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Activity,
     Automations,
+    Presets,
+    Menu,
     Settings,
 }
 
@@ -36,14 +39,67 @@ const GUTTER: f32 = 24.;
 /// How long a row's Copy button says Copied.
 const COPIED_FOR: Duration = Duration::from_millis(1600);
 
+/// State of the inline "+ New rule" builder on Automations.
+#[derive(Debug, Clone)]
+pub(super) struct RuleDraft {
+    /// Which source kind the rule matches (`"HEIC"`, `"Screenshots"`, etc.).
+    pub kind_index: usize,
+    /// Target format id (`"webp"`, `"jpeg"`, `"png"`, `"mp4"`, `"mp3"`, `"pdf"`).
+    pub to: &'static str,
+    /// Explicit watched folder, if the user picked one.
+    pub folder: Option<PathBuf>,
+    pub copy: bool,
+}
+
+impl Default for RuleDraft {
+    fn default() -> Self {
+        Self {
+            kind_index: 0,
+            to: "webp",
+            folder: None,
+            copy: false,
+        }
+    }
+}
+
+/// Presets for what a new automation rule matches.
+const RULE_KINDS: [(&str, &str, WatchKind, &str); 5] = [
+    ("HEIC", "HEIC photos", WatchKind::Folder, "Downloads"),
+    ("Images", "Any image", WatchKind::Folder, "Downloads"),
+    ("Video", "Any video", WatchKind::Folder, "Downloads"),
+    (
+        "Screenshots",
+        "Screenshots",
+        WatchKind::Screenshot,
+        "Screenshots",
+    ),
+    (
+        "Screen recordings",
+        "Recordings",
+        WatchKind::Recording,
+        "Screen recordings",
+    ),
+];
+
+const RULE_TARGETS: [(&str, &str); 6] = [
+    ("webp", "WebP"),
+    ("jpeg", "JPEG"),
+    ("png", "PNG"),
+    ("mp4", "MP4"),
+    ("mp3", "MP3"),
+    ("pdf", "PDF"),
+];
+
 pub struct MainView {
     app: Entity<AppState>,
     pub(super) page: Page,
-    /// The Settings page.
+    /// The Settings view (powers Presets, Right-click menu, and Settings).
     pub(super) settings: Entity<SettingsView>,
     /// Quick convert for files dropped or added here, at the top of
     /// Activity until its conversion starts or it is closed.
     pub(super) composer: Option<Entity<QuickView>>,
+    /// The inline "+ New rule" composer on Automations.
+    pub(super) new_rule: Option<RuleDraft>,
     /// The record whose Copy was clicked last, while its button says Copied.
     pub(super) copied: Option<i64>,
     /// Failed records showing the engine's full message under the summary.
@@ -67,6 +123,7 @@ impl MainView {
             page: Page::Activity,
             settings,
             composer: None,
+            new_rule: None,
             copied: None,
             details_open: HashSet::new(),
             handle: window.window_handle(),
@@ -76,18 +133,40 @@ impl MainView {
     }
 
     pub fn set_page(&mut self, page: Page, cx: &mut Context<Self>) {
-        if page == Page::Settings && self.page != Page::Settings {
+        if matches!(page, Page::Settings | Page::Menu | Page::Presets) && self.page != page {
             // Status is read offline; it may have changed through the CLI.
             self.app.update(cx, |s, cx| s.refresh_pack(cx));
+        }
+        match page {
+            Page::Presets => self
+                .settings
+                .update(cx, |s, cx| s.set_tab(SettingsTab::Presets, cx)),
+            Page::Menu => self
+                .settings
+                .update(cx, |s, cx| s.set_tab(SettingsTab::Menu, cx)),
+            Page::Settings => {
+                let current = self.settings.read(cx).tab;
+                if !matches!(current, SettingsTab::General | SettingsTab::License) {
+                    self.settings
+                        .update(cx, |s, cx| s.set_tab(SettingsTab::General, cx));
+                }
+            }
+            _ => {}
         }
         self.page = page;
         cx.notify();
     }
 
-    /// Shows the Settings page on `tab`.
+    /// Shows the Settings tab, routing Menu and Presets to their top-level
+    /// sidebar pages.
     #[cfg(test)]
     pub fn show_settings(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
-        self.set_page(Page::Settings, cx);
+        let page = match tab {
+            SettingsTab::Presets => Page::Presets,
+            SettingsTab::Menu => Page::Menu,
+            SettingsTab::General | SettingsTab::License => Page::Settings,
+        };
+        self.set_page(page, cx);
         self.settings.update(cx, |s, cx| s.set_tab(tab, cx));
     }
 
@@ -209,13 +288,20 @@ impl MainView {
     fn sidebar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let state = self.app.read(cx);
         let active = state.queue.active();
+        let enabled_rules = state
+            .settings
+            .automations
+            .iter()
+            .filter(|r| r.enabled)
+            .count();
+        let preset_count = state.valid_presets().count();
         let license = state.license.clone();
         let can_start_trial = state.account.can_start_trial();
         let nav = |id: &'static str,
                    label: &'static str,
                    glyph: IconName,
                    selected: bool,
-                   count: Option<usize>| {
+                   count: Option<(usize, Tone)>| {
             theme::clickable(id, label)
                 .aria_selected(selected)
                 .flex()
@@ -243,15 +329,20 @@ impl MainView {
                     styled(size::BODY, if selected { p.text } else { p.secondary })
                         .flex_1()
                         .font_weight(FontWeight::MEDIUM)
+                        .truncate()
                         .child(label),
                 )
-                .children(count.map(|n| theme::badge(n.to_string(), Tone::Green, p)))
+                .children(count.map(|(n, tone)| theme::badge(n.to_string(), tone, p)))
+        };
+        let group_label = |label: &'static str| {
+            styled(size::CAPTION, p.tertiary)
+                .font_weight(FontWeight::MEDIUM)
+                .px(px(10.))
+                .pt(px(14.))
+                .pb(px(4.))
+                .child(label)
         };
         let page = self.page;
-        let item = |id: &'static str, label: &'static str, glyph: IconName, to: Page| {
-            nav(id, label, glyph, page == to, None)
-                .on_click(cx.listener(move |this, _, _, cx| this.set_page(to, cx)))
-        };
         div()
             .flex()
             .flex_col()
@@ -290,22 +381,49 @@ impl MainView {
                             "Activity",
                             IconName::Inbox,
                             page == Page::Activity,
-                            (active > 0).then_some(active),
+                            (active > 0).then_some((active, Tone::Green)),
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.set_page(Page::Activity, cx))),
                     )
-                    .child(item(
-                        "nav-automations",
-                        "Automations",
-                        IconName::Bot,
-                        Page::Automations,
-                    ))
-                    .child(item(
-                        "nav-settings",
-                        "Settings",
-                        IconName::Settings,
-                        Page::Settings,
-                    )),
+                    .child(
+                        nav(
+                            "nav-automations",
+                            "Automations",
+                            IconName::Bot,
+                            page == Page::Automations,
+                            (enabled_rules > 0).then_some((enabled_rules, Tone::Neutral)),
+                        )
+                        .on_click(
+                            cx.listener(|this, _, _, cx| this.set_page(Page::Automations, cx)),
+                        ),
+                    ),
+            )
+            .child(group_label("Configure"))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        nav(
+                            "nav-presets",
+                            "Presets",
+                            IconName::Star,
+                            page == Page::Presets,
+                            (preset_count > 0).then_some((preset_count, Tone::Neutral)),
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| this.set_page(Page::Presets, cx))),
+                    )
+                    .child(
+                        nav(
+                            "nav-menu",
+                            "Right-click menu",
+                            IconName::Menu,
+                            page == Page::Menu,
+                            None,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| this.set_page(Page::Menu, cx))),
+                    ),
             )
             .child(div().flex_1())
             .child(
@@ -324,15 +442,31 @@ impl MainView {
                     .bg(p.hairline),
             )
             .child(
-                nav("nav-feedback", "Send feedback", IconName::Edit, false, None)
-                    .h(px(30.))
-                    .on_click(|_, _, cx| super::show_feedback(cx)),
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        nav(
+                            "nav-settings",
+                            "Settings",
+                            IconName::Settings,
+                            page == Page::Settings,
+                            None,
+                        )
+                        .h(px(30.))
+                        .on_click(cx.listener(|this, _, _, cx| this.set_page(Page::Settings, cx))),
+                    )
+                    .child(
+                        nav("nav-feedback", "Send feedback", IconName::Edit, false, None)
+                            .h(px(30.))
+                            .on_click(|_, _, cx| super::show_feedback(cx)),
+                    ),
             )
     }
 
     fn header(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx);
-        let activity = self.page == Page::Activity;
         let (title, subtitle) = match self.page {
             Page::Activity => (
                 "Activity",
@@ -345,13 +479,22 @@ impl MainView {
             ),
             Page::Automations => (
                 "Automations",
-                "Convert new screenshots and recordings as they appear".to_string(),
+                "Watch folders and convert new files automatically".to_string(),
+            ),
+            Page::Presets => (
+                "Presets",
+                "Reusable conversion recipes for Quick convert and the CLI".to_string(),
+            ),
+            Page::Menu => (
+                "Right-click menu",
+                "Choose which formats appear in your file manager menu".to_string(),
             ),
             Page::Settings => (
                 "Settings",
-                "Defaults, the right-click menu, presets and your license".to_string(),
+                "Preferences, document support, updates and your license".to_string(),
             ),
         };
+        let has_config = state.ensure_settings_file_exists_hint();
         div()
             .flex()
             .flex_shrink_0()
@@ -379,12 +522,46 @@ impl MainView {
                             .child(styled(size::SMALL, p.secondary).truncate().child(subtitle)),
                     ),
             )
-            .when(activity, |d| {
+            .when(self.page == Page::Activity, |d| {
                 d.child(
                     Button::primary("add-files", "Add files")
                         .icon(IconName::Plus)
                         .build(p)
                         .on_click(cx.listener(|this, _, _, cx| this.pick_files(cx))),
+                )
+            })
+            .when(self.page == Page::Automations, |d| {
+                let open = self.new_rule.is_some();
+                d.when(has_config, |d| {
+                    d.child(
+                        Button::secondary("open-automations-config", "Edit TOML")
+                            .icon(IconName::Edit)
+                            .build(p)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                if let Some(path) =
+                                    this.app.update(cx, |s, _| s.ensure_settings_file())
+                                {
+                                    cx.open_with_system(&path);
+                                }
+                            })),
+                    )
+                })
+                .child(
+                    Button::primary("new-automation", if open { "Close" } else { "New rule" })
+                        .icon(if open {
+                            IconName::Close
+                        } else {
+                            IconName::Plus
+                        })
+                        .build(p)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.new_rule = if this.new_rule.is_some() {
+                                None
+                            } else {
+                                Some(RuleDraft::default())
+                            };
+                            cx.notify();
+                        })),
                 )
             })
     }
@@ -816,6 +993,232 @@ impl MainView {
             .children(full)
     }
 
+    fn pick_automation_folder(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
+        let picked = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Watch folder".into()),
+        });
+        let this = cx.entity().downgrade();
+        let app = self.app.clone();
+        cx.spawn(async move |_, cx| {
+            if let Ok(Ok(Some(mut dirs))) = picked.await
+                && let Some(dir) = dirs.pop()
+            {
+                match index {
+                    Some(i) => {
+                        app.update(cx, |s, cx| s.set_automation_folder(i, dir, cx));
+                    }
+                    None => {
+                        let _ = this.update(cx, |this, cx| {
+                            if let Some(draft) = &mut this.new_rule {
+                                draft.folder = Some(dir);
+                                cx.notify();
+                            }
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn save_new_rule(&mut self, cx: &mut Context<Self>) {
+        let Some(draft) = self.new_rule.take() else {
+            return;
+        };
+        let (name, _label, watch, default_source) = RULE_KINDS
+            .get(draft.kind_index)
+            .copied()
+            .unwrap_or(RULE_KINDS[0]);
+        let source = draft
+            .folder
+            .as_deref()
+            .map(super::tilde)
+            .unwrap_or_else(|| default_source.to_string());
+        let rule = Automation {
+            name: name.to_string(),
+            to: draft.to.to_string(),
+            source,
+            detail: if draft.copy {
+                "copy to clipboard".into()
+            } else {
+                "save beside original".into()
+            },
+            enabled: true,
+            watch: Some(watch),
+            folder: draft.folder,
+            copy_to_clipboard: Some(draft.copy),
+        };
+        self.app.update(cx, |s, cx| s.add_automation(rule, cx));
+        cx.notify();
+    }
+
+    fn new_rule_card(
+        &self,
+        draft: &RuleDraft,
+        p: &Palette,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let (_, _, _, default_source) = RULE_KINDS
+            .get(draft.kind_index)
+            .copied()
+            .unwrap_or(RULE_KINDS[0]);
+        let folder_label = draft
+            .folder
+            .as_deref()
+            .map(super::tilde)
+            .unwrap_or_else(|| format!("Default ({default_source})"));
+        let pill = |id: SharedString, label: &'static str, on: bool| {
+            theme::clickable(id, label)
+                .aria_selected(on)
+                .flex()
+                .items_center()
+                .h(px(28.))
+                .px(px(11.))
+                .rounded(px(radius::CONTROL))
+                .bg(if on { p.green_tint } else { p.surface })
+                .shadow(vec![theme::inset_ring(
+                    if on { p.green } else { p.border },
+                    if on { 1.5 } else { 1. },
+                )])
+                .when(!on, |d| d.hover(|s| s.bg(p.recessed)))
+                .child(
+                    styled(size::SMALL, if on { p.green_text } else { p.text })
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(label),
+                )
+        };
+        let field_row = |label: &'static str, control: AnyElement| {
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(space::LG))
+                .px(px(space::LG))
+                .py(px(12.))
+                .child(
+                    styled(size::BODY, p.text)
+                        .font_weight(FontWeight::MEDIUM)
+                        .w(px(108.))
+                        .flex_shrink_0()
+                        .child(label),
+                )
+                .child(div().flex_1().min_w_0().child(control))
+        };
+        let kinds = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .children(
+                RULE_KINDS
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (_, label, ..))| {
+                        pill(
+                            SharedString::from(format!("new-rule-kind-{i}")),
+                            label,
+                            draft.kind_index == i,
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if let Some(d) = &mut this.new_rule {
+                                d.kind_index = i;
+                                cx.notify();
+                            }
+                        }))
+                    }),
+            )
+            .into_any_element();
+        let targets = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .children(RULE_TARGETS.into_iter().map(|(id, label)| {
+                pill(
+                    SharedString::from(format!("new-rule-to-{id}")),
+                    label,
+                    draft.to == id,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(d) = &mut this.new_rule {
+                        d.to = id;
+                        cx.notify();
+                    }
+                }))
+            }))
+            .into_any_element();
+        let folder_control = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap(px(space::SM))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .min_w_0()
+                    .child(icon(IconName::Folder, 14., p.tertiary))
+                    .child(mono(12., 16., p.secondary).truncate().child(folder_label)),
+            )
+            .child(
+                Button::secondary("new-rule-folder", "Choose folder…")
+                    .small()
+                    .build(p)
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_automation_folder(None, cx))),
+            )
+            .into_any_element();
+        let copy = draft.copy;
+        let after_control =
+            theme::checkbox("new-rule-copy", "Copy converted file to clipboard", copy, p)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if let Some(d) = &mut this.new_rule {
+                        d.copy = !d.copy;
+                        cx.notify();
+                    }
+                }))
+                .into_any_element();
+        let rows = vec![
+            field_row("Files", kinds).into_any_element(),
+            field_row("Convert to", targets).into_any_element(),
+            field_row("Folder", folder_control).into_any_element(),
+            field_row("After", after_control).into_any_element(),
+        ];
+        let footer = div()
+            .flex()
+            .items_center()
+            .justify_end()
+            .gap(px(space::SM))
+            .px(px(space::LG))
+            .py(px(10.))
+            .bg(p.recessed)
+            .rounded_b(px(radius::CARD - 1.))
+            .border_t_1()
+            .border_color(p.hairline)
+            .child(
+                Button::secondary("cancel-new-automation", "Cancel")
+                    .small()
+                    .build(p)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.new_rule = None;
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::primary("add-automation", "Add rule")
+                    .small()
+                    .build(p)
+                    .on_click(cx.listener(|this, _, _, cx| this.save_new_rule(cx))),
+            );
+        div()
+            .id("new-rule-card")
+            .test_support()
+            .pb(px(space::XL))
+            .child(theme::section_label("New rule", p))
+            .child(theme::group(rows, p).child(footer))
+    }
+
     fn automations(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let rules = self.app.read(cx).settings.automations.clone();
         let rows: Vec<AnyElement> = rules
@@ -826,11 +1229,68 @@ impl MainView {
                 let app = self.app.clone();
                 let on = rule.enabled;
                 let copy = rule.copies_to_clipboard();
-                let detail = div()
+                let status = automation::watch_status(&rule);
+                let (dot_color, status_text, needs_folder) = match &status {
+                    WatchStatus::Folder(dir) if on => {
+                        (p.green, format!("Watching · {}", super::tilde(dir)), false)
+                    }
+                    WatchStatus::Folder(dir) => {
+                        (p.tertiary, format!("Paused · {}", super::tilde(dir)), false)
+                    }
+                    WatchStatus::Clipboard => (
+                        p.amber,
+                        "Screenshots go to clipboard (no folder to watch)".into(),
+                        true,
+                    ),
+                    WatchStatus::Waiting(msg) => (p.amber, msg.clone(), true),
+                    WatchStatus::Skipped(msg) => (p.error, (*msg).to_string(), true),
+                };
+                let title = format!("{} → {to}", rule.name);
+                let title_row = div()
                     .flex()
-                    .flex_col()
-                    .gap(px(space::SM))
-                    .child(mono(11., 15., p.secondary).child(automation::source_line(&rule)))
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        styled(size::BODY, p.text)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(rule.name.clone()),
+                    )
+                    .child(icon(IconName::ArrowRight, 12., p.tertiary))
+                    .child(theme::badge(
+                        to,
+                        if on { Tone::Green } else { Tone::Neutral },
+                        p,
+                    ));
+                let status_row = div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .size(px(6.))
+                            .rounded(px(3.))
+                            .flex_shrink_0()
+                            .bg(dot_color),
+                    )
+                    .child(mono(11., 15., p.secondary).truncate().child(status_text))
+                    .when(needs_folder, |d| {
+                        d.child(
+                            theme::text_button(
+                                SharedString::from(format!("automation-{i}-folder")),
+                                "Choose folder…",
+                                p.green_text,
+                                12.,
+                            )
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| this.pick_automation_folder(Some(i), cx),
+                            )),
+                        )
+                    });
+                let controls_row = div()
+                    .flex()
+                    .items_center()
+                    .gap(px(space::MD))
+                    .pt(px(2.))
                     .child({
                         let app = app.clone();
                         theme::checkbox(
@@ -842,22 +1302,63 @@ impl MainView {
                         .on_click(move |_, _, cx| {
                             app.update(cx, |s, cx| s.set_automation_copy(i, !copy, cx))
                         })
+                    })
+                    .when(!needs_folder, |d| {
+                        d.child(
+                            theme::text_button(
+                                SharedString::from(format!("automation-{i}-folder")),
+                                "Change folder",
+                                p.tertiary,
+                                12.,
+                            )
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| this.pick_automation_folder(Some(i), cx),
+                            )),
+                        )
+                    })
+                    .child({
+                        let app = app.clone();
+                        theme::text_button(
+                            SharedString::from(format!("remove-automation-{i}")),
+                            "Remove",
+                            p.tertiary,
+                            12.,
+                        )
+                        .on_click(move |_, _, cx| {
+                            app.update(cx, |s, cx| s.remove_automation(i, cx))
+                        })
                     });
-                let title = format!("{} → {to}", rule.name);
-                theme::row(
-                    title.clone(),
-                    Some(detail.into_any_element()),
-                    theme::switch(
-                        SharedString::from(format!("automation-{i}")),
-                        title,
-                        on,
-                        false,
-                        p,
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(space::LG))
+                    .px(px(space::LG))
+                    .py(px(14.))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(6.))
+                            .child(title_row)
+                            .child(status_row)
+                            .child(controls_row),
                     )
-                    .on_click(move |_, _, cx| app.update(cx, |s, cx| s.set_automation(i, !on, cx))),
-                    p,
-                )
-                .into_any_element()
+                    .child(
+                        theme::switch(
+                            SharedString::from(format!("automation-{i}")),
+                            title,
+                            on,
+                            false,
+                            p,
+                        )
+                        .on_click(move |_, _, cx| {
+                            app.update(cx, |s, cx| s.set_automation(i, !on, cx))
+                        }),
+                    )
+                    .into_any_element()
             })
             .collect();
         let empty = rows.is_empty();
@@ -870,11 +1371,14 @@ impl MainView {
             .px(px(GUTTER))
             .pt(px(space::LG))
             .pb(px(GUTTER))
+            .children(self.new_rule.as_ref().map(|d| self.new_rule_card(d, p, cx)))
             .child(theme::section_label("Rules", p))
             .child(if empty {
-                theme::card(p)
-                    .p(px(space::LG))
-                    .child(styled(size::SMALL, p.secondary).child("No rules yet."))
+                theme::card(p).p(px(space::LG)).child(
+                    styled(size::SMALL, p.secondary).child(
+                        "No rules yet. Click New rule above to watch a folder automatically.",
+                    ),
+                )
             } else {
                 theme::group(rows, p)
             })
@@ -883,7 +1387,7 @@ impl MainView {
                     .id("automations-intro")
                     .test_support()
                     .aria_label(AUTOMATIONS_INTRO)
-                    .max_w(px(560.))
+                    .max_w(px(600.))
                     .px(px(2.))
                     .pt(px(space::SM))
                     .child(AUTOMATIONS_INTRO),
@@ -1302,8 +1806,10 @@ impl Render for MainView {
         let body = match self.page {
             Page::Activity => self.activity(&p, cx),
             Page::Automations => self.automations(&p, cx).into_any_element(),
-            // The tabs sit under the header; Settings draws its own line.
-            Page::Settings => div()
+            // Presets, Right-click menu and Settings are rendered by the
+            // embedded SettingsView; only Settings shows the General/License
+            // sub-tabs below the header.
+            Page::Presets | Page::Menu | Page::Settings => div()
                 .flex()
                 .flex_col()
                 .flex_1()

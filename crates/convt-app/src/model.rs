@@ -1172,6 +1172,52 @@ impl AppState {
         );
     }
 
+    /// Appends a new automation rule and saves settings.
+    pub fn add_automation(&mut self, rule: crate::settings::Automation, cx: &mut Context<Self>) {
+        self.update_settings(|s| s.automations.push(rule), cx);
+    }
+
+    /// Removes an automation rule by index and saves settings.
+    pub fn remove_automation(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                if index < s.automations.len() {
+                    s.automations.remove(index);
+                }
+            },
+            cx,
+        );
+    }
+
+    /// Points an automation rule at a specific folder and saves settings.
+    pub fn set_automation_folder(&mut self, index: usize, folder: PathBuf, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                if let Some(rule) = s.automations.get_mut(index) {
+                    rule.folder = Some(folder);
+                }
+            },
+            cx,
+        );
+    }
+
+    /// Whether this instance is backed by a `settings.toml` file on disk.
+    pub fn ensure_settings_file_exists_hint(&self) -> bool {
+        self.settings_path.is_some()
+    }
+
+    /// Path to `settings.toml`, creating it with the current settings if it
+    /// hasn't been written yet so "Edit config" opens a real file.
+    pub fn ensure_settings_file(&mut self) -> Option<PathBuf> {
+        let path = self.settings_path.clone()?;
+        if !path.exists()
+            && let Err(e) = self.settings.save(&path)
+        {
+            tracing::warn!(error = %e, "could not write settings file before opening");
+        }
+        Some(path)
+    }
+
     /// Lists each watched folder and converts new matching files. Tests call
     /// this twice after writing a file: once to see it, once after it is
     /// the same size.

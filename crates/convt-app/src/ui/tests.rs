@@ -1355,36 +1355,54 @@ fn settings_is_a_page_of_the_main_window(cx: &mut TestAppContext) {
     click(cx, main, "nav-automations");
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
 
+    click(cx, main, "nav-presets");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Presets));
+    assert_eq!(selected(cx, main, "nav-presets"), Some(true));
+    assert!(
+        !shown(cx, main, "tab-general"),
+        "Presets has no redundant sub-tabs"
+    );
+    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
+
+    click(cx, main, "nav-menu");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Menu));
+    assert_eq!(selected(cx, main, "nav-menu"), Some(true));
+
     click(cx, main, "nav-settings");
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
     assert_eq!(selected(cx, main, "nav-settings"), Some(true));
     assert_eq!(selected(cx, main, "tab-general"), Some(true));
-    // Its tabs work in place; no Settings window opens.
-    click(cx, main, "tab-presets");
-    assert_eq!(selected(cx, main, "tab-presets"), Some(true));
-    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
+    assert!(
+        !shown(cx, main, "tab-presets"),
+        "Presets promoted to sidebar"
+    );
     view.update(cx, |v, cx| v.show_settings(SettingsTab::License, cx));
     assert_eq!(selected(cx, main, "tab-license"), Some(true));
 
-    // Feedback sits at the bottom of the sidebar, not in the nav.
+    // Settings and Feedback sit at the bottom utility group of the sidebar.
     assert!(shown(cx, main, "nav-feedback"));
-    let (nav, feedback) = cx
+    let (nav, settings_nav) = cx
         .update_window(main, |_, window, cx| {
             window.render_frame(cx);
             (
+                window.find(id("nav-menu")).bounds(),
                 window.find(id("nav-settings")).bounds(),
-                window.find(id("nav-feedback")).bounds(),
             )
         })
         .unwrap();
-    assert!(feedback.top() > nav.bottom() + px(100.), "{feedback:?}");
+    assert!(
+        settings_nav.top() > nav.bottom() + px(80.),
+        "{settings_nav:?}"
+    );
 
     // With the main window open, every way to Settings (the tray, the menu,
-    // a license link) shows this page; no second Settings window opens.
+    // a license link) routes into the main window; no second Settings window opens.
     click(cx, main, "nav-activity");
     cx.update(|cx| super::show_settings(SettingsTab::Presets, cx));
-    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
-    assert_eq!(selected(cx, main, "tab-presets"), Some(true));
+    cx.read(|cx| {
+        assert_eq!(view.read(cx).page, Page::Presets);
+        assert_eq!(view.read(cx).settings.read(cx).tab, SettingsTab::Presets);
+    });
     cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
     click(cx, main, "nav-activity");
     cx.update(|cx| super::show_license(Some("CONVT-TEST-KEY".into()), cx));
@@ -2349,6 +2367,11 @@ fn jpeg_to_png_options_summary_omits_transparent(cx: &mut TestAppContext) {
         !summary.contains("Transparent"),
         "JPEG->PNG summary should omit Transparent: {summary}"
     );
+    click(cx, window, "options-toggle");
+    assert!(
+        !shown(cx, window, "background"),
+        "JPEG->PNG expanded options should omit irrelevant Background control"
+    );
 }
 
 #[gpui_kit::test]
@@ -3042,19 +3065,15 @@ fn onboarding_fits_small_normal_and_large_displays() {
         let s = first_run_fit(size(px(w), px(h)));
         (f32::from(s.width), f32::from(s.height))
     };
-    // A normal laptop or desktop: three quarters.
-    assert_eq!(fit(1440., 900.), (1080., 675.));
-    assert_eq!(fit(1920., 1080.), (1440., 810.));
-    // 4K at 1x: three quarters, however large.
-    assert_eq!(fit(3840., 2160.), (2880., 1620.));
-    // Where three quarters is too small, the least size, while it fits.
-    assert_eq!(fit(1024., 768.), (900., 640.));
-    assert_eq!(fit(1180., 800.), (900., 640.));
-    // Smaller than that: 95%, never past the edges.
-    assert_eq!(fit(800., 600.), (760., 570.));
-    assert_eq!(fit(640., 480.), (608., 456.));
+    // Normal and large displays: focused Alloy window size, never sprawling.
+    assert_eq!(fit(1440., 900.), (600., 520.));
+    assert_eq!(fit(1920., 1080.), (600., 520.));
+    assert_eq!(fit(3840., 2160.), (600., 520.));
+    assert_eq!(fit(1024., 768.), (600., 520.));
+    // Smaller displays: clamped to 95%, never past the edges.
+    assert_eq!(fit(600., 500.), (570., 475.));
     for (w, h) in [
-        (640., 480.),
+        (600., 480.),
         (800., 600.),
         (1024., 768.),
         (1280., 720.),
@@ -3790,6 +3809,24 @@ fn automation_switches_are_saved(cx: &mut TestAppContext) {
     cx.read(|cx| assert!(!f.app.read(cx).settings.automations[0].copies_to_clipboard()));
     click(cx, main, "automation-0");
     cx.read(|cx| assert!(!f.app.read(cx).settings.automations[0].enabled));
+
+    // Inline "+ New rule" adds a rule and Remove deletes it.
+    click(cx, main, "new-automation");
+    assert!(shown(cx, main, "new-rule-card"));
+    click(cx, main, "new-rule-kind-1");
+    click(cx, main, "new-rule-to-webp");
+    click(cx, main, "new-rule-copy");
+    click(cx, main, "add-automation");
+    assert!(!shown(cx, main, "new-rule-card"));
+    cx.read(|cx| {
+        let rules = &f.app.read(cx).settings.automations;
+        assert_eq!(rules.len(), 4);
+        assert_eq!(rules[3].name, "Images");
+        assert_eq!(rules[3].to, "webp");
+        assert!(rules[3].copies_to_clipboard());
+    });
+    click(cx, main, "remove-automation-3");
+    cx.read(|cx| assert_eq!(f.app.read(cx).settings.automations.len(), 3));
 }
 
 #[gpui_kit::test]
@@ -4822,13 +4859,17 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         for name in ["png-size-hint", "where-cloud", "change-folder"] {
             assert!(
                 fits_above_the_footer(cx, warned, name),
-                "Quick convert, PNG warning, {name} above the footer, dark: {dark}"
+                "Quick convert, PNG warning, {name} above the footer, dark: {dark} (air: {:?}, plain air: {:?})",
+                air_above_the_footer(cx, warned, name),
+                air_above_the_footer(cx, plain, "change-folder"),
             );
         }
         assert!(fits(cx, warned, "convert"), "Quick convert, PNG warning");
         assert!(
             air_above_the_footer(cx, warned, "change-folder") <= px(48.),
-            "the warning's window is no taller than it needs, dark: {dark}"
+            "the warning's window is no taller than it needs, dark: {dark} (air: {:?}, where: {:?})",
+            air_above_the_footer(cx, warned, "change-folder"),
+            air_above_the_footer(cx, warned, "where-cloud"),
         );
         click(cx, warned, "options-toggle");
         for name in ["png-size-hint", "options-toggle", "change-folder"] {

@@ -1436,51 +1436,64 @@ impl Render for SettingsView {
             .find(|(t, ..)| *t == self.tab)
             .map_or("Settings", |(_, _, label, _)| label);
         let embedded = self.embedded;
-        let tabs = div()
-            .flex()
-            .flex_shrink_0()
-            .when(embedded, |d| {
-                d.px(px(GUTTER))
-                    .pb(px(space::MD))
-                    .border_b_1()
-                    .border_color(p.hairline)
+        // When embedded in the main window, Menu and Presets have their own
+        // top-level sidebar pages and headers, so Settings only shows the
+        // General / License tabs. Standalone Settings still offers all four.
+        let show_tabs =
+            !embedded || matches!(self.tab, SettingsTab::General | SettingsTab::License);
+        let visible_tabs: Vec<_> = TABS
+            .into_iter()
+            .filter(|(tab, ..)| {
+                !embedded || matches!(tab, SettingsTab::General | SettingsTab::License)
             })
-            .when(!embedded, |d| {
-                d.justify_center()
-                    .px(px(space::LG))
-                    .pb(px(10.))
-                    .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
-                    .bg(p.chrome)
-                    .border_b_1()
-                    .border_color(p.chrome_border)
-            })
-            .child(theme::pill_track(&p).children(TABS.into_iter().map(
-                |(tab, id, label, glyph)| {
-                    let on = self.tab == tab;
-                    theme::clickable(id, label)
-                        .aria_selected(on)
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .h(px(28.))
-                        .px(px(16.))
-                        .rounded(px(radius::CONTROL))
-                        .map(|d| {
-                            if on {
-                                theme::pill_segment_on(d, &p)
-                            } else {
-                                d.hover(|s| s.bg(p.hover))
-                            }
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
-                        .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
-                        .child(
-                            styled(size::SMALL, if on { p.text } else { p.secondary })
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(label),
-                        )
-                },
-            )));
+            .collect();
+        let tabs = show_tabs.then(|| {
+            div()
+                .flex()
+                .flex_shrink_0()
+                .when(embedded, |d| {
+                    d.px(px(GUTTER))
+                        .pb(px(space::MD))
+                        .border_b_1()
+                        .border_color(p.hairline)
+                })
+                .when(!embedded, |d| {
+                    d.justify_center()
+                        .px(px(space::LG))
+                        .pb(px(10.))
+                        .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
+                        .bg(p.chrome)
+                        .border_b_1()
+                        .border_color(p.chrome_border)
+                })
+                .child(theme::pill_track(&p).children(visible_tabs.into_iter().map(
+                    |(tab, id, label, glyph)| {
+                        let on = self.tab == tab;
+                        theme::clickable(id, label)
+                            .aria_selected(on)
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .h(px(28.))
+                            .px(px(16.))
+                            .rounded(px(radius::CONTROL))
+                            .map(|d| {
+                                if on {
+                                    theme::pill_segment_on(d, &p)
+                                } else {
+                                    d.hover(|s| s.bg(p.hover))
+                                }
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
+                            .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
+                            .child(
+                                styled(size::SMALL, if on { p.text } else { p.secondary })
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(label),
+                            )
+                    },
+                )))
+        });
         let body = match self.tab {
             SettingsTab::General => self.general(&p, cx),
             SettingsTab::Menu => self.menu(&p, cx),
@@ -1498,7 +1511,7 @@ impl Render for SettingsView {
             .when(!embedded, |d| {
                 d.children(theme::title_bar(Some(title), 40., Some(p.chrome), &p))
             })
-            .child(tabs)
+            .children(tabs)
             .child(
                 div()
                     .id("settings-body")
