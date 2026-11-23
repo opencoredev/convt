@@ -21,16 +21,25 @@ describe("sitemap pages", () => {
     expect(paths.some((p) => p.startsWith("/docs"))).toBe(false);
   });
 
-  test("pages that list guides are dated from the newest guide added", () => {
-    const formats = sitemapEntries.find((e) => e.path === routes.formats);
-    const index = sitemapEntries.find((e) => e.path === routes.guides);
-    expect(guidesLastmod).toBe(
+  test("pages that list guides are dated from the newest guide added or listing edit", () => {
+    const expected =
       guides
-        .map((g) => g.published)
+        .map((g) =>
+          "listingUpdated" in g && g.listingUpdated > g.published ? g.listingUpdated : g.published,
+        )
         .sort()
-        .at(-1) ?? "",
-    );
-    expect((formats?.lastmod ?? "") >= guidesLastmod).toBe(true);
+        .at(-1) ?? "";
+    expect(guidesLastmod).toBe(expected);
+    for (const path of [
+      routes.formats,
+      routes.guides,
+      routes.macFileConverter,
+      routes.commandLineConverter,
+    ]) {
+      const entry = sitemapEntries.find((e) => e.path === path);
+      expect((entry?.lastmod ?? "") >= guidesLastmod, path).toBe(true);
+    }
+    const index = sitemapEntries.find((e) => e.path === routes.guides);
     expect(index?.lastmod).toBe(guidesLastmod);
   });
 

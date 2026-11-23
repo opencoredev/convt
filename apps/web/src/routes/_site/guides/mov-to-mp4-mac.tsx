@@ -101,7 +101,7 @@ function MovToMp4Mac() {
           usually H.264 or HEVC, which MP4 can hold as is. So the fastest conversion often copies
           the video into a new file without touching a frame. When that won't work, or you want a
           smaller file, the video has to be encoded again. QuickTime Player won't make an MP4 either
-          way: its Export As menu only saves MOV files.
+          way: its Export As menu only saves video as MOV (Audio Only saves MPEG-4 audio with AAC).
         </p>
       }
     >
@@ -505,8 +505,10 @@ videos/a.MOV -> mp4/a.mp4
             <dt className="text-[16px]/6 font-semibold">Can QuickTime Player export MP4?</dt>
             <dd className="text-[16px]/[26px] text-ink-2">
               No. Apple's QuickTime Player guide says its exports are QuickTime movies (.mov) using
-              H.264 or HEVC, and audio-only exports are AAC audio files. To get an MP4, rename an
-              H.264 MOV, export from iMovie, or remux it with FFmpeg as above.
+              H.264 or HEVC, and audio-only exports are AAC audio files. To get a real MP4
+              container, export from iMovie, remux with FFmpeg, or convert with convt as above.
+              Renaming an H.264 MOV to .mp4 only changes the file extension and can still be
+              rejected by apps that check the container.
             </dd>
           </div>
           <div className="flex flex-col gap-1.5">
