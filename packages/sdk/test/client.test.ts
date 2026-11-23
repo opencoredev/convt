@@ -105,7 +105,8 @@ test("completion racing cancellation does not claim released usage", async () =>
     .convert(new Blob(["x"]), { from: "svg", to: "png", signal: controller.signal })
     .catch((e) => e);
   expect(error.code).toBe("already_completed");
-  expect(error.message).toContain("settled");
+  expect(error.message).toContain("billed");
+  expect(error.jobId).toBe(job.id);
 });
 test("conversion options are sent with the job, and left out when unset", async () => {
   const bodies: unknown[] = [];
@@ -320,4 +321,53 @@ test("save streams the output to disk", async () => {
   ]).save(join(dir, "out.png"));
   expect(await readFile(join(dir, "out.png"), "utf8")).toBe("chunk-1chunk-2");
   await rm(dir, { recursive: true });
+});
+test("a billed conversion whose links fail keeps its job id and is not cancelled", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/v1/jobs"))
+      return Response.json({ job: { ...job, status: "succeeded" }, upload_url: null });
+    if (url.endsWith("/download"))
+      return Response.json(
+        { error: { code: "storage_unavailable", message: "x" } },
+        { status: 400 },
+      );
+    return Response.json({ ...job, status: "succeeded" });
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png" })
+    .catch((e) => e);
+  expect(error.code).toBe("download_failed");
+  expect(error.jobId).toBe(job.id);
+  expect(error.idempotencyKey).toBeTruthy();
+  expect(calls.some((u) => u.endsWith("/cancel"))).toBe(false);
+});
+test("with the caller's own key, a failed upload leaves the shared job alone", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/v1/jobs"))
+      return Response.json({ job, upload_url: "https://objects.test/in" });
+    if (url.includes("objects.test")) return new Response("", { status: 503 });
+    return Response.json(job);
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convert(new Blob(["x"]), { from: "svg", to: "png", idempotencyKey: "order-9" })
+    .catch((e) => e);
+  expect(error.code).toBe("upload_failed");
+  expect(error.jobId).toBe(job.id);
+  expect(error.idempotencyKey).toBe("order-9");
+  expect(calls.some((u) => u.endsWith("/cancel"))).toBe(false);
+});
+test("a deadline during retry backoff still reports the create's key", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("busy", { status: 503, headers: { "retry-after": "30" } })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 100 })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.idempotencyKey).toBeTruthy();
 });

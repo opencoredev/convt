@@ -73,12 +73,14 @@ await out.save("report.pdf");`,
   {
     id: "python",
     label: "Python",
-    code: `r = requests.post("${API}/v1/convert",
-    headers={"Authorization": f"Bearer {key}"},
-    files={"file": open("clip.mov", "rb")},
-    data={"to": "mp4"})
-if r.ok and "json" not in r.headers["content-type"]:
-    open("clip.mp4", "wb").write(r.content)`,
+    code: `import os, requests
+
+r = requests.post("${API}/v1/convert",
+    headers={"Authorization": f"Bearer {os.environ['CONVT_API_KEY']}"},
+    files={"file": open("clip.mov", "rb")}, data={"to": "mp4"})
+if not r.ok or "json" in r.headers["content-type"]:
+    raise SystemExit(r.text)
+open("clip.mp4", "wb").write(r.content)`,
   },
 ];
 
@@ -271,7 +273,11 @@ function ApiPage() {
           <figcaption className="flex h-[34px] items-center px-4 font-mono text-[11px]/4 text-land-muted shadow-[inset_0_-1px_0_#ffffff0f]">
             Response headers
           </figcaption>
-          <pre className="overflow-x-auto px-4 py-4 font-mono text-[12.5px]/[22px] [scrollbar-width:thin]">
+          <pre
+            tabIndex={0}
+            aria-label="Example response headers"
+            className="overflow-x-auto px-4 py-4 font-mono text-[12.5px]/[22px] [scrollbar-width:thin]"
+          >
             <code>
               {response.map(([name, value]) => (
                 <span key={name} className="block whitespace-pre">

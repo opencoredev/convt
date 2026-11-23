@@ -96,7 +96,7 @@ pub async fn deliver_due(
     let sends = due.iter().map(|row| async move {
         // Building the event and sending it stay well inside the lease.
         let result = tokio::time::timeout(
-            Duration::from_secs(45),
+            Duration::from_secs(22),
             send(pool, storage, master, policy, row),
         )
         .await

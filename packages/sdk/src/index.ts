@@ -57,31 +57,61 @@ export type Job = {
   source_url?: string;
   webhook_url?: string;
 };
+/** What a ConvtError knows about the request and job it came from. */
+export type ConvtErrorDetails = {
+  /** The HTTP status, when the API answered. */
+  status?: number;
+  /** The `X-Request-Id` of the failed call. Quote it when you contact support. */
+  requestId?: string;
+  /**
+   * The `Idempotency-Key` the job was created with. When the outcome is unknown,
+   * retry with the same key to get the original job instead of a new one.
+   */
+  idempotencyKey?: string;
+  /** The job this error concerns, once one exists. `convt.status(jobId)` shows it. */
+  jobId?: string;
+  cause?: unknown;
+};
 export class ConvtError extends Error {
+  readonly status?: number;
+  readonly requestId?: string;
+  readonly idempotencyKey?: string;
+  readonly jobId?: string;
   constructor(
     readonly code: string,
     message: string,
-    readonly status?: number,
-    /** The `X-Request-Id` of the failed call. Quote it when you contact support. */
-    readonly requestId?: string,
-    /**
-     * The `Idempotency-Key` a failed create was sent with. When the outcome is
-     * unknown, retry with the same key to get the original job instead of a new one.
-     */
-    readonly idempotencyKey?: string,
-    options?: ErrorOptions,
+    details: ConvtErrorDetails = {},
   ) {
-    super(message, options);
+    super(message, details.cause === undefined ? undefined : { cause: details.cause });
     this.name = "ConvtError";
+    this.status = details.status;
+    this.requestId = details.requestId;
+    this.idempotencyKey = details.idempotencyKey;
+    this.jobId = details.jobId;
   }
 }
 export class ConvtCancellationError extends ConvtError {
-  constructor(readonly jobId: string) {
+  declare readonly jobId: string;
+  constructor(jobId: string, details: Omit<ConvtErrorDetails, "jobId"> = {}) {
     super(
       "cancellation_unconfirmed",
       "Cancellation could not be confirmed. Retry cancellation to release the reservation.",
+      { ...details, jobId },
     );
   }
+}
+/** Adds job context to an error that lacks it, keeping its code and cause. */
+function withContext(error: unknown, context: { jobId: string; idempotencyKey: string }): unknown {
+  if (error instanceof ConvtError) {
+    if (error.jobId) return error;
+    return new ConvtError(error.code, error.message, {
+      status: error.status,
+      requestId: error.requestId,
+      ...context,
+      cause: error.cause ?? error,
+    });
+  }
+  return error;
 }
 async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
@@ -170,7 +200,7 @@ export class Conversion {
       throw new ConvtError(
         "download_failed",
         "The download expired or is unavailable. Call convt.download(job.id) for fresh URLs.",
-        response.status,
+        { status: response.status },
       );
     return response;
   }
@@ -258,7 +288,7 @@ export class Convt {
       status?: number,
       requestId?: string,
       cause?: unknown,
-    ) => new ConvtError(code, message, status, requestId, idempotencyKey, { cause });
+    ) => new ConvtError(code, message, { status, requestId, idempotencyKey, cause });
     // Once a keyed create is on the wire, an abort leaves its outcome unknown;
     // say so and keep the key, so a retry can find the job instead of making one.
     const unknown = (cause: unknown) =>
@@ -271,6 +301,53 @@ export class Convt {
             cause,
           )
         : cause;
+    let dispatched = false;
+    try {
+      return await this.attempts<T>({
+        path,
+        method,
+        data,
+        signal,
+        idempotencyKey,
+        retryable,
+        fail,
+        unknown,
+        onDispatch: () => (dispatched = true),
+      });
+    } catch (error) {
+      // After the first send, any abort (in backoff, a credential refresh or a
+      // read) leaves a keyed create's outcome unknown.
+      if (dispatched && signal.aborted && !(error instanceof ConvtError)) throw unknown(error);
+      throw error;
+    }
+  }
+  private async attempts<T>({
+    path,
+    method,
+    data,
+    signal,
+    idempotencyKey,
+    retryable,
+    fail,
+    unknown,
+    onDispatch,
+  }: {
+    path: string;
+    method: "GET" | "POST";
+    data?: unknown;
+    signal: AbortSignal;
+    idempotencyKey?: string;
+    retryable: boolean;
+    fail: (
+      code: string,
+      message: string,
+      status?: number,
+      requestId?: string,
+      cause?: unknown,
+    ) => ConvtError;
+    unknown: (cause: unknown) => unknown;
+    onDispatch: () => void;
+  }): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
       const key =
@@ -281,6 +358,7 @@ export class Convt {
       // Nothing has been sent yet, so an abort here is just an abort.
       signal.throwIfAborted();
       let response: Response;
+      onDispatch();
       try {
         response = await fetch(`${this.baseUrl}${path}`, {
           method,
@@ -456,22 +534,37 @@ export class Convt {
   ): Promise<Conversion> {
     const deadline = AbortSignal.timeout(options.timeoutMs ?? 660_000);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-    const created = await this.create(input, {
-      signal,
-      idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
-    });
+    // A caller's own key can be shared with another call (a retry still running),
+    // so this call cancels the job only when the key is its own or the caller
+    // aborted. Otherwise errors carry the job id, to resume or cancel explicitly.
+    const ownsJob = options.idempotencyKey === undefined;
+    const idempotencyKey = options.idempotencyKey ?? newIdempotencyKey();
+    const created = await this.create(input, { signal, idempotencyKey });
+    const context = { jobId: created.job.id, idempotencyKey };
     try {
       if (body && created.upload_url) {
         const uploaded = await fetch(created.upload_url, { method: "PUT", body, signal });
         if (!uploaded.ok)
-          throw new ConvtError("upload_failed", "Upload failed. Try again.", uploaded.status);
+          throw new ConvtError("upload_failed", "Upload failed. Try again.", {
+            status: uploaded.status,
+            ...context,
+          });
       }
       let job = body ? await this.start(created.job.id, signal) : created.job;
       let pause = 500;
       while (true) {
         options.onProgress?.(job);
-        if (job.status === "succeeded")
-          return new Conversion(job, (await this.download(job.id, signal)).outputs);
+        if (job.status === "succeeded") {
+          try {
+            return new Conversion(job, (await this.download(job.id, signal)).outputs);
+          } catch (error) {
+            throw new ConvtError(
+              "download_failed",
+              "The conversion succeeded and was billed, but its output links could not be fetched. Call convt.download(error.jobId) to get them; do not convert again.",
+              { ...context, cause: error },
+            );
+          }
+        }
         if (job.status === "failed" || job.status === "cancelled")
           throw new ConvtError(
             job.error_code ?? job.status,
@@ -480,29 +573,38 @@ export class Convt {
               : job.error_code === "source_fetch_failed"
                 ? "convt could not download source_url. Check that it is public and returns the file."
                 : "Conversion failed. Try another format or use the desktop app.",
+            context,
           );
         await sleep(pause, signal);
         pause = Math.min(pause * 1.5, 2000);
         job = await this.status(job.id, signal);
       }
     } catch (error) {
+      // Billed already: never cancel, just point at the outputs.
+      if (error instanceof ConvtError && error.code === "download_failed" && error.jobId)
+        throw error;
+      if (!ownsJob && !signal.aborted) throw withContext(error, context);
       let terminal: Job;
       try {
         terminal = await this.cancel(created.job.id);
       } catch {
-        throw new ConvtCancellationError(created.job.id);
+        throw new ConvtCancellationError(created.job.id, { idempotencyKey });
       }
+      if (terminal.status === "succeeded")
+        throw new ConvtError(
+          "already_completed",
+          "The conversion finished before it could be cancelled and was billed. Call convt.download(error.jobId) for its outputs.",
+          { ...context, cause: error },
+        );
       if (signal.aborted) {
         if (terminal.status === "cancelled" || terminal.status === "failed")
-          throw new ConvtError("cancelled", "Conversion cancelled. Your allowance was released.");
-        if (terminal.status === "succeeded")
-          throw new ConvtError(
-            "already_completed",
-            "Conversion completed before cancellation. Your allowance was settled.",
-          );
-        throw new ConvtCancellationError(created.job.id);
+          throw new ConvtError("cancelled", "Conversion cancelled. Your allowance was released.", {
+            ...context,
+            cause: error,
+          });
+        throw new ConvtCancellationError(created.job.id, { idempotencyKey });
       }
-      throw error;
+      throw withContext(error, context);
     }
   }
 }

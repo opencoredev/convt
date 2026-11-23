@@ -24,7 +24,7 @@ struct MemoryStorage {
 }
 #[async_trait]
 impl Storage for MemoryStorage {
-    async fn upload_url(&self, key: &str, _bytes: i64) -> anyhow::Result<String> {
+    async fn upload_url(&self, key: &str, _bytes: i64, _seconds: u32) -> anyhow::Result<String> {
         Ok(format!("https://upload.test/{key}"))
     }
     async fn download_url(&self, key: &str, _seconds: u32) -> anyhow::Result<String> {
@@ -1456,15 +1456,15 @@ async fn a_worker_shutdown_requeues_without_spending_an_attempt() {
 fn job_views_never_show_url_secrets() {
     assert_eq!(
         routes::redact_url("https://bucket.s3.amazonaws.com/a/photo.png?X-Amz-Signature=abc"),
-        "https://bucket.s3.amazonaws.com/a/photo.png?…"
+        "https://bucket.s3.amazonaws.com/…"
     );
     assert_eq!(
-        routes::redact_url("https://example.com/hooks/convt"),
-        "https://example.com/hooks/convt"
+        routes::redact_url("https://hooks.example.com/t0ken-in-path/convt"),
+        "https://hooks.example.com/…"
     );
     assert_eq!(
-        routes::redact_url("https://user:pw@example.com/h#tok"),
-        "https://example.com/h?…"
+        routes::redact_url("https://user:pw@example.com"),
+        "https://example.com"
     );
 }
 
@@ -1486,10 +1486,7 @@ async fn web_credentials_cannot_read_api_jobs() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let created = json(&created);
-    assert_eq!(
-        created["job"]["source_url"],
-        "https://cdn.example.com/a.png?…"
-    );
+    assert_eq!(created["job"]["source_url"], "https://cdn.example.com/…");
     let id = created["job"]["id"].as_str().unwrap();
     let web = web_token(&state.web_secret, "usr_a");
     for (method, path) in [
@@ -1508,5 +1505,89 @@ async fn web_credentials_cannot_read_api_jobs() {
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn keyed_replays_recover_jobs_even_with_a_feature_switched_off() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let body = r#"{"target_format":"webp","source_url":"https://cdn.example.com/a.png"}"#;
+    let create = |state: &CloudState, key: &'static str| {
+        let state = state.clone();
+        async move {
+            send(
+                &state,
+                authed("POST", "/v1/jobs")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", key)
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+        }
+    };
+    let (status, _, first) = create(&state, "remote-1").await;
+    assert_eq!(status, StatusCode::OK);
+    let mut off = state.clone();
+    off.source_urls = false;
+    let (status, headers, replay) = create(&off, "remote-1").await;
+    assert_eq!(status, StatusCode::OK, "{}", json(&replay));
+    assert_eq!(headers["idempotent-replayed"], "true");
+    assert_eq!(json(&replay)["job"]["id"], json(&first)["job"]["id"]);
+    let (status, _, refused) = create(&off, "remote-2").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&refused)["error"]["code"], "source_url_unavailable");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn upload_urls_never_outlive_their_job_and_expiry_drops_customer_urls() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let body = r#"{"input_format":"png","target_format":"webp","input_bytes":4,"webhook_url":"https://hooks.example.com/secret-path"}"#;
+    let request = || {
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .header("idempotency-key", "late-1")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let (_, _, first) = send(&state, request()).await;
+    assert_eq!(json(&first)["upload_expires_in"], 900);
+    let id = json(&first)["job"]["id"].as_str().unwrap().to_owned();
+    sqlx::query("update cloud_jobs set expires_at=now()+interval '5 minutes' where id=$1")
+        .bind(&id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (_, _, replay) = send(&state, request()).await;
+    let ttl = json(&replay)["upload_expires_in"].as_i64().unwrap();
+    assert!((60..=240).contains(&ttl), "{ttl}");
+    sqlx::query("update cloud_jobs set expires_at=now()+interval '90 seconds' where id=$1")
+        .bind(&id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (_, _, late) = send(&state, request()).await;
+    assert!(json(&late)["upload_url"].is_null());
+    // Expired with its webhook delivered: both customer URLs are cleared.
+    sqlx::query("update cloud_jobs set expires_at=now()-interval '1 second', source_url='https://cdn.example.com/x?sig=1', webhook_delivered_at=now() where id=$1")
+        .bind(&id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    routes::expire(&state).await.unwrap();
+    let (source, webhook): (Option<String>, Option<String>) =
+        sqlx::query_as("select source_url, webhook_url from cloud_jobs where id=$1")
+            .bind(&id)
+            .fetch_one(&db.owner)
+            .await
+            .unwrap();
+    assert_eq!((source, webhook), (None, None));
     db.drop().await;
 }

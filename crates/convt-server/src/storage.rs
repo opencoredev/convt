@@ -10,7 +10,8 @@ pub type ByteStream =
 
 #[async_trait]
 pub trait Storage: Send + Sync {
-    async fn upload_url(&self, key: &str, bytes: i64) -> anyhow::Result<String>;
+    /// A PUT URL for exactly `bytes` bytes, valid for `seconds` (at most 900).
+    async fn upload_url(&self, key: &str, bytes: i64, seconds: u32) -> anyhow::Result<String>;
     async fn download_url(&self, key: &str, seconds: u32) -> anyhow::Result<String>;
     async fn size(&self, key: &str) -> anyhow::Result<i64>;
     /// The object's size, or None when nothing is stored under `key`.
@@ -80,7 +81,7 @@ fn success(code: u16) -> anyhow::Result<()> {
 }
 #[async_trait]
 impl Storage for S3Storage {
-    async fn upload_url(&self, key: &str, bytes: i64) -> anyhow::Result<String> {
+    async fn upload_url(&self, key: &str, bytes: i64, seconds: u32) -> anyhow::Result<String> {
         anyhow::ensure!(
             bytes > 0 && bytes <= crate::jobs::MAX_FILE_BYTES,
             "invalid upload size"
@@ -92,7 +93,7 @@ impl Storage for S3Storage {
         );
         Ok(self
             .bucket
-            .presign_put(key, 900, Some(headers), None)
+            .presign_put(key, seconds.clamp(1, 900), Some(headers), None)
             .await?)
     }
     async fn download_url(&self, key: &str, seconds: u32) -> anyhow::Result<String> {
@@ -187,8 +188,8 @@ mod tests {
             )
             .unwrap();
             let storage = S3Storage { bucket };
-            let url =
-                reqwest::Url::parse(&storage.upload_url("job/input", 1).await.unwrap()).unwrap();
+            let url = reqwest::Url::parse(&storage.upload_url("job/input", 1, 900).await.unwrap())
+                .unwrap();
             assert_eq!(url.host_str(), Some(host));
             assert_eq!(url.port(), Some(9443));
             assert_eq!(url.path(), path);
@@ -201,7 +202,8 @@ mod tests {
             );
             assert_eq!(query.get("X-Amz-Expires").unwrap(), "900");
             let other =
-                reqwest::Url::parse(&storage.upload_url("job/input", 2).await.unwrap()).unwrap();
+                reqwest::Url::parse(&storage.upload_url("job/input", 2, 900).await.unwrap())
+                    .unwrap();
             let other_query = other
                 .query_pairs()
                 .collect::<std::collections::HashMap<_, _>>();
@@ -210,7 +212,7 @@ mod tests {
                 other_query.get("X-Amz-Signature")
             );
             for bytes in [0, -1, crate::jobs::MAX_FILE_BYTES + 1] {
-                assert!(storage.upload_url("job/input", bytes).await.is_err());
+                assert!(storage.upload_url("job/input", bytes, 900).await.is_err());
             }
         }
     }
@@ -253,7 +255,7 @@ mod integration_tests {
         }
         let storage = S3Storage::from_env().unwrap();
         let key = format!("security-test-{}/input", crate::ids::new_id("upload"));
-        let url = storage.upload_url(&key, 1).await.unwrap();
+        let url = storage.upload_url(&key, 1, 900).await.unwrap();
         let client = reqwest::Client::new();
         let exact = client.put(&url).body(vec![1_u8]).send().await.unwrap();
         assert!(exact.status().is_success());

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 /// How long in-flight requests get after SIGTERM before the process exits. Keep it
 /// below the platform's drain window (`drainingSeconds` in railway.json is 30).
-const DRAIN: Duration = Duration::from_secs(25);
+const DRAIN: Duration = Duration::from_secs(24);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,6 +14,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
     let mut jobs = None;
+    let mut dispatcher = None;
     if let Ok(url) = std::env::var("DATABASE_URL") {
         let pool = convt_server::db::connect(&url).await?;
         convt_server::migrations::check(&pool).await?;
@@ -46,12 +47,12 @@ async fn main() -> anyhow::Result<()> {
             source_urls: std::env::var("CONVT_SOURCE_URLS").as_deref() == Ok("1"),
         };
         if let Some(master) = webhook_secret {
-            convt_server::webhooks::spawn(
+            dispatcher = Some(convt_server::webhooks::spawn(
                 pool,
                 storage,
                 master,
                 convt_server::net_guard::Policy::from_env(),
-            );
+            ));
         }
         jobs = Some(
             convt_server::routes::router(state.clone())
@@ -85,6 +86,15 @@ async fn main() -> anyhow::Result<()> {
             shutdown_signal().await;
             tokio::time::sleep(DRAIN).await;
         } => tracing::warn!("drain window over; exiting with requests still open"),
+    }
+    // The dispatcher stops claiming once draining starts; let a pass in flight
+    // record its results, so an acknowledged delivery is not sent again.
+    if let Some(dispatcher) = dispatcher
+        && tokio::time::timeout(Duration::from_secs(4), dispatcher)
+            .await
+            .is_err()
+    {
+        tracing::warn!("webhook dispatcher still sending at exit; its rows retry after the lease");
     }
     Ok(())
 }

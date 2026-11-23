@@ -22,7 +22,7 @@ curl -fsS {{api}}/v1/convert \
 
 `-f` makes curl exit non-zero on an error, so a JSON error never lands in `photo.webp`. Drop it while you experiment to see the error body.
 
-Add `-H "Idempotency-Key: $(uuidgen)"` once you script it, so a retry can't run the conversion twice. See [Idempotent requests](/guides/idempotency).
+Once you script it, make one key per file and reuse it on every retry of that file, so a retry can't run the conversion twice: `KEY=$(uuidgen)` once, then `-H "Idempotency-Key: $KEY"` on each attempt. See [Idempotent requests](/guides/idempotency).
 
 </Tab>
 <Tab title="JavaScript SDK">

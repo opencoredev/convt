@@ -41,6 +41,7 @@ Branch on `code`. `message` may change. `request_id` matches the `X-Request-Id` 
 | `403`  | `storage_limit_reached`   | Create                       | Your unexpired uploads hit 100 jobs or 50 GB. Wait for older jobs to expire.                                                       |
 | `404`  | `not_found`               | Get, start, cancel, download | The job does not exist, belongs to another account, or has expired. Also any unknown route.                                        |
 | `405`  | `method_not_allowed`      | Any route                    | The route exists but not with that method.                                                                                         |
+| `408`  | `request_timeout`         | Convert                      | The upload took longer than 2 minutes. Use the jobs routes for slow or large uploads.                                              |
 | `409`  | `idempotency_key_reused`  | Create, convert              | The key was used for a different request in the last 24 hours. Use a new key. See [Idempotent requests](/guides/idempotency).      |
 | `409`  | `upload_missing`          | Start                        | Nothing was uploaded for the job yet. `PUT` the file to `upload_url`, then start again. The job stays `created`.                   |
 | `409`  | `cancelled`               | Convert                      | The job was cancelled before it finished. Not charged. The body includes the `job`.                                                |

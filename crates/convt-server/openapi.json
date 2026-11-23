@@ -1463,6 +1463,15 @@
               },
               "X-RateLimit-Reset": {
                 "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "Where to recover the job: `/v1/jobs/{id}` (409) or `/v1/jobs/{id}/download` (502 after success).",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1554,11 +1563,23 @@
             }
           },
           "502": {
-            "description": "Request refused",
+            "description": "`storage_unavailable`. If the job already succeeded and was billed, the body includes the `job` and `Location` points at its download route; do not convert again.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "job": {
+                          "$ref": "#/components/schemas/Job"
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             },
@@ -1574,6 +1595,15 @@
               },
               "X-RateLimit-Reset": {
                 "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "Where to recover the job: `/v1/jobs/{id}` (409) or `/v1/jobs/{id}/download` (502 after success).",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1678,6 +1708,24 @@
               },
               "X-RateLimit-Reset": {
                 "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              }
+            }
+          },
+          "408": {
+            "description": "`request_timeout`: the upload took longer than 2 minutes. Use `POST /v1/jobs` for slow or large uploads.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -2021,11 +2069,11 @@
           },
           "source_url": {
             "type": "string",
-            "format": "uri"
+            "description": "The origin of the `source_url` you sent, such as `https://bucket.s3.amazonaws.com/\u2026`. The full URL is never returned."
           },
           "webhook_url": {
             "type": "string",
-            "format": "uri"
+            "description": "The origin of the `webhook_url` you sent. The full URL is never returned."
           }
         }
       },

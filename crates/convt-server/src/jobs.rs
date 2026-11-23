@@ -60,6 +60,19 @@ pub struct Idempotency {
     pub key: String,
     pub request_hash: String,
 }
+/// Server switches for optional inputs. Checked after an idempotent replay is
+/// resolved, so a client can always recover a job it already created.
+#[derive(Clone, Copy, Debug)]
+pub struct Features {
+    pub source_urls: bool,
+    pub webhooks: bool,
+}
+impl Features {
+    pub const ALL: Self = Self {
+        source_urls: true,
+        webhooks: true,
+    };
+}
 pub struct Created {
     pub job: Job,
     /// The key matched an earlier request; no new reservation was made.
@@ -101,7 +114,7 @@ struct Subscription {
 }
 
 pub async fn create(pool: &PgPool, who: &Principal, data: &CreateJob) -> Result<Job, ApiError> {
-    Ok(create_with(pool, who, data, None).await?.job)
+    Ok(create_with(pool, who, data, None, Features::ALL).await?.job)
 }
 
 pub async fn create_with(
@@ -109,6 +122,7 @@ pub async fn create_with(
     who: &Principal,
     data: &CreateJob,
     idempotency: Option<&Idempotency>,
+    features: Features,
 ) -> Result<Created, ApiError> {
     let policy = crate::net_guard::Policy::from_env();
     match (&data.source_url, data.input_bytes) {
@@ -209,6 +223,18 @@ pub async fn create_with(
                 replayed: true,
             });
         }
+    }
+    if data.source_url.is_some() && !features.source_urls {
+        return Err(ApiError::bad(
+            "source_url_unavailable",
+            "source_url is not enabled on this server yet. Upload the file instead.",
+        ));
+    }
+    if data.webhook_url.is_some() && !features.webhooks {
+        return Err(ApiError::bad(
+            "webhooks_unavailable",
+            "Webhooks are not enabled on this server yet. Poll the job instead.",
+        ));
     }
     let stored = sqlx::query!(r#"select count(*)::bigint as "count!", coalesce(sum(input_bytes),0)::bigint as "bytes!" from cloud_jobs where user_id=$1 and input_key is not null"#, &who.user_id).fetch_one(&mut *tx).await?;
     if stored.count >= MAX_STORED_JOBS

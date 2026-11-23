@@ -261,21 +261,20 @@ impl From<jobs::Job> for JobView {
     }
 }
 
-/// A URL without its query string or fragment, which is where presigned links
-/// and receivers' tokens live. Job views show this; the full URL stays private.
+/// Only a URL's origin: paths, query strings and fragments can all carry
+/// presigned signatures or receivers' tokens. Job views show this; the full URL
+/// stays server-side and is cleared at expiry.
 pub fn redact_url(url: &str) -> String {
     match url::Url::parse(url) {
-        Ok(mut parsed) => {
-            let had_secret = parsed.query().is_some() || parsed.fragment().is_some();
-            parsed.set_query(None);
-            parsed.set_fragment(None);
-            let _ = parsed.set_username("");
-            let _ = parsed.set_password(None);
-            let mut shown = parsed.to_string();
-            if had_secret {
-                shown.push_str("?…");
+        Ok(parsed) => {
+            let origin = parsed.origin().ascii_serialization();
+            let has_more =
+                parsed.path() != "/" || parsed.query().is_some() || parsed.fragment().is_some();
+            if has_more {
+                format!("{origin}/…")
+            } else {
+                origin
             }
-            shown
         }
         Err(_) => "[unparseable URL]".into(),
     }
@@ -364,23 +363,15 @@ pub async fn create_job(
     route: &str,
     extra: &str,
 ) -> Result<jobs::Created, ApiError> {
-    if data.source_url.is_some() && !s.source_urls {
-        return Err(ApiError::bad(
-            "source_url_unavailable",
-            "source_url is not enabled on this server yet. Upload the file instead.",
-        ));
-    }
-    if data.webhook_url.is_some() && s.webhook_secret.is_none() {
-        return Err(ApiError::bad(
-            "webhooks_unavailable",
-            "Webhooks are not enabled on this server yet. Poll the job instead.",
-        ));
-    }
     let idempotency = idempotency_key(headers)?.map(|key| Idempotency {
         request_hash: data.fingerprint(route, extra),
         key,
     });
-    jobs::create_with(&s.pool, who, data, idempotency.as_ref()).await
+    let features = jobs::Features {
+        source_urls: s.source_urls,
+        webhooks: s.webhook_secret.is_some(),
+    };
+    jobs::create_with(&s.pool, who, data, idempotency.as_ref(), features).await
 }
 
 async fn create(
@@ -394,13 +385,22 @@ async fn create(
     let job = created.job;
     // Only a job still waiting for its upload gets a URL; a replay of a started
     // job must not hand out a way to write its input again.
-    let upload_url = if job.status == "created" && job.source_url.is_none() {
+    // Only a job still waiting for its upload gets a URL; a replay of a started
+    // job must not hand out a way to write its input again. The URL never
+    // outlives the job, so nothing can land in storage after expiry cleanup.
+    let upload_ttl = (job.expires_at - chrono::Utc::now()).num_seconds() - 60;
+    let upload_url = if job.status == "created" && job.source_url.is_none() && upload_ttl >= 60 {
+        let seconds = upload_ttl.min(900) as u32;
         match s
             .storage
-            .upload_url(job.input_key.as_deref().unwrap(), job.input_bytes.unwrap())
+            .upload_url(
+                job.input_key.as_deref().unwrap(),
+                job.input_bytes.unwrap(),
+                seconds,
+            )
             .await
         {
-            Ok(url) => Some(url),
+            Ok(url) => Some((url, seconds)),
             Err(e) => {
                 if !created.replayed {
                     let _ = jobs::cancel(&s.pool, &who, &job.id).await;
@@ -413,8 +413,8 @@ async fn create(
     };
     let mut response = Json(serde_json::json!({
         "job": JobView::from(job),
-        "upload_url": upload_url,
-        "upload_expires_in": upload_url.as_ref().map(|_| 900),
+        "upload_url": upload_url.as_ref().map(|(url, _)| url),
+        "upload_expires_in": upload_url.as_ref().map(|(_, seconds)| seconds),
     }))
     .into_response();
     if created.replayed {
@@ -624,6 +624,10 @@ pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
     // Only rows that still hold something: an open reservation or an unfinished
     // status. Finished rows keep their status, so a cancelled job stays cancelled.
     sqlx::query!(r#"update cloud_jobs set status=case when status in ('succeeded','failed','cancelled') then status else 'failed' end,reservation=case when reservation='open' then 'released' else reservation end,lease_expires_at=null,error_code=case when reservation='open' then 'expired' else error_code end,updated_at=now() where expires_at<=now() and (reservation='open' or status not in ('succeeded','failed','cancelled'))"#).execute(&s.pool).await?;
+    // Customer URLs can be credentials. Drop them at expiry, whether or not file
+    // cleanup succeeds; a webhook URL stays until its delivery is done or given up,
+    // which takes under three hours.
+    sqlx::query!(r#"update cloud_jobs set source_url=null, webhook_url=case when webhook_delivered_at is not null or webhook_attempts>=$1 or expires_at<=now()-interval '6 hours' then null else webhook_url end, updated_at=now() where expires_at<=now() and (source_url is not null or (webhook_url is not null and (webhook_delivered_at is not null or webhook_attempts>=$1 or expires_at<=now()-interval '6 hours')))"#, crate::webhooks::MAX_ATTEMPTS).execute(&s.pool).await?;
     let ids: Vec<String> = sqlx::query_scalar!(
         r#"select id from cloud_jobs where expires_at<=now() and input_key is not null"#
     )
@@ -633,7 +637,7 @@ pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
         s.storage.delete_prefix(&format!("{id}/")).await?;
         // Only successful cleanup releases the separate storage commitment.
         sqlx::query!(
-            r#"update cloud_jobs set input_key=null, source_url=null where id=$1 and expires_at<=now()"#,
+            r#"update cloud_jobs set input_key=null where id=$1 and expires_at<=now()"#,
             &id
         )
         .execute(&s.pool)

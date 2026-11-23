@@ -437,7 +437,7 @@ pub async fn run_job_backend(
         loop {
             tokio::select! {
                 result=&mut conversion=>break result,
-                _=heartbeat.tick()=>{match tokio::time::timeout(Duration::from_secs(5), jobs::renew(pool,job)).await { Ok(Ok(true)) => {}, Ok(Ok(false)) => break Err(anyhow::anyhow!("cancelled or lease lost")), Ok(Err(error)) => break Err(error.into()), Err(_) => {tracing::warn!(job_id=job.id,"lease renewal timed out; retrying")} }},
+                _=heartbeat.tick()=>{match tokio::time::timeout(Duration::from_secs(2), jobs::renew(pool,job)).await { Ok(Ok(true)) => {}, Ok(Ok(false)) => break Err(anyhow::anyhow!("cancelled or lease lost")), Ok(Err(error)) => break Err(error.into()), Err(_) => {tracing::warn!(job_id=job.id,"lease renewal timed out; retrying")} }},
                 _=&mut timeout=>break Err(anyhow::anyhow!("wall-clock limit")),
                 _=wait_for_shutdown(shutdown), if !stopping=>{
                     stopping=true;
