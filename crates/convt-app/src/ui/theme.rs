@@ -148,83 +148,83 @@ impl Palette {
         Self {
             dark: false,
             window: c(0xFFFFFF),
-            chrome: c(0xFAFAFA),
-            chrome_border: c(0xE4E4E7),
-            recessed: c(0xF2F2F3),
+            chrome: c(0xF5F6F8),
+            chrome_border: c(0xE3E6EC),
+            recessed: c(0xECEEF2),
             surface: c(0xFFFFFF),
-            border: c(0xE4E4E7),
-            control_border: c(0xD4D4D8),
-            hairline: c(0xE4E4E7),
-            row_divider: c(0xEFEFF1),
-            chip: c(0xF2F2F3),
-            chip_border: c(0xE4E4E7),
-            text: c(0x202124),
-            secondary: c(0x5D5D65),
-            tertiary: c(0x62626A),
-            hover: c(0xF2F2F3),
-            selected: c(0xE8E8EC),
-            green: c(0x127A47),
-            green_text: c(0x127A47),
+            border: c(0xE3E6EC),
+            control_border: c(0xCFD4DE),
+            hairline: c(0xE8EBF0),
+            row_divider: c(0xEFF1F5),
+            chip: c(0xF0F2F6),
+            chip_border: c(0xE2E5EC),
+            text: c(0x111318),
+            secondary: c(0x4E5664),
+            tertiary: c(0x5B6473),
+            hover: c(0xF2F4F7),
+            selected: c(0xE7EAEF),
+            green: c(0x18794E),
+            green_text: c(0x146C43),
             on_green: c(0xFFFFFF),
-            green_tint: c(0xEEF7F2),
-            green_border: c(0xC7E5D5),
-            error: c(0xB3261E),
-            error_tint: c(0xFDF2F2),
-            error_border: c(0xF2CECE),
-            amber: c(0x945B0A),
-            amber_tint: c(0xFEF8EC),
-            amber_border: c(0xF2DBAE),
-            track: c(0xE4E4E7),
-            toggle_off: c(0xC8C8CF),
+            green_tint: c(0xF2F9F5),
+            green_border: c(0xC7E3D4),
+            error: c(0xC2272D),
+            error_tint: c(0xFEF3F3),
+            error_border: c(0xF5D0D2),
+            amber: c(0x92570A),
+            amber_tint: c(0xFEF8ED),
+            amber_border: c(0xF2DBB0),
+            track: c(0xE3E6EC),
+            toggle_off: c(0xC6CCD6),
             // Dark enough for 3:1 on every ground a checkbox sits on.
-            mark_off: c(0x7E7E87),
+            mark_off: c(0x78808F),
             thumb: c(0xFFFFFF),
-            thumb_border: c(0xE4E4E7),
+            thumb_border: c(0xE3E6EC),
             overlay: c(0xFFFFFF),
-            shadow: ca(0x10182824),
-            shadow_soft: ca(0x1018281A),
+            shadow: ca(0x0F172A1E),
+            shadow_soft: ca(0x0F172A14),
         }
     }
 
     pub fn dark() -> Self {
         Self {
             dark: true,
-            window: c(0x171719),
-            chrome: c(0x1D1D20),
-            chrome_border: c(0x2C2C32),
-            recessed: c(0x242428),
-            surface: c(0x202023),
-            border: c(0x323238),
-            control_border: c(0x44444C),
-            hairline: c(0x2C2C32),
-            row_divider: c(0x2B2B31),
-            chip: c(0x26262B),
-            chip_border: c(0x3B3B42),
-            text: c(0xFAFAFA),
-            secondary: c(0xB2B2BC),
-            tertiary: c(0x9E9EA8),
-            hover: c(0x2A2A2E),
-            selected: c(0x323238),
-            green: c(0x3FCB84),
-            green_text: c(0x3FCB84),
-            on_green: c(0x171719),
-            green_tint: c(0x14271D),
-            green_border: ca(0x3FCB8438),
-            error: c(0xF48C92),
-            error_tint: c(0x2A181A),
-            error_border: ca(0xF48C9238),
-            amber: c(0xE8BD6B),
-            amber_tint: c(0x292216),
-            amber_border: ca(0xE8BD6B38),
-            track: c(0x2E2E34),
-            toggle_off: c(0x3B3B42),
+            window: c(0x15161A),
+            chrome: c(0x111215),
+            chrome_border: c(0x23262E),
+            recessed: c(0x0D0E11),
+            surface: c(0x1C1E23),
+            border: c(0x292D36),
+            control_border: c(0x393E4A),
+            hairline: c(0x23262E),
+            row_divider: c(0x242830),
+            chip: c(0x22252C),
+            chip_border: c(0x323641),
+            text: c(0xF3F4F6),
+            secondary: c(0xA9B0BD),
+            tertiary: c(0x969DAA),
+            hover: c(0x24272E),
+            selected: c(0x282C34),
+            green: c(0x1A7F51),
+            green_text: c(0x60CA95),
+            on_green: c(0xFFFFFF),
+            green_tint: c(0x15251E),
+            green_border: ca(0x60CA9542),
+            error: c(0xF08D93),
+            error_tint: c(0x27171A),
+            error_border: ca(0xF08D9340),
+            amber: c(0xE5BA6B),
+            amber_tint: c(0x272015),
+            amber_border: ca(0xE5BA6B40),
+            track: c(0x272B33),
+            toggle_off: c(0x363B47),
             // Light enough for 3:1 on every ground a checkbox sits on.
-            mark_off: c(0x85858F),
-            thumb: c(0x242428),
-            thumb_border: ca(0xFFFFFF16),
-            overlay: c(0x242428),
-            shadow: ca(0x00000099),
-            shadow_soft: ca(0x00000066),
+            mark_off: c(0x8A919E),
+            thumb: c(0x23262E),
+            thumb_border: ca(0xFFFFFF18),
+            overlay: c(0x202329),
+            shadow: ca(0x000000A6),
+            shadow_soft: ca(0x0000006E),
         }
     }
 }
@@ -624,18 +624,18 @@ pub fn clickable(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Cl
 
 /// The machined green of a primary button in the light appearance, top and
 /// bottom of its sheen, resting and hovered. White on each is past 4.5:1.
-const GREEN_SHEEN: (u32, u32) = (0x15854E, 0x106E3F);
-const GREEN_SHEEN_HOVER: (u32, u32) = (0x127A47, 0x0E6638);
-/// The same in the dark appearance, under ink.
-const GREEN_SHEEN_DARK: (u32, u32) = (0x48D38D, 0x34BC77);
-const GREEN_SHEEN_DARK_HOVER: (u32, u32) = (0x52D896, 0x3FCB84);
+const GREEN_SHEEN: (u32, u32) = (0x1C8053, 0x156C44);
+const GREEN_SHEEN_HOVER: (u32, u32) = (0x18774D, 0x12603C);
+/// The same in the dark appearance, refined deep emerald under crisp white text.
+const GREEN_SHEEN_DARK: (u32, u32) = (0x1D8354, 0x166D45);
+const GREEN_SHEEN_DARK_HOVER: (u32, u32) = (0x1F8557, 0x19764B);
 /// The ring around the green: a step deeper than its fill.
-const GREEN_RING: (u32, u32) = (0x0C5F36, 0x2FA868);
+const GREEN_RING: (u32, u32) = (0x105A38, 0x135C3A);
 /// A secondary button's raised white or graphite, resting and hovered.
-const RAISED_SHEEN: (u32, u32) = (0xFFFFFF, 0xF7F7F9);
-const RAISED_SHEEN_HOVER: (u32, u32) = (0xFAFAFB, 0xF0F0F2);
-const RAISED_SHEEN_DARK: (u32, u32) = (0x28282E, 0x222227);
-const RAISED_SHEEN_DARK_HOVER: (u32, u32) = (0x2F2F36, 0x28282E);
+const RAISED_SHEEN: (u32, u32) = (0xFFFFFF, 0xF7F8FA);
+const RAISED_SHEEN_HOVER: (u32, u32) = (0xFAFBFD, 0xF0F2F6);
+const RAISED_SHEEN_DARK: (u32, u32) = (0x262932, 0x20232B);
+const RAISED_SHEEN_DARK_HOVER: (u32, u32) = (0x2C303A, 0x252932);
 
 /// How a [`Button`] looks. Every button is machined: 8px corners, a hairline
 /// ring, a highlight along its top edge and a small drop. One green button
@@ -1254,7 +1254,14 @@ pub fn choice(el: Clickable, on: bool, corner: f32, p: &Palette) -> Clickable {
 
 fn choice_shadow(on: bool, p: &Palette) -> Vec<BoxShadow> {
     if on {
-        vec![inset_ring(p.green, 1.5)]
+        if p.dark {
+            vec![
+                inset_ring(ca(0x47B88188), 1.5),
+                inset_edge(ca(0xFFFFFF0D), 1.),
+            ]
+        } else {
+            vec![inset_ring(p.green, 1.5)]
+        }
     } else {
         let mut s = vec![inset_ring(p.border, 1.)];
         s.extend(soft(p));
@@ -1281,7 +1288,11 @@ pub fn choice_tile(
         .gap(px(12.))
         .w(px(176.))
         .h(px(136.))
-        .child(icon(glyph, 30., if on { p.green } else { p.secondary }))
+        .child(icon(
+            glyph,
+            30.,
+            if on { p.green_text } else { p.secondary },
+        ))
         .child(
             styled(size::BODY, p.text)
                 .font_weight(FontWeight::SEMIBOLD)

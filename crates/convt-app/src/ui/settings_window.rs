@@ -848,7 +848,7 @@ impl SettingsView {
                                 .min_w_0()
                                 .gap(px(1.))
                                 .child(
-                                    mono(12., 15., if on { p.green_text } else { p.text })
+                                    mono(12., 15., p.text)
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .truncate()
                                         .child(to.name),
@@ -857,7 +857,7 @@ impl SettingsView {
                                     d.child(
                                         styled(
                                             size::CAPTION,
-                                            if on { p.green_text } else { p.tertiary },
+                                            if on { p.secondary } else { p.tertiary },
                                         )
                                         .truncate()
                                         .child(format_note(to)),
@@ -1183,8 +1183,12 @@ impl SettingsView {
                     });
                 })
                 .child(
-                    mono(12., 15., if on { p.green_text } else { p.text })
-                        .font_weight(FontWeight::MEDIUM)
+                    mono(12., 15., p.text)
+                        .font_weight(if on {
+                            FontWeight::SEMIBOLD
+                        } else {
+                            FontWeight::MEDIUM
+                        })
                         .truncate()
                         .child(to.name),
                 )

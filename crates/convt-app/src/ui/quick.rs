@@ -1256,11 +1256,7 @@ impl QuickView {
                         .id(SharedString::from(format!("blurb-{}", format.id)))
                         .test_support()
                         .aria_label(blurb)
-                        .child(
-                            styled(size::CAPTION, if on { p.green_text } else { p.secondary })
-                                .truncate()
-                                .child(blurb),
-                        ),
+                        .child(styled(size::CAPTION, p.secondary).truncate().child(blurb)),
                 )
             }
         })
