@@ -4,8 +4,9 @@
 //! itself a few seconds after they finish, or a little later if one failed.
 //!
 //! Two rows: what happened (a picture of the file, the title, ×), then the
-//! detail (sizes, progress or the reason) with Copy and Show beside it, or
-//! Details, which opens the failure in Activity.
+//! detail (sizes, progress or the reason) with Copy and Show beside it for
+//! saved files, and Details, which opens the failures in Activity, when any
+//! failed.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,7 +21,7 @@ use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState};
 
 /// The HUD's size, in pixels.
-pub const SIZE: (f32, f32) = (380., 86.);
+pub const SIZE: (f32, f32) = (408., 86.);
 /// Its distance from the screen's top and right edges.
 pub const MARGIN: f32 = 16.;
 /// How long it stays once every job is done.
@@ -412,8 +413,9 @@ impl Render for HudView {
                             .on_click(move |_, _, cx| cx.reveal_path(&path)),
                     )
             });
-        // A failure's full message is in Activity, beside Retry.
-        let details = (phase == Phase::Failed).then(|| {
+        // A failure's full message is in Activity, beside Retry, even when
+        // other files of the batch were saved.
+        let details = matches!(phase, Phase::Mixed | Phase::Failed).then(|| {
             let inputs = self.failed_inputs();
             div().flex_shrink_0().child(
                 Button::secondary("hud-details", "Details")

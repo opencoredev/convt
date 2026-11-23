@@ -1952,7 +1952,7 @@ impl QuickView {
                     [one] => format!("Saved {}", model::file_name(one)),
                     many => format!("Saved {} files", many.len()),
                 },
-                Status::Failed(e) => e.message.clone(),
+                Status::Failed(e) => super::friendly_error(&e.message),
                 Status::Cancelled => "Cancelled".into(),
             };
             let (color, glyph) = match entry.status {

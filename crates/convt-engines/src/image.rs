@@ -424,8 +424,11 @@ const SDR_GAMMA: std::ops::RangeInclusive<f32> = 1.75..=2.65;
 /// must run from 0 to 65535 without falling and pass its midpoint where a
 /// gamma of about 1.6 to 2.7 would (0.5^2.2 is 0.214; linear is 0.5 and PQ
 /// is near 0.01). A `para` of any of the five ICC function types needs its
-/// gamma in [`SDR_GAMMA`]. Anything else, or a tag too short for its own
-/// header, is not SDR.
+/// gamma in [`SDR_GAMMA`] and, evaluated in full ([`eval_icc_para`]) at 0,
+/// 0.25, 0.5, 0.75 and 1, must run from about 0 to about 1 without falling
+/// and pass its midpoint between 0.15 and 0.35, as a `curv` table must: the
+/// exponent alone says nothing when a linear segment covers the whole range.
+/// Anything else, or a tag too short for its own header, is not SDR.
 #[cfg(any(test, target_os = "macos"))]
 fn is_sdr_trc_tag(data: &[u8]) -> bool {
     let be16 = |at: usize| {
@@ -460,22 +463,104 @@ fn is_sdr_trc_tag(data: &[u8]) -> bool {
             }
         }
         Some(b"para") => {
+            let Some(func_type) = be16(8) else {
+                return false;
+            };
             // Header plus 1, 3, 4, 5 or 7 s15Fixed16 parameters.
-            let Some(params) = be16(8).and_then(|t| [1, 3, 4, 5, 7].get(usize::from(t)).copied())
+            let Some(&count) = PARA_PARAMS.get(usize::from(func_type)) else {
+                return false;
+            };
+            let Some(params) = (0..count)
+                .map(|i| {
+                    let b = data.get(12 + 4 * i..16 + 4 * i)?;
+                    Some(f64::from(i32::from_be_bytes([b[0], b[1], b[2], b[3]])) / 65536.0)
+                })
+                .collect::<Option<Vec<f64>>>()
             else {
                 return false;
             };
-            let Some(g) = data
-                .get(12..16)
-                .filter(|_| data.len() >= 12 + 4 * params)
-                .map(|b| i32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+            if !SDR_GAMMA.contains(&(params[0] as f32)) {
+                return false;
+            }
+            let Some(ys) = [0.0, 0.25, 0.5, 0.75, 1.0]
+                .iter()
+                .map(|&x| eval_icc_para(func_type, &params, x))
+                .collect::<Option<Vec<f64>>>()
             else {
                 return false;
             };
-            SDR_GAMMA.contains(&(g as f32 / 65536.0))
+            (-0.01..=0.02).contains(&ys[0])
+                && (0.98..=1.02).contains(&ys[4])
+                && ys.windows(2).all(|w| w[0] <= w[1])
+                && (0.15..=0.35).contains(&ys[2])
         }
         _ => false,
     }
+}
+
+/// How many parameters each ICC `para` function type (0 to 4) has.
+#[cfg(any(test, target_os = "macos"))]
+const PARA_PARAMS: [usize; 5] = [1, 3, 4, 5, 7];
+
+/// The output of an ICC `para` curve of `func_type` with `params`
+/// (`g, a, b, c, d, e, f`, as many as the type has) at `x`, by the formulas
+/// of ICC.1:2022 section 10.18. `None` for an unknown type, missing or
+/// non-finite parameters, a type 1 or 2 curve whose `a` isn't positive, a
+/// negative base raised to a fractional power, or a non-finite result.
+#[cfg(any(test, target_os = "macos"))]
+fn eval_icc_para(func_type: u16, params: &[f64], x: f64) -> Option<f64> {
+    let count = *PARA_PARAMS.get(usize::from(func_type))?;
+    let p = params.get(..count)?;
+    if !x.is_finite() || p.iter().any(|v| !v.is_finite()) {
+        return None;
+    }
+    let pow = |base: f64, g: f64| {
+        // Rounding at the segment boundary can leave a base a hair below 0.
+        let base = if base < 0.0 && base > -1e-9 {
+            0.0
+        } else {
+            base
+        };
+        if base < 0.0 && g.fract() != 0.0 {
+            return None;
+        }
+        Some(base.powf(g))
+    };
+    let y = match *p {
+        [g] => pow(x, g)?,
+        [g, a, b] => {
+            if a <= 0.0 {
+                return None;
+            }
+            if x >= -b / a { pow(a * x + b, g)? } else { 0.0 }
+        }
+        [g, a, b, c] => {
+            if a <= 0.0 {
+                return None;
+            }
+            if x >= -b / a {
+                pow(a * x + b, g)? + c
+            } else {
+                c
+            }
+        }
+        [g, a, b, c, d] => {
+            if x >= d {
+                pow(a * x + b, g)?
+            } else {
+                c * x
+            }
+        }
+        [g, a, b, c, d, e, f] => {
+            if x >= d {
+                pow(a * x + b, g)? + e
+            } else {
+                c * x + f
+            }
+        }
+        _ => return None,
+    };
+    y.is_finite().then_some(y)
 }
 
 #[cfg(any(test, target_os = "macos"))]
@@ -542,25 +627,30 @@ fn icc_text(data: &[u8]) -> String {
 /// PNG 3 drafts (`mDCv`, `cLLi`) some encoders still write.
 const HDR_CHUNKS: [[u8; 4]; 4] = [*b"mDCV", *b"mDCv", *b"cLLI", *b"cLLi"];
 
-/// Metadata chunks PNG allows after the image data, which
-/// [`png::Decoder::read_info`] never reaches: text and EXIF.
-const TRAILING_METADATA: [[u8; 4]; 4] = [*b"tEXt", *b"zTXt", *b"iTXt", *b"eXIf"];
+/// Text chunks PNG allows after the image data, which
+/// [`png::Decoder::read_info`] never reaches. A trailing `eXIf` is not
+/// among them: [`PngMeta::read`] moves it into `info.exif_metadata`, so a
+/// PNG has one EXIF source wherever its chunk sat.
+const TRAILING_METADATA: [[u8; 4]; 3] = [*b"tEXt", *b"zTXt", *b"iTXt"];
 
 /// The largest trailing metadata chunk kept, enough for any XMP packet.
 const MAX_TRAILING_CHUNK: u32 = 16 << 20;
 
 /// What a PNG rewrite carries over besides pixels: the decoded header and
 /// ancillary chunks, and the raw chunks the encoder can't write from
-/// [`png::Info`].
+/// [`png::Info`]. `info.exif_metadata` is the file's one EXIF: the `eXIf`
+/// before the image data, or else the first valid one after it, which the
+/// decoder never reads. [`write_png`] writes it back as a single `eXIf`
+/// before the image data, so a rewrite never leaves a second, stale copy.
 #[derive(Clone)]
 pub(crate) struct PngMeta {
     pub info: png::Info<'static>,
     /// `(type, payload)` of each chunk in [`HDR_CHUNKS`], before or after
     /// the image data, in file order.
     pub hdr_chunks: Vec<([u8; 4], Vec<u8>)>,
-    /// `(type, payload)` of each [`TRAILING_METADATA`] chunk after the image
-    /// data, in file order, kept as they were so a rewrite with metadata
-    /// writes them back after its own image data.
+    /// `(type, payload)` of each [`TRAILING_METADATA`] text chunk after the
+    /// image data, in file order, kept as they were so a rewrite with
+    /// metadata writes them back after its own image data. Never `eXIf`.
     pub trailing_chunks: Vec<([u8; 4], Vec<u8>)>,
 }
 
@@ -569,24 +659,33 @@ impl PngMeta {
         let reader = png::Decoder::new(std::io::BufReader::new(File::open(path)?))
             .read_info()
             .map_err(failed)?;
-        let info = reader.info().clone();
+        let mut info = reader.info().clone();
         drop(reader);
-        let (hdr_chunks, mut trailing_chunks) = read_raw_chunks(path)?;
-        // PNG allows one eXIf; the decoder already has one from the header.
-        if info.exif_metadata.is_some() {
-            trailing_chunks.retain(|(kind, _)| kind != b"eXIf");
+        let raw = read_raw_chunks(path)?;
+        // PNG allows one eXIf; one before the image data wins.
+        if info.exif_metadata.is_none() {
+            info.exif_metadata = raw.trailing_exif.map(Into::into);
         }
         Ok(Self {
             info,
-            hdr_chunks,
-            trailing_chunks,
+            hdr_chunks: raw.hdr,
+            trailing_chunks: raw.trailing,
         })
     }
 }
 
+/// The EXIF orientation of the PNG at `path`, from its one EXIF wherever
+/// the chunk sits ([`PngMeta`]). [`png::Decoder`] and so the `image` crate
+/// see only an `eXIf` before the image data; this also finds one after it.
+/// `None` when the file has no EXIF, no orientation tag, or can't be read.
+pub(crate) fn png_exif_orientation(path: &Path) -> Option<image::metadata::Orientation> {
+    let meta = PngMeta::read(path).ok()?;
+    image::metadata::Orientation::from_exif_chunk(meta.info.exif_metadata.as_deref()?)
+}
+
 /// The [`HDR_CHUNKS`] anywhere in a PNG, and the [`TRAILING_METADATA`]
-/// chunks after its first `IDAT`, reading up to `IEND` and seeking past
-/// image data. The decoder has already checked the structure before the
+/// chunks and the first `eXIf` after its first `IDAT`, reading up to `IEND`
+/// and seeking past image data. The decoder has already checked the structure before the
 /// image data; after it, a chunk whose CRC doesn't match, or that is cut
 /// short, ends the scan and is dropped.
 fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
@@ -594,7 +693,7 @@ fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
     let mut file = std::io::BufReader::new(File::open(path)?);
     let mut signature = [0u8; 8];
     file.read_exact(&mut signature)?;
-    let (mut hdr, mut trailing) = (Vec::new(), Vec::new());
+    let mut raw = RawChunks::default();
     let mut after_image = false;
     loop {
         let mut head = [0u8; 8];
@@ -610,8 +709,10 @@ fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
         }
         // HDR chunks are a few bytes long; anything larger is not one.
         let keep_hdr = HDR_CHUNKS.contains(&kind) && len <= 64;
-        let keep_trailing =
-            after_image && TRAILING_METADATA.contains(&kind) && len <= MAX_TRAILING_CHUNK;
+        let is_exif = &kind == b"eXIf" && raw.trailing_exif.is_none();
+        let keep_trailing = after_image
+            && (TRAILING_METADATA.contains(&kind) || is_exif)
+            && len <= MAX_TRAILING_CHUNK;
         if !(keep_hdr || keep_trailing) {
             file.seek_relative(i64::from(len) + 4)?;
             continue;
@@ -628,16 +729,26 @@ fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
             break;
         }
         if keep_hdr {
-            hdr.push((kind, payload));
+            raw.hdr.push((kind, payload));
+        } else if is_exif {
+            raw.trailing_exif = Some(payload);
         } else {
-            trailing.push((kind, payload));
+            raw.trailing.push((kind, payload));
         }
     }
-    Ok((hdr, trailing))
+    Ok(raw)
 }
 
-/// HDR chunks and trailing metadata chunks, as [`read_raw_chunks`] finds them.
-type RawChunks = (Vec<([u8; 4], Vec<u8>)>, Vec<([u8; 4], Vec<u8>)>);
+/// The raw chunks [`read_raw_chunks`] finds.
+#[derive(Default)]
+struct RawChunks {
+    /// [`HDR_CHUNKS`], anywhere in the file.
+    hdr: Vec<([u8; 4], Vec<u8>)>,
+    /// [`TRAILING_METADATA`] text chunks after the image data.
+    trailing: Vec<([u8; 4], Vec<u8>)>,
+    /// The first `eXIf` after the image data.
+    trailing_exif: Option<Vec<u8>>,
+}
 
 /// The CRC-32 PNG stores after a chunk, over its type and payload.
 fn png_crc(kind: &[u8; 4], payload: &[u8]) -> u32 {
@@ -679,7 +790,9 @@ pub(crate) fn strip_opaque_alpha(img: DynamicImage) -> DynamicImage {
 /// Writes `img` to `path` as PNG with `source`'s color tags (ICC, sRGB,
 /// gAMA, cHRM, cICP, mDCV, cLLI) and pixel ratio, and with `keep_metadata`
 /// its EXIF and text chunks too, including those that came after the image
-/// data. An alpha channel that is opaque everywhere is dropped.
+/// data. The EXIF is `source`'s single `info.exif_metadata`, written once
+/// before the image data; without `keep_metadata` there is none. An alpha
+/// channel that is opaque everywhere is dropped.
 pub(crate) fn write_png(
     img: &DynamicImage,
     source: &PngMeta,
@@ -1766,12 +1879,16 @@ pub(crate) mod tests {
     /// A `para` tone curve: function type 3 with gamma 2.4 and the sRGB
     /// segments, as Apple's Display P3 and sRGB v4 profiles have.
     fn srgb_para() -> Vec<u8> {
-        let fixed = |v: f64| ((v * 65536.0).round() as i32).to_be_bytes();
+        para_tag(3, &[2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045])
+    }
+
+    /// A `para` tone curve of `func_type` with `params` as s15Fixed16.
+    fn para_tag(func_type: u16, params: &[f64]) -> Vec<u8> {
         let mut tag = b"para\0\0\0\0".to_vec();
-        tag.extend_from_slice(&3u16.to_be_bytes());
+        tag.extend_from_slice(&func_type.to_be_bytes());
         tag.extend_from_slice(&[0, 0]);
-        for v in [2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045] {
-            tag.extend_from_slice(&fixed(v));
+        for v in params {
+            tag.extend_from_slice(&((v * 65536.0).round() as i32).to_be_bytes());
         }
         tag
     }
@@ -2202,7 +2319,23 @@ pub(crate) mod tests {
         let sdr = [
             ("para sRGB", srgb_para()),
             ("para type 0, gamma 2.2", para(0, 2.2, 1)),
-            ("para type 4, gamma 2.4", para(4, 2.4, 7)),
+            (
+                "para type 4, sRGB segments",
+                para_tag(
+                    4,
+                    &[
+                        2.4,
+                        1.0 / 1.055,
+                        0.055 / 1.055,
+                        1.0 / 12.92,
+                        0.04045,
+                        0.0,
+                        0.0,
+                    ],
+                ),
+            ),
+            ("para type 1, gamma 2.2", para_tag(1, &[2.2, 1.0, 0.0])),
+            ("para type 2, gamma 1.8", para_tag(2, &[1.8, 1.0, 0.0, 0.0])),
             ("curv gamma 2.2", curv(&[563])),
             ("curv gamma 1.8", curv(&[461])),
             ("curv sRGB table", curv_table(1024, srgb)),
@@ -2231,6 +2364,7 @@ pub(crate) mod tests {
             }),
             ("curv header only", b"curv\0\0\0\0".to_vec()),
             ("para gamma 1.0", para(3, 1.0, 5)),
+            ("para type 4 with all-zero segments", para(4, 2.4, 7)),
             ("para gamma 2.4, type 5", para(5, 2.4, 7)),
             ("para type 3 missing parameters", para(3, 2.4, 2)),
             ("para header only", b"para\0\0\0\0\0\0".to_vec()),
@@ -2268,6 +2402,67 @@ pub(crate) mod tests {
         past_end.truncate(past_end.len() - 10);
         assert!(!has_verified_sdr_trc(&past_end));
         assert!(!has_verified_sdr_trc(b"not a profile at all"));
+    }
+
+    /// A `para` curve is judged by its shape, not its exponent: a type 4
+    /// curve with `g = 2.4` whose linear segment (`c = 1`, `d = 1`) covers
+    /// all of [0, 1] is linear light, so a Display P3 file with it keeps 16
+    /// bits, while the real sRGB and Display P3 type 3 curves still pass.
+    #[test]
+    fn para_curves_are_evaluated_not_just_their_gamma() {
+        let linear_type4 = para_tag(4, &[2.4, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0]);
+        let params = [2.4, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0];
+        for x in [0.0, 0.25, 0.5, 0.75] {
+            assert_eq!(eval_icc_para(4, &params, x), Some(x));
+        }
+        assert_eq!(eval_icc_para(4, &params, 1.0), Some(1.0));
+        assert!(!is_sdr_trc_tag(&linear_type4));
+
+        let srgb = [2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045];
+        let mid = eval_icc_para(3, &srgb, 0.5).unwrap();
+        assert!((mid - 0.214).abs() < 0.001, "{mid}");
+        assert!(is_sdr_trc_tag(&srgb_para()));
+        // Parameters the formulas can't use.
+        assert_eq!(eval_icc_para(1, &[2.2, 0.0, 0.0], 0.5), None);
+        assert_eq!(eval_icc_para(0, &[f64::NAN], 0.5), None);
+        assert_eq!(eval_icc_para(3, &[2.4, 1.0, -2.0, 0.0, 0.0], 0.5), None);
+        assert_eq!(eval_icc_para(5, &[2.4; 7], 0.5), None);
+        assert_eq!(eval_icc_para(4, &[2.4; 5], 0.5), None);
+
+        for name in ["Display P3", "sRGB IEC61966-2.1"] {
+            let linear = icc_with_trc(name, Some(linear_type4.clone()), &[]);
+            assert!(!icc_signals_hdr(&linear), "{name}");
+            assert!(!icc_confirms_sdr(&linear), "{name}");
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("linear.png");
+            let deep = deep_png(
+                &path,
+                64,
+                48,
+                &DeepPng {
+                    icc: Some(&linear),
+                    ..DeepPng::default()
+                },
+            );
+            optimize_heif_png(&path).unwrap();
+            let info = png_info(&path);
+            assert_eq!(info.bit_depth, png::BitDepth::Sixteen, "{name}");
+            assert_eq!(
+                image::open(&path).unwrap().to_rgb16(),
+                DynamicImage::ImageRgba16(deep).to_rgb16(),
+                "{name}"
+            );
+            // The same name over the real type 3 curve goes to 8 bits.
+            let real = icc_with_trc(name, Some(srgb_para()), &[]);
+            assert!(icc_confirms_sdr(&real), "{name}");
+            assert!(
+                goes_to_eight_bits(&DeepPng {
+                    icc: Some(&real),
+                    ..DeepPng::default()
+                }),
+                "{name}"
+            );
+        }
     }
 
     /// A profile that calls itself Display P3 or sRGB but has a linear,
@@ -2332,7 +2527,7 @@ pub(crate) mod tests {
     }
 
     /// The type of each chunk in a PNG, in order.
-    fn chunk_order(path: &Path) -> Vec<String> {
+    pub(crate) fn chunk_order(path: &Path) -> Vec<String> {
         let data = std::fs::read(path).unwrap();
         let mut at = 8;
         let mut kinds = Vec::new();
@@ -2370,7 +2565,9 @@ pub(crate) mod tests {
         assert_eq!(original.uncompressed_latin1_text.len(), 1);
         let source = PngMeta::read(&path).unwrap();
         assert!(source.info.uncompressed_latin1_text.is_empty());
-        assert_eq!(source.trailing_chunks, meta.trailing);
+        // Text stays raw; the trailing eXIf becomes the file's one EXIF.
+        assert_eq!(source.trailing_chunks, meta.trailing[..2]);
+        assert_eq!(source.info.exif_metadata.as_deref(), Some(&exif[..]));
 
         // A plain rewrite keeps them, and only with metadata.
         let img = image::open(&path).unwrap();
@@ -2394,6 +2591,7 @@ pub(crate) mod tests {
             assert_eq!(info.utf8_text[0].keyword, "XML:com.adobe.xmp");
             assert_eq!(info.exif_metadata.as_deref(), Some(&exif[..]), "{out:?}");
             let order = chunk_order(out);
+            assert_eq!(order.iter().filter(|k| *k == "eXIf").count(), 1, "{out:?}");
             let idat = order.iter().position(|k| k == "IDAT").unwrap();
             assert!(order.iter().position(|k| k == "tEXt").unwrap() > idat);
             assert_eq!(order.last().map(String::as_str), Some("IEND"));

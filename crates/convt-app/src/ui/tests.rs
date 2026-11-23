@@ -1886,6 +1886,83 @@ fn the_hud_keeps_the_saved_files_of_a_batch_with_failures(cx: &mut TestAppContex
     );
 }
 
+/// A mixed batch keeps Copy and Show for the saved file and adds Details
+/// for the failed one, all whole on the detail row in both themes; Details
+/// opens Activity with the failure expanded.
+#[gpui_kit::test]
+fn the_hud_shows_a_mixed_batch_without_hiding_saved_files(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        })
+    });
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let good = f.bmp(&format!("good-{dark}.bmp"));
+        let broken = f.dir.path().join(format!("broken-{dark}.bmp"));
+        std::fs::write(&broken, "not a bmp").unwrap();
+        cx.update(|cx| super::route(cli(vec![good, broken.clone()], Some("png"), None), cx));
+        let (hud, _) = window_of::<HudView>(cx);
+        wait_for_label(cx, hud, "hud", |s| s == "mixed");
+        assert_eq!(
+            label(cx, hud, "hud-title").as_deref(),
+            Some("1 saved · 1 failed")
+        );
+        for name in [
+            "hud-title",
+            "hud-line",
+            "hud-close",
+            "hud-copy",
+            "hud-show",
+            "hud-details",
+        ] {
+            assert!(fits(cx, hud, name), "{name}, dark: {dark}");
+        }
+        let (line, copy, show, details) = cx
+            .update_window(hud, |_, window, cx| {
+                window.render_frame(cx);
+                (
+                    window.find(id("hud-line")).bounds(),
+                    window.find(id("hud-copy")).bounds(),
+                    window.find(id("hud-show")).bounds(),
+                    window.find(id("hud-details")).bounds(),
+                )
+            })
+            .unwrap();
+        assert!(line.right() <= copy.left(), "Copy doesn't cover the line");
+        assert!(copy.right() <= show.left(), "Copy, then Show");
+        assert!(show.right() <= details.left(), "Show, then Details");
+        assert!(
+            line.size.width >= px(120.),
+            "the reason keeps room to read: {:?}",
+            line.size.width
+        );
+
+        click(cx, hud, "hud-details");
+        assert!(!hud_open(cx), "Details closes the HUD");
+        let record = cx.read(|cx| {
+            f.app
+                .read(cx)
+                .recent
+                .iter()
+                .find(|r| r.input == broken)
+                .cloned()
+                .expect("the failure is recorded")
+        });
+        assert!(matches!(record.outcome, Outcome::Failed(_)));
+        let (main, view) = window_of::<MainView>(cx);
+        cx.read(|cx| {
+            let v = view.read(cx);
+            assert_eq!(v.page, Page::Activity);
+            assert!(v.details_open.contains(&record.id), "the failure is open");
+        });
+        assert!(shown(cx, main, &format!("retry-{}", record.id)));
+        main.update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+    }
+}
+
 /// The HUD's two rows fit its size whole: the title row with ×, and the
 /// sizes with Copy and Show beside them.
 #[gpui_kit::test]
@@ -2483,6 +2560,30 @@ fn a_preset_for_an_unreachable_format_clears_the_target(cx: &mut TestAppContext)
     assert!(shown(cx, window, "error"));
     click(cx, window, "convert");
     cx.read(|cx| assert!(view.read(cx).jobs.is_empty(), "nothing converts"));
+}
+
+/// A failed job in Quick convert says why in the same plain words as the
+/// HUD and Activity, not the engine's raw message.
+#[gpui_kit::test]
+fn quick_convert_shows_a_failure_in_plain_words(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    // Gone by the time Convert is clicked: the engine says "No such file",
+    // which reads as a plain sentence.
+    let png = f.png("gone.png");
+    let (window, _) = f.quick(cli(vec![png.clone()], Some("webp"), None), cx);
+    std::fs::remove_file(&png).unwrap();
+    click(cx, window, "convert");
+    let job = f.last_job(cx);
+    wait_for_label(cx, window, &format!("status-{job}"), |s| {
+        !(s == "Waiting" || s.starts_with("Converting") || s.contains('%'))
+    });
+    let raw = cx.read(|cx| match &f.app.read(cx).entry(job).unwrap().status {
+        crate::jobs::Status::Failed(e) => e.message.clone(),
+        other => panic!("the conversion failed, not {other:?}"),
+    });
+    let friendly = super::friendly_error(&raw);
+    assert_ne!(friendly, raw, "the raw message is not what is shown");
+    assert_eq!(label(cx, window, &format!("status-{job}")), Some(friendly));
 }
 
 #[gpui_kit::test]

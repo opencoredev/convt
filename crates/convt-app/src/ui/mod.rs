@@ -222,13 +222,27 @@ fn show<V: Render>(
     cx: &mut App,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> Option<(AnyWindowHandle, Entity<V>)> {
-    show_on(None, size, title, cx, build)
+    show_on(None, size, None, title, cx, build)
 }
 
-/// [`show`], centered on `display` (the primary display for `None`).
+/// [`show`] for a window that can't be resized smaller than `min`, so its
+/// columns and grids keep their room.
+fn show_min<V: Render>(
+    size: Size<Pixels>,
+    min: Size<Pixels>,
+    title: &str,
+    cx: &mut App,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Option<(AnyWindowHandle, Entity<V>)> {
+    show_on(None, size, Some(min), title, cx, build)
+}
+
+/// [`show`], centered on `display` (the primary display for `None`), and
+/// no smaller than `min` when given.
 fn show_on<V: Render>(
     display: Option<DisplayId>,
     size: Size<Pixels>,
+    min: Option<Size<Pixels>>,
     title: &str,
     cx: &mut App,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
@@ -240,7 +254,11 @@ fn show_on<V: Render>(
     {
         return Some((handle, view));
     }
-    let opened = open_window(window_options_on(display, size, title, cx), cx, build);
+    let options = WindowOptions {
+        window_min_size: min,
+        ..window_options_on(display, size, title, cx)
+    };
+    let opened = open_window(options, cx, build);
     cx.activate(true);
     match opened {
         Ok((handle, view)) => {
@@ -369,9 +387,13 @@ fn first_run_pending(cx: &App) -> bool {
 
 fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
     let app = model::shared(cx);
-    let opened = show(size(px(1040.), px(640.)), "convt", cx, |window, cx| {
-        cx.new(|cx| MainView::new(app, window, cx))
-    });
+    let opened = show_min(
+        size(px(1040.), px(640.)),
+        size(px(MAIN_MIN_SIZE.0), px(MAIN_MIN_SIZE.1)),
+        "convt",
+        cx,
+        |window, cx| cx.new(|cx| MainView::new(app, window, cx)),
+    );
     if let Some((handle, view)) = &opened {
         let _ = handle.update(cx, |_, window, _| window.activate_window());
         view.update(cx, |view, cx| {
@@ -440,6 +462,14 @@ pub fn show_about(cx: &mut App) {
 /// (`QuickView::sync_window_height`); long lists scroll.
 pub(super) const QUICK_SIZE: (f32, f32) = (580., 524.);
 
+/// The smallest each window can be resized to: room for Activity's status
+/// column, Quick convert's four-column format grid, and the forms of
+/// Settings and Feedback.
+pub(super) const MAIN_MIN_SIZE: (f32, f32) = (820., 520.);
+pub(super) const QUICK_MIN_SIZE: (f32, f32) = (520., 460.);
+pub(super) const SETTINGS_MIN_SIZE: (f32, f32) = (560., 480.);
+pub(super) const FEEDBACK_MIN_SIZE: (f32, f32) = (420., 440.);
+
 /// Quick convert's height for `content`, plus the title bar macOS draws
 /// inside it.
 pub(super) fn quick_height_for(content: f32) -> Pixels {
@@ -495,7 +525,7 @@ pub(super) fn first_run_bounds(cx: &mut App) -> (Option<DisplayId>, Size<Pixels>
 fn open_first_run(cx: &mut App) {
     let app = model::shared(cx);
     let (display, size) = first_run_bounds(cx);
-    show_on(display, size, "Welcome to convt", cx, |window, cx| {
+    show_on(display, size, None, "Welcome to convt", cx, |window, cx| {
         cx.new(|cx| FirstRunView::new(app, first_run::Screen::Account, window, cx))
     });
 }
@@ -571,9 +601,13 @@ fn open_settings(
             return;
         }
     }
-    if let Some((handle, view)) = show(size(px(620.), px(600.)), "Settings", cx, |window, cx| {
-        cx.new(|cx| SettingsView::new(app, window, cx))
-    }) {
+    if let Some((handle, view)) = show_min(
+        size(px(620.), px(600.)),
+        size(px(SETTINGS_MIN_SIZE.0), px(SETTINGS_MIN_SIZE.1)),
+        "Settings",
+        cx,
+        |window, cx| cx.new(|cx| SettingsView::new(app, window, cx)),
+    ) {
         let _ = handle.update(cx, |_, window, cx| {
             view.update(cx, |view, cx| {
                 view.set_tab(tab, cx);
@@ -588,8 +622,9 @@ fn open_settings(
 /// Opens the Feedback window, or brings it forward.
 pub fn show_feedback(cx: &mut App) {
     let app = model::shared(cx);
-    show(
+    show_min(
         size(px(460.), px(500.)),
+        size(px(FEEDBACK_MIN_SIZE.0), px(FEEDBACK_MIN_SIZE.1)),
         "Send feedback",
         cx,
         |window, cx| cx.new(|cx| feedback::FeedbackView::new(app, window, cx)),
@@ -702,7 +737,10 @@ pub fn open_quick(request: Request, cx: &mut App) {
     let app = model::shared(cx);
     // Status is read offline; it may have changed through the CLI.
     app.update(cx, |s, cx| s.refresh_pack(cx));
-    let mut options = window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx);
+    let mut options = WindowOptions {
+        window_min_size: Some(size(px(QUICK_MIN_SIZE.0), px(QUICK_MIN_SIZE.1))),
+        ..window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx)
+    };
     // Position slightly above geometric center so expanding Options or the
     // PNG warning grows downward cleanly without crossing the bottom edge.
     if let Some(display) = cx.primary_display() {

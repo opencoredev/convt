@@ -24,7 +24,7 @@ private struct Target: Decodable {
 /// extensions shouldn't run long conversions themselves.
 ///
 /// Picking a format converts in place with no window; "More options…" opens
-/// Quick convert. Either way the request goes through the App Group
+/// Quick convert, as does a format click whose menu snapshot is gone. Either way the request goes through the App Group
 /// container (see `send`), which only processes in the group can write, so a
 /// `convt://` link from a web page can never start a conversion.
 final class FinderSync: FIFinderSync {
@@ -162,19 +162,23 @@ final class FinderSync: FIFinderSync {
 
     /// Finder's selection at the moment of a click whose menu can't be found
     /// (the tag was lost when Finder copied the menu, or the snapshot
-    /// expired). Another menu's files are never used instead: Finder may
-    /// have built a menu for other files since, and converting those would
-    /// convert files the user never picked. Without a selection, nothing is
-    /// converted.
-    private func liveSelection() -> [URL]? {
+    /// expired or was already used). Another menu's files are never used
+    /// instead: Finder may have built a menu for other files since. Callers
+    /// only ever open Quick convert with it, so the user sees which files
+    /// they are about to convert. Without a selection, nothing happens.
+    private func liveSelection(tag: Int) -> [URL]? {
         if let selected = FIFinderSyncController.default().selectedItemURLs(), !selected.isEmpty {
+            NSLog("convt: menu snapshot unavailable (tag=\(tag)); opening Quick convert for confirmation")
             return selected
         }
-        NSLog("convt: ignoring click with no bound menu snapshot or active Finder selection")
+        NSLog("convt: ignoring click with no bound menu snapshot (tag=\(tag)) or active Finder selection")
         return nil
     }
 
-    /// Converts the menu's files in place, with no window.
+    /// Converts the menu's files in place, with no window. Only a click
+    /// bound to its menu's snapshot converts directly: without one, the
+    /// files Finder selects now may not be the ones the menu showed, so
+    /// Quick convert opens instead and the user confirms.
     @objc private func convert(_ sender: NSMenuItem) {
         if let snapshot = takeSnapshot(for: sender) {
             guard let id = snapshot.targetsByTitle[sender.title] else {
@@ -185,23 +189,15 @@ final class FinderSync: FIFinderSync {
             send(to: id, items: snapshot.items, activate: false)
             return
         }
-        guard let items = liveSelection() else { return }
-        let name = sender.title.replacingOccurrences(of: " (audio only)", with: "")
-        let target = loadTargets().flatMap { list in
-            list.targets.values.lazy.flatMap { $0 }.first { $0.name == name }
-        }
-        guard let target else {
-            // The list changed since the menu was built: let the app decide.
-            NSLog("convt: no target named \(name); opening Quick convert")
-            send(to: nil, items: items, activate: true)
-            return
-        }
-        send(to: target.id, items: items, activate: false)
+        guard let items = liveSelection(tag: sender.tag) else { return }
+        send(to: nil, items: items, activate: true)
     }
 
-    /// Opens Quick convert for the menu's files.
+    /// Opens Quick convert for the menu's files, or for Finder's current
+    /// selection when the menu's snapshot is gone: Quick convert always
+    /// shows the files before anything is converted.
     @objc private func moreOptions(_ sender: NSMenuItem) {
-        guard let items = takeSnapshot(for: sender)?.items ?? liveSelection() else { return }
+        guard let items = takeSnapshot(for: sender)?.items ?? liveSelection(tag: sender.tag) else { return }
         send(to: nil, items: items, activate: true)
     }
 

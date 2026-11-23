@@ -1223,9 +1223,10 @@ fn reason_note(element_id: &SharedString, reason: SharedString, p: &Palette) -> 
 }
 
 /// The look of anything picked from a set (format cards, presets, the
-/// onboarding questions): a raised surface, and for the picked one a crisp
-/// 1.5px ring in the brand green on a green tint, with no drop of its own.
-/// The ring is also what the keyboard moves.
+/// onboarding questions): a quiet surface with a hairline ring and the
+/// container lift of [`soft`], and for the picked one a crisp 1.5px ring in
+/// the brand green on a green tint, with no drop of its own. The ring is
+/// also what the keyboard moves.
 pub fn choice(el: Clickable, on: bool, corner: f32, p: &Palette) -> Clickable {
     el.rounded(px(corner))
         .bg(if on { p.green_tint } else { p.surface })
@@ -1238,7 +1239,7 @@ fn choice_shadow(on: bool, p: &Palette) -> Vec<BoxShadow> {
         vec![inset_ring(p.green, 1.5)]
     } else {
         let mut s = vec![inset_ring(p.border, 1.)];
-        s.extend(raise(p));
+        s.extend(soft(p));
         s
     }
 }
@@ -1408,7 +1409,7 @@ pub fn icon_tile(name: IconName, tone: Tone, size: f32, p: &Palette) -> Div {
 }
 
 /// A card on the window: the surface color, a hairline border, 12px
-/// corners and a layered resting shadow.
+/// corners and the calm container lift of [`soft`].
 pub fn card(p: &Palette) -> Div {
     div()
         .flex()
@@ -1420,17 +1421,16 @@ pub fn card(p: &Palette) -> Div {
         .shadow(soft(p))
 }
 
-/// The resting shadow of cards, crisp like Alloy's: in light mode a 1px
-/// drop and a short, faint second one; in dark mode, where the hairline
-/// border does the work, one small drop.
+/// The resting shadow of calm containers (cards, groups, unpicked choices):
+/// in light mode a 1px hairline lift with no blur spread, in dark mode
+/// nothing, since the hairline border does the work. Raised controls
+/// (buttons, selects, the picked segment) keep [`bevel`] and `--shadow-s`,
+/// so they stand off these containers.
 pub fn soft(p: &Palette) -> Vec<BoxShadow> {
     if p.dark {
-        vec![shadow(ca(0x0000004D), 1., 3.)]
+        Vec::new()
     } else {
-        vec![
-            shadow(ca(0x2021240F), 1., 2.),
-            shadow(ca(0x2021240A), 2., 6.),
-        ]
+        vec![shadow(ca(0x20212408), 1., 1.)]
     }
 }
 
