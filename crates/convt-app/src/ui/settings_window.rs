@@ -1,4 +1,6 @@
-//! The Settings window: General, Menu, Presets and License.
+//! Settings: General, Menu, Presets and License. It is a page of the main
+//! window ([`SettingsView::new_embedded`]) and, for the tray, links and the
+//! Settings… menu item, a window of its own.
 
 use convt_core::{
     Category, FORMATS, Format, MENU_KINDS, MenuChoices, Options, Preset, category_key, format_by_id,
@@ -85,11 +87,26 @@ pub struct SettingsView {
     /// Remove was clicked once under Documents; the row asks again.
     pub(super) confirm_remove_pack: bool,
     scroll: ScrollHandle,
+    /// Drawn as a page of the main window, under its header: no title bar,
+    /// and the tabs on the page rather than on a toolbar.
+    pub(super) embedded: bool,
     _observe: Subscription,
     _appearance: Subscription,
 }
 
 impl SettingsView {
+    /// Settings as a page of the main window.
+    pub fn new_embedded(
+        app: Entity<AppState>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self {
+            embedded: true,
+            ..Self::new(app, window, cx)
+        }
+    }
+
     pub fn new(app: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let registry = app.read(cx).registry.clone();
         let menu_options_generation = app.read(cx).registry_generation;
@@ -135,6 +152,7 @@ impl SettingsView {
             license_notice: None,
             confirm_remove_pack: false,
             scroll: ScrollHandle::new(),
+            embedded: false,
         }
     }
 
@@ -572,7 +590,7 @@ impl SettingsView {
                         .h(px(26.))
                         .pl(px(if on { 4. } else { 11. }))
                         .pr(px(11.))
-                        .rounded_full()
+                        .rounded(px(radius::CONTROL))
                         .map(|d| {
                             if on {
                                 d.bg(p.green_tint)
@@ -795,7 +813,7 @@ impl SettingsView {
                 .items_center()
                 .h(px(26.))
                 .px(px(11.))
-                .rounded_full()
+                .rounded(px(radius::CONTROL))
                 .map(|d| {
                     if on {
                         d.bg(p.green_tint)
@@ -1413,16 +1431,25 @@ impl Render for SettingsView {
             .iter()
             .find(|(t, ..)| *t == self.tab)
             .map_or("Settings", |(_, _, label, _)| label);
+        let embedded = self.embedded;
         let tabs = div()
             .flex()
             .flex_shrink_0()
-            .justify_center()
-            .px(px(space::LG))
-            .pb(px(10.))
-            .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
-            .bg(p.chrome)
-            .border_b_1()
-            .border_color(p.chrome_border)
+            .when(embedded, |d| {
+                d.px(px(GUTTER))
+                    .pb(px(space::MD))
+                    .border_b_1()
+                    .border_color(p.hairline)
+            })
+            .when(!embedded, |d| {
+                d.justify_center()
+                    .px(px(space::LG))
+                    .pb(px(10.))
+                    .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
+                    .bg(p.chrome)
+                    .border_b_1()
+                    .border_color(p.chrome_border)
+            })
             .child(theme::pill_track(&p).children(TABS.into_iter().map(
                 |(tab, id, label, glyph)| {
                     let on = self.tab == tab;
@@ -1433,7 +1460,7 @@ impl Render for SettingsView {
                         .gap(px(6.))
                         .h(px(28.))
                         .px(px(16.))
-                        .rounded_full()
+                        .rounded(px(radius::CONTROL))
                         .map(|d| {
                             if on {
                                 theme::pill_segment_on(d, &p)
@@ -1464,7 +1491,9 @@ impl Render for SettingsView {
             .bg(p.window)
             .font_family(theme::SANS)
             .text_color(p.text)
-            .children(theme::title_bar(Some(title), 40., Some(p.chrome), &p))
+            .when(!embedded, |d| {
+                d.children(theme::title_bar(Some(title), 40., Some(p.chrome), &p))
+            })
             .child(tabs)
             .child(
                 div()

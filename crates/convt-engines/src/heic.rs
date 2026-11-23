@@ -1259,6 +1259,7 @@ impl Engine for ImageIoEngine {
         let _ = std::fs::remove_file(&flattened);
         ran?;
         if format == "png" {
+            crate::image::optimize_heif_png(&output)?;
             crate::image::background_png(&output, ctx.options)?;
             crate::orientation::finish_heif_output(input, &output, "png", ctx.options)?;
         }

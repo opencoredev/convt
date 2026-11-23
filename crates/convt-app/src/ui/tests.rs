@@ -26,7 +26,7 @@ use super::first_run::{FirstRunView, Question, Screen, Stage};
 use super::main_window::{MainView, Page};
 use super::quick::QuickView;
 use super::settings_window::{SettingsTab, SettingsView};
-use super::{AboutView, FinderGuideView, Open, PopoverView, menus, theme};
+use super::{AboutView, FinderGuideView, HudView, Open, PopoverView, menus, theme};
 use crate::account::{Access, Provider, Refresh, SignIn};
 use crate::cloud::CloudAccess;
 use crate::feedback::{SendError, Sender};
@@ -856,6 +856,25 @@ fn license_key(email: &str, updates_until: &str) -> String {
     convt_license::sign(&license, &test_key())
 }
 
+/// The main window's composer, once [`MainView::add`] has built it.
+fn composer(cx: &mut TestAppContext, view: &Entity<MainView>) -> Entity<QuickView> {
+    cx.run_until_parked();
+    cx.read(|cx| {
+        view.read(cx)
+            .composer
+            .clone()
+            .expect("the composer is open")
+    })
+}
+
+/// Whether the progress HUD is up.
+fn hud_open(cx: &mut TestAppContext) -> bool {
+    cx.run_until_parked();
+    cx.update(|cx| {
+        Open::<HudView>::get(cx).is_some_and(|(handle, _)| cx.windows().contains(&handle))
+    })
+}
+
 /// The open window of kind `V` and its view.
 fn window_of<V: 'static>(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<V>) {
     cx.read(|cx| Open::<V>::get(cx).expect("the window is open"))
@@ -909,9 +928,13 @@ fn a_cli_request_with_a_target_converts_in_place_without_a_window(cx: &mut TestA
     let f = Fixture::new(cx);
     let png = f.png("red dot.png");
     cx.update(|cx| super::route(cli(vec![png.clone()], Some("jpeg"), None), cx));
-    assert!(
-        cx.update(|cx| cx.windows().is_empty()),
-        "a silent conversion opens no window"
+    // Only the progress HUD opens, and it takes no focus.
+    let (hud, _) = window_of::<HudView>(cx);
+    assert_eq!(cx.update(|cx| cx.windows()), [hud], "no other window opens");
+    assert_eq!(
+        cx.update(|cx| cx.active_window()),
+        None,
+        "it never steals focus"
     );
     let job = f.last_job(cx);
     cx.read(|cx| assert!(f.app.read(cx).quit_when_idle, "nothing keeps the app open"));
@@ -929,6 +952,14 @@ fn a_cli_request_with_a_target_converts_in_place_without_a_window(cx: &mut TestA
             matches!(&recent[0].outcome, Outcome::Done(out) if out[0].ends_with("red dot.jpg"))
         );
     });
+    wait_for_label(cx, hud, "hud", |s| s == "done");
+    assert_eq!(
+        label(cx, hud, "hud-title").as_deref(),
+        Some("Saved red dot.jpg")
+    );
+    // It goes away by itself a few seconds later.
+    cx.executor().advance_clock(Duration::from_secs(5));
+    cx.run_until_parked();
     assert!(cx.update(|cx| cx.windows().is_empty()));
 
     // While it ran, the tray would have shown a spinner and nothing more.
@@ -1204,29 +1235,54 @@ fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
     );
 }
 
-/// The sidebar's nav switches pages in the main window; Settings opens its
-/// own window, so it is a gear beside the brand rather than a third page.
+/// Settings is a page of the main window, beside Activity and Automations;
+/// the tray, links and the menu still open it as a window of its own.
 #[gpui_kit::test]
-fn settings_is_a_gear_beside_the_brand_not_a_page(cx: &mut TestAppContext) {
+fn settings_is_a_page_of_the_main_window(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let (main, view) = f.main(cx);
-    assert!(!shown(cx, main, "nav-settings"));
+    assert!(
+        !shown(cx, main, "open-settings"),
+        "no gear beside the brand"
+    );
     assert_eq!(selected(cx, main, "nav-activity"), Some(true));
+    assert_eq!(selected(cx, main, "nav-settings"), Some(false));
     click(cx, main, "nav-automations");
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
 
-    assert_eq!(
-        label(cx, main, "open-settings").as_deref(),
-        Some("Settings")
-    );
-    click(cx, main, "open-settings");
+    click(cx, main, "nav-settings");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
+    assert_eq!(selected(cx, main, "nav-settings"), Some(true));
+    assert_eq!(selected(cx, main, "tab-general"), Some(true));
+    // Its tabs work in place; no Settings window opens.
+    click(cx, main, "tab-presets");
+    assert_eq!(selected(cx, main, "tab-presets"), Some(true));
+    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
+    view.update(cx, |v, cx| v.show_settings(SettingsTab::License, cx));
+    assert_eq!(selected(cx, main, "tab-license"), Some(true));
+
+    // Feedback sits at the bottom of the sidebar, not in the nav.
+    assert!(shown(cx, main, "nav-feedback"));
+    let (nav, feedback) = cx
+        .update_window(main, |_, window, cx| {
+            window.render_frame(cx);
+            (
+                window.find(id("nav-settings")).bounds(),
+                window.find(id("nav-feedback")).bounds(),
+            )
+        })
+        .unwrap();
+    assert!(feedback.top() > nav.bottom() + px(100.), "{feedback:?}");
+
+    // Elsewhere, Settings still opens as its own window.
+    cx.update(|cx| super::show_settings(SettingsTab::General, cx));
     let (_, settings) = window_of::<SettingsView>(cx);
     cx.read(|cx| assert_eq!(settings.read(cx).tab, SettingsTab::General));
-    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
 }
 
 #[gpui_kit::test]
-fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) {
+fn add_files_opens_the_composer_and_lists_the_results(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let a = f.bmp("a.bmp");
     let b = f.bmp("b.bmp");
@@ -1237,29 +1293,62 @@ fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) 
         Some("Choose files…")
     );
 
-    // Add files converts nothing by itself: Quick convert asks for the
-    // format, and the same file twice is listed once.
+    // Add files converts nothing by itself and opens no window: the
+    // composer at the top of Activity asks for the format, with the usual
+    // one picked, and the same file twice is listed once.
+    let windows = cx.update(|cx| cx.windows().len());
     view.update(cx, |v, cx| v.add(&[a.clone(), b.clone(), a], cx));
     assert_eq!(f.jobs(cx), 0);
-    let (quick, quick_view) = last_quick(cx);
+    let quick = composer(cx, &view);
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows);
     cx.read(|cx| {
-        assert_eq!(
-            quick_view.read(cx).files,
-            [f.dir.path().join("a.bmp"), b.clone()]
-        )
+        let quick = quick.read(cx);
+        assert!(quick.inline);
+        assert_eq!(quick.files, [f.dir.path().join("a.bmp"), b.clone()]);
+        assert_eq!(quick.to.map(|t| t.id), Some("png"), "BMP becomes PNG");
     });
-    cx.read(|cx| assert!(quick_view.read(cx).to.is_none()));
-    click(cx, quick, "to-png");
-    click(cx, quick, "convert");
+    assert!(shown(cx, window, "composer"));
+    assert!(!shown(cx, window, "empty"));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Convert to PNG")
+    );
+
+    // Converting hands the jobs to Activity and closes the composer.
+    click(cx, window, "convert");
+    cx.read(|cx| assert!(view.read(cx).composer.is_none()));
+    assert!(!shown(cx, window, "composer"));
     wait_until(cx, "both files", |cx| f.app.read(cx).recent.len() == 2);
     assert!(is_png(&f.dir.path().join("a.png")) && is_png(&f.dir.path().join("b.png")));
     let records = cx.read(|cx| f.app.read(cx).recent.clone());
     for record in &records {
-        let status = label(cx, window, &format!("record-status-{}", record.id)).unwrap();
+        let id = record.id;
+        let status = label(cx, window, &format!("record-status-{id}")).unwrap();
         assert!(status.starts_with("Done · "), "{status}");
-        assert!(shown(cx, window, &format!("show-{}", record.id)));
+        for action in ["copy", "open", "show"] {
+            assert!(shown(cx, window, &format!("{action}-{id}")), "{action}");
+        }
+        // The 4x4 BMP shrinks as PNG.
+        let delta = label(cx, window, &format!("delta-{id}")).unwrap();
+        assert!(delta.starts_with('-') && delta.ends_with('%'), "{delta}");
     }
     assert!(!shown(cx, window, "empty"));
+    // With rows, a slim strip takes drops in place of the empty state.
+    assert!(shown(cx, window, "drop-strip"));
+
+    // Copy puts the file on the clipboard and says so.
+    let id = records[0].id;
+    click(cx, window, &format!("copy-{id}"));
+    assert_eq!(
+        label(cx, window, &format!("copy-{id}")).as_deref(),
+        Some("Copied")
+    );
+    assert!(cx.read_from_clipboard().is_some());
+    cx.executor().advance_clock(Duration::from_secs(2));
+    assert_eq!(
+        label(cx, window, &format!("copy-{id}")).as_deref(),
+        Some("Copy")
+    );
 
     // Each day clears on its own.
     assert!(!shown(cx, window, "clear-finished"));
@@ -1269,6 +1358,322 @@ fn add_files_opens_quick_convert_and_lists_the_results(cx: &mut TestAppContext) 
         assert!(state.recent.is_empty() && state.queue.entries.is_empty());
     });
     assert!(shown(cx, window, "empty"));
+}
+
+/// The composer closes from ×, Cancel and Escape without converting, and
+/// Enter converts.
+#[gpui_kit::test]
+fn the_composer_closes_on_cancel_and_converts_on_enter(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+    let (window, view) = f.main(cx);
+    for close in ["composer-close", "cancel", "escape"] {
+        view.update(cx, |v, cx| v.add(std::slice::from_ref(&png), cx));
+        composer(cx, &view);
+        if close == "escape" {
+            cx.simulate_keystrokes(window, "escape");
+        } else {
+            click(cx, window, close);
+        }
+        cx.run_until_parked();
+        cx.read(|cx| assert!(view.read(cx).composer.is_none(), "{close}"));
+        assert_eq!(f.jobs(cx), 0, "{close}");
+    }
+    view.update(cx, |v, cx| v.add(std::slice::from_ref(&png), cx));
+    let quick = composer(cx, &view);
+    cx.read(|cx| assert_eq!(quick.read(cx).to.map(|t| t.id), Some("webp")));
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    cx.read(|cx| assert!(view.read(cx).composer.is_none()));
+    assert_eq!(f.jobs(cx), 1);
+    wait_until(cx, "the conversion", |cx| f.app.read(cx).recent.len() == 1);
+    assert!(is_webp(&f.dir.path().join("a.webp")));
+}
+
+/// Files sent without a target start on the format most people want from
+/// them; an explicit target, a preset or a document waiting on the pack
+/// leaves the pick alone.
+#[gpui_kit::test]
+fn quick_convert_starts_on_the_usual_format(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let picked = |f: &Fixture, files: Vec<PathBuf>, cx: &mut TestAppContext| {
+        let (_, view) = f.quick(cli(files, None, None), cx);
+        cx.read(|cx| view.read(cx).to.map(|t| t.id))
+    };
+    assert_eq!(picked(&f, vec![f.png("a.png")], cx), Some("webp"));
+    assert_eq!(picked(&f, vec![f.rgb("b.jpg")], cx), Some("webp"));
+    assert_eq!(picked(&f, vec![f.bmp("c.bmp")], cx), Some("png"));
+    assert_eq!(picked(&f, vec![f.rgb("d.tiff")], cx), Some("png"));
+    let webp = f.dir.path().join("e.webp");
+    image::RgbImage::from_pixel(4, 4, image::Rgb([1, 2, 3]))
+        .save(&webp)
+        .unwrap();
+    assert_eq!(picked(&f, vec![webp], cx), Some("jpeg"));
+
+    // The window says what it will do from the start.
+    let (window, _) = f.quick(cli(vec![f.png("g.png")], None, None), cx);
+    assert_eq!(selected(cx, window, "to-webp"), Some(true));
+    assert_eq!(
+        label(cx, window, "convert").as_deref(),
+        Some("Convert to WebP")
+    );
+    assert_eq!(
+        label(cx, window, "file-name-edit").as_deref(),
+        Some("g.webp")
+    );
+
+    // An explicit target wins.
+    let (_, view) = f.quick(cli(vec![f.png("h.png")], Some("jpeg"), None), cx);
+    cx.read(|cx| assert_eq!(view.read(cx).to.map(|t| t.id), Some("jpeg")));
+
+    // The rules themselves, against target lists.
+    use super::quick::recommended_target;
+    let targets = |ids: &[&str], pack: &[&str]| crate::model::Targets {
+        formats: ids.iter().map(|id| format_by_id(id).unwrap()).collect(),
+        unsupported: Vec::new(),
+        pack: pack.iter().map(|id| format_by_id(id).unwrap()).collect(),
+    };
+    let pick = |file: &str, t: &crate::model::Targets| {
+        recommended_target(&[PathBuf::from(file)], t).map(|f| f.id)
+    };
+    let images = targets(&["jpeg", "png", "webp", "avif", "gif", "pdf"], &[]);
+    assert_eq!(pick("IMG_0990.HEIC", &images), Some("jpeg"));
+    assert_eq!(pick("a.heif", &images), Some("jpeg"));
+    assert_eq!(pick("a.svg", &images), Some("png"));
+    assert_eq!(pick("a.svg", &targets(&["pdf"], &[])), Some("pdf"));
+    assert_eq!(pick("a.pdf", &images), Some("png"));
+    let video = targets(&["webm", "mp4", "gif", "mp3"], &[]);
+    assert_eq!(pick("a.mov", &video), Some("mp4"));
+    assert_eq!(pick("a.mkv", &video), Some("mp4"));
+    assert_eq!(pick("a.mp4", &video), Some("webm"));
+    assert_eq!(pick("a.mp4", &targets(&["gif", "mp3"], &[])), Some("mp3"));
+    let audio = targets(&["wav", "m4a", "mp3"], &[]);
+    assert_eq!(pick("a.flac", &audio), Some("mp3"));
+    assert_eq!(pick("a.mp3", &audio), Some("m4a"));
+    assert_eq!(pick("a.docx", &targets(&["txt", "pdf"], &[])), Some("pdf"));
+    // Never a target that waits for the pack: the next one instead.
+    assert_eq!(
+        pick("a.docx", &targets(&["pdf", "txt"], &["pdf"])),
+        Some("txt")
+    );
+    assert_eq!(pick("a.ico", &targets(&["bmp", "png"], &[])), Some("bmp"));
+    assert_eq!(pick("a.png", &targets(&[], &[])), None);
+}
+
+/// The picker leads with the formats people use; the rest wait behind
+/// "More formats", which opens by itself for a pick among them.
+#[gpui_kit::test]
+fn quick_convert_keeps_rare_formats_behind_more_formats(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let png = f.png("a.png");
+    let (window, view) = f.quick(cli(vec![png.clone()], None, None), cx);
+    let (popular, more) = cx.read(|cx| {
+        let v = view.read(cx);
+        super::quick::popular_and_more(&v.targets, &v.files)
+    });
+    let popular: Vec<_> = popular.iter().map(|f| f.id).collect();
+    assert_eq!(&popular[..3], ["jpeg", "webp", "png"], "{popular:?}");
+    assert!(more.iter().any(|f| f.id == "bmp"), "{more:?}");
+    for id in &popular {
+        assert!(shown(cx, window, &format!("to-{id}")), "{id}");
+    }
+    assert!(!shown(cx, window, "to-bmp"));
+    assert_eq!(
+        label(cx, window, "more-formats-toggle"),
+        Some(format!("More formats ({})", more.len()))
+    );
+    click(cx, window, "more-formats-toggle");
+    assert!(shown(cx, window, "to-bmp"));
+    click(cx, window, "to-bmp");
+    cx.read(|cx| assert_eq!(view.read(cx).to.map(|t| t.id), Some("bmp")));
+    click(cx, window, "more-formats-toggle");
+    assert!(!shown(cx, window, "to-bmp"));
+
+    // Asked for a rare format, the window opens with it showing.
+    let (window, _) = f.quick(cli(vec![png], Some("bmp"), None), cx);
+    assert_eq!(selected(cx, window, "to-bmp"), Some(true));
+}
+
+/// A photo becoming PNG grows several times over; the window says so and
+/// offers the formats that keep it small.
+#[gpui_kit::test]
+fn photos_to_png_explain_the_size_and_offer_jpeg_or_webp(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let jpeg = f.rgb(&format!("photo-{dark}.jpg"));
+        let (window, view) = f.quick(cli(vec![jpeg], Some("png"), None), cx);
+        assert_eq!(
+            label(cx, window, "png-size-hint").as_deref(),
+            Some("PNG files are much larger for photos")
+        );
+        click(cx, window, "switch-to-webp");
+        cx.read(|cx| assert_eq!(view.read(cx).to.map(|t| t.id), Some("webp")));
+        assert!(!shown(cx, window, "png-size-hint"));
+        click(cx, window, "to-png");
+        assert!(shown(cx, window, "png-size-hint"));
+        click(cx, window, "switch-to-jpeg");
+        cx.read(|cx| assert_eq!(view.read(cx).to.map(|t| t.id), Some("jpeg")));
+        assert!(!shown(cx, window, "png-size-hint"));
+    }
+    // HEIC and WebP photos too; screenshots and other graphics don't.
+    let webp = f.dir.path().join("photo.webp");
+    image::RgbImage::from_pixel(4, 4, image::Rgb([1, 2, 3]))
+        .save(&webp)
+        .unwrap();
+    let (window, _) = f.quick(cli(vec![webp], Some("png"), None), cx);
+    assert!(shown(cx, window, "png-size-hint"));
+    let (window, _) = f.quick(cli(vec![f.bmp("graphic.bmp")], Some("png"), None), cx);
+    assert!(!shown(cx, window, "png-size-hint"));
+    let (window, _) = f.quick(cli(vec![f.rgb("screen.tiff")], Some("png"), None), cx);
+    assert!(!shown(cx, window, "png-size-hint"));
+    // A HEIC the registry can read gets it too; elsewhere HEIC isn't offered.
+    let registry = convt_engines::default_registry();
+    if !registry
+        .targets(format_by_id("heic").unwrap())
+        .iter()
+        .any(|t| t.id == "png")
+    {
+        return;
+    }
+    let heic = f.dir.path().join("IMG_0990.HEIC");
+    std::fs::write(&heic, b"not really a photo").unwrap();
+    let (window, _) = f.quick(cli(vec![heic], Some("png"), None), cx);
+    assert!(shown(cx, window, "png-size-hint"));
+}
+
+#[test]
+fn size_deltas_read_as_the_change() {
+    use super::main_window::size_delta;
+    use theme::Tone;
+    assert_eq!(
+        size_delta(107_000, 23_000),
+        ("-79%".to_string(), Tone::Green)
+    );
+    assert_eq!(size_delta(1000, 985), ("-2%".to_string(), Tone::Green));
+    assert_eq!(
+        size_delta(1000, 995).1,
+        Tone::Neutral,
+        "under 1% is the same"
+    );
+    assert_eq!(
+        size_delta(1000, 1000),
+        ("Same size".to_string(), Tone::Neutral)
+    );
+    assert_eq!(size_delta(1000, 1100), ("+10%".to_string(), Tone::Neutral));
+    assert_eq!(size_delta(1000, 1450), ("+45%".to_string(), Tone::Amber));
+    assert_eq!(size_delta(1000, 4200), ("+4.2×".to_string(), Tone::Amber));
+    assert_eq!(size_delta(1000, 23_000), ("+23×".to_string(), Tone::Amber));
+    assert_eq!(
+        size_delta(0, 10).1,
+        Tone::Amber,
+        "an empty input doesn't divide by zero"
+    );
+}
+
+/// Activity rows say how much a conversion changed the size.
+#[gpui_kit::test]
+fn activity_rows_show_the_size_change(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    // A noisy picture: as JPEG it shrinks a lot; as BMP it grows.
+    let photo = f.dir.path().join("noise.png");
+    image::RgbImage::from_fn(64, 64, |x, y| {
+        image::Rgb([
+            (x * 37 % 255) as u8,
+            (y * 91 % 255) as u8,
+            ((x ^ y) * 13 % 255) as u8,
+        ])
+    })
+    .save(&photo)
+    .unwrap();
+    let (window, _) = f.main(cx);
+    let app = f.app.clone();
+    for to in ["jpeg", "bmp"] {
+        cx.update(|cx| {
+            app.update(cx, |s, cx| {
+                let to = format_by_id(to).unwrap();
+                s.convert(std::slice::from_ref(&photo), to, &Options::default(), cx)
+                    .unwrap();
+            })
+        });
+    }
+    wait_until(cx, "both conversions", |cx| {
+        f.app.read(cx).recent.len() == 2
+    });
+    let records = cx.read(|cx| f.app.read(cx).recent.clone());
+    for record in &records {
+        let delta = label(cx, window, &format!("delta-{}", record.id)).unwrap();
+        let out = match &record.outcome {
+            Outcome::Done(out) => out[0].clone(),
+            other => panic!("{other:?}"),
+        };
+        let (a, b) = (
+            std::fs::metadata(&photo).unwrap().len(),
+            std::fs::metadata(&out).unwrap().len(),
+        );
+        assert_eq!(
+            delta,
+            super::main_window::size_delta(a, b).0,
+            "{}",
+            record.to
+        );
+        if record.to == "bmp" {
+            assert!(delta.starts_with('+'), "{delta}");
+        }
+    }
+}
+
+/// The HUD that follows a right-click conversion draws its running, done
+/// and failed states in both themes, and its buttons work.
+#[gpui_kit::test]
+fn the_hud_shows_progress_then_the_result(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let png = f.png(&format!("IMG_{dark}.png"));
+        cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+        let (hud, view) = window_of::<HudView>(cx);
+        let state = label(cx, hud, "hud").unwrap();
+        if state == "running" {
+            assert_eq!(
+                label(cx, hud, "hud-title"),
+                Some(format!("Converting IMG_{dark}.png → JPEG"))
+            );
+        }
+        wait_for_label(cx, hud, "hud", |s| s == "done");
+        assert_eq!(
+            label(cx, hud, "hud-title"),
+            Some(format!("Saved IMG_{dark}.jpg"))
+        );
+        assert!(label(cx, hud, "hud-line").unwrap().contains(" → "));
+        click(cx, hud, "hud-copy");
+        assert_eq!(label(cx, hud, "hud-copy").as_deref(), Some("Copied"));
+        assert!(cx.read_from_clipboard().is_some());
+        // The test platform can't reveal files; Show is there to click.
+        assert!(shown(cx, hud, "hud-show"));
+        cx.read(|cx| assert!(view.read(cx).copied));
+        click(cx, hud, "hud-close");
+        assert!(!hud_open(cx));
+
+        // A failure stays a little longer, with the reason.
+        let broken = f.dir.path().join(format!("broken-{dark}.bmp"));
+        std::fs::write(&broken, "not a bmp").unwrap();
+        cx.update(|cx| super::route(cli(vec![broken], Some("png"), None), cx));
+        let (hud, _) = window_of::<HudView>(cx);
+        wait_for_label(cx, hud, "hud", |s| s == "failed");
+        assert_eq!(
+            label(cx, hud, "hud-title"),
+            Some(format!("Couldn't convert broken-{dark}.bmp"))
+        );
+        assert!(!label(cx, hud, "hud-line").unwrap().is_empty());
+        assert!(!shown(cx, hud, "hud-show"));
+        cx.executor().advance_clock(Duration::from_secs(5));
+        cx.run_until_parked();
+        assert!(hud_open(cx), "still up after 5s");
+        cx.executor().advance_clock(Duration::from_secs(3));
+        cx.run_until_parked();
+        assert!(!hud_open(cx), "gone after 7s");
+    }
 }
 
 #[gpui_kit::test]
@@ -1377,11 +1782,10 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     std::fs::write(&broken, "not a bmp").unwrap();
     let (window, view) = f.main(cx);
     view.update(cx, |v, cx| v.add(std::slice::from_ref(&broken), cx));
-    let (quick, _) = last_quick(cx);
-    click(cx, quick, "to-png");
-    click(cx, quick, "convert");
+    composer(cx, &view);
+    click(cx, window, "to-png");
+    click(cx, window, "convert");
     wait_until(cx, "the failure", |cx| f.app.read(cx).recent.len() == 1);
-    assert_eq!(label(cx, quick, "jobs-title").as_deref(), Some("Finished"));
     let record = cx.read(|cx| f.app.read(cx).recent[0].clone());
     assert!(matches!(record.outcome, Outcome::Failed(_)));
     assert_eq!(
@@ -1919,8 +2323,8 @@ fn a_license_older_than_the_build_says_so(cx: &mut TestAppContext) {
 
     let bmp = f.bmp("a.bmp");
     view.update(cx, |v, cx| v.add(std::slice::from_ref(&bmp), cx));
-    let (quick, _) = last_quick(cx);
-    assert!(shown(cx, quick, "download"));
+    composer(cx, &view);
+    assert!(shown(cx, main, "download"));
     assert_eq!(f.jobs(cx), 0);
 
     let (quick, _) = f.quick(cli(vec![bmp], Some("jpeg"), None), cx);
@@ -3621,6 +4025,18 @@ fn fits(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> bool {
     .unwrap()
 }
 
+/// Whether the element shows whole in Quick convert's body, above its footer.
+fn fits_above_the_footer(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> bool {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        let bounds = window.find(id(name)).bounds();
+        let body = window.find(id("quick-body")).bounds();
+        bounds.bottom() <= body.bottom() && bounds.top() >= body.top()
+    })
+    .unwrap()
+}
+
 #[gpui_kit::test]
 fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, Some("2026-09-30"), None);
@@ -3639,6 +4055,10 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         assert!(fits(cx, quick, "convert"), "Quick convert");
         // An image's Options row, where it runs and Save fit without scrolling.
         assert!(fits(cx, quick, "change-folder"), "Quick convert, Save");
+        assert!(
+            fits_above_the_footer(cx, quick, "change-folder"),
+            "Quick convert, Save above the footer"
+        );
         cx.update(|cx| super::open_quick(cli(pngs.clone(), None, None), cx));
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-jpeg");
@@ -4252,7 +4672,9 @@ fn a_silent_convert_of_a_document_opens_the_offer_and_never_downloads(cx: &mut T
     let other = f.docx("Other.docx");
     let windows = cx.update(|cx| cx.windows().len());
     cx.update(|cx| super::route(cli(vec![other], Some("pdf"), None), cx));
-    assert_eq!(cx.update(|cx| cx.windows().len()), windows);
+    // Only the progress HUD opens.
+    assert_eq!(cx.update(|cx| cx.windows().len()), windows + 1);
+    window_of::<HudView>(cx);
     let job = f.last_job(cx);
     wait_until(cx, "the silent job", |cx| {
         f.app
@@ -4275,15 +4697,15 @@ fn documents_added_dropped_or_in_folders_reach_the_offer(cx: &mut TestAppContext
     std::fs::write(folder.join("Budget.xlsx"), b"PK").unwrap();
 
     // Add files: Quick convert offers the pack beside the BMP's formats.
-    let (_, main) = f.main(cx);
+    let (window, main) = f.main(cx);
     main.update(cx, |v, cx| v.add(&[bmp.clone(), docx.clone()], cx));
-    let (window, view) = last_quick(cx);
+    let view = composer(cx, &main);
     cx.read(|cx| assert_eq!(view.read(cx).files, [bmp, docx.clone()]));
     assert!(shown(cx, window, "pack-download"));
 
     // A folder's documents aren't dropped on the floor.
     main.update(cx, |v, cx| v.add(std::slice::from_ref(&folder), cx));
-    let (window, view) = last_quick(cx);
+    let view = composer(cx, &main);
     cx.read(|cx| assert_eq!(view.read(cx).files, [folder.join("Budget.xlsx")]));
     assert!(shown(cx, window, "pack-card"));
 

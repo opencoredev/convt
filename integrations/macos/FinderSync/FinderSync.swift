@@ -28,6 +28,12 @@ private struct Target: Decodable {
 /// container (see `send`), which only processes in the group can write, so a
 /// `convt://` link from a web page can never start a conversion.
 final class FinderSync: FIFinderSync {
+    /// The items the last menu was built for. By the time an item is
+    /// clicked, Finder may report a different selection or none at all
+    /// (right-clicking an item that wasn't selected targets it without
+    /// selecting it), and the click would otherwise do nothing.
+    private var lastMenuItems: [URL] = []
+
     override init() {
         super.init()
         // Watch the whole disk so the menu shows up everywhere.
@@ -35,10 +41,17 @@ final class FinderSync: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
-        guard menuKind == .contextualMenuForItems,
-              let items = FIFinderSyncController.default().selectedItemURLs(),
-              !items.isEmpty
-        else { return nil }
+        guard menuKind == .contextualMenuForItems else { return nil }
+        let controller = FIFinderSyncController.default()
+        let items: [URL]
+        if let selected = controller.selectedItemURLs(), !selected.isEmpty {
+            items = selected
+        } else if let targeted = controller.targetedURL() {
+            items = [targeted]
+        } else {
+            return nil
+        }
+        lastMenuItems = items
 
         let submenu = NSMenu(title: "Convert with convt")
         if let list = loadTargets() {
@@ -103,11 +116,26 @@ final class FinderSync: FIFinderSync {
         return item
     }
 
+    /// The items a click applies to: Finder's selection, else what the menu
+    /// was built for, else the item that was right-clicked.
+    private func clickedItems() -> [URL]? {
+        let controller = FIFinderSyncController.default()
+        if let selected = controller.selectedItemURLs(), !selected.isEmpty {
+            return selected
+        }
+        if !lastMenuItems.isEmpty {
+            return lastMenuItems
+        }
+        if let targeted = controller.targetedURL() {
+            return [targeted]
+        }
+        NSLog("convt: the menu was clicked with no selected or targeted items")
+        return nil
+    }
+
     /// Converts the selection in place, with no window.
     @objc private func convert(_ sender: NSMenuItem) {
-        guard let items = FIFinderSyncController.default().selectedItemURLs(), !items.isEmpty else {
-            return
-        }
+        guard let items = clickedItems() else { return }
         let name = sender.title.replacingOccurrences(of: " (audio only)", with: "")
         let target = loadTargets().flatMap { list in
             list.targets.values.lazy.flatMap { $0 }.first { $0.name == name }
@@ -123,7 +151,7 @@ final class FinderSync: FIFinderSync {
 
     /// Opens Quick convert for the selection.
     @objc private func moreOptions(_ sender: NSMenuItem) {
-        guard let items = FIFinderSyncController.default().selectedItemURLs() else { return }
+        guard let items = clickedItems() else { return }
         send(to: nil, items: items, activate: true)
     }
 
@@ -139,7 +167,9 @@ final class FinderSync: FIFinderSync {
     /// sandboxed callers, so the request goes into the App Group container
     /// and `convt://finder` only wakes the app, which takes it from there. The
     /// link is opened with this bundle's app by path, because another app may
-    /// also claim the `convt` scheme.
+    /// also claim the `convt` scheme. Each link carries the request's id, so
+    /// macOS doesn't merge two quick clicks into one identical open; the app
+    /// reads every waiting request either way.
     private func send(to: String?, items: [URL], activate: Bool) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = activate
@@ -149,6 +179,7 @@ final class FinderSync: FIFinderSync {
                 NSLog("convt: could not start the app: \(error.localizedDescription)")
             }
         }
+        let requestID = UUID().uuidString
         do {
             guard let group = Bundle.main.object(forInfoDictionaryKey: "ConvtAppGroup") as? String,
                   let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
@@ -159,7 +190,7 @@ final class FinderSync: FIFinderSync {
             let data = try JSONEncoder().encode(request)
             // The app drops request files over 1 MiB unread.
             guard data.count <= 1 << 20 else { throw CocoaError(.fileWriteOutOfSpace) }
-            try data.write(to: dir.appendingPathComponent(UUID().uuidString + ".json"), options: .atomic)
+            try data.write(to: dir.appendingPathComponent(requestID + ".json"), options: .atomic)
         } catch {
             // No usable shared container (an ad-hoc build, which macOS
             // doesn't grant the group), or a selection too large for one
@@ -169,7 +200,7 @@ final class FinderSync: FIFinderSync {
             NSWorkspace.shared.open(items, withApplicationAt: appURL, configuration: configuration, completionHandler: done)
             return
         }
-        NSWorkspace.shared.open([URL(string: "convt://finder")!], withApplicationAt: appURL, configuration: configuration, completionHandler: done)
+        NSWorkspace.shared.open([URL(string: "convt://finder?id=\(requestID)")!], withApplicationAt: appURL, configuration: configuration, completionHandler: done)
     }
 
     /// convt.app, which contains this extension at Contents/PlugIns/<name>.appex.

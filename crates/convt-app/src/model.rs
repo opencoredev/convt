@@ -780,7 +780,7 @@ impl AppState {
             !request.show_progress,
             cx,
         )?;
-        if cx.windows().is_empty() {
+        if crate::ui::only_hud_open(cx) {
             // Nothing else keeps the app open, so quit once the files are done.
             self.quit_when_idle = true;
         }
@@ -1300,7 +1300,7 @@ impl AppState {
             });
         }
         if self.quit_when_idle
-            && cx.windows().is_empty()
+            && crate::ui::only_hud_open(cx)
             && !crate::tray::keeps_running(self.settings.menu_bar_icon, cx)
         {
             crate::menu::quit(cx);

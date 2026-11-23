@@ -298,15 +298,21 @@ fn quits_after_a_silent_conversion(cx: &mut TestAppContext, tray_works: bool) ->
     cx.update(|cx| super::super::route(cli(vec![png], Some("jpeg"), None), cx));
     let job = f.last_job(cx);
     // A small PNG can finish on its worker before this line runs, so only a
-    // job that is still running proves convt waits for it.
-    let running = cx.read(|cx| {
-        f.app
-            .read(cx)
-            .entry(job)
-            .is_some_and(|e| !e.status.is_finished())
+    // job that is still running proves convt waits for it. The state and
+    // the quits are read together, after everything pending has run, so a
+    // job finishing in between can't look like an early quit.
+    cx.run_until_parked();
+    let (running, quit) = cx.read(|cx| {
+        (
+            f.app
+                .read(cx)
+                .entry(job)
+                .is_some_and(|e| !e.status.is_finished()),
+            cx.try_global::<crate::menu::Quits>().map_or(0, |q| q.0),
+        )
     });
     if running {
-        assert_eq!(quits(cx), 0, "not while the job runs");
+        assert_eq!(quit, 0, "not while the job runs");
     }
     wait_until(cx, "the job to finish", |cx| {
         f.app

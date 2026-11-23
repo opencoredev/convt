@@ -3,8 +3,10 @@
 //! the type and spacing scale, and the controls the windows share. The theme
 //! follows the system appearance.
 //!
-//! The system, in short: neutral surfaces with one accent (the brand green),
-//! Inter for words and Geist Mono for file facts (sizes, formats, paths).
+//! The system, in short: cool graphite neutrals with one accent (the brand
+//! green), machined controls (8px corners, a hairline ring, a top highlight
+//! and a soft drop), concentric corners (a 12px track holds 8px segments 4px
+//! in), Inter for words and Geist Mono for file facts (sizes, formats, paths).
 //! Sizes come from [`space`] and [`radius`]; text from [`text`] and [`mono`]
 //! at the sizes in [`size`]. Lists and settings sit in [`group`]s of
 //! [`row`]s; anything that needs the user's attention is a [`callout`].
@@ -42,13 +44,18 @@ pub mod space {
     pub const XXL: f32 = 32.;
 }
 
-/// Corner radii, in pixels.
+/// Corner radii, in pixels. They nest: a control 4px inside a card has the
+/// card's radius less 4.
 pub mod radius {
+    /// Checkboxes and small marks.
+    pub const XS: f32 = 4.;
+    /// Badges and menu items.
     pub const SM: f32 = 6.;
-    /// Text fields and selects. Buttons are pills.
-    pub const CONTROL: f32 = 9.;
+    /// Buttons, text fields, selects and segments.
+    pub const CONTROL: f32 = 8.;
+    /// Cards, groups, format choices and segment tracks.
     pub const CARD: f32 = 12.;
-    /// Choice tiles and the larger cards.
+    /// Choice tiles, drop zones and the larger cards.
     pub const PANEL: f32 = 16.;
 }
 
@@ -109,6 +116,11 @@ pub struct Palette {
     pub error: Hsla,
     pub error_tint: Hsla,
     pub error_border: Hsla,
+    /// Advisories, such as a photo that grows as PNG: text and icons, at
+    /// least 4.5:1 on every ground.
+    pub amber: Hsla,
+    pub amber_tint: Hsla,
+    pub amber_border: Hsla,
     pub track: Hsla,
     pub toggle_off: Hsla,
     pub mark_off: Hsla,
@@ -128,85 +140,91 @@ fn ca(hex: u32) -> Hsla {
     rgba(hex).into()
 }
 
-/// Both palettes are the convt.app tokens (`apps/web/src/styles.css`); the
-/// comments name the web token each color comes from. The few colors the web
-/// has no token for are marked "derived".
+/// Graphical UI Alloy's cool graphite neutrals with the convt green. The
+/// accent, error and amber inks each reach 4.5:1 on every ground they are
+/// drawn on (see `contrast`).
 impl Palette {
     pub fn light() -> Self {
         Self {
             dark: false,
-            window: c(0xFFFFFF),         // --page
-            chrome: c(0xF7F8F7),         // --sunken
-            chrome_border: c(0xE6E8E7),  // --line
-            recessed: c(0xF7F8F7),       // --sunken
-            surface: c(0xFFFFFF),        // --raised
-            border: c(0xE6E8E7),         // --line
-            control_border: c(0xD5D9D7), // --line-strong
-            hairline: c(0xE6E8E7),       // --line
-            row_divider: c(0xEEF0EF),    // --divider
-            chip: c(0xF5F7F6),           // --chip
-            chip_border: c(0xE0E3E1),    // --chip-line
-            text: c(0x0A0A0A),           // --ink
-            secondary: c(0x6B6F6D),      // --ink-2
-            tertiary: c(0x6C716E),       // --ink-3
-            hover: c(0xF3F4F3),          // --hover
-            selected: c(0xE6E8E7),       // --line
-            green: c(0x127A47),          // --green
-            green_text: c(0x127A47),     // --green
+            window: c(0xFFFFFF),
+            chrome: c(0xFAFAFA),
+            chrome_border: c(0xE4E4E7),
+            recessed: c(0xF2F2F3),
+            surface: c(0xFFFFFF),
+            border: c(0xE4E4E7),
+            control_border: c(0xD4D4D8),
+            hairline: c(0xE4E4E7),
+            row_divider: c(0xEFEFF1),
+            chip: c(0xF2F2F3),
+            chip_border: c(0xE4E4E7),
+            text: c(0x202124),
+            secondary: c(0x5D5D65),
+            tertiary: c(0x62626A),
+            hover: c(0xF2F2F3),
+            selected: c(0xE8E8EC),
+            green: c(0x127A47),
+            green_text: c(0x127A47),
             on_green: c(0xFFFFFF),
-            green_tint: c(0xEEF7F2),   // --green-tint
-            green_border: c(0xCFE6D9), // --green-line
-            error: c(0xB3261E),        // --error
-            error_tint: c(0xFCF3F2),   // derived: --error over --page, as --green-tint
-            error_border: c(0xF0D4D1), // --error-line
-            track: c(0xE6E8E7),        // --line
-            toggle_off: c(0xD0D3D1),   // --separator
-            // Derived: dark enough for 3:1 on every ground a checkbox sits on.
-            mark_off: c(0x868B88),
-            thumb: c(0xFFFFFF),          // --raised
-            thumb_border: c(0xE0E3E1),   // --chip-line
-            overlay: c(0xFFFFFF),        // --raised
-            shadow: ca(0x0A3C231F),      // --shadow-float
-            shadow_soft: ca(0x0A1E1426), // --shadow-note
+            green_tint: c(0xEEF7F2),
+            green_border: c(0xC7E5D5),
+            error: c(0xB3261E),
+            error_tint: c(0xFDF2F2),
+            error_border: c(0xF2CECE),
+            amber: c(0x945B0A),
+            amber_tint: c(0xFEF8EC),
+            amber_border: c(0xF2DBAE),
+            track: c(0xE4E4E7),
+            toggle_off: c(0xD4D4D8),
+            // Dark enough for 3:1 on every ground a checkbox sits on.
+            mark_off: c(0x7E7E87),
+            thumb: c(0xFFFFFF),
+            thumb_border: c(0xE4E4E7),
+            overlay: c(0xFFFFFF),
+            shadow: ca(0x10182824),
+            shadow_soft: ca(0x1018281A),
         }
     }
 
     pub fn dark() -> Self {
         Self {
             dark: true,
-            window: c(0x0A0B0B),          // --page
-            chrome: c(0x111312),          // --raised
-            chrome_border: c(0x232726),   // --line
-            recessed: c(0x161918),        // --sunken
-            surface: c(0x111312),         // --raised
-            border: c(0x232726),          // --line
-            control_border: c(0x2E3331),  // --line-strong
-            hairline: c(0x232726),        // --line
-            row_divider: c(0x232726),     // --divider
-            chip: c(0x161918),            // --chip
-            chip_border: c(0x2E3331),     // --chip-line
-            text: c(0xEDEFEE),            // --ink
-            secondary: c(0xA1A6A3),       // --ink-2
-            tertiary: c(0x868B88),        // --ink-3
-            hover: c(0x1C201E),           // --hover
-            selected: c(0x232726),        // --line
-            green: c(0x3FCB84),           // --green
-            green_text: c(0x3FCB84),      // --green
-            on_green: c(0x0A0B0B),        // --page
-            green_tint: c(0x12261B),      // --green-tint
-            green_border: ca(0x3FCB8433), // --green-line
-            error: c(0xF2786D),           // --error
-            error_tint: c(0x261716),      // derived: --error over --page, as --green-tint
-            error_border: ca(0xF2786D33), // --error-line
-            track: c(0x232726),           // --line
-            toggle_off: c(0x2E3331),      // --separator
-            // Derived: light enough for 3:1 on every ground a checkbox sits on.
-            mark_off: c(0x707673),
-            thumb: c(0x161918),           // --sunken
-            thumb_border: ca(0xFFFFFF14), // --shadow-float ring
-            overlay: c(0x1C201E),         // --hover, as the web's floating cards
-            shadow: ca(0x00000099),       // --shadow-float
-            shadow_soft: ca(0x00000066),  // --shadow-float
+            window: c(0x171719),
+            chrome: c(0x1D1D20),
+            chrome_border: c(0x2C2C32),
+            recessed: c(0x242428),
+            surface: c(0x202023),
+            border: c(0x323238),
+            control_border: c(0x44444C),
+            hairline: c(0x2C2C32),
+            row_divider: c(0x2B2B31),
+            chip: c(0x26262B),
+            chip_border: c(0x3B3B42),
+            text: c(0xFAFAFA),
+            secondary: c(0xB2B2BC),
+            tertiary: c(0x9E9EA8),
+            hover: c(0x2A2A2E),
+            selected: c(0x323238),
+            green: c(0x3FCB84),
+            green_text: c(0x3FCB84),
+            on_green: c(0x171719),
+            green_tint: c(0x14271D),
+            green_border: ca(0x3FCB8438),
+            error: c(0xF48C92),
+            error_tint: c(0x2A181A),
+            error_border: ca(0xF48C9238),
+            amber: c(0xE8BD6B),
+            amber_tint: c(0x292216),
+            amber_border: ca(0xE8BD6B38),
+            track: c(0x2E2E34),
+            toggle_off: c(0x3B3B42),
+            // Light enough for 3:1 on every ground a checkbox sits on.
+            mark_off: c(0x85858F),
+            thumb: c(0x242428),
+            thumb_border: ca(0xFFFFFF16),
+            overlay: c(0x242428),
+            shadow: ca(0x00000099),
+            shadow_soft: ca(0x00000066),
         }
     }
 }
@@ -498,18 +516,78 @@ pub fn shadow(color: Hsla, y: f32, blur: f32) -> BoxShadow {
     }
 }
 
-/// The resting shadow of raised controls and cards (the web's
-/// `--shadow-button` drop).
-fn raise(p: &Palette) -> Vec<BoxShadow> {
-    vec![shadow(
+/// A line drawn inside an element's top (`y` > 0) or bottom (`y` < 0) edge:
+/// the specular highlight or the shade of a machined control.
+pub fn inset_edge(color: Hsla, y: f32) -> BoxShadow {
+    BoxShadow {
+        color,
+        offset: point(px(0.), px(y)),
+        blur_radius: px(0.),
+        spread_radius: px(0.),
+        inset: true,
+    }
+}
+
+/// `--shadow-s`: the small drop under raised controls and segments.
+pub fn shadow_s(p: &Palette) -> BoxShadow {
+    shadow(
         if p.dark {
-            ca(0x00000066)
+            ca(0x00000059)
         } else {
-            ca(0x0000000F)
+            ca(0x1018280F)
         },
         1.,
         2.,
-    )]
+    )
+}
+
+/// The resting shadow of raised controls and cards.
+fn raise(p: &Palette) -> Vec<BoxShadow> {
+    vec![shadow_s(p)]
+}
+
+/// The bevel of a raised control on top of its fill: a hairline ring, a
+/// highlight along the top edge, a shade along the bottom and `--shadow-s`.
+pub fn bevel(ring: Hsla, p: &Palette) -> Vec<BoxShadow> {
+    let (top, bottom) = if p.dark {
+        (ca(0xFFFFFF14), ca(0x00000040))
+    } else {
+        (ca(0xFFFFFFCC), ca(0x10182808))
+    };
+    vec![
+        inset_ring(ring, 1.),
+        inset_edge(top, 1.),
+        inset_edge(bottom, -1.),
+        shadow_s(p),
+    ]
+}
+
+/// The inset top shadow of a recessed well, such as a segment track or a
+/// drop zone.
+pub fn well(p: &Palette) -> Vec<BoxShadow> {
+    vec![
+        inset_ring(p.border, 1.),
+        BoxShadow {
+            color: if p.dark {
+                ca(0x00000040)
+            } else {
+                ca(0x1018280D)
+            },
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(2.),
+            spread_radius: px(0.),
+            inset: true,
+        },
+    ]
+}
+
+/// A top-to-bottom sheen from `top` to `bottom`.
+fn sheen((top, bottom): (u32, u32)) -> Background {
+    linear_gradient(
+        180.,
+        linear_color_stop(c(top), 0.),
+        linear_color_stop(c(bottom), 1.),
+    )
 }
 
 /// An element registered for test queries: [`clickable`] and the controls
@@ -526,26 +604,34 @@ pub fn clickable(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Cl
         .aria_label(label)
 }
 
-/// The brand green as a button fill: white text on it is past 5.3:1.
-const BRAND_FILL: u32 = 0x127A47;
-/// Ink as a button fill in the light appearance.
-const INK_FILL: u32 = 0x111312;
-/// The soft gray of a secondary pill in the light appearance.
-const SOFT_FILL: (u32, u32) = (0xF0F2F1, 0xE7EAE8);
+/// The machined green of a primary button in the light appearance, top and
+/// bottom of its sheen, resting and hovered. White on each is past 4.5:1.
+const GREEN_SHEEN: (u32, u32) = (0x15854E, 0x106E3F);
+const GREEN_SHEEN_HOVER: (u32, u32) = (0x127A47, 0x0E6638);
+/// The same in the dark appearance, under ink.
+const GREEN_SHEEN_DARK: (u32, u32) = (0x48D38D, 0x34BC77);
+const GREEN_SHEEN_DARK_HOVER: (u32, u32) = (0x52D896, 0x3FCB84);
+/// The ring around the green: a step deeper than its fill.
+const GREEN_RING: (u32, u32) = (0x0C5F36, 0x2FA868);
+/// A secondary button's raised white or graphite, resting and hovered.
+const RAISED_SHEEN: (u32, u32) = (0xFFFFFF, 0xF7F7F9);
+const RAISED_SHEEN_HOVER: (u32, u32) = (0xFAFAFB, 0xF0F0F2);
+const RAISED_SHEEN_DARK: (u32, u32) = (0x28282E, 0x222227);
+const RAISED_SHEEN_DARK_HOVER: (u32, u32) = (0x2F2F36, 0x28282E);
 
-/// How a [`Button`] looks. Every button is a pill, as on the onboarding
-/// screens: one ink pill per window or card for its main action, soft gray
-/// pills beside it, quiet ghost buttons in rows, and the brand green only
-/// for buying or starting a trial.
+/// How a [`Button`] looks. Every button is machined: 8px corners, a hairline
+/// ring, a highlight along its top edge and a small drop. One green button
+/// per window or card for its main action, raised secondaries beside it and
+/// quiet ghost buttons in rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Look {
-    /// The one main action: ink on the page (light ink in dark mode).
+    /// The one main action: the brand green.
     Primary,
-    /// A soft gray pill, such as Cancel or a second way on.
+    /// A raised white (graphite in dark mode) button, such as Cancel.
     Secondary,
-    /// Text that gains a soft pill on hover, for row actions.
+    /// Text that gains a soft fill on hover, for row actions.
     Ghost,
-    /// The brand green, for a purchase or a trial.
+    /// The brand green, for a purchase or a trial. Drawn as Primary.
     Brand,
 }
 
@@ -556,7 +642,7 @@ pub enum Height {
     Small,
     /// 32px, the default in windows.
     Regular,
-    /// 42px, the wide onboarding pills.
+    /// 42px, the wide onboarding buttons.
     Large,
 }
 
@@ -625,7 +711,7 @@ impl Button {
         self
     }
 
-    /// 42px tall, as the onboarding pills.
+    /// 42px tall, as the onboarding buttons.
     pub fn large(mut self) -> Self {
         self.height = Height::Large;
         self
@@ -655,15 +741,28 @@ impl Button {
             Height::Regular => (32., 16., 13., 16., 14.),
             Height::Large => (42., 24., 14., 18., 16.),
         };
-        let (bg, hover_bg, fg) = match self.look {
-            Look::Primary if p.dark => (p.text, c(0xFFFFFF), p.window),
-            Look::Primary => (c(INK_FILL), c(0x2A2D2C), c(0xFFFFFF)),
-            Look::Brand => (c(BRAND_FILL), c(0x0F6B3E), c(0xFFFFFF)),
-            Look::Secondary if p.dark => (p.hover, p.selected, self.color.unwrap_or(p.text)),
-            Look::Secondary => (c(SOFT_FILL.0), c(SOFT_FILL.1), self.color.unwrap_or(p.text)),
+        let (bg, hover_bg, fg): (Background, Background, Hsla) = match self.look {
+            Look::Primary | Look::Brand if p.dark => (
+                sheen(GREEN_SHEEN_DARK),
+                sheen(GREEN_SHEEN_DARK_HOVER),
+                p.on_green,
+            ),
+            Look::Primary | Look::Brand => {
+                (sheen(GREEN_SHEEN), sheen(GREEN_SHEEN_HOVER), p.on_green)
+            }
+            Look::Secondary if p.dark => (
+                sheen(RAISED_SHEEN_DARK),
+                sheen(RAISED_SHEEN_DARK_HOVER),
+                self.color.unwrap_or(p.text),
+            ),
+            Look::Secondary => (
+                sheen(RAISED_SHEEN),
+                sheen(RAISED_SHEEN_HOVER),
+                self.color.unwrap_or(p.text),
+            ),
             Look::Ghost => (
-                transparent_black(),
-                p.hover,
+                transparent_black().into(),
+                p.hover.into(),
                 self.color.unwrap_or(p.secondary),
             ),
         };
@@ -688,15 +787,19 @@ impl Button {
             } else {
                 pad
             }))
-            .rounded_full()
+            .rounded(px(radius::CONTROL))
             .bg(bg)
-            .when(!still, |d| d.hover(|s| s.bg(hover_bg)));
+            .when(!still, |d| d.hover(move |s| s.bg(hover_bg)));
         let base = match self.look {
-            Look::Primary | Look::Brand if self.height == Height::Large => {
-                base.shadow(vec![shadow(p.shadow_soft, 2., 8.)])
+            Look::Primary | Look::Brand => {
+                let ring = c(if p.dark { GREEN_RING.1 } else { GREEN_RING.0 });
+                let mut s = bevel(ring, p);
+                if self.height == Height::Large {
+                    s.push(shadow(p.shadow_soft, 2., 8.));
+                }
+                base.shadow(s)
             }
-            Look::Primary | Look::Brand => base.shadow(vec![shadow(p.shadow_soft, 1., 3.)]),
-            Look::Secondary => base.shadow(vec![inset_ring(p.border, 1.)]),
+            Look::Secondary => base.shadow(bevel(p.control_border, p)),
             Look::Ghost => base,
         };
         let icon_color = match self.look {
@@ -726,7 +829,7 @@ impl Button {
     }
 }
 
-/// The ink pill, 32px tall: the one main action.
+/// The green button, 32px tall: the one main action.
 pub fn primary_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -735,7 +838,7 @@ pub fn primary_button(
     Button::primary(id, label).build(p)
 }
 
-/// The soft gray pill, such as Cancel.
+/// The raised secondary button, such as Cancel.
 pub fn secondary_button(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -795,13 +898,19 @@ pub fn switch(
         .p(px(2.))
         .rounded(px(h / 2.))
         .bg(if on { p.green } else { p.toggle_off })
+        // A recessed track: a faint shade along its top edge.
+        .shadow(vec![inset_edge(ca(0x0000001A), 1.)])
         .when(on, |d| d.justify_end())
         .child(
             div()
                 .size(px(knob))
                 .rounded(px(knob / 2.))
                 .bg(c(0xFFFFFF))
-                .shadow(vec![shadow(ca(0x00000040), 1., 2.)]),
+                .shadow(vec![
+                    inset_ring(ca(0x0000000F), 0.5),
+                    shadow(ca(0x00000033), 1., 2.),
+                    shadow_s(p),
+                ]),
         )
 }
 
@@ -819,13 +928,13 @@ pub fn checkbox(
             .items_center()
             .justify_center()
             .size(px(15.))
-            .rounded(px(4.))
+            .rounded(px(radius::XS))
             .bg(p.green)
             .child(icon(IconName::Check, 11., p.on_green))
     } else {
         div()
             .size(px(15.))
-            .rounded(px(4.))
+            .rounded(px(radius::XS))
             .bg(p.surface)
             .shadow(vec![inset_ring(p.mark_off, 1.)])
     };
@@ -1004,7 +1113,7 @@ pub fn segmented(
             .items_center()
             .h(px(24.))
             .px(px(12.))
-            .rounded_full()
+            .rounded(px(radius::CONTROL))
             .when(on, |d| pill_segment_on(d, p))
             .when(!on, |d| d.hover(|s| s.bg(p.hover)))
             .on_click(move |_, window, cx| on_pick(key, window, cx))
@@ -1017,25 +1126,27 @@ pub fn segmented(
     }))
 }
 
-/// The soft gray pill that holds a segmented control or tabs.
+/// The recessed track that holds a segmented control or tabs: 12px corners
+/// around 8px segments, 4px in, so the corners nest.
 pub fn pill_track(p: &Palette) -> Div {
     div()
         .flex()
         .flex_shrink_0()
-        .p(px(3.))
+        .p(px(4.))
         .gap(px(2.))
-        .rounded_full()
-        .bg(if p.dark { p.recessed } else { c(SOFT_FILL.0) })
-        .shadow(vec![inset_ring(p.border, 1.)])
+        .rounded(px(radius::CARD))
+        .bg(p.recessed)
+        .shadow(well(p))
 }
 
-/// The picked segment of a [`pill_track`]: a raised white pill.
+/// The picked segment of a [`pill_track`]: a raised, beveled surface.
 pub fn pill_segment_on(d: Clickable, p: &Palette) -> Clickable {
-    d.bg(if p.dark { p.selected } else { p.surface }).shadow({
-        let mut s = raise(p);
-        s.push(shadow(p.shadow_soft, 1., 3.));
-        s
-    })
+    d.bg(segment_fill(p)).shadow(bevel(p.border, p))
+}
+
+/// The picked segment's fill.
+fn segment_fill(p: &Palette) -> Hsla {
+    if p.dark { p.selected } else { p.surface }
 }
 
 /// Keeps a hover flag in step with the pointer.
@@ -1100,14 +1211,14 @@ pub fn choice(el: Clickable, on: bool, corner: f32, p: &Palette) -> Clickable {
 /// [`choice`], with no hover for a choice that can't be picked.
 fn choice_look(el: Clickable, on: bool, enabled: bool, corner: f32, p: &Palette) -> Clickable {
     el.rounded(px(corner))
-        .bg(p.surface)
+        .bg(if on { p.green_tint } else { p.surface })
         .shadow(choice_shadow(on, p))
-        .when(!on && enabled, |d| d.hover(|s| s.bg(p.recessed)))
+        .when(!on && enabled, |d| d.hover(|s| s.bg(p.hover)))
 }
 
 fn choice_shadow(on: bool, p: &Palette) -> Vec<BoxShadow> {
     if on {
-        vec![inset_ring(p.green, 2.), shadow(p.shadow_soft, 4., 14.)]
+        vec![inset_ring(p.green, 2.), shadow_s(p)]
     } else {
         let mut s = vec![inset_ring(p.border, 1.)];
         s.extend(raise(p));
@@ -1202,7 +1313,7 @@ pub fn tiles(
             .flex_1()
             .items_center()
             .gap(px(space::MD))
-            .p(px(14.))
+            .p(px(12.))
             .when(off, |d| d.cursor_default())
             .when_some(
                 hover.zip(tile.disabled.clone()),
@@ -1221,12 +1332,12 @@ pub fn tiles(
                     .flex_shrink_0()
                     .items_center()
                     .justify_center()
-                    .size(px(38.))
-                    .rounded(px(10.))
+                    .size(px(34.))
+                    .rounded(px(radius::CONTROL + 1.))
                     .bg(tile_bg)
                     .shadow(vec![inset_ring(tile_ring, 1.)])
                     .when(off, |d| d.opacity(0.5))
-                    .child(icon(tile.icon, 20., glyph)),
+                    .child(icon(tile.icon, 18., glyph)),
             )
             .child(
                 div()
@@ -1255,6 +1366,8 @@ pub enum Tone {
     Neutral,
     Green,
     Error,
+    /// A warm advisory, such as a file that grows a lot.
+    Amber,
 }
 
 impl Tone {
@@ -1263,6 +1376,7 @@ impl Tone {
             Tone::Neutral => (p.chip, p.chip_border, p.secondary),
             Tone::Green => (p.green_tint, p.green_border, p.green_text),
             Tone::Error => (p.error_tint, p.error_border, p.error),
+            Tone::Amber => (p.amber_tint, p.amber_border, p.amber),
         }
     }
 }
@@ -1302,7 +1416,8 @@ pub fn icon_tile(name: IconName, tone: Tone, size: f32, p: &Palette) -> Div {
         .child(icon(name, (size * 0.5).round(), fg))
 }
 
-/// A card on the window: the surface color, a border and soft corners.
+/// A card on the window: the surface color, a hairline border, 12px
+/// corners and a layered resting shadow.
 pub fn card(p: &Palette) -> Div {
     div()
         .flex()
@@ -1311,23 +1426,32 @@ pub fn card(p: &Palette) -> Div {
         .bg(p.surface)
         .border_1()
         .border_color(p.border)
-        .when(!p.dark, |d| d.shadow(soft(p)))
+        .shadow(soft(p))
 }
 
-/// The soft resting shadow of cards: a hairline drop and a wide, faint one,
-/// as the onboarding tiles sit on the page.
+/// The layered resting shadow of cards: a 1px-2px drop and a wide, faint
+/// elevation (in dark mode a crisp drop and a little depth).
 pub fn soft(p: &Palette) -> Vec<BoxShadow> {
-    let mut s = raise(p);
-    s.push(shadow(
-        if p.dark {
-            ca(0x00000040)
-        } else {
-            ca(0x0A1E140A)
-        },
-        4.,
-        14.,
-    ));
-    s
+    vec![
+        shadow(
+            if p.dark {
+                ca(0x00000066)
+            } else {
+                ca(0x1018280D)
+            },
+            1.,
+            2.,
+        ),
+        shadow(
+            if p.dark {
+                ca(0x00000033)
+            } else {
+                ca(0x1018280A)
+            },
+            4.,
+            12.,
+        ),
+    ]
 }
 
 /// Rows in one card, with dividers between them, like grouped settings.
@@ -1403,6 +1527,7 @@ pub fn callout(name: IconName, tone: Tone, content: impl IntoElement, p: &Palett
         Tone::Neutral => (p.surface, p.border),
         Tone::Green => (p.green_tint, p.green_border),
         Tone::Error => (p.error_tint, p.error_border),
+        Tone::Amber => (p.amber_tint, p.amber_border),
     };
     div()
         .flex()
@@ -1689,7 +1814,11 @@ pub fn file_manager_name() -> &'static str {
 
 #[cfg(test)]
 mod contrast {
-    use super::{BRAND_FILL, Hsla, INK_FILL, Palette, SOFT_FILL, c};
+    use super::{
+        GREEN_SHEEN, GREEN_SHEEN_DARK, GREEN_SHEEN_DARK_HOVER, GREEN_SHEEN_HOVER, Hsla, Palette,
+        RAISED_SHEEN, RAISED_SHEEN_DARK, RAISED_SHEEN_DARK_HOVER, RAISED_SHEEN_HOVER, c,
+        segment_fill,
+    };
 
     fn luminance(color: Hsla) -> f32 {
         let c = color.to_rgb();
@@ -1723,6 +1852,7 @@ mod contrast {
                 ("overlay", p.overlay),
                 ("green_tint", p.green_tint),
                 ("error_tint", p.error_tint),
+                ("amber_tint", p.amber_tint),
             ];
             let inks = [
                 ("text", p.text),
@@ -1730,6 +1860,7 @@ mod contrast {
                 ("tertiary", p.tertiary),
                 ("green_text", p.green_text),
                 ("error", p.error),
+                ("amber", p.amber),
             ];
             for (ink, fg) in inks {
                 for (ground, bg) in grounds {
@@ -1765,31 +1896,38 @@ mod contrast {
         }
     }
 
-    /// Unpicked tabs and segments draw `secondary` on the pill track.
+    /// Unpicked tabs and segments draw `secondary` on the recessed track
+    /// and on their hover; the picked one draws `text` on its raised fill.
     #[test]
     fn unpicked_segments_meet_aa() {
-        let (light, dark) = (Palette::light(), Palette::dark());
-        assert!(ratio(light.secondary, c(SOFT_FILL.0)) >= 4.5);
-        assert!(ratio(dark.secondary, dark.recessed) >= 4.5);
-        assert!(ratio(light.secondary, light.hover) >= 4.5);
-        assert!(ratio(dark.secondary, dark.hover) >= 4.5);
+        for p in [Palette::light(), Palette::dark()] {
+            assert!(ratio(p.secondary, p.recessed) >= 4.5, "dark: {}", p.dark);
+            assert!(ratio(p.secondary, p.hover) >= 4.5, "dark: {}", p.dark);
+            assert!(ratio(p.text, segment_fill(&p)) >= 4.5, "dark: {}", p.dark);
+        }
     }
 
-    /// Every pill's label against its fill, resting and hovered.
+    /// Every button's label against both ends of its sheen, resting and
+    /// hovered.
     #[test]
     fn button_labels_meet_aa() {
-        for fill in [BRAND_FILL, 0x0F6B3E, INK_FILL, 0x2A2D2C] {
-            assert!(ratio(c(0xFFFFFF), c(fill)) >= 4.5, "{fill:06X}");
-        }
         let (light, dark) = (Palette::light(), Palette::dark());
-        for fill in [SOFT_FILL.0, SOFT_FILL.1] {
-            assert!(ratio(light.text, c(fill)) >= 4.5, "{fill:06X}");
+        for (label, sheens) in [
+            (light.on_green, [GREEN_SHEEN, GREEN_SHEEN_HOVER]),
+            (dark.on_green, [GREEN_SHEEN_DARK, GREEN_SHEEN_DARK_HOVER]),
+            (light.text, [RAISED_SHEEN, RAISED_SHEEN_HOVER]),
+            (dark.text, [RAISED_SHEEN_DARK, RAISED_SHEEN_DARK_HOVER]),
+        ] {
+            for (top, bottom) in sheens {
+                for fill in [top, bottom] {
+                    let r = ratio(label, c(fill));
+                    assert!(r >= 4.5, "label on {fill:06X} is {r:.2}:1");
+                }
+            }
         }
-        for fill in [dark.text, c(0xFFFFFF)] {
-            assert!(ratio(dark.window, fill) >= 4.5);
-        }
-        for fill in [dark.hover, dark.selected] {
-            assert!(ratio(dark.text, fill) >= 4.5);
+        // Ghost buttons draw `secondary`, then `text` on the hover fill.
+        for p in [light, dark] {
+            assert!(ratio(p.text, p.hover) >= 4.5);
         }
     }
 }

@@ -185,27 +185,124 @@ pub(crate) fn background_png(path: &Path, options: &Options) -> Result<()> {
     drop(reader);
     let img = apply_background(crate::orientation::open_oriented(path)?, "png", options)?;
     let Some(target) = target else {
-        return write_png(&img, &source, path);
+        return write_png(&img, &source, path, false);
     };
     let longest = img.width().max(img.height());
     fit_target(target, "png", None, longest, |_, edge| {
         match edge {
-            Some(edge) => write_png(&img.resize(edge, edge, FilterType::Lanczos3), &source, path)?,
-            None => write_png(&img, &source, path)?,
+            Some(edge) => write_png(
+                &img.resize(edge, edge, FilterType::Lanczos3),
+                &source,
+                path,
+                false,
+            )?,
+            None => write_png(&img, &source, path, false)?,
         }
         Ok(std::fs::metadata(path)?.len())
     })
 }
 
-/// Writes `img` to `path` as PNG with `source`'s color tags and pixel ratio.
-fn write_png(img: &DynamicImage, source: &png::Info<'static>, path: &Path) -> Result<()> {
+/// Rewrites a PNG that macOS `sips` decoded from HEIC or HEIF. iPhone
+/// photos are 10-bit HEVC, and `sips` writes them as 16 bits per channel
+/// with an alpha channel nobody uses, more than twice the size of the same
+/// picture in 8 bits. A 16-bit file with an SDR transfer goes down to 8 bits
+/// (HDR, a PQ or HLG `cICP`, keeps its precision), an alpha channel that is
+/// opaque everywhere goes, and the file is recompressed. Color tags, pixel
+/// ratio, EXIF and text chunks stay, and EXIF orientation is left for
+/// [`crate::orientation::finish_heif_output`] to apply. A rewrite that
+/// keeps the depth replaces the file only when it comes out smaller.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn optimize_heif_png(path: &Path) -> Result<()> {
+    let reader = png::Decoder::new(std::io::BufReader::new(File::open(path)?))
+        .read_info()
+        .map_err(failed)?;
+    let source = reader.info().clone();
+    drop(reader);
+    if source.animation_control.is_some() {
+        return Ok(());
+    }
+    let hdr = matches!(
+        source
+            .coding_independent_code_points
+            .map(|c| c.transfer_function),
+        Some(16 | 18)
+    );
+    let reduce = source.bit_depth == png::BitDepth::Sixteen && !hdr;
+    // Stored pixels: orientation belongs to `finish_heif_output`, which
+    // reads the EXIF this rewrite keeps.
+    let img = image::ImageReader::open(path)?
+        .with_guessed_format()?
+        .decode()
+        .map_err(failed)?;
+    let img = strip_opaque_alpha(img);
+    let img = if reduce {
+        match img {
+            DynamicImage::ImageLuma16(_) => DynamicImage::ImageLuma8(img.to_luma8()),
+            DynamicImage::ImageLumaA16(_) => DynamicImage::ImageLumaA8(img.to_luma_alpha8()),
+            img if img.color().has_alpha() => DynamicImage::ImageRgba8(img.to_rgba8()),
+            img => DynamicImage::ImageRgb8(img.to_rgb8()),
+        }
+    } else {
+        img
+    };
+    let name = path
+        .file_name()
+        .map_or_else(Default::default, |n| n.to_string_lossy().into_owned());
+    let tmp = path.with_file_name(format!(".{name}.optimizing.png"));
+    let written = write_png(&img, &source, &tmp, true).and_then(|()| {
+        let smaller = std::fs::metadata(&tmp)?.len() < std::fs::metadata(path)?.len();
+        if reduce || smaller {
+            std::fs::rename(&tmp, path)?;
+        }
+        Ok(())
+    });
+    let _ = std::fs::remove_file(&tmp);
+    written
+}
+
+/// Drops an alpha channel that is fully opaque on every pixel, which saves
+/// a quarter of an RGBA image's data before compression. Real transparency
+/// stays untouched.
+pub(crate) fn strip_opaque_alpha(img: DynamicImage) -> DynamicImage {
+    match img {
+        DynamicImage::ImageRgba8(ref px) if px.pixels().all(|p| p.0[3] == u8::MAX) => {
+            DynamicImage::ImageRgb8(img.to_rgb8())
+        }
+        DynamicImage::ImageLumaA8(ref px) if px.pixels().all(|p| p.0[1] == u8::MAX) => {
+            DynamicImage::ImageLuma8(img.to_luma8())
+        }
+        DynamicImage::ImageRgba16(ref px) if px.pixels().all(|p| p.0[3] == u16::MAX) => {
+            DynamicImage::ImageRgb16(img.to_rgb16())
+        }
+        DynamicImage::ImageLumaA16(ref px) if px.pixels().all(|p| p.0[1] == u16::MAX) => {
+            DynamicImage::ImageLuma16(img.to_luma16())
+        }
+        img => img,
+    }
+}
+
+/// Writes `img` to `path` as PNG with `source`'s color tags and pixel ratio,
+/// and with `keep_metadata` its EXIF and text chunks too. An alpha channel
+/// that is opaque everywhere is dropped.
+fn write_png(
+    img: &DynamicImage,
+    source: &png::Info<'static>,
+    path: &Path,
+    keep_metadata: bool,
+) -> Result<()> {
     let mut info = png::Info::with_size(img.width(), img.height());
     info.pixel_dims = source.pixel_dims;
     info.source_gamma = source.gamma();
     info.source_chromaticities = source.chromaticities();
     info.srgb = source.srgb;
     info.icc_profile = source.icc_profile.clone();
-    let bytes = match img.clone() {
+    if keep_metadata {
+        info.exif_metadata = source.exif_metadata.clone();
+        info.uncompressed_latin1_text = source.uncompressed_latin1_text.clone();
+        info.compressed_latin1_text = source.compressed_latin1_text.clone();
+        info.utf8_text = source.utf8_text.clone();
+    }
+    let bytes = match strip_opaque_alpha(img.clone()) {
         DynamicImage::ImageLuma16(gray) => {
             info.color_type = png::ColorType::Grayscale;
             info.bit_depth = png::BitDepth::Sixteen;
@@ -261,10 +358,10 @@ fn write_png(img: &DynamicImage, source: &png::Info<'static>, path: &Path) -> Re
         }
     };
     let mut out = BufWriter::new(File::create(path)?);
-    let mut writer = png::Encoder::with_info(&mut out, info)
-        .map_err(failed)?
-        .write_header()
-        .map_err(failed)?;
+    let mut encoder = png::Encoder::with_info(&mut out, info).map_err(failed)?;
+    encoder.set_compression(png::Compression::Balanced);
+    encoder.set_filter(png::Filter::Adaptive);
+    let mut writer = encoder.write_header().map_err(failed)?;
     // png 0.18 decodes cICP, but its encoder does not emit it from Info.
     if let Some(cicp) = source.coding_independent_code_points {
         writer
@@ -406,7 +503,8 @@ const WEBP_MAX: u32 = libwebp_sys::WEBP_MAX_DIMENSION;
 
 /// Converts pixels to what `to`'s encoder accepts. These encoders take only
 /// 8-bit pixels, and ICO requires RGBA PNG data even from an RGB source.
-/// PNG and TIFF keep higher precision.
+/// PNG and TIFF keep higher precision; PNG drops an alpha channel that is
+/// opaque everywhere.
 fn prepare(img: DynamicImage, to: &str) -> DynamicImage {
     match to {
         "ico" | "gif" | "qoi" | "avif" => DynamicImage::ImageRgba8(img.to_rgba8()),
@@ -421,8 +519,10 @@ fn prepare(img: DynamicImage, to: &str) -> DynamicImage {
                 DynamicImage::ImageRgb32F(_) | DynamicImage::ImageRgba32F(_)
             ) =>
         {
-            DynamicImage::ImageRgba16(img.to_rgba16())
+            strip_opaque_alpha(DynamicImage::ImageRgba16(img.to_rgba16()))
         }
+        // An alpha channel that is opaque everywhere only costs space.
+        "png" => strip_opaque_alpha(img),
         _ => img,
     }
 }
@@ -567,7 +667,13 @@ fn encode_into<W: Write + std::io::Seek>(
         ),
         "gif" => return gif(img, w),
         "png" => {
-            let mut encoder = image::codecs::png::PngEncoder::new(&mut w);
+            // `PngEncoder::new` picks the fast setting, which leaves photos
+            // far larger than other encoders do.
+            let mut encoder = image::codecs::png::PngEncoder::new_with_quality(
+                &mut w,
+                image::codecs::png::CompressionType::Default,
+                image::codecs::png::FilterType::Adaptive,
+            );
             with_icc(&mut encoder);
             img.write_with_encoder(encoder)
         }
@@ -1035,10 +1141,11 @@ mod tests {
             let decoded = image::open(out).unwrap();
             assert_eq!(
                 decoded.color(),
-                if to == "exr" {
-                    image::ColorType::Rgba32F
-                } else {
-                    image::ColorType::Rgba16
+                match to {
+                    "exr" => image::ColorType::Rgba32F,
+                    // The alpha is opaque everywhere, so PNG leaves it out.
+                    "png" => image::ColorType::Rgb16,
+                    _ => image::ColorType::Rgba16,
                 }
             );
             assert_eq!(decoded.to_rgba16(), img.to_rgba16());
@@ -1071,6 +1178,177 @@ mod tests {
             std::fs::metadata(&files[0]).unwrap().len()
         };
         assert!(size(20) < size(95));
+    }
+
+    #[test]
+    fn png_drops_only_an_opaque_alpha_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        let rgb = photo(96, 64).to_rgb8();
+        let opaque = dir.path().join("opaque.png");
+        DynamicImage::ImageRgba8(DynamicImage::ImageRgb8(rgb.clone()).to_rgba8())
+            .save(&opaque)
+            .unwrap();
+        let back = run(&opaque, "png", &Options::default());
+        assert_eq!(back.color(), image::ColorType::Rgb8);
+        assert_eq!(back.to_rgb8(), rgb);
+        let out = tempfile::tempdir().unwrap();
+        let png = format_by_id("png").unwrap();
+        let (cancel, options) = (Cancel::new(), Options::default());
+        let ctx = Ctx::new(Step { from: png, to: png }, &options, &|_| {}, &cancel);
+        let files = ImageEngine.convert(&ctx, &opaque, out.path()).unwrap();
+        let (before, after) = (
+            std::fs::metadata(&opaque).unwrap().len(),
+            std::fs::metadata(&files[0]).unwrap().len(),
+        );
+        assert!(after < before, "{after} >= {before}");
+
+        let mut clear = DynamicImage::ImageRgb8(rgb).to_rgba8();
+        clear.get_pixel_mut(3, 4).0[3] = 254;
+        clear.get_pixel_mut(10, 20).0[3] = 0;
+        let src = dir.path().join("clear.png");
+        clear.save(&src).unwrap();
+        let back = run(&src, "png", &Options::default());
+        assert_eq!(back.color(), image::ColorType::Rgba8);
+        assert_eq!(back.to_rgba8(), clear);
+
+        // Gray and 16-bit follow the same rule.
+        let la = DynamicImage::ImageLumaA16(image::ImageBuffer::from_pixel(
+            2,
+            2,
+            image::LumaA([1234u16, 65535]),
+        ));
+        assert!(matches!(
+            strip_opaque_alpha(la),
+            DynamicImage::ImageLuma16(_)
+        ));
+        let la = DynamicImage::ImageLumaA8(image::GrayAlphaImage::from_pixel(
+            2,
+            2,
+            image::LumaA([5, 200]),
+        ));
+        assert!(matches!(
+            strip_opaque_alpha(la),
+            DynamicImage::ImageLumaA8(_)
+        ));
+    }
+
+    /// Writes a 16-bit RGBA PNG the way `sips` does for an iPhone photo:
+    /// ten significant bits, an opaque alpha channel and an ICC profile,
+    /// plus `cicp` when given.
+    fn sips_like_png(
+        path: &Path,
+        w: u32,
+        h: u32,
+        icc: &[u8],
+        cicp: Option<png::CodingIndependentCodePoints>,
+    ) -> image::ImageBuffer<image::Rgba<u16>, Vec<u16>> {
+        let base = photo(w, h).to_rgb8();
+        let mut seed = 0x9e37_79b9_u32;
+        let px = image::ImageBuffer::from_fn(w, h, |x, y| {
+            let p = base.get_pixel(x, y).0;
+            image::Rgba(std::array::from_fn(|i| {
+                if i == 3 {
+                    return u16::MAX;
+                }
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                // Ten bits, scaled to sixteen.
+                let ten = ((p[i] as u32) << 2 | (seed & 3)) as u16;
+                ten << 6 | ten >> 4
+            }))
+        });
+        let mut info = png::Info::with_size(w, h);
+        info.color_type = png::ColorType::Rgba;
+        info.bit_depth = png::BitDepth::Sixteen;
+        info.icc_profile = Some(icc.to_vec().into());
+        let mut file = BufWriter::new(File::create(path).unwrap());
+        let mut writer = png::Encoder::with_info(&mut file, info)
+            .unwrap()
+            .write_header()
+            .unwrap();
+        if let Some(c) = cicp {
+            writer
+                .write_chunk(
+                    png::chunk::cICP,
+                    &[
+                        c.color_primaries,
+                        c.transfer_function,
+                        c.matrix_coefficients,
+                        u8::from(c.is_video_full_range_image),
+                    ],
+                )
+                .unwrap();
+        }
+        let bytes: Vec<u8> = px.as_raw().iter().flat_map(|v| v.to_be_bytes()).collect();
+        writer.write_image_data(&bytes).unwrap();
+        writer.finish().unwrap();
+        px
+    }
+
+    fn png_info(path: &Path) -> png::Info<'static> {
+        png::Decoder::new(std::io::BufReader::new(File::open(path).unwrap()))
+            .read_info()
+            .unwrap()
+            .info()
+            .clone()
+    }
+
+    #[test]
+    fn heif_png_goes_to_eight_bits_with_its_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("IMG_0001.png");
+        let icc: Vec<u8> = (0..548u32).map(|i| (i * 7 % 251) as u8).collect();
+        let deep = sips_like_png(&path, 320, 240, &icc, None);
+        let before = std::fs::metadata(&path).unwrap().len();
+        optimize_heif_png(&path).unwrap();
+        let after = std::fs::metadata(&path).unwrap().len();
+        assert!(
+            (after as f64) < before as f64 * 0.6,
+            "{after} is not 40% under {before}"
+        );
+        let info = png_info(&path);
+        assert_eq!(info.bit_depth, png::BitDepth::Eight);
+        assert_eq!(info.color_type, png::ColorType::Rgb);
+        assert_eq!(info.icc_profile.as_deref(), Some(&icc[..]));
+        let back = image::open(&path).unwrap();
+        assert_eq!(back.color(), image::ColorType::Rgb8);
+        let back = back.to_rgb8();
+        for (a, b) in deep.pixels().zip(back.pixels()) {
+            for i in 0..3 {
+                let want = (a.0[i] as f64 / 257.0).round() as i32;
+                assert!((want - b.0[i] as i32).abs() <= 1, "{a:?} vs {b:?}");
+            }
+        }
+        // Nothing left beside it.
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["IMG_0001.png"]);
+    }
+
+    #[test]
+    fn heif_png_keeps_hdr_depth() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hdr.png");
+        let pq = png::CodingIndependentCodePoints {
+            color_primaries: 9,
+            transfer_function: 16,
+            matrix_coefficients: 0,
+            is_video_full_range_image: true,
+        };
+        let deep = sips_like_png(&path, 64, 48, b"profile", Some(pq));
+        optimize_heif_png(&path).unwrap();
+        let info = png_info(&path);
+        assert_eq!(info.bit_depth, png::BitDepth::Sixteen);
+        assert_eq!(
+            info.coding_independent_code_points
+                .map(|c| c.transfer_function),
+            Some(16)
+        );
+        assert_eq!(info.icc_profile.as_deref(), Some(&b"profile"[..]));
+        assert_eq!(image::open(&path).unwrap().to_rgba16(), deep);
     }
 
     /// A photo-like image: smooth gradients plus noise, which compresses
@@ -1162,7 +1440,9 @@ mod tests {
             // keeps the full dimensions; PNG has to shrink.
             let back = image::open(&out).unwrap();
             if to == "png" {
-                assert!(back.width() < 512 && back.width() * 3 == back.height() * 4);
+                // Resizing rounds each edge, so the ratio is 4:3 to a pixel.
+                let (w, h) = (back.width(), back.height());
+                assert!(w < 512 && (w * 3).abs_diff(h * 4) <= 4, "{w}x{h}");
             } else if target >= 15_000 {
                 assert_eq!((back.width(), back.height()), (512, 384), "{to}");
             }

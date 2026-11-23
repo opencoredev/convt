@@ -1,6 +1,8 @@
-//! Windows and the pieces they share. The main window lists activity; Quick
-//! convert opens for files sent without a target; Settings and the first-run
-//! window are their own windows; the menu bar popover belongs to the tray.
+//! Windows and the pieces they share. The main window lists activity, takes
+//! dropped and added files in its composer, and holds Settings as a page;
+//! Quick convert opens for files sent without a target; conversions started
+//! without a window show the progress HUD; Settings also opens as a window
+//! from the tray and links; the menu bar popover belongs to the tray.
 
 mod about;
 mod account;
@@ -8,6 +10,7 @@ mod chrome;
 mod feedback;
 mod finder_guide;
 mod first_run;
+mod hud;
 mod main_window;
 pub mod menus;
 mod pack;
@@ -29,6 +32,7 @@ use theme::IconName;
 pub use about::AboutView;
 pub use finder_guide::FinderGuideView;
 pub use first_run::FirstRunView;
+pub use hud::HudView;
 pub use main_window::MainView;
 pub use popover::PopoverView;
 pub use quick::QuickView;
@@ -312,9 +316,14 @@ pub fn route(request: Request, cx: &mut App) {
             open_main(cx);
         }
         let silent = app.update(cx, |s, cx| s.convert_silently(&request, cx));
-        if let Err(e) = silent {
-            tracing::info!(reason = %e, "opening Quick convert instead of converting in place");
-            open_quick(request, cx);
+        match silent {
+            // With no window to show it, the HUD follows the conversion.
+            Ok(jobs) if !request.show_progress => show_hud(jobs, cx),
+            Ok(_) => {}
+            Err(e) => {
+                tracing::info!(reason = %e, "opening Quick convert instead of converting in place");
+                open_quick(request, cx);
+            }
         }
     } else {
         open_quick(request, cx);
@@ -425,11 +434,10 @@ pub fn show_about(cx: &mut App) {
     );
 }
 
-/// Quick convert's size: room for a typical image's format cards (four
-/// rows, with its own format to compress and HEIC on macOS), the Options
-/// row, where it runs and Save without scrolling. Opened options, video and
-/// long lists scroll.
-pub(super) const QUICK_SIZE: (f32, f32) = (600., 752.);
+/// Quick convert's size: room for a typical image's popular formats (two
+/// rows), More formats, the Options row, where it runs and Save without
+/// scrolling. Opened options, more formats and long lists scroll.
+pub(super) const QUICK_SIZE: (f32, f32) = (580., 640.);
 
 /// Quick convert's height, plus the title bar macOS draws inside it.
 pub(super) fn quick_height() -> Pixels {
@@ -548,13 +556,81 @@ pub fn show_license(key: Option<String>, cx: &mut App) {
     }
 }
 
+/// Shows the progress HUD for jobs started without a window, or adds them
+/// to the one showing. It opens near the top right of the primary display,
+/// never takes focus and stays out of the Dock.
+pub fn show_hud(jobs: Vec<crate::jobs::JobId>, cx: &mut App) {
+    if jobs.is_empty() {
+        return;
+    }
+    if let Some((handle, view)) = Open::<HudView>::get(cx) {
+        let more = jobs.clone();
+        if handle
+            .update(cx, |_, window, cx| {
+                view.update(cx, |v, cx| v.add(more, window, cx))
+            })
+            .is_ok()
+        {
+            return;
+        }
+    }
+    let app = model::shared(cx);
+    let hud = size(px(hud::SIZE.0), px(hud::SIZE.1));
+    let display = cx.primary_display();
+    let origin = display.as_ref().map_or(point(px(0.), px(0.)), |d| {
+        let area = d.visible_bounds();
+        point(
+            area.right() - hud.width - px(hud::MARGIN),
+            area.top() + px(hud::MARGIN),
+        )
+    });
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: hud })),
+        display_id: display.map(|d| d.id()),
+        titlebar: None,
+        kind: WindowKind::PopUp,
+        focus: false,
+        show: true,
+        is_movable: false,
+        is_resizable: false,
+        is_minimizable: false,
+        window_background: if hud::transparent() {
+            WindowBackgroundAppearance::Transparent
+        } else {
+            WindowBackgroundAppearance::Opaque
+        },
+        app_id: Some("convt".into()),
+        ..Default::default()
+    };
+    // Not `open_window`: the HUD brings back no Dock icon and needs no title
+    // bar drawn for it.
+    match gpui_kit::open_window(options, cx, |window, cx| {
+        cx.new(|cx| HudView::new(app, jobs, window, cx))
+    }) {
+        Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
+        Err(e) => tracing::warn!(error = %e, "could not show the progress HUD"),
+    }
+}
+
+/// Whether no window is open but the HUD. The HUD alone doesn't keep convt
+/// open: with no tray, it quits once silent conversions are done.
+pub(crate) fn only_hud_open(cx: &App) -> bool {
+    let hud = Open::<HudView>::get(cx).map(|(handle, _)| handle);
+    cx.windows().iter().all(|w| Some(*w) == hud)
+}
+
 pub fn open_quick(request: Request, cx: &mut App) {
     let app = model::shared(cx);
     // Status is read offline; it may have changed through the CLI.
     app.update(cx, |s, cx| s.refresh_pack(cx));
     let options = window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx);
     match open_window(options, cx, |window, cx| {
-        cx.new(|cx| QuickView::new(app, request, window, cx))
+        cx.new(|cx| {
+            let view = QuickView::new(app, request, window, cx);
+            // Enter converts and Escape closes from the start.
+            window.focus(&view.focus, cx);
+            view
+        })
     }) {
         // Each request gets its own window; the global tracks the newest.
         Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
