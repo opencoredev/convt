@@ -1,5 +1,37 @@
 # @convt/desktop
 
+## 0.6.0
+
+### Minor Changes
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Cloud conversions now use your conversion options. In the desktop app, Quick convert shows the same quality, size, codec and background controls in the cloud as on your computer. The cloud converter on convt.app lets you pick a quality and a size, and the API takes an optional `options` object when you create a job.
+
+- [#141](https://github.com/opencoredev/convt/pull/141) [`64037a1`](https://github.com/opencoredev/convt/commit/64037a1c68aa5776fa84df5d43ecf40484def34b) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Compress a file without changing its format (`convt clip.mp4 --to mp4 --quality 60`, or the file's own format in Quick convert), and fit output under a size with `--target-size 10MB` or the new Max file size control. WebP is now lossy by default and follows `--quality` (100 stays lossless), so photos no longer come out larger than their JPEG. New `--strip-metadata`, `--trim-start`, `--trim-end` and `--fps` options, and a Strip metadata checkbox in Quick convert. Photos with an EXIF rotation now keep it.
+
+- [#175](https://github.com/opencoredev/convt/pull/175) [`9fe926b`](https://github.com/opencoredev/convt/commit/9fe926b41a2231869fd4ad2f86f1f43364207ad6) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Redesign the desktop app around an Alloy light/dark palette, unified Activity and inline composer, floating Progress HUD, revamped Quick Convert, master-detail Right-click menu designer, and starter Presets. Fix oversized 16-bit SDR PNGs and EXIF orientation on macOS HEIC-to-PNG conversions, and keep the macOS Finder Sync context menu in sync with selected items.
+
+- [#150](https://github.com/opencoredev/convt/pull/150) [`6cf388c`](https://github.com/opencoredev/convt/commit/6cf388c580763da1f76827da3b3dfc66355ea22f) Thanks [@leoisadev1](https://github.com/leoisadev1)! - convt is now sold once, with no subscription. Desktop is $39 once, and Desktop + Cloud is $69 once: a Desktop license plus a year of cloud conversions from your phone, your browser or the app, which doesn't renew. Buying it again adds another year. Licenses bought at $29 keep working, and existing Pro subscriptions keep renewing, switching and canceling as before. In the desktop app, signing in installs your Desktop license, so there is no key to paste, and Cloud works while the account has cloud conversions.
+
+- [#175](https://github.com/opencoredev/convt/pull/175) [`9fe926b`](https://github.com/opencoredev/convt/commit/9fe926b41a2231869fd4ad2f86f1f43364207ad6) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Add desktop usage statistics with a Settings opt-out and DO_NOT_TRACK support. Statistics never include file names, paths, content or error messages. Signing in links usage to your account.
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Nine new formats. Markdown converts to HTML and plain text, and HTML, Word and other documents convert to Markdown. CSV, TSV, JSON and YAML convert between each other, and CSV and TSV become HTML, Markdown or text tables, all without the document pack. SRT and WebVTT subtitles convert to each other and to plain text, and MP4, MOV, MKV and WebM videos give up their subtitle track as SRT or VTT. AIFF, CAF and M4R (iPhone ringtone) audio join the audio formats.
+
+### Patch Changes
+
+- [#134](https://github.com/opencoredev/convt/pull/134) [`7e7bba3`](https://github.com/opencoredev/convt/commit/7e7bba38f9c9e39c21464d09d080266dda9cccab) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The email code boxes on convt.app submit as soon as the last digit is typed or pasted, show when the code is being checked, and shake and clear on a wrong code.
+
+- [#135](https://github.com/opencoredev/convt/pull/135) [`13be1df`](https://github.com/opencoredev/convt/commit/13be1df1c3446e9da4bdd155f2a22c1fdb7af3b0) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Onboarding no longer has a separate Continue with Email step. Continue with Google goes straight to Google, and Other ways to sign in opens convt.app's sign-in page, where you can type your email right away.
+
+- [#140](https://github.com/opencoredev/convt/pull/140) [`8003d19`](https://github.com/opencoredev/convt/commit/8003d196f9dfde6e666bd36e9c252b4940d2a811) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Video encodes to H.264 and HEVC on the graphics hardware when it works: VideoToolbox on Macs and NVENC on NVIDIA cards. Conversions finish sooner and leave the CPU free. If the hardware can't handle a file, convt encodes it in software as before. Set `CONVT_HWACCEL=0` to always use software.
+
+- [#159](https://github.com/opencoredev/convt/pull/159) [`75ceb2c`](https://github.com/opencoredev/convt/commit/75ceb2cbc216b1a6818e65504a205b3ee49bb93f) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Update the Markdown parser, pulldown-cmark, to 0.13.6 for RUSTSEC-2026-0433. convt does not turn on the wikilink syntax that advisory affects, so conversions behave the same.
+
+- [#169](https://github.com/opencoredev/convt/pull/169) [`88abb65`](https://github.com/opencoredev/convt/commit/88abb6572d3f8984fd2321b085716bdbd066d3d1) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Update the Rust dependencies tar to 0.4.46 (GHSA-3pv8-6f4r-ffg2), tokio to 1.53.3 (RUSTSEC-2026-0386), ctutils to 0.4.4 (RUSTSEC-2026-0385), roxmltree to 0.21.2 in the conversion engine (CVE-2026-92987; the copy at 0.20.0 used by the desktop app's SVG rendering has no fix in its release line yet), heapless to 0.9.4 (RUSTSEC-2026-0574 to RUSTSEC-2026-0582), inout to 0.2.6 (GHSA-2943-gp7x-qg39) and url to 2.5.9 (GHSA-hrj5-67jp-wqp9). Conversions behave the same.
+
+- [#154](https://github.com/opencoredev/convt/pull/154) [`f5bb2e3`](https://github.com/opencoredev/convt/commit/f5bb2e3c24bdac2a7e13f5dc4d8b1f67cf83c489) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Update dependencies with known security fixes: rustls, rustls-webpki, webpki-roots, rustix and tar in the app and CLI, and seroval, undici, vite and other packages in the website.
+
+- [#171](https://github.com/opencoredev/convt/pull/171) [`8aa9dbb`](https://github.com/opencoredev/convt/commit/8aa9dbbe01260087ef9c254a399510f2e8ec5948) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Fitting a video under a target size works again on Macs that encode with VideoToolbox. The hardware encoder can't go below a certain bitrate on busy footage, so convt kept shrinking the budget and refused with "too small" even when the size was reachable. Now, when a hardware encode (VideoToolbox or NVENC) comes out too big, convt encodes it again in software at the same budget, which is slower but lands under the size.
+
 ## 0.5.0
 
 ### Minor Changes
