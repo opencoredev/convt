@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import { guidePath, guides } from "#/lib/guides";
 import { llmsTxt } from "#/lib/llms";
-import { guidesLastmod, sitemapEntries } from "#/lib/sitemap";
+import {
+  buildSitemapEntries,
+  guidesLastmod,
+  guidesPublishedLastmod,
+  sitemapEntries,
+} from "#/lib/sitemap";
 import { SITE_ORIGIN, routes, sitemapPages } from "#/lib/site";
 
 describe("sitemap pages", () => {
@@ -21,26 +26,63 @@ describe("sitemap pages", () => {
     expect(paths.some((p) => p.startsWith("/docs"))).toBe(false);
   });
 
-  test("pages that list guides are dated from the newest guide added or listing edit", () => {
-    const expected =
+  test("pages that list guides are dated from the fields they render", () => {
+    const expectedPublished =
+      guides
+        .map((g) => g.published)
+        .sort()
+        .at(-1) ?? "";
+    const expectedListing =
       guides
         .map((g) =>
           "listingUpdated" in g && g.listingUpdated > g.published ? g.listingUpdated : g.published,
         )
         .sort()
         .at(-1) ?? "";
-    expect(guidesLastmod).toBe(expected);
-    for (const path of [
-      routes.formats,
-      routes.guides,
-      routes.macFileConverter,
-      routes.commandLineConverter,
-    ]) {
+    expect(guidesPublishedLastmod).toBe(expectedPublished);
+    expect(guidesLastmod).toBe(expectedListing);
+
+    // /formats renders headings/links only, so a description-only edit does not advance it.
+    const formats = sitemapEntries.find((e) => e.path === routes.formats);
+    expect(formats?.lastmod).toBe(guidesPublishedLastmod);
+
+    // Card listings render heading + description, so listing edits advance them.
+    for (const path of [routes.guides, routes.macFileConverter, routes.commandLineConverter]) {
       const entry = sitemapEntries.find((e) => e.path === path);
       expect((entry?.lastmod ?? "") >= guidesLastmod, path).toBe(true);
     }
     const index = sitemapEntries.find((e) => e.path === routes.guides);
     expect(index?.lastmod).toBe(guidesLastmod);
+  });
+
+  test("body-only guide edits do not move listing pages, and description edits do not move /formats", () => {
+    const entries = buildSitemapEntries(
+      [
+        { path: routes.formats, lastmod: "2026-10-30", listsGuides: "headings" },
+        { path: routes.macFileConverter, lastmod: "2026-11-03", listsGuides: "cards" },
+        { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: "cards" },
+      ],
+      [
+        {
+          slug: "heic-to-jpg-mac",
+          published: "2026-11-10",
+          updated: "2026-11-28",
+        },
+        {
+          slug: "mov-to-mp4-mac",
+          published: "2026-10-30",
+          updated: "2026-11-25",
+          listingUpdated: "2026-11-20",
+        },
+      ],
+    );
+    const byPath = new Map(entries.map((e) => [e.path, e.lastmod]));
+    expect(byPath.get(routes.formats)).toBe("2026-11-10");
+    expect(byPath.get(routes.guides)).toBe("2026-11-20");
+    expect(byPath.get(routes.macFileConverter)).toBe("2026-11-20");
+    expect(byPath.get(routes.commandLineConverter)).toBe("2026-11-20");
+    expect(byPath.get(guidePath("heic-to-jpg-mac"))).toBe("2026-11-28");
+    expect(byPath.get(guidePath("mov-to-mp4-mac"))).toBe("2026-11-25");
   });
 
   test("lists every fixed page, /guides and each guide once", () => {

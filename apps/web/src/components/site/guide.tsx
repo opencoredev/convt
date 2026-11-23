@@ -149,8 +149,14 @@ function GuideRailCard({ downloadUrl }: { downloadUrl: string }) {
     >
       <p className="font-mono text-[11px]/4 text-ink-2 uppercase">convt</p>
       <p className="text-[13px]/5 text-pretty text-ink-2">
-        One app for video, audio, images and documents. Local conversions stay on your machine. $39
-        once, every future desktop update.
+        One app for video, audio, images and documents. Local conversions stay on your machine.{" "}
+        <a
+          href={routes.pricing}
+          className={cx("rounded-sm text-ink underline underline-offset-2", focusRing)}
+        >
+          $39 once
+        </a>
+        , every future desktop update.
       </p>
       <a href={downloadUrl} className={cx(primaryButton, "w-full", focusRing)}>
         Get convt

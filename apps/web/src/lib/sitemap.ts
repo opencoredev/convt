@@ -1,31 +1,66 @@
-import { guidePath, guides } from "#/lib/guides";
+import { guidePath, guides, type ListedGuide } from "#/lib/guides";
 import { routes, sitemapPages } from "#/lib/site";
 
 export type SitemapEntry = { path: string; lastmod: string };
 
+type SitemapPageInput = {
+  readonly path: string;
+  readonly lastmod: string;
+  readonly listsGuides?: "headings" | "cards";
+};
+
+type SitemapGuideInput = Pick<ListedGuide, "slug" | "published" | "updated" | "listingUpdated">;
+
 /** The later of two `YYYY-MM-DD` days; the format sorts as text. */
 const later = (a: string, b: string): string => (a > b ? a : b);
 
-/**
- * The newest guide's `published` or `listingUpdated` day: a page that lists guides changes when
- * a guide is added or when its listing heading/description is edited. Edits inside a guide's body
- * only move that guide's own `updated` date.
- */
-export const guidesLastmod: string = guides
-  .map((guide): string =>
-    "listingUpdated" in guide ? later(guide.published, guide.listingUpdated) : guide.published,
-  )
-  .reduce(later);
+/** Newest `published` day across guides; moves pages that only render guide headings/links. */
+function newestPublished(list: readonly SitemapGuideInput[]): string {
+  return list.map((guide): string => guide.published).reduce(later);
+}
 
 /**
- * Every URL in /sitemap.xml with its `lastmod`: the fixed pages (dated from the newest guide
- * when they list guides), then /guides and each guide.
+ * Newest `published` or `listingUpdated` day across guides; moves pages that render guide cards
+ * (heading + description). Body-only edits (`updated`) only move that guide's own entry.
  */
-export const sitemapEntries: readonly SitemapEntry[] = [
-  ...sitemapPages.map((page): SitemapEntry => ({
-    path: page.path,
-    lastmod: "listsGuides" in page ? later(page.lastmod, guidesLastmod) : page.lastmod,
-  })),
-  { path: routes.guides, lastmod: guidesLastmod },
-  ...guides.map((guide) => ({ path: guidePath(guide.slug), lastmod: guide.updated })),
-];
+function newestListing(list: readonly SitemapGuideInput[]): string {
+  return list
+    .map((guide): string =>
+      guide.listingUpdated ? later(guide.published, guide.listingUpdated) : guide.published,
+    )
+    .reduce(later);
+}
+
+/** Newest guide `published` day; pages that list only headings/links (/formats) use this. */
+export const guidesPublishedLastmod: string = newestPublished(guides);
+
+/** Newest guide `published` or `listingUpdated` day; pages that list guide cards use this. */
+export const guidesLastmod: string = newestListing(guides);
+
+/**
+ * Builds every URL in /sitemap.xml with its `lastmod`: the fixed pages (dated from the guides
+ * they render), then /guides and each guide.
+ */
+export function buildSitemapEntries(
+  pages: readonly SitemapPageInput[],
+  list: readonly SitemapGuideInput[],
+): SitemapEntry[] {
+  const published = newestPublished(list);
+  const listing = newestListing(list);
+  return [
+    ...pages.map((page): SitemapEntry => {
+      if (page.listsGuides === "headings") {
+        return { path: page.path, lastmod: later(page.lastmod, published) };
+      }
+      if (page.listsGuides === "cards") {
+        return { path: page.path, lastmod: later(page.lastmod, listing) };
+      }
+      return { path: page.path, lastmod: page.lastmod };
+    }),
+    { path: routes.guides, lastmod: listing },
+    ...list.map((guide) => ({ path: guidePath(guide.slug), lastmod: guide.updated })),
+  ];
+}
+
+/** Every URL in /sitemap.xml with its `lastmod`. */
+export const sitemapEntries: readonly SitemapEntry[] = buildSitemapEntries(sitemapPages, guides);
