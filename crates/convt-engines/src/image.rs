@@ -731,13 +731,49 @@ impl PngMeta {
 }
 
 /// The EXIF orientation of the PNG at `path`, from its one EXIF wherever
-/// the chunk sits ([`PngMeta`]). [`png::Decoder`] and so the `image` crate
-/// see only an `eXIf` before the image data; this also finds one after it.
+/// the chunk sits. [`png::Decoder`] and so the `image` crate see only an
+/// `eXIf` before the image data; this also finds one after it, seeking past
+/// every other chunk without retaining text or HDR metadata.
 /// `None` when the file has no EXIF, no orientation tag, or can't be read.
 pub(crate) fn png_exif_orientation(path: &Path) -> Option<image::metadata::Orientation> {
-    let meta = PngMeta::read(path).ok()?;
-    image::metadata::Orientation::from_exif_chunk(meta.info.exif_metadata.as_deref()?)
+    use std::io::Read;
+    let mut file = std::io::BufReader::new(File::open(path).ok()?);
+    let mut signature = [0u8; 8];
+    file.read_exact(&mut signature).ok()?;
+    if signature != [137, 80, 78, 71, 13, 10, 26, 10] {
+        return None;
+    }
+    let mut after_image = false;
+    loop {
+        let mut head = [0u8; 8];
+        if file.read_exact(&mut head).is_err() {
+            return None;
+        }
+        let len = u32::from_be_bytes([head[0], head[1], head[2], head[3]]);
+        let kind = [head[4], head[5], head[6], head[7]];
+        match &kind {
+            b"IEND" => return None,
+            b"IDAT" => after_image = true,
+            b"eXIf" if len <= MAX_TRAILING_CHUNK => {
+                let mut payload = vec![0; len as usize];
+                let mut crc = [0u8; 4];
+                if file.read_exact(&mut payload).is_err() || file.read_exact(&mut crc).is_err() {
+                    return None;
+                }
+                if after_image && png_crc(&kind, &payload) != u32::from_be_bytes(crc) {
+                    return None;
+                }
+                return image::metadata::Orientation::from_exif_chunk(&payload);
+            }
+            _ => {}
+        }
+        file.seek_relative(i64::from(len) + 4).ok()?;
+    }
 }
+
+/// Cap total retained trailing metadata across all chunks so a small PNG with
+/// hundreds of megabytes of trailing text chunks cannot bloat memory.
+const MAX_TRAILING_TOTAL: usize = 32 * 1024 * 1024;
 
 /// The [`HDR_CHUNKS`] anywhere in a PNG, and the [`TRAILING_METADATA`]
 /// chunks and the first `eXIf` after its first `IDAT`, reading up to `IEND`
@@ -751,6 +787,7 @@ fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
     file.read_exact(&mut signature)?;
     let mut raw = RawChunks::default();
     let mut after_image = false;
+    let mut trailing_bytes: usize = 0;
     loop {
         let mut head = [0u8; 8];
         if file.read_exact(&mut head).is_err() {
@@ -766,9 +803,14 @@ fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
         // HDR chunks are a few bytes long; anything larger is not one.
         let keep_hdr = HDR_CHUNKS.contains(&kind) && len <= 64;
         let is_exif = &kind == b"eXIf" && raw.trailing_exif.is_none();
+        let fits_budget = is_exif
+            || trailing_bytes
+                .checked_add(len as usize)
+                .is_some_and(|total| total <= MAX_TRAILING_TOTAL);
         let keep_trailing = after_image
             && (TRAILING_METADATA.contains(&kind) || is_exif)
-            && len <= MAX_TRAILING_CHUNK;
+            && len <= MAX_TRAILING_CHUNK
+            && fits_budget;
         if !(keep_hdr || keep_trailing) {
             file.seek_relative(i64::from(len) + 4)?;
             continue;
@@ -789,6 +831,7 @@ fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
         } else if is_exif {
             raw.trailing_exif = Some(payload);
         } else {
+            trailing_bytes += payload.len();
             raw.trailing.push((kind, payload));
         }
     }

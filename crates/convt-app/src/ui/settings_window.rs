@@ -1165,7 +1165,6 @@ impl SettingsView {
                 .grid_cols(3)
                 .gap(px(space::SM))
                 .children(STARTER_PRESETS.iter().map(|starter| {
-                    let app = self.app.clone();
                     let s = *starter;
                     theme::card(p)
                         .p(px(14.))
@@ -1201,19 +1200,26 @@ impl SettingsView {
                                 .icon(IconName::Plus)
                                 .small()
                                 .build(p)
-                                .on_click(move |_, _, cx| {
-                                    let preset = Preset {
-                                        to: Some(s.to.into()),
-                                        options: Options {
-                                            quality: s.quality,
-                                            max_size: s.max_size,
-                                            video_height: s.video_height,
-                                            ..Options::default()
-                                        },
-                                    };
-                                    let _ = app
-                                        .update(cx, |st, cx| st.save_preset(s.name, &preset, cx));
-                                }),
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        let preset = Preset {
+                                            to: Some(s.to.into()),
+                                            options: Options {
+                                                quality: s.quality,
+                                                max_size: s.max_size,
+                                                video_height: s.video_height,
+                                                ..Options::default()
+                                            },
+                                        };
+                                        match this.app.update(cx, |st, cx| {
+                                            st.save_preset(s.name, &preset, cx)
+                                        }) {
+                                            Ok(()) => this.preset_error = None,
+                                            Err(e) => this.preset_error = Some(e),
+                                        }
+                                        cx.notify();
+                                    },
+                                )),
                             ),
                         )
                 }));

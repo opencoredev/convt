@@ -81,14 +81,23 @@ const RULE_KINDS: [(&str, &str, WatchKind, &str); 5] = [
     ),
 ];
 
-const RULE_TARGETS: [(&str, &str); 6] = [
+const RULE_IMAGE_TARGETS: [(&str, &str); 4] = [
     ("webp", "WebP"),
     ("jpeg", "JPEG"),
     ("png", "PNG"),
-    ("mp4", "MP4"),
-    ("mp3", "MP3"),
     ("pdf", "PDF"),
 ];
+
+const RULE_VIDEO_TARGETS: [(&str, &str); 2] = [("mp4", "MP4"), ("mp3", "MP3")];
+
+/// Target formats supported for each `RULE_KINDS` entry so the rule builder
+/// never offers impossible pairs like HEIC → MP3.
+fn targets_for_rule_kind(kind_index: usize) -> &'static [(&'static str, &'static str)] {
+    match kind_index {
+        2 | 4 => &RULE_VIDEO_TARGETS,
+        _ => &RULE_IMAGE_TARGETS,
+    }
+}
 
 pub struct MainView {
     app: Entity<AppState>,
@@ -1043,9 +1052,15 @@ impl MainView {
             .as_deref()
             .map(super::tilde)
             .unwrap_or_else(|| default_source.to_string());
+        let valid_targets = targets_for_rule_kind(draft.kind_index);
+        let to = if valid_targets.iter().any(|(id, _)| *id == draft.to) {
+            draft.to
+        } else {
+            valid_targets[0].0
+        };
         let rule = Automation {
             name: name.to_string(),
-            to: draft.to.to_string(),
+            to: to.to_string(),
             source,
             detail: if draft.copy {
                 "copy to clipboard".into()
@@ -1130,17 +1145,22 @@ impl MainView {
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if let Some(d) = &mut this.new_rule {
                                 d.kind_index = i;
+                                let valid = targets_for_rule_kind(i);
+                                if !valid.iter().any(|(id, _)| *id == d.to) {
+                                    d.to = valid[0].0;
+                                }
                                 cx.notify();
                             }
                         }))
                     }),
             )
             .into_any_element();
+        let valid_targets = targets_for_rule_kind(draft.kind_index);
         let targets = div()
             .flex()
             .flex_wrap()
             .gap(px(6.))
-            .children(RULE_TARGETS.into_iter().map(|(id, label)| {
+            .children(valid_targets.iter().copied().map(|(id, label)| {
                 pill(
                     SharedString::from(format!("new-rule-to-{id}")),
                     label,
