@@ -86,7 +86,7 @@ actions:
       description: Signed URL. Send the file bytes to it with `PUT`. `null` for a `source_url` job, and for an idempotent replay of a job that was already started.
   - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_expires_in
     update:
-      description: Seconds until `upload_url` stops accepting uploads, 900, or `null` when there is no `upload_url`.
+      description: "Seconds until `upload_url` stops accepting uploads: 900 for a new job, less for a replay close to the job's expiry, `null` when there is no `upload_url`."
   - target: $.paths['/v1/jobs'].post.responses['400']
     update:
       description: "`invalid_request` (the body is not JSON or misses a required field), `unsupported_format`, `invalid_options` or `file_too_large`."

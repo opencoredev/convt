@@ -9,7 +9,7 @@ Each API key can make **120 requests per minute** across every job route. The wi
 
 The limit is per key, not per account. Uploads and downloads through signed URLs do not count, and neither does `GET /v1/formats`.
 
-Every response to a job route carries the window's state:
+Every authenticated response to a job route carries the window's state (a request refused for a missing or bad key has no window, so no headers):
 
 | Header                  | Value                                                                                                                                                          |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |

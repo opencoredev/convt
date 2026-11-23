@@ -134,8 +134,14 @@ test("conversion options are sent with the job, and left out when unset", async 
       target_format: "jpeg",
       input_bytes: 3,
       options: { quality: 40, max_size: 512 },
+      input_sha256: "8f8cbb7dcf46e0bc7d53265749a6c17d116093a6ba95e442764060c76fd4a86c",
     },
-    { input_format: "png", target_format: "jpeg", input_bytes: 3 },
+    {
+      input_format: "png",
+      target_format: "jpeg",
+      input_bytes: 3,
+      input_sha256: "8f8cbb7dcf46e0bc7d53265749a6c17d116093a6ba95e442764060c76fd4a86c",
+    },
   ]);
 });
 test("every convert sends an Idempotency-Key and retries a lost create with it", async () => {
@@ -434,6 +440,59 @@ test("an abort while hashing a caller-keyed file stops at once and sends nothing
   const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
     .convert(stalled, { from: "svg", to: "png", idempotencyKey: "k", signal: controller.signal })
     .catch((e) => e);
+  expect(Date.now() - started).toBeLessThan(200);
+  expect(String(error.message ?? error)).toContain("user cancelled");
+  expect(calls).toBe(0);
+});
+test("recovering with the key an error reports sends the identical request", async () => {
+  const bodies: string[] = [];
+  const keys: (string | null)[] = [];
+  let first = true;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs")) {
+      bodies.push(String(init?.body));
+      keys.push(new Headers(init?.headers).get("idempotency-key"));
+      if (first) {
+        first = false;
+        throw new TypeError("connection reset");
+      }
+      return Response.json({ job, upload_url: "https://objects.test/in" });
+    }
+    if (url.includes("objects.test")) return new Response("", { status: 200 });
+    if (url.endsWith("/download"))
+      return Response.json({ outputs: [{ name: "input.png", url: "https://objects.test/out" }] });
+    return Response.json({ ...job, status: "succeeded" });
+  }) as typeof fetch;
+  const client = new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 });
+  const error = await client.convert(new Blob(["svg"]), { from: "svg", to: "png" }).catch((e) => e);
+  expect(error.idempotencyKey).toBeTruthy();
+  await client.convert(new Blob(["svg"]), {
+    from: "svg",
+    to: "png",
+    idempotencyKey: error.idempotencyKey,
+  });
+  expect(keys[1]).toBe(keys[0]);
+  expect(bodies[1]).toBe(bodies[0]);
+});
+test("an abort right as convert starts stops before reading the file", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    calls++;
+    return Response.json({});
+  }) as typeof fetch;
+  class StalledBlob extends Blob {
+    override stream(): ReadableStream<Uint8Array<ArrayBuffer>> {
+      return new ReadableStream<Uint8Array<ArrayBuffer>>({ pull: () => new Promise(() => {}) });
+    }
+  }
+  const controller = new AbortController();
+  const started = Date.now();
+  const pending = new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convert(new StalledBlob(["0123456789"]), { from: "svg", to: "png", signal: controller.signal })
+    .catch((e) => e);
+  controller.abort(new Error("user cancelled"));
+  const error = await pending;
   expect(Date.now() - started).toBeLessThan(200);
   expect(String(error.message ?? error)).toContain("user cancelled");
   expect(calls).toBe(0);

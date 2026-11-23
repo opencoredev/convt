@@ -136,6 +136,8 @@ async function sha256Hex(blob: Blob, signal: AbortSignal): Promise<string> {
     );
     return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
   }
+  // The import above may have taken a while; an abort during it ends here.
+  signal.throwIfAborted();
   const hash = crypto.createHash("sha256");
   const reader = blob.stream().getReader();
   const stop = () => void reader.cancel(signal.reason).catch(() => {});
@@ -583,7 +585,9 @@ export class Convt {
     // aborted. Otherwise errors carry the job id, to resume or cancel explicitly.
     const ownsJob = options.idempotencyKey === undefined;
     const idempotencyKey = options.idempotencyKey ?? newIdempotencyKey();
-    if (!ownsJob && body) input = { ...input, input_sha256: await sha256Hex(body, signal) };
+    // Always fingerprint the bytes, so a later recovery with the key this call
+    // reports sends exactly the same request.
+    if (body) input = { ...input, input_sha256: await sha256Hex(body, signal) };
     const created = await this.create(input, { signal, idempotencyKey });
     const context = { jobId: created.job.id, idempotencyKey };
     try {

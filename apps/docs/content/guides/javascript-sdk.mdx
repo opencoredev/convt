@@ -56,10 +56,9 @@ The client takes `{ apiKey, baseUrl, maxRetries }`. `baseUrl` defaults to `{{api
 
 Pass `idempotencyKey` (an order id, say) and a second run after a crash returns the same job instead of converting again. With your own key the SDK:
 
-- sends the file's SHA-256 as `input_sha256`, so a retry that would upload different bytes under that key fails with `idempotency_key_reused` instead of converting them;
 - never cancels the job for you, because another call with the same key may be waiting on it. A deadline or abort throws `stopped_waiting` with `jobId`; call `convt.cancel(jobId)` if you want the job stopped.
 
-Without a key, each call uses its own and cancels its job when it fails or you abort, so the reservation is released.
+Without a key, each call uses its own and cancels its job when it fails or you abort, so the reservation is released. Either way the SDK sends the file's SHA-256 as `input_sha256`, so retrying with the key an error reports, but different bytes, fails with `idempotency_key_reused` instead of converting them.
 
 ## Retries and errors
 

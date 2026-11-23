@@ -190,7 +190,8 @@ function ApiPage() {
           </p>
           <p className="max-w-[520px] text-[17px]/[27px] text-pretty text-ink-2">
             Images, video, audio, Word, Excel, PowerPoint and PDF, on the same engines as the convt
-            desktop app. No monthly fee and no credits to buy: you set a spend cap and pay for what
+            desktop app. Files up to 25 MB convert in one request; up to 2 GB through an upload URL
+            or a link. No monthly fee and no credits to buy: you set a spend cap and pay for what
             succeeded, once a month.
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-1">

@@ -20,8 +20,8 @@ Create an API key on the [dashboard](https://convt.app/dashboard/api). Keep it o
 
 - `convert(input, { to })` takes a file path (Node, Bun, Deno), a `Blob` or `File`, or bytes, up to 2 GB. It reserves a job, uploads straight to storage, starts it, polls and returns a `Conversion` with `save()`, `saveAll()`, `blob()` and signed `outputs`.
 - `convertUrl(url, { to })` converts a file convt downloads from a public https URL, such as a presigned S3 or R2 link, so nothing is uploaded from your machine.
-- Every conversion is created with an `Idempotency-Key`, so retried requests never reserve or bill twice. Rate limits (`429`) and gateway errors are retried with backoff, honoring `Retry-After`. Pass your own `idempotencyKey` (an order id, say) to resume after a crash; the SDK then also sends the file's SHA-256, so a retry with different bytes is refused, and it never cancels that job for you.
-- Abort with `signal` or `timeoutMs` and the job is cancelled, which releases its reservation. With your own `idempotencyKey` the SDK stops waiting instead and leaves cancelling to you (`convt.cancel(error.jobId)`), since another call may share that job.
+- Every conversion is created with an `Idempotency-Key`, so retried requests never reserve or bill twice. Rate limits (`429`) and gateway errors are retried with backoff, honoring `Retry-After`. Pass your own `idempotencyKey` (an order id, say) to resume after a crash; it never cancels that job for you. The SDK sends every file's SHA-256 with the job, so a retry under the same key with different bytes is refused.
+- Abort with `signal` or `timeoutMs` and the SDK cancels the job, which releases its reservation. Cancellation is best effort: a job that already succeeded is billed, and the error then says so and carries `jobId`. With your own `idempotencyKey` the SDK stops waiting instead and leaves cancelling to you (`convt.cancel(error.jobId)`), since another call may share that job.
 - Errors are `ConvtError` with a stable `code`, the HTTP `status`, the `requestId` to quote to support and, once a job exists, its `jobId` and `idempotencyKey`.
 
 ```ts

@@ -31,13 +31,18 @@ curl -fsS ${apiBaseUrl}/v1/convert \\
   {
     id: "browser",
     label: "Browser",
-    code: `// Your server route: the browser posts the file here,
-// and the API key never leaves the server.
+    code: `// Your server route: the browser posts the file here and the
+// API key never leaves the server. Every call is billed to you,
+// so only your signed-in users may use it.
 import { Convt } from "@convt/sdk";
 
 const convt = new Convt();
 
 export async function POST(request: Request) {
+  const user = await getSignedInUser(request); // your own auth
+  if (!user) return new Response("sign in first", { status: 401 });
+  const size = Number(request.headers.get("content-length"));
+  if (!size || size > 25_000_000) return new Response("too large", { status: 413 });
   const file = (await request.formData()).get("file");
   if (!(file instanceof File)) return new Response("file required", { status: 400 });
   const out = await convt.convert(file, { to: "pdf" });

@@ -30,28 +30,38 @@ Fix these in your code. Retrying will not help.
 
 ## What to retry
 
-| Response                   | Retry?           | What to do                                                                                    |
-| -------------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
-| `429 rate_limited`         | Yes              | Wait `Retry-After` seconds, then retry.                                                       |
-| `502 storage_unavailable`  | Yes              | Retry with backoff.                                                                           |
-| `409 upload_missing`       | After the upload | `PUT` the file to `upload_url`, then call start again.                                        |
-| `500 internal`             | Yes, a few times | Retry with backoff. Report it if it persists.                                                 |
-| Network error or timeout   | Yes              | Retry reads freely. Retry creates with the same `Idempotency-Key`; see below.                 |
-| `400`, `401`, `403`, `404` | No               | Fix the request, the key or your billing.                                                     |
-| Job `failed`               | No               | Create a new job if the cause was temporary, such as `source_fetch_failed` on a flaky origin. |
+**First, if the error names a job, recover that job instead of retrying.** Any error that comes after convt created a job carries it: a `job` object or `job_id` in the body, and `Convt-Job-Id` and `Location` headers. That job may still finish and be billed, or may already have been. Read it with `GET /v1/jobs/{id}`, and if it succeeded, fetch its outputs with `GET /v1/jobs/{id}/download`. Sending the create again makes a second job and can bill twice.
+
+**Second, retry a create only with the same `Idempotency-Key`.** Then a retry returns the original job rather than reserving a new one. Without a key, never retry `POST /v1/jobs` or `POST /v1/convert` blindly.
+
+| Response                                      | Retry?           | What to do                                                                                    |
+| --------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| Names a job (`job`, `job_id`, `Convt-Job-Id`) | No               | Check that job, as above.                                                                     |
+| `429 rate_limited`                            | Yes              | Wait `Retry-After` seconds, then retry.                                                       |
+| `502 storage_unavailable`, `503`, `504`       | Yes, a few times | Retry with backoff; a create only with the same key.                                          |
+| `409 upload_missing`                          | After the upload | `PUT` the file to `upload_url`, then call start again.                                        |
+| `409 still_running`                           | Yes              | Same request, same key, after `Retry-After`.                                                  |
+| `500 internal`                                | Yes, a few times | Retry with backoff; a create only with the same key. Report it if it persists.                |
+| Network error or timeout                      | Yes              | Retry reads freely. Retry creates only with the same `Idempotency-Key`.                       |
+| `400`, `401`, `403`, `404`                    | No               | Fix the request, the key or your billing.                                                     |
+| Job `failed`                                  | No               | Create a new job if the cause was temporary, such as `source_fetch_failed` on a flaky origin. |
 
 ## Backoff
 
 Wait longer after each failed try, add some randomness, and stop after a few:
 
 ```js
+// fn must send the same Idempotency-Key on every try when it creates a job.
 async function withRetry(fn, tries = 5) {
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn();
     } catch (error) {
+      // An error that names a job is not retried: check that job instead.
+      const namesJob = Boolean(error.jobId ?? error.body?.job ?? error.body?.job_id);
       const retryable =
-        [429, 500, 502, 503, 504].includes(error.status) || error.name === "TypeError";
+        !namesJob &&
+        ([429, 500, 502, 503, 504].includes(error.status) || error.name === "TypeError");
       if (!retryable || attempt + 1 >= tries) throw error;
       const delay = Math.min(30_000, 1000 * 2 ** attempt) * (0.5 + Math.random() / 2);
       await new Promise((resolve) => setTimeout(resolve, delay));
