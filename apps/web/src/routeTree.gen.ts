@@ -20,6 +20,7 @@ import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AppShellRouteImport } from './routes/_app/_shell'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
+import { Route as SiteApiRouteImport } from './routes/_site/api'
 import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
 import { Route as SiteCommandLineFileConverterRouteImport } from './routes/_site/command-line-file-converter'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
@@ -112,6 +113,11 @@ const AppDeviceRoute = AppDeviceRouteImport.update({
   id: '/device',
   path: '/device',
   getParentRoute: () => AppRoute,
+} as any)
+const SiteApiRoute = SiteApiRouteImport.update({
+  id: '/api',
+  path: '/api',
+  getParentRoute: () => SiteRoute,
 } as any)
 const SiteChangelogRoute = SiteChangelogRouteImport.update({
   id: '/changelog',
@@ -325,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
+  '/api': typeof SiteApiRoute
   '/changelog': typeof SiteChangelogRoute
   '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
@@ -374,6 +381,7 @@ export interface FileRoutesByTo {
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/device': typeof AppDeviceRoute
+  '/api': typeof SiteApiRoute
   '/changelog': typeof SiteChangelogRoute
   '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
@@ -427,6 +435,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/_shell': typeof AppShellRouteWithChildren
   '/_app/device': typeof AppDeviceRoute
+  '/_site/api': typeof SiteApiRoute
   '/_site/changelog': typeof SiteChangelogRoute
   '/_site/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/_site/contact': typeof SiteContactRoute
@@ -478,6 +487,7 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/sitemap.xml'
     | '/device'
+    | '/api'
     | '/changelog'
     | '/command-line-file-converter'
     | '/contact'
@@ -527,6 +537,7 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/sitemap.xml'
     | '/device'
+    | '/api'
     | '/changelog'
     | '/command-line-file-converter'
     | '/contact'
@@ -579,6 +590,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_app/_shell'
     | '/_app/device'
+    | '/_site/api'
     | '/_site/changelog'
     | '/_site/command-line-file-converter'
     | '/_site/contact'
@@ -720,6 +732,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/device'
       preLoaderRoute: typeof AppDeviceRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_site/api': {
+      id: '/_site/api'
+      path: '/api'
+      fullPath: '/api'
+      preLoaderRoute: typeof SiteApiRouteImport
+      parentRoute: typeof SiteRoute
     }
     '/_site/changelog': {
       id: '/_site/changelog'
@@ -1044,6 +1063,7 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface SiteRouteChildren {
+  SiteApiRoute: typeof SiteApiRoute
   SiteChangelogRoute: typeof SiteChangelogRoute
   SiteCommandLineFileConverterRoute: typeof SiteCommandLineFileConverterRoute
   SiteContactRoute: typeof SiteContactRoute
@@ -1064,6 +1084,7 @@ interface SiteRouteChildren {
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
+  SiteApiRoute: SiteApiRoute,
   SiteChangelogRoute: SiteChangelogRoute,
   SiteCommandLineFileConverterRoute: SiteCommandLineFileConverterRoute,
   SiteContactRoute: SiteContactRoute,

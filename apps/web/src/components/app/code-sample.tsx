@@ -6,7 +6,7 @@ import { apiBaseUrl } from "#/lib/config";
 
 import { cx } from "./ui";
 
-// Each example follows the jobs API. The SDK handles upload and polling.
+// The SDK handles upload and polling; cURL uses the one-request /v1/convert route.
 const samples = [
   {
     id: "node",
@@ -23,14 +23,10 @@ await out.save("report.pdf");`,
   {
     id: "curl",
     label: "cURL",
-    code: `# Create a reservation for a 104-byte SVG.
-job=$(curl -fsS ${apiBaseUrl}/v1/jobs \\
-  -H "Authorization: Bearer $CONVT_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"input_format":"svg","target_format":"png","input_bytes":104}')
-# PUT your file to upload_url, then POST /v1/jobs/{id}/start.
-# Poll GET /v1/jobs/{id}; on success, GET its /download URLs.
-# The SDK performs each of these steps for you.`,
+    code: `# One request: the response is the converted file.
+curl -fsS ${apiBaseUrl}/v1/convert \\
+  -H "Authorization: Bearer $CONVT_API_KEY" \\
+  -F file=@report.docx -F to=pdf -o report.pdf`,
   },
   {
     id: "browser",

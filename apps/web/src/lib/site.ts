@@ -58,6 +58,8 @@ export const routes = {
   pricing: "/#pricing",
   changelog: "/changelog",
   apiDocs: "/docs/api",
+  /** The cloud API's landing page. */
+  api: "/api",
   privacy: "/privacy",
   terms: "/terms",
   contact: "/contact",
@@ -93,6 +95,7 @@ export const sitemapPages = [
   { path: routes.brand, lastmod: "2026-10-23" },
   { path: routes.macFileConverter, lastmod: "2026-11-03", listsGuides: true },
   { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: true },
+  { path: routes.api, lastmod: "2026-11-23" },
   { path: routes.privacy, lastmod: "2026-10-27" },
   { path: routes.terms, lastmod: "2026-10-30" },
 ] as const satisfies readonly { path: string; lastmod: IsoDate; listsGuides?: true }[];

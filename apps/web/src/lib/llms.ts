@@ -47,7 +47,8 @@ ${guides.map((guide) => page(guide.heading, guidePath(guide.slug), guide.summary
 
 ## API docs
 
-- [convt API docs](${SITE_ORIGIN}/docs): convert files from your own code with the cloud API.
+- [convt file conversion API](${SITE_ORIGIN}/api): convert images, video, audio, documents and PDFs with one HTTP request, $0.01 per successful conversion.
+- [convt API docs](${SITE_ORIGIN}/docs): quick start, guides and the API reference.
 - [API docs for agents](${SITE_ORIGIN}/docs/llms.txt): the docs' own llms.txt.
 
 ## Optional

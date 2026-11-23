@@ -25,6 +25,7 @@ export const footerColumns = [
   {
     title: "Developers",
     links: [
+      { label: "File conversion API", href: routes.api },
       { label: commandLineConverter.footerLabel, href: commandLineConverter.path },
       { label: "API docs", href: routes.apiDocs },
       { label: "GitHub", href: GITHUB_URL },
@@ -46,5 +47,5 @@ export const headerLinks = [
   { label: "Download", href: routes.download },
   { label: "Formats", href: routes.formats },
   { label: "Pricing", href: routes.pricing },
-  { label: "API docs", href: routes.apiDocs },
+  { label: "API", href: routes.api },
 ];
