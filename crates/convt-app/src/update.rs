@@ -504,11 +504,8 @@ impl AppState {
     }
 
     fn scheduled_checks(&mut self, cx: &mut Context<Self>) {
-        // One of the two network calls the app makes by itself: while signed
-        // in, at most once a day, ask convt.app for the current Pro key.
+        self.observe_trial(cx);
         self.renew_if_due(cx);
-        // The other: while automatic checks are on, at launch and then every
-        // few hours, fetch the signed list of releases.
         self.check_updates_if_due(cx);
     }
 
