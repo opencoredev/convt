@@ -2060,21 +2060,50 @@ impl QuickView {
             let first = outputs.first().cloned();
             let only = (outputs.len() == 1).then(|| outputs[0].clone());
             let done = self.finished();
+            let failed: Vec<PathBuf> = self
+                .entries()
+                .filter(|e| matches!(e.status, Status::Failed(_)))
+                .map(|e| e.input.clone())
+                .collect();
+            let saved = self
+                .entries()
+                .filter(|e| matches!(e.status, Status::Done(_)))
+                .count();
             // Where the jobs run, not what was picked: a same-format
             // target stays here even with Cloud chosen.
-            let status = match (done, self.in_cloud(cx)) {
-                (true, _) => "Done",
-                (false, true) => "Converting in the cloud…",
-                (false, false) => "Converting…",
+            let status: SharedString = match (done, self.in_cloud(cx)) {
+                (true, _) if !failed.is_empty() && saved == 0 => "Failed".into(),
+                (true, _) if !failed.is_empty() => {
+                    format!("{saved} saved · {} failed", failed.len()).into()
+                }
+                (true, _)
+                    if self
+                        .entries()
+                        .all(|e| matches!(e.status, Status::Cancelled)) =>
+                {
+                    "Cancelled".into()
+                }
+                (true, _) => "Done".into(),
+                (false, true) => "Converting in the cloud…".into(),
+                (false, false) => "Converting…".into(),
             };
+            // The full error waits in Activity, with Retry beside it.
+            let details = (done && !failed.is_empty()).then(|| {
+                Button::secondary("quick-details", "Details")
+                    .build(p)
+                    .on_click(move |_, _, cx| super::show_failures(failed.clone(), cx))
+            });
             return bar
                 .child(
-                    styled(size::SMALL, p.secondary)
+                    div()
+                        .id("quick-status")
+                        .test_support()
+                        .aria_label(status.clone())
                         .flex_1()
                         .min_w_0()
-                        .truncate()
-                        .child(status),
+                        .child(styled(size::SMALL, p.secondary).truncate().child(status)),
                 )
+                .children(details)
                 .children(first.filter(|_| done).map(|path| {
                     Button::secondary("show-in-folder", "Show in folder")
                         .icon(IconName::FolderOpen)

@@ -1855,10 +1855,9 @@ fn the_hud_keeps_the_saved_files_of_a_batch_with_failures(cx: &mut TestAppContex
         label(cx, hud, "hud-title").as_deref(),
         Some("1 saved · 1 failed")
     );
-    assert!(
-        label(cx, hud, "hud-line")
-            .unwrap()
-            .starts_with("broken.bmp: "),
+    assert_eq!(
+        label(cx, hud, "hud-line").as_deref(),
+        Some("broken.bmp failed"),
         "the line says which file failed"
     );
     assert!(shown(cx, hud, "hud-show"), "the saved file can be shown");
@@ -1908,6 +1907,10 @@ fn the_hud_shows_a_mixed_batch_without_hiding_saved_files(cx: &mut TestAppContex
         assert_eq!(
             label(cx, hud, "hud-title").as_deref(),
             Some("1 saved · 1 failed")
+        );
+        assert_eq!(
+            label(cx, hud, "hud-line"),
+            Some(format!("broken-{dark}.bmp failed"))
         );
         for name in [
             "hud-title",
@@ -2115,6 +2118,47 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     click(cx, window, &format!("retry-{}", record.id));
     assert_eq!(f.jobs(cx), before + 1);
     wait_until(cx, "the retry", |cx| f.app.read(cx).recent.len() == 2);
+}
+
+/// When Quick convert's only job fails, its footer says Failed, not Done,
+/// and Details opens Activity with the failure expanded and Retry ready.
+#[gpui_kit::test]
+fn quick_convert_says_failed_and_offers_details(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        })
+    });
+    let broken = f.dir.path().join("broken.bmp");
+    std::fs::write(&broken, "not a bmp").unwrap();
+    let (window, _) = f.quick(cli(vec![broken.clone()], None, None), cx);
+    assert!(!shown(cx, window, "quick-details"));
+    click(cx, window, "to-png");
+    click(cx, window, "convert");
+    wait_for_label(cx, window, "quick-status", |s| s != "Converting…");
+    assert_eq!(label(cx, window, "quick-status").as_deref(), Some("Failed"));
+    assert!(shown(cx, window, "quick-details"));
+    assert!(!shown(cx, window, "show-in-folder"));
+
+    click(cx, window, "quick-details");
+    let record = cx.read(|cx| {
+        f.app
+            .read(cx)
+            .recent
+            .iter()
+            .find(|r| r.input == broken)
+            .cloned()
+            .expect("the failure is recorded")
+    });
+    assert!(matches!(record.outcome, Outcome::Failed(_)));
+    let (main, view) = window_of::<MainView>(cx);
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.page, Page::Activity);
+        assert!(v.details_open.contains(&record.id), "the failure is open");
+    });
+    assert!(shown(cx, main, &format!("retry-{}", record.id)));
 }
 
 /// FFmpeg's raw stderr reads as one plain line in Activity, with the full

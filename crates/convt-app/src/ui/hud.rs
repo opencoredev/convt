@@ -265,9 +265,11 @@ impl HudView {
                     .filter(|e| matches!(e.status, Status::Done(_)))
                     .count();
                 let title = format!("{saved} saved · {} failed", failed.len());
+                // Short enough to sit whole beside Copy, Show and Details;
+                // Details opens Activity with the full error.
                 let line = match failed.as_slice() {
-                    [one] => format!("{}: {}", model::file_name(&one.input), reason()),
-                    _ => reason(),
+                    [one] => format!("{} failed", model::file_name(&one.input)),
+                    many => format!("{} files failed", many.len()),
                 };
                 (title, line, None)
             }

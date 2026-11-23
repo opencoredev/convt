@@ -1259,7 +1259,13 @@ impl Engine for ImageIoEngine {
         let _ = std::fs::remove_file(&flattened);
         ran?;
         if format == "png" {
-            finish_sips_png(ctx.step.from.id, input, &output, ctx.options)?;
+            finish_sips_png(
+                ctx.step.from.id,
+                input,
+                &output,
+                ctx.options,
+                ctx.is_last_hop(),
+            )?;
         }
         Ok(vec![output])
     }
@@ -1273,15 +1279,19 @@ impl Engine for ImageIoEngine {
 /// tag and apply the source's orientation a second time. The shrinking is
 /// optional: when it fails, the valid PNG `sips` wrote is kept rather than
 /// failing the conversion. AVIF is left alone, since `optimize_heif_png` is
-/// tuned for what `sips` makes of iPhone HEIC.
+/// tuned for what `sips` makes of iPhone HEIC. The shrinking also runs only
+/// when `last_hop` is set: a middle hop's PNG feeds the next step (HEIC to
+/// PNG to TIFF), which should get the full 16 bits `sips` wrote.
 #[cfg(any(test, target_os = "macos"))]
 pub(crate) fn finish_sips_png(
     from: &str,
     input: &Path,
     output: &Path,
     options: &convt_core::Options,
+    last_hop: bool,
 ) -> Result<()> {
-    if matches!(from, "heic" | "heif")
+    if last_hop
+        && matches!(from, "heic" | "heif")
         && let Err(e) = crate::image::optimize_heif_png(output)
     {
         tracing::warn!("could not shrink the PNG sips wrote, keeping it as is: {e}");

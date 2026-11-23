@@ -1823,7 +1823,7 @@ mod tests {
             // The stored 64x48 frame `ispe` describes.
             let deep = deep_png(&dest, 64, 48, &meta);
             let before = std::fs::metadata(&dest).unwrap().len();
-            crate::heic::finish_sips_png("heic", &source, &dest, &options).unwrap();
+            crate::heic::finish_sips_png("heic", &source, &dest, &options, true).unwrap();
             let after = std::fs::metadata(&dest).unwrap().len();
             assert!(after < before, "{name}: {after} >= {before}");
 
@@ -1928,7 +1928,7 @@ mod tests {
         type Run = fn(&Path, &Path, &Options) -> Result<()>;
         let bake: Run = |_, png, o| bake_pending_orientation(png, "png", o);
         let background: Run = |_, png, o| crate::image::background_png(png, o);
-        let sips: Run = |heif, png, o| crate::heic::finish_sips_png("heic", heif, png, o);
+        let sips: Run = |heif, png, o| crate::heic::finish_sips_png("heic", heif, png, o, true);
         let cases: [(&str, Run, &Options, bool); 6] = [
             ("orient_png", bake, &Options::default(), true),
             ("orient_png, strip", bake, &strip, false),

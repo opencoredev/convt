@@ -424,10 +424,12 @@ const SDR_GAMMA: std::ops::RangeInclusive<f32> = 1.75..=2.65;
 /// must run from 0 to 65535 without falling and pass its midpoint where a
 /// gamma of about 1.6 to 2.7 would (0.5^2.2 is 0.214; linear is 0.5 and PQ
 /// is near 0.01). A `para` of any of the five ICC function types needs its
-/// gamma in [`SDR_GAMMA`] and, evaluated in full ([`eval_icc_para`]) at 0,
-/// 0.25, 0.5, 0.75 and 1, must run from about 0 to about 1 without falling
-/// and pass its midpoint between 0.15 and 0.35, as a `curv` table must: the
+/// gamma in [`SDR_GAMMA`] and, evaluated in full ([`eval_icc_para`]) at 33
+/// points from 0 to 1, must run from about 0 to about 1 without falling and
+/// pass its midpoint between 0.15 and 0.35, as a `curv` table must: the
 /// exponent alone says nothing when a linear segment covers the whole range.
+/// A type 3 or 4 curve must also not drop where its segments join
+/// ([`para_joins_without_a_drop`]).
 /// Anything else, or a tag too short for its own header, is not SDR.
 #[cfg(any(test, target_os = "macos"))]
 fn is_sdr_trc_tag(data: &[u8]) -> bool {
@@ -454,7 +456,14 @@ fn is_sdr_trc_tag(data: &[u8]) -> bool {
                         .chunks_exact(2)
                         .map(|c| u16::from_be_bytes([c[0], c[1]]))
                         .collect();
-                    let mid = f32::from(entries[count / 2]) / 65535.0;
+                    // An even table has no middle entry: interpolate
+                    // between the two either side of 0.5.
+                    let mid = if count % 2 == 0 {
+                        (f64::from(entries[count / 2 - 1]) + f64::from(entries[count / 2])) * 0.5
+                            / 65535.0
+                    } else {
+                        f64::from(entries[count / 2]) / 65535.0
+                    };
                     entries[0] == 0
                         && entries[count - 1] == u16::MAX
                         && entries.windows(2).all(|w| w[0] <= w[1])
@@ -482,20 +491,49 @@ fn is_sdr_trc_tag(data: &[u8]) -> bool {
             if !SDR_GAMMA.contains(&(params[0] as f32)) {
                 return false;
             }
-            let Some(ys) = [0.0, 0.25, 0.5, 0.75, 1.0]
-                .iter()
-                .map(|&x| eval_icc_para(func_type, &params, x))
+            let Some(ys) = (0..=32)
+                .map(|i| eval_icc_para(func_type, &params, f64::from(i) / 32.0))
                 .collect::<Option<Vec<f64>>>()
             else {
                 return false;
             };
             (-0.01..=0.02).contains(&ys[0])
-                && (0.98..=1.02).contains(&ys[4])
+                && (0.98..=1.02).contains(&ys[32])
                 && ys.windows(2).all(|w| w[0] <= w[1])
-                && (0.15..=0.35).contains(&ys[2])
+                && (0.15..=0.35).contains(&ys[16])
+                && para_joins_without_a_drop(&params)
         }
         _ => false,
     }
+}
+
+/// Whether a type 3 or 4 `para` curve (`g, a, b, c, d[, e, f]`) rises
+/// into its power segment at `d` rather than dropping: the samples in
+/// [`is_sdr_trc_tag`] are 1/32 apart, so a drop between two of them would
+/// otherwise go unseen. Both slopes must be non-negative and, when `d` lies
+/// in [0, 1], the power segment's base must be non-negative at `d` and the
+/// linear segment may not end above where the power segment starts. Types 0
+/// to 2 have no join and always pass.
+#[cfg(any(test, target_os = "macos"))]
+fn para_joins_without_a_drop(params: &[f64]) -> bool {
+    let (g, a, b, c, d, e, f) = match *params {
+        [g, a, b, c, d] => (g, a, b, c, d, 0.0, 0.0),
+        [g, a, b, c, d, e, f] => (g, a, b, c, d, e, f),
+        _ => return true,
+    };
+    if c < 0.0 || a < 0.0 {
+        return false;
+    }
+    if !(0.0..=1.0).contains(&d) {
+        return true;
+    }
+    let base = a * d + b;
+    if base < 0.0 {
+        return false;
+    }
+    let linear = c * d + f;
+    let power = base.powf(g) + e;
+    linear.is_finite() && power.is_finite() && linear <= power + 1e-4
 }
 
 /// How many parameters each ICC `para` function type (0 to 4) has.
@@ -2341,6 +2379,13 @@ pub(crate) mod tests {
             ("curv sRGB table", curv_table(1024, srgb)),
             ("curv gamma 1.8 table", curv_table(256, gamma(1.8))),
             ("curv three-entry table at 2.4", curv_table(3, gamma(2.4))),
+            ("curv even table at 2.2", curv_table(16, gamma(2.2))),
+            // Entries 1 and 2 (0.2 and 0.4) straddle 0.5 and average to
+            // 0.3; entry 2 alone would read 0.4 and fail.
+            (
+                "curv four-entry table, midpoint between entries",
+                curv(&[0, 13_107, 26_214, u16::MAX]),
+            ),
         ];
         for (name, tag) in &sdr {
             assert!(is_sdr_trc_tag(tag), "{name} should be SDR");
@@ -2363,6 +2408,12 @@ pub(crate) mod tests {
                 curv_table(1024, |x| srgb(x) * 0.9)
             }),
             ("curv header only", b"curv\0\0\0\0".to_vec()),
+            // Entries 1 and 2 (0 and 0.25) average to 0.125, below an SDR
+            // midpoint; entry 2 alone would read 0.25 and pass.
+            (
+                "curv four-entry table, midpoint too dark",
+                curv(&[0, 0, 16_384, u16::MAX]),
+            ),
             ("para gamma 1.0", para(3, 1.0, 5)),
             ("para type 4 with all-zero segments", para(4, 2.4, 7)),
             ("para gamma 2.4, type 5", para(5, 2.4, 7)),
@@ -2417,6 +2468,28 @@ pub(crate) mod tests {
         }
         assert_eq!(eval_icc_para(4, &params, 1.0), Some(1.0));
         assert!(!is_sdr_trc_tag(&linear_type4));
+
+        // A type 3 curve that follows y = x up to d = 0.125, then drops to
+        // x^2 (0.0156 at d): its 33 samples alone could miss a drop like
+        // this between them, so the join itself is checked.
+        let dropping = [2.0, 1.0, 0.0, 1.0, 0.125];
+        assert!(!para_joins_without_a_drop(&dropping));
+        assert!(!is_sdr_trc_tag(&para_tag(3, &dropping)));
+        let mut dropping4 = dropping.to_vec();
+        dropping4.extend([0.0, 0.0]);
+        assert!(!is_sdr_trc_tag(&para_tag(4, &dropping4)));
+        // Negative slopes or a negative base at the join.
+        assert!(!para_joins_without_a_drop(&[2.2, -1.0, 1.0, 0.0, 0.5]));
+        assert!(!para_joins_without_a_drop(&[2.2, 1.0, 0.0, -1.0, 0.0]));
+        assert!(!para_joins_without_a_drop(&[2.2, 1.0, -0.5, 0.0, 0.25]));
+        // The real sRGB join passes (with s15Fixed16 rounding).
+        assert!(para_joins_without_a_drop(&[
+            2.4,
+            1.0 / 1.055,
+            0.055 / 1.055,
+            1.0 / 12.92,
+            0.04045
+        ]));
 
         let srgb = [2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045];
         let mid = eval_icc_para(3, &srgb, 0.5).unwrap();
@@ -2729,7 +2802,8 @@ pub(crate) mod tests {
             };
             let deep = deep_png(&path, 96, 64, &meta);
             let before = std::fs::metadata(&path).unwrap().len();
-            crate::heic::finish_sips_png("heic", &source, &path, &Options::default()).unwrap();
+            crate::heic::finish_sips_png("heic", &source, &path, &Options::default(), true)
+                .unwrap();
             let after = std::fs::metadata(&path).unwrap().len();
             assert!(after < before, "{after} >= {before}");
 
@@ -2796,10 +2870,37 @@ pub(crate) mod tests {
         assert!(optimize_heif_png(&path).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), cut);
         // The conversion still succeeds, with the file sips wrote.
-        crate::heic::finish_sips_png("heic", &source, &path, &Options::default()).unwrap();
+        crate::heic::finish_sips_png("heic", &source, &path, &Options::default(), true).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), cut);
         let names: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
         assert_eq!(names.len(), 2);
+    }
+
+    #[test]
+    fn a_middle_hop_sips_png_keeps_sixteen_bits() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("IMG_0001.heic");
+        std::fs::write(&source, b"not a heif").unwrap();
+        let path = dir.path().join("IMG_0001.png");
+        let p3 = icc_named("Display P3");
+        let meta = DeepPng {
+            icc: Some(&p3),
+            ..DeepPng::default()
+        };
+        let deep = deep_png(&path, 64, 48, &meta);
+        let before = std::fs::read(&path).unwrap();
+        // HEIC -> PNG -> TIFF: the PNG feeds the next hop, so it stays deep.
+        crate::heic::finish_sips_png("heic", &source, &path, &Options::default(), false).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let info = png_info(&path);
+        assert_eq!(info.bit_depth, png::BitDepth::Sixteen);
+        assert_eq!(
+            image::open(&path).unwrap().to_rgba16(),
+            DynamicImage::ImageRgba16(deep.clone()).to_rgba16()
+        );
+        // The same PNG as the last hop is shrunk to 8 bits.
+        crate::heic::finish_sips_png("heic", &source, &path, &Options::default(), true).unwrap();
+        assert_eq!(png_info(&path).bit_depth, png::BitDepth::Eight);
     }
 
     /// A photo-like image: smooth gradients plus noise, which compresses
