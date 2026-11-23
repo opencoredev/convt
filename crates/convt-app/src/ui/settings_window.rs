@@ -36,7 +36,7 @@ const TABS: [(SettingsTab, &str, &str, IconName); 4] = [
         "General",
         IconName::Settings,
     ),
-    (SettingsTab::Menu, "tab-menu", "Menu", IconName::Menu),
+    (SettingsTab::Menu, "tab-menu", "Menu", IconName::RightClick),
     (
         SettingsTab::Presets,
         "tab-presets",
@@ -604,7 +604,8 @@ impl SettingsView {
                 .items_center()
                 .gap(px(6.))
                 .h(px(28.))
-                .px(px(12.))
+                .pl(px(10.))
+                .pr(px(12.))
                 .rounded(px(radius::CONTROL))
                 .map(|d| {
                     if on {
@@ -617,6 +618,11 @@ impl SettingsView {
                     this.menu_kind = kind;
                     cx.notify();
                 }))
+                .child(icon(
+                    kind_icon(kind),
+                    14.,
+                    if on { p.green_text } else { p.tertiary },
+                ))
                 .child(
                     styled(size::SMALL, if on { p.text } else { p.secondary })
                         .font_weight(FontWeight::MEDIUM)
@@ -646,36 +652,27 @@ impl SettingsView {
                     let can_remove = picked.len() > 1;
                     let preview_rows: Vec<AnyElement> = picked
                         .iter()
-                        .enumerate()
-                        .map(|(i, &to)| {
+                        .map(|&to| {
                             let app = self.app.clone();
                             let options = options.clone();
+                            let group = SharedString::from(format!("menu-row-{key}-{}", to.id));
                             div()
+                                .id(group.clone())
+                                .group(group.clone())
                                 .flex()
                                 .items_center()
-                                .gap(px(8.))
+                                .gap(px(9.))
                                 .h(px(28.))
-                                .px(px(8.))
+                                .pl(px(8.))
+                                .pr(px(5.))
                                 .rounded(px(radius::SM))
                                 .hover(|s| s.bg(p.hover))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .size(px(16.))
-                                        .rounded(px(4.))
-                                        .bg(p.green_tint)
-                                        .child(
-                                            mono(10., 12., p.green_text)
-                                                .font_weight(FontWeight::SEMIBOLD)
-                                                .child((i + 1).to_string()),
-                                        ),
-                                )
+                                .child(icon(format_icon(to), 15., p.secondary))
                                 .child(
                                     styled(size::SMALL, p.text)
                                         .flex_1()
-                                        .font_weight(FontWeight::MEDIUM)
+                                        .min_w_0()
+                                        .truncate()
                                         .child(to.name),
                                 )
                                 .children(can_remove.then(|| {
@@ -684,11 +681,14 @@ impl SettingsView {
                                         format!("Remove {}", to.name),
                                     )
                                     .flex()
+                                    .flex_shrink_0()
                                     .items_center()
                                     .justify_center()
-                                    .size(px(18.))
-                                    .rounded(px(4.))
-                                    .hover(|s| s.bg(p.recessed))
+                                    .size(px(20.))
+                                    .rounded(px(5.))
+                                    .opacity(0.45)
+                                    .group_hover(group.clone(), |s| s.opacity(1.))
+                                    .hover(|s| s.bg(p.error_tint))
                                     .on_click(move |_, _, cx| {
                                         app.update(cx, |s, cx| {
                                             s.update_menu(|m| toggle(m, kind, to, &options), cx)
@@ -696,14 +696,15 @@ impl SettingsView {
                                     })
                                     .child(icon(
                                         IconName::Close,
-                                        10.,
-                                        p.tertiary,
+                                        11.,
+                                        p.secondary,
                                     ))
                                 }))
                                 .into_any_element()
                         })
                         .collect();
 
+                    let separator = || div().h(px(1.)).mx(px(8.)).my(px(3.)).bg(p.hairline);
                     let preview_card = div()
                         .flex()
                         .flex_col()
@@ -712,32 +713,45 @@ impl SettingsView {
                         .gap(px(space::SM))
                         .child(theme::section_label("Menu preview", p))
                         .child(
-                            theme::card(p)
+                            div()
+                                .flex()
+                                .flex_col()
                                 .bg(p.overlay)
                                 .rounded(px(10.))
-                                .p(px(6.))
-                                .gap(px(2.))
+                                .p(px(5.))
+                                .gap(px(1.))
+                                .shadow(menu_shadow(p))
                                 .child(
                                     div()
                                         .flex()
                                         .items_center()
-                                        .gap(px(7.))
+                                        .gap(px(9.))
                                         .h(px(26.))
                                         .px(px(8.))
-                                        .child(theme::mark(13., p))
+                                        .child(theme::mark(14., p))
                                         .child(
-                                            styled(size::CAPTION, p.secondary)
+                                            styled(size::SMALL, p.text)
+                                                .flex_1()
                                                 .font_weight(FontWeight::SEMIBOLD)
                                                 .child("Convert with convt"),
-                                        ),
+                                        )
+                                        .child(icon(IconName::ChevronDown, 12., p.tertiary)),
                                 )
-                                .child(div().h(px(1.)).mx(px(4.)).my(px(2.)).bg(p.hairline))
+                                .child(separator())
                                 .children(preview_rows)
-                                .child(div().h(px(1.)).mx(px(4.)).my(px(2.)).bg(p.hairline))
+                                .child(separator())
                                 .child(
-                                    div().flex().items_center().h(px(26.)).px(px(8.)).child(
-                                        styled(size::SMALL, p.tertiary).child("More options…"),
-                                    ),
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(9.))
+                                        .h(px(28.))
+                                        .px(px(8.))
+                                        .rounded(px(radius::SM))
+                                        .child(icon(IconName::Settings, 15., p.tertiary))
+                                        .child(
+                                            styled(size::SMALL, p.secondary).child("More options…"),
+                                        ),
                                 ),
                         )
                         .child(
@@ -888,14 +902,55 @@ impl SettingsView {
                                     )),
                             )
                             .when(!secondary_list.is_empty(), |d| {
+                                // An animated GIF can become a video, so the
+                                // Images menu offers video containers too.
+                                // They get their own labelled row so they
+                                // don't read as still-image formats.
+                                let (animated, still): (Vec<_>, Vec<_>) =
+                                    secondary_list.into_iter().partition(|f| {
+                                        kind == Category::Image && f.category == Category::Video
+                                    });
                                 d.child(
                                     div()
                                         .flex()
                                         .flex_col()
                                         .child(theme::section_label("Other formats", p))
-                                        .child(div().grid().grid_cols(4).gap(px(6.)).children(
-                                            secondary_list.into_iter().map(|f| tile(f, true)),
-                                        )),
+                                        .when(!still.is_empty(), |d| {
+                                            d.child(
+                                                div().grid().grid_cols(4).gap(px(6.)).children(
+                                                    still.into_iter().map(|f| tile(f, true)),
+                                                ),
+                                            )
+                                        })
+                                        .when(!animated.is_empty(), |d| {
+                                            d.child(
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "menu-animated-{key}"
+                                                    )))
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap(px(6.))
+                                                    .px(px(2.))
+                                                    .pt(px(space::MD))
+                                                    .pb(px(space::SM))
+                                                    .child(icon(IconName::Video, 13., p.tertiary))
+                                                    .child(
+                                                        styled(size::CAPTION, p.secondary)
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .child("For animated GIFs"),
+                                                    )
+                                                    .child(
+                                                        styled(size::CAPTION, p.tertiary)
+                                                            .child("· only GIFs offer these"),
+                                                    ),
+                                            )
+                                            .child(
+                                                div().grid().grid_cols(4).gap(px(6.)).children(
+                                                    animated.into_iter().map(|f| tile(f, true)),
+                                                ),
+                                            )
+                                        }),
                                 )
                             });
 
@@ -1786,6 +1841,41 @@ fn kind_label(kind: Category) -> &'static str {
         Category::Spreadsheet => "Spreadsheets",
         Category::Presentation => "Presentations",
     }
+}
+
+/// The icon for a kind of file, on the Right-click menu's category tabs.
+fn kind_icon(kind: Category) -> IconName {
+    match kind {
+        Category::Image => IconName::Image,
+        Category::Vector => IconName::Vector,
+        Category::Video => IconName::Video,
+        Category::Audio => IconName::Music,
+        Category::Pdf => IconName::Pdf,
+        Category::Document => IconName::Document,
+        Category::Spreadsheet => IconName::Spreadsheet,
+        Category::Presentation => IconName::Presentation,
+    }
+}
+
+/// The icon beside a target in the menu preview: what kind of file it makes.
+fn format_icon(to: &Format) -> IconName {
+    kind_icon(to.category)
+}
+
+/// The menu preview's surface: a hairline ring, a highlight along the top
+/// edge and the soft drop of a floating menu, like the native popovers.
+fn menu_shadow(p: &Palette) -> Vec<BoxShadow> {
+    let highlight = if p.dark {
+        hsla(0., 0., 1., 0.07)
+    } else {
+        hsla(0., 0., 1., 0.9)
+    };
+    vec![
+        theme::inset_ring(p.border, 1.),
+        theme::inset_edge(highlight, 1.),
+        theme::shadow(p.shadow_soft, 6., 18.),
+        theme::shadow_s(p),
+    ]
 }
 
 /// "MP3, M4A and WAV".

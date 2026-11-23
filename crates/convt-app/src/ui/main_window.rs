@@ -385,7 +385,7 @@ impl MainView {
                         nav(
                             "nav-menu",
                             "Right-click menu",
-                            IconName::Menu,
+                            IconName::RightClick,
                             page == Page::Menu,
                             None,
                         )
