@@ -24,7 +24,9 @@ use super::theme::IconName;
 use super::theme::{
     self, Button, Choice, Palette, Segment, Tone, icon, mono, radius, size, space, styled,
 };
-use super::{blocked_banner, error_text, file_size, human_size, time_left};
+use super::{
+    QUICK_SIZE, blocked_banner, error_text, file_size, human_size, quick_height_for, time_left,
+};
 use crate::cloud::CloudAccess;
 use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState, PackPhase, Targets};
@@ -144,6 +146,9 @@ pub struct QuickView {
     pub(super) cloud: bool,
     /// The registry the targets were computed with.
     generation: u64,
+    /// The height the window was last sized to for its content, so a window
+    /// the user resized keeps its size until what it shows changes.
+    sized_for: Option<Pixels>,
     _observe: Subscription,
     _appearance: Subscription,
     /// Clears the file name's error once it's edited.
@@ -229,6 +234,8 @@ impl QuickView {
             _observe: cx.observe_in(&app, window, |this: &mut Self, app, window, cx| {
                 this.remember(&app, cx);
                 this.follow_registry(window, cx);
+                // A license banner or the pack card came or went.
+                this.sync_window_height(window, cx);
                 cx.notify();
             }),
             _appearance: theme::observe_appearance(window, cx),
@@ -264,6 +271,7 @@ impl QuickView {
             convert_when_ready: false,
             cloud: false,
             generation,
+            sized_for: None,
         };
         view.load_controls();
         view.reset_name(window, cx);
@@ -489,6 +497,7 @@ impl QuickView {
         }
         self.error = None;
         self.reset_name(window, cx);
+        self.sync_window_height(window, cx);
         cx.notify();
     }
 
@@ -511,6 +520,7 @@ impl QuickView {
             }
             Err(e) => self.error = Some(e),
         }
+        self.sync_window_height(window, cx);
         cx.notify();
     }
 
@@ -990,8 +1000,9 @@ impl QuickView {
                 .mr(px(-6.))
                 .rounded(px(radius::SM))
                 .hover(|s| s.bg(p.hover))
-                .on_click(cx.listener(|this, _, _, cx| {
+                .on_click(cx.listener(|this, _, window, cx| {
                     this.more_open = !this.more_open;
+                    this.sync_window_height(window, cx);
                     cx.notify();
                 }))
                 .child(
@@ -1184,10 +1195,7 @@ impl QuickView {
     /// A photo becoming PNG grows a lot; says so and offers the formats
     /// that keep it small.
     fn png_hint(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if !self.jobs.is_empty() || self.to.is_none_or(|t| t.id != "png") {
-            return None;
-        }
-        if !sources(&self.files).any(is_photo) {
+        if !self.shows_png_hint() {
             return None;
         }
         let switch = |id: &'static str, label: &'static str, cx: &mut Context<Self>| {
@@ -1240,6 +1248,97 @@ impl QuickView {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// Whether the PNG size warning shows.
+    fn shows_png_hint(&self) -> bool {
+        self.jobs.is_empty()
+            && self.to.is_some_and(|t| t.id == "png")
+            && sources(&self.files).any(is_photo)
+    }
+
+    /// How many rows the open Options show.
+    fn option_rows(&self) -> usize {
+        let Some(to) = self.to else {
+            return 0;
+        };
+        [
+            quality_applies(to),
+            size_choices(to).is_some(),
+            target_size_applies(to),
+            codec_applies(to),
+            background_applies(to, &self.files),
+            audio_applies(to),
+            media(to),
+        ]
+        .into_iter()
+        .filter(|applies| *applies)
+        .count()
+    }
+
+    /// The window height, before the title bar, that shows everything
+    /// without scrolling, with the same air above the footer as the opening
+    /// size: [`QUICK_SIZE`] plus what shows beyond it. `None` while the
+    /// window shows its conversions, which keep the size it had.
+    fn wanted_height(&self, cx: &App) -> Option<f32> {
+        if self.inline || !self.jobs.is_empty() {
+            return None;
+        }
+        let state = self.app.read(cx);
+        let mut height = QUICK_SIZE.1;
+        if state.license.blocked_reason().is_some() {
+            height += BANNER_HEIGHT;
+        }
+        if self.shows_png_hint() {
+            height += PNG_HINT_HEIGHT;
+        }
+        if self.options_open {
+            height += self.option_rows() as f32 * OPTION_ROW_HEIGHT + 1.;
+        }
+        let (popular, more) = popular_and_more(&self.targets, &self.files);
+        if self.more_open && more.len() >= MIN_HIDDEN && !popular.is_empty() {
+            height += more.len().div_ceil(CARDS_PER_ROW.into()) as f32 * CARD_ROW_HEIGHT;
+        }
+        let waiting = self.waiting_for_pack(cx);
+        let saves = !self.supported().is_empty() || waiting == 0 || self.to.is_some();
+        if (waiting > 0 || self.needs_pack()) && saves {
+            height += PACK_CARD_HEIGHT;
+        }
+        Some(height)
+    }
+
+    /// Fits the window's height to what it shows now: tight by default, and
+    /// taller for the PNG warning, open Options or More formats, a license
+    /// banner or the pack card, at most 90% of the display's usable height.
+    /// It changes the window only when that height changes, so a window the
+    /// user resized stays as it is until then.
+    pub(super) fn sync_window_height(&mut self, window: &mut Window, cx: &mut App) {
+        let Some(wanted) = self.wanted_height(cx) else {
+            return;
+        };
+        let mut height = quick_height_for(wanted);
+        if let Some(display) = window.display(cx) {
+            let visible = display.visible_bounds();
+            let max_by_display = (visible.size.height * 0.9).floor();
+            let room_below = (visible.bottom() - window.bounds().origin.y - px(16.)).floor();
+            let cap = if room_below >= quick_height_for(QUICK_SIZE.1) {
+                max_by_display.min(room_below)
+            } else {
+                max_by_display
+            };
+            height = height.min(cap);
+        }
+        if self.sized_for == Some(height) {
+            return;
+        }
+        self.sized_for = Some(height);
+        let current = window.viewport_size();
+        if current.height != height {
+            window.resize(size(current.width, height));
+            // The test platform resizes without telling the window.
+            #[cfg(test)]
+            window.bounds_changed(cx);
+        }
     }
 
     /// The document pack card, or the line saying it was installed.
@@ -1563,9 +1662,10 @@ impl QuickView {
             .min_h(px(42.))
             .px(px(space::LG))
             .hover(|s| s.bg(p.hover))
-            .on_click(cx.listener(|this, _, _, cx| {
+            .on_click(cx.listener(|this, _, window, cx| {
                 this.options_open = !this.options_open;
                 this.open = None;
+                this.sync_window_height(window, cx);
                 cx.notify();
             }))
             .child(
@@ -1945,6 +2045,9 @@ impl QuickView {
             .px(px(gutter))
             .h(px(56.))
             .bg(if self.inline { p.recessed } else { p.chrome })
+            // The card's overflow clip is square, so the fill takes the
+            // card's corners itself, less its 1px border.
+            .when(self.inline, |d| d.rounded_b(px(radius::CARD - 1.)))
             .when(!asking, |d| {
                 d.border_t_1().border_color(if self.inline {
                     p.border
@@ -2060,6 +2163,14 @@ const SECTION_GAP: f32 = 16.;
 const CARDS_PER_ROW: u16 = 4;
 /// The fewest formats "More formats" hides; fewer show with the rest.
 const MIN_HIDDEN: usize = 3;
+/// What each part adds to Quick convert's height beyond [`QUICK_SIZE`], as
+/// drawn at its width: the license banner, the PNG warning, an open Options
+/// row, a row of format cards with the gap above it, and the pack card.
+const BANNER_HEIGHT: f32 = 118.;
+const PNG_HINT_HEIGHT: f32 = 118.;
+const OPTION_ROW_HEIGHT: f32 = 44.;
+const CARD_ROW_HEIGHT: f32 = 57.;
+const PACK_CARD_HEIGHT: f32 = 96.;
 const SELECT_WIDTH: f32 = 190.;
 
 /// A titled part of the window.

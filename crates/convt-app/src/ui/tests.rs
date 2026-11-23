@@ -16,8 +16,8 @@ use gpui_kit::component::input::InputState;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext as _, Bounds, ClipboardEntry, Decorations, ElementId, Entity,
-    ImageFormat, Render, SharedString, TestAppContext, Tiling, Window, WindowBounds, WindowOptions,
-    point, px, size,
+    ImageFormat, Pixels, Render, SharedString, TestAppContext, Tiling, Window, WindowBounds,
+    WindowOptions, point, px, size,
 };
 use tempfile::TempDir;
 
@@ -1796,9 +1796,12 @@ fn the_hud_shows_progress_then_the_result(cx: &mut TestAppContext) {
         let (hud, view) = window_of::<HudView>(cx);
         let state = label(cx, hud, "hud").unwrap();
         if state == "running" {
-            assert_eq!(
-                label(cx, hud, "hud-title"),
-                Some(format!("Converting IMG_{dark}.png → JPEG"))
+            // The job runs on its own thread and may finish between reads.
+            let title = label(cx, hud, "hud-title").unwrap();
+            assert!(
+                title == format!("Converting IMG_{dark}.png → JPEG")
+                    || title == format!("Saved IMG_{dark}.jpg"),
+                "{title}"
             );
         }
         wait_for_label(cx, hud, "hud", |s| s == "done");
@@ -2035,6 +2038,104 @@ fn a_failed_conversion_can_be_retried(cx: &mut TestAppContext) {
     click(cx, window, &format!("retry-{}", record.id));
     assert_eq!(f.jobs(cx), before + 1);
     wait_until(cx, "the retry", |cx| f.app.read(cx).recent.len() == 2);
+}
+
+/// FFmpeg's raw stderr reads as one plain line in Activity, with the full
+/// message behind Details and Retry beside it; a plain message has no
+/// Details.
+#[gpui_kit::test]
+fn activity_summarizes_engine_errors_with_the_full_message_behind_details(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let clip = f.dir.path().join("clip.mp4");
+    std::fs::write(&clip, "not a movie").unwrap();
+    let raw = "ffmpeg failed: [mov,mp4,m4a,3gp,3g2,mj2 @ 0x57dd70369580] moov atom not found\n\
+               [in#0 @ 0x57dd70368f40] Error opening input: Invalid data found when processing input\n\
+               Error opening input file clip.mp4.";
+    let (window, _) = f.main(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            for (id, message) in [(1, raw), (2, "The image is too large to convert.")] {
+                s.recent.push(crate::history::Record {
+                    id,
+                    finished_at: 0,
+                    input: clip.clone(),
+                    to: "mov".into(),
+                    outcome: Outcome::Failed(message.into()),
+                    setup: None,
+                    input_bytes: None,
+                    output_bytes: None,
+                });
+            }
+            cx.notify();
+        })
+    });
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        assert_eq!(
+            label(cx, window, "error-summary-1").as_deref(),
+            Some("File is damaged or unreadable.")
+        );
+        assert_eq!(
+            label(cx, window, "error-details-1").as_deref(),
+            Some("Details")
+        );
+        assert!(!shown(cx, window, "error-raw-1"));
+        assert!(shown(cx, window, "retry-1"), "Retry stays beside it");
+        click(cx, window, "error-details-1");
+        assert_eq!(label(cx, window, "error-raw-1").as_deref(), Some(raw));
+        assert_eq!(
+            label(cx, window, "error-details-1").as_deref(),
+            Some("Hide details")
+        );
+        click(cx, window, "error-details-1");
+        assert!(!shown(cx, window, "error-raw-1"));
+
+        assert_eq!(
+            label(cx, window, "error-summary-2").as_deref(),
+            Some("The image is too large to convert.")
+        );
+        assert!(
+            !shown(cx, window, "error-details-2"),
+            "nothing more to show"
+        );
+    }
+}
+
+/// A failed HUD says why in plain words and offers Details, which opens
+/// Activity on that failure and closes the HUD.
+#[gpui_kit::test]
+fn the_failed_hud_opens_the_failure_in_activity(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            s.update_settings(|s| s.first_run_done = true, cx)
+        })
+    });
+    let broken = f.dir.path().join("broken.bmp");
+    std::fs::write(&broken, "not a bmp").unwrap();
+    cx.update(|cx| super::route(cli(vec![broken.clone()], Some("png"), None), cx));
+    let (hud, _) = window_of::<HudView>(cx);
+    wait_for_label(cx, hud, "hud", |s| s == "failed");
+    let record = cx.read(|cx| f.app.read(cx).recent[0].clone());
+    let Outcome::Failed(raw) = &record.outcome else {
+        panic!("the conversion failed");
+    };
+    assert_eq!(
+        label(cx, hud, "hud-line"),
+        Some(super::friendly_error(raw)),
+        "the HUD shows the plain reason"
+    );
+    assert!(fits(cx, hud, "hud-details"), "Details fits the HUD");
+    click(cx, hud, "hud-details");
+    assert!(!hud_open(cx), "Details closes the HUD");
+    let (main, view) = window_of::<MainView>(cx);
+    cx.read(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.page, Page::Activity);
+        assert!(v.details_open.contains(&record.id), "the failure is open");
+    });
+    assert!(shown(cx, main, &format!("record-status-{}", record.id)));
+    assert!(shown(cx, main, &format!("retry-{}", record.id)));
 }
 
 #[gpui_kit::test]
@@ -4317,6 +4418,28 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
             fits_above_the_footer(cx, quick, "change-folder"),
             "Quick convert, Save above the footer"
         );
+        // Open Options grow the window, so Save still shows whole, and
+        // closing them gives the space back.
+        let closed = viewport_height(cx, quick);
+        click(cx, quick, "options-toggle");
+        assert!(
+            viewport_height(cx, quick) > closed,
+            "Options grow the window"
+        );
+        for name in ["options-toggle", "where-cloud", "change-folder"] {
+            assert!(
+                fits_above_the_footer(cx, quick, name),
+                "Quick convert, Options open, {name} above the footer, dark: {dark}"
+            );
+        }
+        assert!(fits(cx, quick, "convert"), "Quick convert, Options open");
+        click(cx, quick, "options-toggle");
+        assert_eq!(viewport_height(cx, quick), closed, "and shrink back");
+        click(cx, quick, "more-formats-toggle");
+        assert!(
+            fits_above_the_footer(cx, quick, "change-folder"),
+            "Quick convert, More formats open, Save above the footer"
+        );
         cx.update(|cx| super::open_quick(cli(pngs.clone(), None, None), cx));
         let quick = *cx.update(|cx| cx.windows()).last().unwrap();
         click(cx, quick, "to-jpeg");
@@ -4433,6 +4556,28 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
     let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
     for dark in [false, true] {
         cx.update(|cx| theme::set_dark(dark, cx));
+        // With nothing extra to show, Quick convert opens at its tight size
+        // and leaves only a little air between Save and the footer.
+        cx.update(|cx| {
+            super::open_quick(
+                cli(
+                    vec![f.png(&format!("plain-{dark}.png"))],
+                    Some("webp"),
+                    None,
+                ),
+                cx,
+            )
+        });
+        let plain = *cx.update(|cx| cx.windows()).last().unwrap();
+        assert_eq!(
+            viewport_height(cx, plain),
+            cx.update(|_| super::quick_height())
+        );
+        assert!(fits_above_the_footer(cx, plain, "change-folder"));
+        assert!(
+            air_above_the_footer(cx, plain, "change-folder") <= px(48.),
+            "no empty band above the footer, dark: {dark}"
+        );
         let photo = f.rgb(&format!("photo-{dark}.jpg"));
         cx.update(|cx| super::open_quick(cli(vec![photo], Some("png"), None), cx));
         let warned = *cx.update(|cx| cx.windows()).last().unwrap();
@@ -4444,7 +4589,35 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
             );
         }
         assert!(fits(cx, warned, "convert"), "Quick convert, PNG warning");
+        assert!(
+            air_above_the_footer(cx, warned, "change-folder") <= px(48.),
+            "the warning's window is no taller than it needs, dark: {dark}"
+        );
+        click(cx, warned, "options-toggle");
+        for name in ["png-size-hint", "options-toggle", "change-folder"] {
+            assert!(
+                fits_above_the_footer(cx, warned, name),
+                "Quick convert, PNG warning and Options, {name} above the footer, dark: {dark}"
+            );
+        }
     }
+}
+
+fn viewport_height(cx: &mut TestAppContext, handle: AnyWindowHandle) -> Pixels {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, _| window.viewport_size().height)
+        .unwrap()
+}
+
+/// The empty space between the element and the bottom of Quick convert's
+/// body, which the footer sits under.
+fn air_above_the_footer(cx: &mut TestAppContext, handle: AnyWindowHandle, name: &str) -> Pixels {
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.find(id("quick-body")).bounds().bottom() - window.find(id(name)).bounds().bottom()
+    })
+    .unwrap()
 }
 
 // Unix permission bits make the folder unreadable; Windows has no equivalent here.

@@ -310,9 +310,10 @@ const SDR_PROFILE_NAMES: [&str; 10] = [
 /// `mDCV` or `cLLI` chunk, a `cICP` transfer that isn't SDR
 /// ([`is_sdr_transfer`]), or an ICC profile that [`icc_signals_hdr`]. Then
 /// the file needs positive evidence: an SDR `cICP` transfer, an `sRGB`
-/// chunk, or an ICC profile that [`icc_confirms_sdr`]. A file with none of
-/// them, such as one with a custom profile under a neutral name, is
-/// ambiguous and is not treated as SDR.
+/// chunk, or an ICC profile that [`icc_confirms_sdr`] (an SDR `cicp` tag,
+/// or a known SDR name with tone curves that check out). A file with none
+/// of them, such as one with a custom profile under a neutral name or an
+/// SDR name over a linear curve, is ambiguous and is not treated as SDR.
 #[cfg(any(test, target_os = "macos"))]
 fn is_confirmed_sdr_png(source: &PngMeta) -> bool {
     let info = &source.info;
@@ -379,19 +380,102 @@ fn icc_signals_hdr(icc: &[u8]) -> bool {
 
 /// Whether an ICC profile that doesn't [`icc_signals_hdr`] is known to be
 /// SDR: a `cicp` tag with an SDR transfer, or a description from
-/// [`SDR_PROFILE_NAMES`]. A custom profile, whatever its curves, is not.
+/// [`SDR_PROFILE_NAMES`] whose tone curves also check out
+/// ([`has_verified_sdr_trc`]). A name alone is not enough, since anyone can
+/// call a linear or HDR profile "Display P3". A custom profile, whatever its
+/// curves, is not SDR either.
 #[cfg(any(test, target_os = "macos"))]
 fn icc_confirms_sdr(icc: &[u8]) -> bool {
-    icc_tags(icc)
-        .into_iter()
-        .any(|(signature, data)| match &signature {
-            b"cicp" => icc_cicp_transfer(data).is_some_and(is_sdr_transfer),
-            b"desc" => {
-                let name = icc_text(data).to_lowercase();
-                SDR_PROFILE_NAMES.iter().any(|n| name.contains(n))
+    let tags = icc_tags(icc);
+    if tags.iter().any(|(signature, data)| {
+        signature == b"cicp" && icc_cicp_transfer(data).is_some_and(is_sdr_transfer)
+    }) {
+        return true;
+    }
+    let named_sdr = tags.iter().any(|(signature, data)| {
+        signature == b"desc" && {
+            let name = icc_text(data).to_lowercase();
+            SDR_PROFILE_NAMES.iter().any(|n| name.contains(n))
+        }
+    });
+    named_sdr && has_verified_sdr_trc(icc)
+}
+
+/// Whether an RGB ICC profile's `rTRC`, `gTRC` and `bTRC` tags all exist,
+/// lie inside the profile, and each describe an SDR display gamma
+/// ([`is_sdr_trc_tag`]).
+#[cfg(any(test, target_os = "macos"))]
+fn has_verified_sdr_trc(icc: &[u8]) -> bool {
+    let tags = icc_tags(icc);
+    [b"rTRC", b"gTRC", b"bTRC"].iter().all(|want| {
+        tags.iter()
+            .find(|(signature, _)| signature == *want)
+            .is_some_and(|(_, data)| is_sdr_trc_tag(data))
+    })
+}
+
+/// Display gammas that count as SDR: 1.8 (old Apple) to 2.6 (DCI), around
+/// the 2.2 and 2.4 of sRGB, Display P3 and BT.1886.
+#[cfg(any(test, target_os = "macos"))]
+const SDR_GAMMA: std::ops::RangeInclusive<f32> = 1.75..=2.65;
+
+/// Whether one ICC tone curve is an SDR gamma. A `curv` with no entries is
+/// linear, one entry is a u8Fixed8 gamma, and more are a lookup table that
+/// must run from 0 to 65535 without falling and pass its midpoint where a
+/// gamma of about 1.6 to 2.7 would (0.5^2.2 is 0.214; linear is 0.5 and PQ
+/// is near 0.01). A `para` of any of the five ICC function types needs its
+/// gamma in [`SDR_GAMMA`]. Anything else, or a tag too short for its own
+/// header, is not SDR.
+#[cfg(any(test, target_os = "macos"))]
+fn is_sdr_trc_tag(data: &[u8]) -> bool {
+    let be16 = |at: usize| {
+        data.get(at..at + 2)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]))
+    };
+    match data.get(..4) {
+        Some(b"curv") => {
+            let Some(count) = be32(data, 8) else {
+                return false;
+            };
+            match count {
+                0 => false,
+                1 => be16(12).is_some_and(|g| SDR_GAMMA.contains(&(f32::from(g) / 256.0))),
+                _ => {
+                    let Some(table) = count
+                        .checked_mul(2)
+                        .and_then(|len| data.get(12..12usize.checked_add(len)?))
+                    else {
+                        return false;
+                    };
+                    let entries: Vec<u16> = table
+                        .chunks_exact(2)
+                        .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                        .collect();
+                    let mid = f32::from(entries[count / 2]) / 65535.0;
+                    entries[0] == 0
+                        && entries[count - 1] == u16::MAX
+                        && entries.windows(2).all(|w| w[0] <= w[1])
+                        && (0.15..=0.35).contains(&mid)
+                }
             }
-            _ => false,
-        })
+        }
+        Some(b"para") => {
+            // Header plus 1, 3, 4, 5 or 7 s15Fixed16 parameters.
+            let Some(params) = be16(8).and_then(|t| [1, 3, 4, 5, 7].get(usize::from(t)).copied())
+            else {
+                return false;
+            };
+            let Some(g) = data
+                .get(12..16)
+                .filter(|_| data.len() >= 12 + 4 * params)
+                .map(|b| i32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+            else {
+                return false;
+            };
+            SDR_GAMMA.contains(&(g as f32 / 65536.0))
+        }
+        _ => false,
+    }
 }
 
 #[cfg(any(test, target_os = "macos"))]
@@ -458,14 +542,26 @@ fn icc_text(data: &[u8]) -> String {
 /// PNG 3 drafts (`mDCv`, `cLLi`) some encoders still write.
 const HDR_CHUNKS: [[u8; 4]; 4] = [*b"mDCV", *b"mDCv", *b"cLLI", *b"cLLi"];
 
+/// Metadata chunks PNG allows after the image data, which
+/// [`png::Decoder::read_info`] never reaches: text and EXIF.
+const TRAILING_METADATA: [[u8; 4]; 4] = [*b"tEXt", *b"zTXt", *b"iTXt", *b"eXIf"];
+
+/// The largest trailing metadata chunk kept, enough for any XMP packet.
+const MAX_TRAILING_CHUNK: u32 = 16 << 20;
+
 /// What a PNG rewrite carries over besides pixels: the decoded header and
-/// ancillary chunks, and the raw HDR chunks the encoder can't write from
+/// ancillary chunks, and the raw chunks the encoder can't write from
 /// [`png::Info`].
 #[derive(Clone)]
 pub(crate) struct PngMeta {
     pub info: png::Info<'static>,
-    /// `(type, payload)` of each chunk in [`HDR_CHUNKS`], in file order.
+    /// `(type, payload)` of each chunk in [`HDR_CHUNKS`], before or after
+    /// the image data, in file order.
     pub hdr_chunks: Vec<([u8; 4], Vec<u8>)>,
+    /// `(type, payload)` of each [`TRAILING_METADATA`] chunk after the image
+    /// data, in file order, kept as they were so a rewrite with metadata
+    /// writes them back after its own image data.
+    pub trailing_chunks: Vec<([u8; 4], Vec<u8>)>,
 }
 
 impl PngMeta {
@@ -475,21 +571,31 @@ impl PngMeta {
             .map_err(failed)?;
         let info = reader.info().clone();
         drop(reader);
+        let (hdr_chunks, mut trailing_chunks) = read_raw_chunks(path)?;
+        // PNG allows one eXIf; the decoder already has one from the header.
+        if info.exif_metadata.is_some() {
+            trailing_chunks.retain(|(kind, _)| kind != b"eXIf");
+        }
         Ok(Self {
             info,
-            hdr_chunks: read_hdr_chunks(path)?,
+            hdr_chunks,
+            trailing_chunks,
         })
     }
 }
 
-/// The [`HDR_CHUNKS`] before a PNG's image data. The decoder has already
-/// checked the file's structure.
-fn read_hdr_chunks(path: &Path) -> Result<Vec<([u8; 4], Vec<u8>)>> {
+/// The [`HDR_CHUNKS`] anywhere in a PNG, and the [`TRAILING_METADATA`]
+/// chunks after its first `IDAT`, reading up to `IEND` and seeking past
+/// image data. The decoder has already checked the structure before the
+/// image data; after it, a chunk whose CRC doesn't match, or that is cut
+/// short, ends the scan and is dropped.
+fn read_raw_chunks(path: &Path) -> Result<RawChunks> {
     use std::io::Read;
     let mut file = std::io::BufReader::new(File::open(path)?);
     let mut signature = [0u8; 8];
     file.read_exact(&mut signature)?;
-    let mut found = Vec::new();
+    let (mut hdr, mut trailing) = (Vec::new(), Vec::new());
+    let mut after_image = false;
     loop {
         let mut head = [0u8; 8];
         if file.read_exact(&mut head).is_err() {
@@ -497,20 +603,56 @@ fn read_hdr_chunks(path: &Path) -> Result<Vec<([u8; 4], Vec<u8>)>> {
         }
         let len = u32::from_be_bytes([head[0], head[1], head[2], head[3]]);
         let kind = [head[4], head[5], head[6], head[7]];
-        if matches!(&kind, b"IDAT" | b"IEND") {
+        match &kind {
+            b"IEND" => break,
+            b"IDAT" => after_image = true,
+            _ => {}
+        }
+        // HDR chunks are a few bytes long; anything larger is not one.
+        let keep_hdr = HDR_CHUNKS.contains(&kind) && len <= 64;
+        let keep_trailing =
+            after_image && TRAILING_METADATA.contains(&kind) && len <= MAX_TRAILING_CHUNK;
+        if !(keep_hdr || keep_trailing) {
+            file.seek_relative(i64::from(len) + 4)?;
+            continue;
+        }
+        let mut payload = vec![0; len as usize];
+        let mut crc = [0u8; 4];
+        if file.read_exact(&mut payload).is_err() || file.read_exact(&mut crc).is_err() {
+            if after_image {
+                break;
+            }
+            return Err(failed("truncated PNG chunk"));
+        }
+        if after_image && png_crc(&kind, &payload) != u32::from_be_bytes(crc) {
             break;
         }
-        // Both are a few bytes long; anything larger is not one of them.
-        if HDR_CHUNKS.contains(&kind) && len <= 64 {
-            let mut payload = vec![0; len as usize];
-            file.read_exact(&mut payload)?;
-            file.seek_relative(4)?;
-            found.push((kind, payload));
+        if keep_hdr {
+            hdr.push((kind, payload));
         } else {
-            file.seek_relative(i64::from(len) + 4)?;
+            trailing.push((kind, payload));
         }
     }
-    Ok(found)
+    Ok((hdr, trailing))
+}
+
+/// HDR chunks and trailing metadata chunks, as [`read_raw_chunks`] finds them.
+type RawChunks = (Vec<([u8; 4], Vec<u8>)>, Vec<([u8; 4], Vec<u8>)>);
+
+/// The CRC-32 PNG stores after a chunk, over its type and payload.
+fn png_crc(kind: &[u8; 4], payload: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for &byte in kind.iter().chain(payload) {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
 }
 
 /// Drops an alpha channel that is fully opaque on every pixel, which saves
@@ -536,8 +678,8 @@ pub(crate) fn strip_opaque_alpha(img: DynamicImage) -> DynamicImage {
 
 /// Writes `img` to `path` as PNG with `source`'s color tags (ICC, sRGB,
 /// gAMA, cHRM, cICP, mDCV, cLLI) and pixel ratio, and with `keep_metadata`
-/// its EXIF and text chunks too. An alpha channel that is opaque everywhere
-/// is dropped.
+/// its EXIF and text chunks too, including those that came after the image
+/// data. An alpha channel that is opaque everywhere is dropped.
 pub(crate) fn write_png(
     img: &DynamicImage,
     source: &PngMeta,
@@ -545,6 +687,7 @@ pub(crate) fn write_png(
     keep_metadata: bool,
 ) -> Result<()> {
     let hdr_chunks = &source.hdr_chunks;
+    let trailing_chunks = &source.trailing_chunks;
     let source = &source.info;
     let mut info = png::Info::with_size(img.width(), img.height());
     info.pixel_dims = source.pixel_dims;
@@ -639,6 +782,13 @@ pub(crate) fn write_png(
             .map_err(failed)?;
     }
     writer.write_image_data(&bytes).map_err(failed)?;
+    if keep_metadata {
+        for (kind, payload) in trailing_chunks {
+            writer
+                .write_chunk(png::chunk::ChunkType(*kind), payload)
+                .map_err(failed)?;
+        }
+    }
     writer.finish().map_err(failed)?;
     std::io::Write::flush(&mut out)?;
     Ok(())
@@ -1502,6 +1652,8 @@ pub(crate) mod tests {
         pub cicp: Option<png::CodingIndependentCodePoints>,
         /// Raw chunks written before the image data, such as `mDCV`.
         pub chunks: Vec<([u8; 4], Vec<u8>)>,
+        /// Raw chunks written after the image data, such as `tEXt`.
+        pub trailing: Vec<([u8; 4], Vec<u8>)>,
         pub exif: Option<Vec<u8>>,
         /// Alpha for every pixel; `alpha_at` overrides one.
         pub alpha: Option<u16>,
@@ -1575,6 +1727,11 @@ pub(crate) mod tests {
         }
         let bytes: Vec<u8> = px.as_raw().iter().flat_map(|v| v.to_be_bytes()).collect();
         writer.write_image_data(&bytes).unwrap();
+        for (kind, payload) in &meta.trailing {
+            writer
+                .write_chunk(png::chunk::ChunkType(*kind), payload)
+                .unwrap();
+        }
         writer.finish().unwrap();
         px
     }
@@ -1595,14 +1752,49 @@ pub(crate) mod tests {
     }
 
     /// A minimal ICC v4 profile whose `desc` tag (`mluc`, UTF-16) is
-    /// `name`, followed by curve-like filler so it is the size of a real
-    /// one.
+    /// `name`, with the sRGB tone curve ([`srgb_para`]) on all three
+    /// channels and filler so it is the size of a real one.
     pub(crate) fn icc_named(name: &str) -> Vec<u8> {
         icc_with(name, &[])
     }
 
     /// [`icc_named`] plus `extra` tags.
     fn icc_with(name: &str, extra: &[([u8; 4], Vec<u8>)]) -> Vec<u8> {
+        icc_with_trc(name, Some(srgb_para()), extra)
+    }
+
+    /// A `para` tone curve: function type 3 with gamma 2.4 and the sRGB
+    /// segments, as Apple's Display P3 and sRGB v4 profiles have.
+    fn srgb_para() -> Vec<u8> {
+        let fixed = |v: f64| ((v * 65536.0).round() as i32).to_be_bytes();
+        let mut tag = b"para\0\0\0\0".to_vec();
+        tag.extend_from_slice(&3u16.to_be_bytes());
+        tag.extend_from_slice(&[0, 0]);
+        for v in [2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045] {
+            tag.extend_from_slice(&fixed(v));
+        }
+        tag
+    }
+
+    /// A `curv` tone curve with `entries` (empty for linear).
+    fn curv(entries: &[u16]) -> Vec<u8> {
+        let mut tag = b"curv\0\0\0\0".to_vec();
+        tag.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+        tag.extend(entries.iter().flat_map(|e| e.to_be_bytes()));
+        tag
+    }
+
+    /// A `curv` lookup table of `n` entries following `f` from 0 to 1.
+    fn curv_table(n: usize, f: impl Fn(f64) -> f64) -> Vec<u8> {
+        let entries: Vec<u16> = (0..n)
+            .map(|i| (f(i as f64 / (n - 1) as f64) * 65535.0).round() as u16)
+            .collect();
+        curv(&entries)
+    }
+
+    /// An ICC v4 profile named `name` whose `rTRC`, `gTRC` and `bTRC` are
+    /// all `trc`, or that has none, plus `extra` tags.
+    fn icc_with_trc(name: &str, trc: Option<Vec<u8>>, extra: &[([u8; 4], Vec<u8>)]) -> Vec<u8> {
         let text: Vec<u8> = name.encode_utf16().flat_map(u16::to_be_bytes).collect();
         let mut mluc = b"mluc\0\0\0\0".to_vec();
         mluc.extend_from_slice(&1u32.to_be_bytes());
@@ -1612,7 +1804,12 @@ pub(crate) mod tests {
         mluc.extend_from_slice(&28u32.to_be_bytes());
         mluc.extend_from_slice(&text);
         let filler: Vec<u8> = (0..512u32).map(|i| (i * 7 % 251) as u8).collect();
-        let mut tags = vec![(*b"desc", mluc), (*b"rTRC", filler)];
+        let mut tags = vec![(*b"desc", mluc), (*b"A2B0", filler)];
+        if let Some(trc) = trc {
+            for sig in [*b"rTRC", *b"gTRC", *b"bTRC"] {
+                tags.push((sig, trc.clone()));
+            }
+        }
         tags.extend_from_slice(extra);
         let mut icc = vec![0u8; 128];
         icc[8..12].copy_from_slice(&[4, 0x40, 0, 0]);
@@ -1975,6 +2172,264 @@ pub(crate) mod tests {
             image::open(&path).unwrap().to_rgb16(),
             DynamicImage::ImageRgba16(deep).to_rgb16()
         );
+    }
+
+    #[test]
+    fn icc_tone_curves_must_be_sdr_gamma() {
+        let gamma = |g: f64| move |x: f64| x.powf(g);
+        let srgb = |x: f64| {
+            if x <= 0.04045 {
+                x / 12.92
+            } else {
+                ((x + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let para = |kind: u16, g: f64, params: usize| {
+            let mut tag = b"para\0\0\0\0".to_vec();
+            tag.extend_from_slice(&kind.to_be_bytes());
+            tag.extend_from_slice(&[0, 0]);
+            tag.extend_from_slice(&((g * 65536.0) as i32).to_be_bytes());
+            tag.resize(12 + 4 * params, 0);
+            tag
+        };
+        // A rough PQ EOTF, normalized: 0.5 in gives about 0.009 out.
+        let pq = |x: f64| {
+            let (m1, m2) = (0.159_301_76, 78.843_75);
+            let (c1, c2, c3) = (0.835_937_5, 18.851_562_5, 18.687_5);
+            let p = x.powf(1.0 / m2);
+            ((p - c1).max(0.0) / (c2 - c3 * p)).powf(1.0 / m1)
+        };
+        let sdr = [
+            ("para sRGB", srgb_para()),
+            ("para type 0, gamma 2.2", para(0, 2.2, 1)),
+            ("para type 4, gamma 2.4", para(4, 2.4, 7)),
+            ("curv gamma 2.2", curv(&[563])),
+            ("curv gamma 1.8", curv(&[461])),
+            ("curv sRGB table", curv_table(1024, srgb)),
+            ("curv gamma 1.8 table", curv_table(256, gamma(1.8))),
+            ("curv three-entry table at 2.4", curv_table(3, gamma(2.4))),
+        ];
+        for (name, tag) in &sdr {
+            assert!(is_sdr_trc_tag(tag), "{name} should be SDR");
+            let icc = icc_with_trc("Display P3", Some(tag.clone()), &[]);
+            assert!(has_verified_sdr_trc(&icc), "{name} profile");
+        }
+        let mut falling = curv_table(1024, srgb);
+        falling[12 + 2 * 600..12 + 2 * 601].copy_from_slice(&0u16.to_be_bytes());
+        let mut short_table = curv_table(1024, srgb);
+        short_table.truncate(400);
+        let not_sdr = [
+            ("curv with no entries (linear)", curv(&[])),
+            ("curv gamma 1.0", curv(&[256])),
+            ("curv gamma 3.0", curv(&[768])),
+            ("curv linear table", curv_table(1024, |x| x)),
+            ("curv PQ table", curv_table(1024, pq)),
+            ("curv table that falls", falling),
+            ("curv table cut short", short_table),
+            ("curv table not reaching 65535", {
+                curv_table(1024, |x| srgb(x) * 0.9)
+            }),
+            ("curv header only", b"curv\0\0\0\0".to_vec()),
+            ("para gamma 1.0", para(3, 1.0, 5)),
+            ("para gamma 2.4, type 5", para(5, 2.4, 7)),
+            ("para type 3 missing parameters", para(3, 2.4, 2)),
+            ("para header only", b"para\0\0\0\0\0\0".to_vec()),
+            ("other tag type", b"sf32\0\0\0\0\0\0\0\0".to_vec()),
+            ("empty", Vec::new()),
+        ];
+        for (name, tag) in &not_sdr {
+            assert!(!is_sdr_trc_tag(tag), "{name} should not be SDR");
+        }
+        assert!(!has_verified_sdr_trc(&icc_with_trc(
+            "Display P3",
+            None,
+            &[]
+        )));
+        // Only two of the three channels.
+        let two = icc_with_trc(
+            "Display P3",
+            None,
+            &[(*b"rTRC", srgb_para()), (*b"gTRC", srgb_para())],
+        );
+        assert!(!has_verified_sdr_trc(&two));
+        // One channel linear.
+        let mixed = icc_with_trc(
+            "Display P3",
+            None,
+            &[
+                (*b"rTRC", srgb_para()),
+                (*b"gTRC", curv(&[])),
+                (*b"bTRC", srgb_para()),
+            ],
+        );
+        assert!(!has_verified_sdr_trc(&mixed));
+        // A tag table entry pointing past the end of the profile.
+        let mut past_end = icc_named("Display P3");
+        past_end.truncate(past_end.len() - 10);
+        assert!(!has_verified_sdr_trc(&past_end));
+        assert!(!has_verified_sdr_trc(b"not a profile at all"));
+    }
+
+    /// A profile that calls itself Display P3 or sRGB but has a linear,
+    /// missing or malformed tone curve is not SDR: the file keeps 16 bits
+    /// and every pixel.
+    #[test]
+    fn sdr_named_icc_with_unverified_curves_keeps_sixteen_bits() {
+        let p3 = |trc| icc_with_trc("Display P3", trc, &[]);
+        let cases = [
+            ("Display P3 with linear curv", p3(Some(curv(&[])))),
+            ("Display P3 with gamma 1.0 curv", p3(Some(curv(&[256])))),
+            (
+                "sRGB IEC61966-2.1 with a linear table",
+                icc_with_trc("sRGB IEC61966-2.1", Some(curv_table(1024, |x| x)), &[]),
+            ),
+            ("Display P3 without curves", p3(None)),
+            (
+                "Display P3 with filler for curves",
+                p3(Some((0..512u32).map(|i| (i * 7 % 251) as u8).collect())),
+            ),
+        ];
+        for (name, icc) in &cases {
+            assert!(!icc_signals_hdr(icc), "{name}");
+            assert!(!icc_confirms_sdr(icc), "{name}");
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("p3.png");
+            let meta = DeepPng {
+                icc: Some(icc),
+                ..DeepPng::default()
+            };
+            let deep = deep_png(&path, 64, 48, &meta);
+            assert!(
+                !is_confirmed_sdr_png(&PngMeta::read(&path).unwrap()),
+                "{name}"
+            );
+            optimize_heif_png(&path).unwrap();
+            let info = png_info(&path);
+            assert_eq!(info.bit_depth, png::BitDepth::Sixteen, "{name}");
+            assert_eq!(info.icc_profile.as_deref(), Some(&icc[..]), "{name}");
+            assert_eq!(
+                image::open(&path).unwrap().to_rgb16(),
+                DynamicImage::ImageRgba16(deep).to_rgb16(),
+                "{name}"
+            );
+        }
+        // The same name with real curves still goes to 8 bits.
+        assert!(goes_to_eight_bits(&DeepPng {
+            icc: Some(&p3(Some(curv(&[563])))),
+            ..DeepPng::default()
+        }));
+    }
+
+    /// Every chunk of a PNG after its image data has been read to `IEND`.
+    fn full_png_info(path: &Path) -> png::Info<'static> {
+        let mut reader = png::Decoder::new(std::io::BufReader::new(File::open(path).unwrap()))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+        reader.next_frame(&mut buf).unwrap();
+        reader.finish().unwrap();
+        reader.info().clone()
+    }
+
+    /// The type of each chunk in a PNG, in order.
+    fn chunk_order(path: &Path) -> Vec<String> {
+        let data = std::fs::read(path).unwrap();
+        let mut at = 8;
+        let mut kinds = Vec::new();
+        while at + 8 <= data.len() {
+            let len = u32::from_be_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+            kinds.push(String::from_utf8_lossy(&data[at + 4..at + 8]).into_owned());
+            at += 12 + len;
+        }
+        kinds
+    }
+
+    #[test]
+    fn text_and_exif_after_the_image_data_survive_rewrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let p3 = icc_named("Display P3");
+        let text =
+            |key: &str, value: &str| (*b"tEXt", [key.as_bytes(), &[0], value.as_bytes()].concat());
+        let itxt = (
+            *b"iTXt",
+            [&b"XML:com.adobe.xmp\0\0\0\0\0"[..], b"<x:xmpmeta/>"].concat(),
+        );
+        let exif = exif_with_orientation(1);
+        let path = dir.path().join("trailing.png");
+        let meta = DeepPng {
+            icc: Some(&p3),
+            trailing: vec![
+                text("Comment", "after IDAT"),
+                itxt.clone(),
+                (*b"eXIf", exif.clone()),
+            ],
+            ..DeepPng::default()
+        };
+        deep_png(&path, 64, 48, &meta);
+        let original = full_png_info(&path);
+        assert_eq!(original.uncompressed_latin1_text.len(), 1);
+        let source = PngMeta::read(&path).unwrap();
+        assert!(source.info.uncompressed_latin1_text.is_empty());
+        assert_eq!(source.trailing_chunks, meta.trailing);
+
+        // A plain rewrite keeps them, and only with metadata.
+        let img = image::open(&path).unwrap();
+        let kept = dir.path().join("kept.png");
+        write_png(&img, &source, &kept, true).unwrap();
+        let stripped = dir.path().join("stripped.png");
+        write_png(&img, &source, &stripped, false).unwrap();
+        let info = full_png_info(&stripped);
+        assert!(info.uncompressed_latin1_text.is_empty());
+        assert!(info.utf8_text.is_empty());
+        assert!(info.exif_metadata.is_none());
+
+        // So does the HEIF optimization, which takes the file to 8 bits.
+        optimize_heif_png(&path).unwrap();
+        for out in [&kept, &path] {
+            let info = full_png_info(out);
+            assert_eq!(info.uncompressed_latin1_text.len(), 1, "{out:?}");
+            let t = &info.uncompressed_latin1_text[0];
+            assert_eq!((&t.keyword[..], &t.text[..]), ("Comment", "after IDAT"));
+            assert_eq!(info.utf8_text.len(), 1, "{out:?}");
+            assert_eq!(info.utf8_text[0].keyword, "XML:com.adobe.xmp");
+            assert_eq!(info.exif_metadata.as_deref(), Some(&exif[..]), "{out:?}");
+            let order = chunk_order(out);
+            let idat = order.iter().position(|k| k == "IDAT").unwrap();
+            assert!(order.iter().position(|k| k == "tEXt").unwrap() > idat);
+            assert_eq!(order.last().map(String::as_str), Some("IEND"));
+        }
+        assert_eq!(png_info(&path).bit_depth, png::BitDepth::Eight);
+
+        // A chunk with a bad CRC after the image data is dropped, not copied
+        // with a fresh one.
+        let mut data = std::fs::read(&kept).unwrap();
+        let at = data.windows(10).position(|w| w == b"after IDAT").unwrap();
+        data[at] ^= 0x20;
+        let corrupt = dir.path().join("corrupt.png");
+        std::fs::write(&corrupt, &data).unwrap();
+        assert!(PngMeta::read(&corrupt).unwrap().trailing_chunks.is_empty());
+    }
+
+    #[test]
+    fn hdr_chunks_after_the_image_data_keep_sixteen_bits() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("late_hdr.png");
+        let meta = DeepPng {
+            srgb: true,
+            trailing: hdr10_chunks(),
+            ..DeepPng::default()
+        };
+        deep_png(&path, 64, 48, &meta);
+        let source = PngMeta::read(&path).unwrap();
+        assert_eq!(source.hdr_chunks, hdr10_chunks());
+        assert!(!is_confirmed_sdr_png(&source));
+        optimize_heif_png(&path).unwrap();
+        assert_eq!(png_info(&path).bit_depth, png::BitDepth::Sixteen);
+        // Rewritten before the image data, where PNG wants them.
+        assert_eq!(PngMeta::read(&path).unwrap().hdr_chunks, hdr10_chunks());
+        let info = png_info(&path);
+        assert!(info.mastering_display_color_volume.is_some());
+        assert!(info.content_light_level.is_some());
     }
 
     #[test]

@@ -28,21 +28,27 @@ private struct Target: Decodable {
 /// container (see `send`), which only processes in the group can write, so a
 /// `convt://` link from a web page can never start a conversion.
 final class FinderSync: FIFinderSync {
-    /// The items each recent menu was built for, by the tag its items carry.
-    /// By the time an item is clicked, Finder may report a different
-    /// selection or none at all (right-clicking an item that wasn't selected
-    /// targets it without selecting it), and Finder can build another menu,
-    /// in another window, before the first one's click arrives. The tag ties
-    /// a click to the menu it came from. Only the newest `maxMenuSelections`
-    /// are kept, so the memory stays tiny.
-    private var menuSelections: [Int: [URL]] = [:]
-    /// `menuSelections`' tags, oldest first.
+    /// What one menu was built for: its files, and the target id behind each
+    /// format item's exact title. A click uses only its own menu's snapshot,
+    /// so it converts the files that menu showed into the format it showed.
+    private struct MenuSnapshot {
+        let items: [URL]
+        /// Exact menu title to target id.
+        let targetsByTitle: [String: String]
+    }
+
+    /// Each recent menu's snapshot, by the tag its items carry. By the time
+    /// an item is clicked, Finder may report a different selection or none
+    /// at all (right-clicking an item that wasn't selected targets it
+    /// without selecting it), and Finder can build another menu, in another
+    /// window, before the first one's click arrives. The tag ties a click to
+    /// the menu it came from. Only the newest `maxMenuSnapshots` are kept, so
+    /// the memory stays tiny.
+    private var menuSnapshots: [Int: MenuSnapshot] = [:]
+    /// `menuSnapshots`' tags, oldest first.
     private var menuTagOrder: [Int] = []
     private var nextMenuTag = 100
-    private let maxMenuSelections = 16
-    /// The items the last menu was built for, in case Finder drops the tag
-    /// when it copies the menu into its own process.
-    private var lastMenuItems: [URL] = []
+    private let maxMenuSnapshots = 16
 
     override init() {
         super.init()
@@ -63,8 +69,7 @@ final class FinderSync: FIFinderSync {
         }
         let tag = nextMenuTag
         nextMenuTag = nextMenuTag >= 10000 ? 100 : nextMenuTag + 1
-        remember(items, tag: tag)
-        lastMenuItems = items
+        var targetsByTitle: [String: String] = [:]
 
         let submenu = NSMenu(title: "Convert with convt")
         if let list = loadTargets() {
@@ -84,12 +89,13 @@ final class FinderSync: FIFinderSync {
             let isVideo = targets.contains { $0.category == "Video" }
             for target in targets {
                 let title = isVideo && target.category == "Audio" ? "\(target.name) (audio only)" : target.name
-                // Finder copies this menu into its own process, so `convert`
-                // finds the target again by title, and the files by the tag
-                // (with fallbacks in `clickedItems` if the copy loses it).
+                // Finder copies this menu into its own process, so the item
+                // that comes back is a copy: `convert` finds this menu's
+                // snapshot by the tag and the target by the exact title.
                 let item = NSMenuItem(title: title, action: #selector(convert(_:)), keyEquivalent: "")
                 item.target = self
                 item.tag = tag
+                targetsByTitle[title] = target.id
                 submenu.addItem(item)
             }
             submenu.addItem(.separator())
@@ -100,6 +106,7 @@ final class FinderSync: FIFinderSync {
             // rather than guess from the format table.
             submenu.addItem(moreItem(title: "Open in convt…", tag: tag))
         }
+        remember(MenuSnapshot(items: items, targetsByTitle: targetsByTitle), tag: tag)
 
         let menu = NSMenu(title: "")
         let root = NSMenuItem(title: "Convert with convt", action: nil, keyEquivalent: "")
@@ -131,52 +138,54 @@ final class FinderSync: FIFinderSync {
         return item
     }
 
-    /// Records the items the menu with `tag` was built for, forgetting the
-    /// oldest menu past `maxMenuSelections`.
-    private func remember(_ items: [URL], tag: Int) {
-        if menuSelections.updateValue(items, forKey: tag) != nil {
+    /// Records the snapshot of the menu with `tag`, forgetting the oldest
+    /// menu past `maxMenuSnapshots`.
+    private func remember(_ snapshot: MenuSnapshot, tag: Int) {
+        if menuSnapshots.updateValue(snapshot, forKey: tag) != nil {
             menuTagOrder.removeAll { $0 == tag }
         }
         menuTagOrder.append(tag)
-        while menuTagOrder.count > maxMenuSelections {
-            menuSelections.removeValue(forKey: menuTagOrder.removeFirst())
+        while menuTagOrder.count > maxMenuSnapshots {
+            menuSnapshots.removeValue(forKey: menuTagOrder.removeFirst())
         }
     }
 
-    /// The items a click on `sender` applies to: exactly what its menu was
-    /// built for (found by its tag), else what the last menu was built for,
-    /// else Finder's selection, else the item that was right-clicked. The
-    /// menu's items come first because Finder's selection can change between
-    /// opening the menu and clicking it, and converting what is selected by
-    /// then would convert files the user never picked. They are used once,
-    /// so a later click can't reuse an old menu's files.
-    private func clickedItems(for sender: NSMenuItem) -> [URL]? {
-        if sender.tag != 0, let items = menuSelections.removeValue(forKey: sender.tag), !items.isEmpty {
-            menuTagOrder.removeAll { $0 == sender.tag }
-            if lastMenuItems == items {
-                lastMenuItems = []
-            }
-            return items
+    /// The snapshot of the menu `sender` came from, found by its tag and
+    /// used once, so a later click can't reuse an old menu's files.
+    private func takeSnapshot(for sender: NSMenuItem) -> MenuSnapshot? {
+        guard sender.tag != 0, let snapshot = menuSnapshots.removeValue(forKey: sender.tag) else {
+            return nil
         }
-        if !lastMenuItems.isEmpty {
-            let items = lastMenuItems
-            lastMenuItems = []
-            return items
-        }
-        let controller = FIFinderSyncController.default()
-        if let selected = controller.selectedItemURLs(), !selected.isEmpty {
+        menuTagOrder.removeAll { $0 == sender.tag }
+        return snapshot.items.isEmpty ? nil : snapshot
+    }
+
+    /// Finder's selection at the moment of a click whose menu can't be found
+    /// (the tag was lost when Finder copied the menu, or the snapshot
+    /// expired). Another menu's files are never used instead: Finder may
+    /// have built a menu for other files since, and converting those would
+    /// convert files the user never picked. Without a selection, nothing is
+    /// converted.
+    private func liveSelection() -> [URL]? {
+        if let selected = FIFinderSyncController.default().selectedItemURLs(), !selected.isEmpty {
             return selected
         }
-        if let targeted = controller.targetedURL() {
-            return [targeted]
-        }
-        NSLog("convt: the menu was clicked with no selected or targeted items")
+        NSLog("convt: ignoring click with no bound menu snapshot or active Finder selection")
         return nil
     }
 
-    /// Converts the selection in place, with no window.
+    /// Converts the menu's files in place, with no window.
     @objc private func convert(_ sender: NSMenuItem) {
-        guard let items = clickedItems(for: sender) else { return }
+        if let snapshot = takeSnapshot(for: sender) {
+            guard let id = snapshot.targetsByTitle[sender.title] else {
+                NSLog("convt: no target for \(sender.title) in its menu; opening Quick convert")
+                send(to: nil, items: snapshot.items, activate: true)
+                return
+            }
+            send(to: id, items: snapshot.items, activate: false)
+            return
+        }
+        guard let items = liveSelection() else { return }
         let name = sender.title.replacingOccurrences(of: " (audio only)", with: "")
         let target = loadTargets().flatMap { list in
             list.targets.values.lazy.flatMap { $0 }.first { $0.name == name }
@@ -190,9 +199,9 @@ final class FinderSync: FIFinderSync {
         send(to: target.id, items: items, activate: false)
     }
 
-    /// Opens Quick convert for the selection.
+    /// Opens Quick convert for the menu's files.
     @objc private func moreOptions(_ sender: NSMenuItem) {
-        guard let items = clickedItems(for: sender) else { return }
+        guard let items = takeSnapshot(for: sender)?.items ?? liveSelection() else { return }
         send(to: nil, items: items, activate: true)
     }
 

@@ -434,19 +434,26 @@ pub fn show_about(cx: &mut App) {
     );
 }
 
-/// Quick convert's size: room for a typical image's popular formats (two
-/// rows), More formats, the Options row, where it runs and Save without
-/// scrolling. Opened options, more formats and long lists scroll.
-pub(super) const QUICK_SIZE: (f32, f32) = (580., 618.);
+/// Quick convert's opening size: room for a typical image's popular formats
+/// (two rows), More formats, the Options row, where it runs and Save, with a
+/// little air above the footer. The window grows when more shows
+/// (`QuickView::sync_window_height`); long lists scroll.
+pub(super) const QUICK_SIZE: (f32, f32) = (580., 524.);
 
-/// Quick convert's height, plus the title bar macOS draws inside it.
-pub(super) fn quick_height() -> Pixels {
-    px(QUICK_SIZE.1
+/// Quick convert's height for `content`, plus the title bar macOS draws
+/// inside it.
+pub(super) fn quick_height_for(content: f32) -> Pixels {
+    px(content
         + if theme::transparent_titlebar() {
             24.
         } else {
             0.
         })
+}
+
+/// Quick convert's opening height, plus the title bar macOS draws inside it.
+pub(super) fn quick_height() -> Pixels {
+    quick_height_for(QUICK_SIZE.1)
 }
 
 /// The size onboarding would like at least; it opens at three quarters of
@@ -665,6 +672,25 @@ pub(crate) fn hud_follows(job: crate::jobs::JobId, cx: &App) -> bool {
     })
 }
 
+/// Whether a window other than the HUD is open. The HUD alone never brings
+/// convt into the Dock.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn has_regular_windows(cx: &App) -> bool {
+    !only_hud_open(cx)
+}
+
+/// The HUD's Details for a failure: the main window on Activity, with the
+/// newest failed record of each of `inputs` opened to its full message.
+pub(crate) fn show_failures(inputs: Vec<PathBuf>, cx: &mut App) {
+    if first_run_pending(cx) {
+        open_first_run(cx);
+        return;
+    }
+    if let Some((_, view)) = open_main(cx) {
+        view.update(cx, |view, cx| view.expand_failures(&inputs, cx));
+    }
+}
+
 /// Whether no window is open but the HUD. The HUD alone doesn't keep convt
 /// open: with no tray, it quits once silent conversions are done.
 pub(crate) fn only_hud_open(cx: &App) -> bool {
@@ -676,7 +702,18 @@ pub fn open_quick(request: Request, cx: &mut App) {
     let app = model::shared(cx);
     // Status is read offline; it may have changed through the CLI.
     app.update(cx, |s, cx| s.refresh_pack(cx));
-    let options = window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx);
+    let mut options = window_options(size(px(QUICK_SIZE.0), quick_height()), "Convert", cx);
+    // Position slightly above geometric center so expanding Options or the
+    // PNG warning grows downward cleanly without crossing the bottom edge.
+    if let Some(display) = cx.primary_display() {
+        let visible = display.visible_bounds();
+        let w = px(QUICK_SIZE.0);
+        let h = quick_height();
+        let x = visible.origin.x + ((visible.size.width - w).max(px(0.)) / 2.).floor();
+        let room_y = ((visible.size.height - px(780.)).max(px(32.)) / 2.).floor();
+        let y = visible.origin.y + room_y;
+        options.window_bounds = Some(WindowBounds::Windowed(Bounds::new(point(x, y), size(w, h))));
+    }
     match open_window(options, cx, |window, cx| {
         cx.new(|cx| {
             let view = QuickView::new(app, request, window, cx);
@@ -685,8 +722,15 @@ pub fn open_quick(request: Request, cx: &mut App) {
             view
         })
     }) {
-        // Each request gets its own window; the global tracks the newest.
-        Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
+        Ok((handle, view)) => {
+            // Taller than the opening size when there is more to show: the
+            // PNG warning, a license banner or the pack card.
+            let _ = handle.update(cx, |_, window, cx| {
+                view.update(cx, |view, cx| view.sync_window_height(window, cx))
+            });
+            // Each request gets its own window; the global tracks the newest.
+            cx.set_global(Open(handle, view.downgrade()));
+        }
         Err(e) => tracing::error!(error = %e, "could not open Quick convert"),
     }
     cx.activate(true);
@@ -887,6 +931,91 @@ fn blocked_banner(state: &State, p: &Palette) -> Option<impl IntoElement + use<>
     ))
 }
 
+/// One plain line for an engine's error: what went wrong in words a person
+/// reads, without the tool's name, FFmpeg's `[demuxer @ 0x…]` tags or the
+/// rest of its log. The raw message stays in Activity's Details.
+pub(super) fn friendly_error(raw: &str) -> String {
+    let lower = raw.to_lowercase();
+    let known = [
+        (
+            &[
+                "moov atom not found",
+                "invalid data found when processing input",
+            ][..],
+            "File is damaged or unreadable.",
+        ),
+        (
+            &["no such file", "cannot find the file"][..],
+            "The original file could not be found.",
+        ),
+        (
+            &["permission denied"][..],
+            "Permission denied reading or writing the file.",
+        ),
+        (
+            &["no space left"][..],
+            "Not enough disk space to save the file.",
+        ),
+    ];
+    if let Some((_, words)) = known
+        .iter()
+        .find(|(needles, _)| needles.iter().any(|n| lower.contains(n)))
+    {
+        return (*words).to_string();
+    }
+    let mut text = raw.trim();
+    for tool in ["ffmpeg failed:", "sips failed:", "libreoffice failed:"] {
+        if text.len() >= tool.len()
+            && text.is_char_boundary(tool.len())
+            && text[..tool.len()].eq_ignore_ascii_case(tool)
+        {
+            text = text[tool.len()..].trim_start();
+        }
+    }
+    let line = text
+        .lines()
+        .map(|line| collapse_whitespace(&strip_address_tags(line)))
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    if line.is_empty() {
+        return raw
+            .trim()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+    }
+    // The first sentence, when a line runs on into more.
+    match line.find(". ") {
+        Some(end) => line[..=end].to_string(),
+        None => line,
+    }
+}
+
+/// Drops FFmpeg's `[mov,mp4,m4a @ 0x57dd70369580]` tags.
+fn strip_address_tags(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(start) = rest.find('[') {
+        let Some(len) = rest[start..].find(']') else {
+            break;
+        };
+        let tag = &rest[start..start + len + 1];
+        out.push_str(&rest[..start]);
+        if !tag.contains(" @ 0x") {
+            out.push_str(tag);
+        }
+        rest = &rest[start + len + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn collapse_whitespace(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// "1.9 MB", "214 KB".
 pub(crate) fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
@@ -926,7 +1055,49 @@ fn open_folder(dir: &Path, cx: &mut App) {
 
 #[cfg(test)]
 mod unit {
-    use super::{human_size, time_left};
+    use super::{friendly_error, human_size, time_left};
+
+    #[test]
+    fn engine_errors_read_as_one_plain_line() {
+        let moov = "ffmpeg failed: [mov,mp4,m4a,3gp,3g2,mj2 @ 0x57dd70369580] moov atom not found\n\
+                    [in#0 @ 0x57dd70368f40] Error opening input: Invalid data found when processing input\n\
+                    Error opening input file /tmp/broken.mp4.\n\
+                    Error opening input files: Invalid data found when processing input";
+        assert_eq!(friendly_error(moov), "File is damaged or unreadable.");
+        assert_eq!(
+            friendly_error("sips failed: /Users/a/x.heic: Permission denied"),
+            "Permission denied reading or writing the file."
+        );
+        assert_eq!(
+            friendly_error("open /tmp/gone.png: No such file or directory (os error 2)"),
+            "The original file could not be found."
+        );
+        assert_eq!(
+            friendly_error("write failed: No space left on device"),
+            "Not enough disk space to save the file."
+        );
+        // Plain messages stay as they are, so Activity offers no Details.
+        let plain = "The image is too large to convert.";
+        assert_eq!(friendly_error(plain), plain);
+        assert_eq!(
+            friendly_error("  unsupported format  "),
+            "unsupported format"
+        );
+        // Unknown FFmpeg errors lose the tool name and the address tags,
+        // and keep their first line.
+        assert_eq!(
+            friendly_error(
+                "ffmpeg failed: [libx264 @ 0x6000]   height not divisible by 2 (1081x721)\n\
+                 Error while opening encoder"
+            ),
+            "height not divisible by 2 (1081x721)"
+        );
+        assert_eq!(
+            friendly_error("libreoffice failed: Source file could not be loaded. Details follow"),
+            "Source file could not be loaded."
+        );
+        assert_eq!(friendly_error("[keep this] tag"), "[keep this] tag");
+    }
 
     #[test]
     fn sizes_and_times() {

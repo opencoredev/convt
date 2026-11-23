@@ -4,7 +4,8 @@
 //! itself a few seconds after they finish, or a little later if one failed.
 //!
 //! Two rows: what happened (a picture of the file, the title, ×), then the
-//! detail (sizes, progress or the reason) with Copy and Show beside it.
+//! detail (sizes, progress or the reason) with Copy and Show beside it, or
+//! Details, which opens the failure in Activity.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -14,7 +15,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::theme::{self, Button, IconName, Palette, Tone, icon, mono, radius, size, styled};
-use super::{file_size, human_size};
+use super::{file_size, friendly_error, human_size};
 use crate::jobs::{Entry, JobId, Status};
 use crate::model::{self, AppState};
 
@@ -204,7 +205,7 @@ impl HudView {
             failed
                 .first()
                 .and_then(|e| match &e.status {
-                    Status::Failed(error) => Some(error.message.clone()),
+                    Status::Failed(error) => Some(friendly_error(&error.message)),
                     _ => None,
                 })
                 .unwrap_or_default()
@@ -277,6 +278,14 @@ impl HudView {
                 (title, reason(), None)
             }
         }
+    }
+
+    /// The files that failed, in job order.
+    fn failed_inputs(&self) -> Vec<PathBuf> {
+        self.entries()
+            .filter(|e| matches!(e.status, Status::Failed(_)))
+            .map(|e| e.input.clone())
+            .collect()
     }
 
     /// The overall progress of the running jobs, 0 to 1.
@@ -403,6 +412,19 @@ impl Render for HudView {
                             .on_click(move |_, _, cx| cx.reveal_path(&path)),
                     )
             });
+        // A failure's full message is in Activity, beside Retry.
+        let details = (phase == Phase::Failed).then(|| {
+            let inputs = self.failed_inputs();
+            div().flex_shrink_0().child(
+                Button::secondary("hud-details", "Details")
+                    .small()
+                    .build(&p)
+                    .on_click(move |_, window, cx| {
+                        super::show_failures(inputs.clone(), cx);
+                        window.remove_window();
+                    }),
+            )
+        });
         let detail = match phase {
             Phase::Running => div()
                 .flex()
@@ -494,7 +516,8 @@ impl Render for HudView {
                             .min_w_0()
                             .child(detail),
                     )
-                    .children(actions),
+                    .children(actions)
+                    .children(details),
             )
     }
 }

@@ -1,6 +1,7 @@
 //! The main window: Activity (the composer for files dropped or added here,
 //! running jobs and history in one list), Automations and Settings.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -13,7 +14,7 @@ use gpui_kit::*;
 use super::quick::{Dismissed, QuickView};
 use super::settings_window::SettingsView;
 use super::theme::{self, Button, Palette, Tone, icon, mono, radius, size, space, styled, text};
-use super::{LICENSE_PRICE, SettingsTab, file_size, human_size, time_left};
+use super::{LICENSE_PRICE, SettingsTab, file_size, friendly_error, human_size, time_left};
 use crate::automation;
 use crate::clock::Local;
 use crate::history::{Outcome, Record};
@@ -45,6 +46,8 @@ pub struct MainView {
     pub(super) composer: Option<Entity<QuickView>>,
     /// The record whose Copy was clicked last, while its button says Copied.
     pub(super) copied: Option<i64>,
+    /// Failed records showing the engine's full message under the summary.
+    pub(super) details_open: HashSet<i64>,
     handle: AnyWindowHandle,
     _composer: Option<Subscription>,
     _copied: Option<Task<()>>,
@@ -65,6 +68,7 @@ impl MainView {
             settings,
             composer: None,
             copied: None,
+            details_open: HashSet::new(),
             handle: window.window_handle(),
             _composer: None,
             _copied: None,
@@ -136,6 +140,33 @@ impl MainView {
         self.composer = Some(composer);
         self.page = Page::Activity;
         cx.notify();
+    }
+
+    /// Shows or hides a failed record's full message.
+    fn toggle_details(&mut self, id: i64, cx: &mut Context<Self>) {
+        if !self.details_open.remove(&id) {
+            self.details_open.insert(id);
+        }
+        cx.notify();
+    }
+
+    /// Opens the full message of the newest failed record of each input,
+    /// for the HUD's Details.
+    pub(super) fn expand_failures(&mut self, inputs: &[PathBuf], cx: &mut Context<Self>) {
+        let state = self.app.read(cx);
+        let ids: Vec<i64> = inputs
+            .iter()
+            .filter_map(|input| {
+                state
+                    .recent
+                    .iter()
+                    .filter(|r| r.input == *input && matches!(r.outcome, Outcome::Failed(_)))
+                    .max_by_key(|r| (r.finished_at, r.id))
+                    .map(|r| r.id)
+            })
+            .collect();
+        self.details_open.extend(ids);
+        self.set_page(Page::Activity, cx);
     }
 
     /// Copies a finished conversion's files, and says so on its button for
@@ -669,7 +700,7 @@ impl MainView {
                     "Failed".into(),
                     p.error,
                     (IconName::CircleX, p.error),
-                    Some(styled(size::SMALL, p.error).child(message.clone())),
+                    Some(self.failure(id, message, p, cx)),
                     retry(record, app, p).into_iter().collect(),
                 ),
                 Outcome::Cancelled => (
@@ -719,6 +750,62 @@ impl MainView {
                     .child(status),
             ))
             .child(action_cell(actions))
+    }
+
+    /// A failed record's reason on one line, and the engine's own message
+    /// behind Details when the line is a summary of it.
+    fn failure(&self, id: i64, raw: &str, p: &Palette, cx: &mut Context<Self>) -> Div {
+        let summary = friendly_error(raw);
+        let raw = raw.trim().to_string();
+        let open = self.details_open.contains(&id);
+        let toggle = (summary != raw).then(|| {
+            theme::text_button(
+                SharedString::from(format!("error-details-{id}")),
+                if open { "Hide details" } else { "Details" },
+                p.secondary,
+                12.,
+            )
+            .aria_expanded(open)
+            .flex_shrink_0()
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_details(id, cx)))
+        });
+        let full = (open && toggle.is_some()).then(|| {
+            div()
+                .id(SharedString::from(format!("error-raw-{id}")))
+                .test_support()
+                .aria_label(SharedString::from(raw.clone()))
+                .max_h(px(160.))
+                .overflow_y_scroll()
+                .px(px(10.))
+                .py(px(8.))
+                .rounded(px(radius::SM))
+                .bg(p.recessed)
+                .border_1()
+                .border_color(p.border)
+                .child(mono(11., 16., p.secondary).child(raw))
+        });
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .min_w_0()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(space::SM))
+                    .min_w_0()
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("error-summary-{id}")))
+                            .test_support()
+                            .aria_label(SharedString::from(summary.clone()))
+                            .min_w_0()
+                            .child(styled(size::SMALL, p.error).truncate().child(summary)),
+                    )
+                    .children(toggle),
+            )
+            .children(full)
     }
 
     fn automations(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
