@@ -74,4 +74,4 @@ A `429` also carries `Retry-After` in seconds; wait at least that long. The `@co
 | `POST /v1/jobs`              | Only with an `Idempotency-Key`.            |
 | `POST /v1/convert`           | Only with an `Idempotency-Key`.            |
 
-Without a key, each create reserves a new job. If one times out, you cannot tell whether it was created; the unknown job expires after 24 hours and is never charged, but holds 1 cent of your spend cap and one storage slot until then. Send an [`Idempotency-Key`](/guides/idempotency) and the retry returns the original job instead.
+Without a key, each create reserves a new job. If one times out, you cannot tell whether it was created. An upload job that was never started expires after 24 hours without a charge, holding 1 cent of your spend cap and one storage slot until then. A `source_url` job or a `/v1/convert` request runs on its own and is billed if it succeeds, so a blind retry can pay twice. Send an [`Idempotency-Key`](/guides/idempotency) and the retry returns the original job instead.

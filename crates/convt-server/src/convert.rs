@@ -362,7 +362,16 @@ async fn convert(
             })?,
     };
     let _memory = reserve_memory(&headers).await?;
-    let mut body = read_body(request, &s).await?;
+    // A slow sender must not hold its share of the memory budget forever.
+    let mut body = tokio::time::timeout(Duration::from_secs(120), read_body(request, &s))
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::REQUEST_TIMEOUT,
+                "request_timeout",
+                "The upload took longer than 2 minutes. Use POST /v1/jobs for slow or large uploads.",
+            )
+        })??;
     body.to = body.to.or_else(|| query.get("to").cloned());
     body.from = body.from.or_else(|| query.get("from").cloned());
     body.filename = body.filename.or_else(|| query.get("filename").cloned());
@@ -603,7 +612,10 @@ async fn convert(
         _ => {}
     }
     if wants_json || job.output_keys.0.len() != 1 {
-        let (outputs, ttl) = routes::output_links(&s, &job).await?;
+        let (outputs, ttl) = match routes::output_links(&s, &job).await {
+            Ok(links) => links,
+            Err(error) => return Ok(finish(billed_error(error, job), &id, replayed)),
+        };
         let response = Json(serde_json::json!({
             "job": JobView::from(job),
             "outputs": outputs,
@@ -613,8 +625,16 @@ async fn convert(
         return Ok(finish(response, &id, replayed));
     }
     let key = job.output_keys.0[0].clone();
-    let length = s.storage.head(&key).await?;
-    let stream = s.storage.open(&key).await?;
+    let opened = async {
+        let length = s.storage.head(&key).await?;
+        let stream = s.storage.open(&key).await?;
+        Ok::<_, ApiError>((length, stream))
+    }
+    .await;
+    let (length, stream) = match opened {
+        Ok(opened) => opened,
+        Err(error) => return Ok(finish(billed_error(error, job), &id, replayed)),
+    };
     let mime = convt_core::format_by_id(&job.target_format)
         .map(|f| f.mime)
         .unwrap_or("application/octet-stream");
@@ -632,6 +652,17 @@ async fn convert(
         h.insert(header::CONTENT_DISPOSITION, value);
     }
     Ok(finish(response, &id, replayed))
+}
+
+/// A storage error after the job succeeded: it was billed, so the answer must
+/// name the job, whose outputs `GET /v1/jobs/{id}/download` still returns.
+fn billed_error(error: ApiError, job: jobs::Job) -> Response {
+    let id = job.id.clone();
+    let mut response = error.with_job(job).into_response();
+    if let Ok(location) = HeaderValue::from_str(&format!("/v1/jobs/{id}/download")) {
+        response.headers_mut().insert(header::LOCATION, location);
+    }
+    response
 }
 
 fn source_name_owned(job: &jobs::Job) -> Option<&str> {

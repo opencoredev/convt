@@ -255,9 +255,29 @@ impl From<jobs::Job> for JobView {
             error_code: j.error_code,
             created_at: j.created_at,
             expires_at: j.expires_at,
-            source_url: j.source_url,
-            webhook_url: j.webhook_url,
+            source_url: j.source_url.as_deref().map(redact_url),
+            webhook_url: j.webhook_url.as_deref().map(redact_url),
         }
+    }
+}
+
+/// A URL without its query string or fragment, which is where presigned links
+/// and receivers' tokens live. Job views show this; the full URL stays private.
+pub fn redact_url(url: &str) -> String {
+    match url::Url::parse(url) {
+        Ok(mut parsed) => {
+            let had_secret = parsed.query().is_some() || parsed.fragment().is_some();
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            let _ = parsed.set_username("");
+            let _ = parsed.set_password(None);
+            let mut shown = parsed.to_string();
+            if had_secret {
+                shown.push_str("?…");
+            }
+            shown
+        }
+        Err(_) => "[unparseable URL]".into(),
     }
 }
 
@@ -613,7 +633,7 @@ pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
         s.storage.delete_prefix(&format!("{id}/")).await?;
         // Only successful cleanup releases the separate storage commitment.
         sqlx::query!(
-            r#"update cloud_jobs set input_key=null where id=$1 and expires_at<=now()"#,
+            r#"update cloud_jobs set input_key=null, source_url=null where id=$1 and expires_at<=now()"#,
             &id
         )
         .execute(&s.pool)

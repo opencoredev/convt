@@ -125,9 +125,9 @@ actions:
 
         Send the file as a multipart `file` field (with `to`, and optionally `from` and `options`), as the raw body with `to` in the query, or send JSON with `source_url`. `to` and `from` take format ids or extensions; `from` is inferred from the file name, URL or `Content-Type` when left out.
 
-        When the job succeeds with one output and `Accept` does not ask for JSON, the response is the file, named after yours in `Content-Disposition`. With several outputs (a multi-page PDF to PNG) or `Accept: application/json`, it is JSON with signed URLs. A job still running after `wait` seconds answers `202`; it keeps running and you poll it.
+        When the job succeeds with one output and `Accept` does not ask for JSON, the response is the file, named after yours in `Content-Disposition`. With several outputs (a multi-page PDF to PNG) or `Accept: application/json`, it is JSON with signed URLs. When the job is still running after `wait` seconds, a JSON request gets `202` and the job keeps running; a file request gets `409 still_running` if it sent an `Idempotency-Key` (the job keeps running) or `504 timeout` if not (the job is cancelled).
 
-        Without an `Idempotency-Key`, hanging up before the answer cancels the job, so you are not charged. With one, the job keeps running and a retry with the same key collects it.
+        Without an `Idempotency-Key`, hanging up before the answer cancels the job; that is best effort, and a job that already succeeded is billed. With one, the job keeps running and a retry with the same key collects it.
   - target: $.paths['/v1/convert'].post.responses['400']
     update:
       description: "`invalid_request`, `input_format_required`, `unsupported_format`, `invalid_options`, `invalid_source_url`, `invalid_idempotency_key` or an empty file (`file_too_large`)."

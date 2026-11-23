@@ -77,7 +77,8 @@ await out.save("report.pdf");`,
     headers={"Authorization": f"Bearer {key}"},
     files={"file": open("clip.mov", "rb")},
     data={"to": "mp4"})
-open("clip.mp4", "wb").write(r.content)`,
+if r.ok and "json" not in r.headers["content-type"]:
+    open("clip.mp4", "wb").write(r.content)`,
   },
 ];
 
@@ -118,7 +119,7 @@ const production: [ReactNode, ReactNode][] = [
   ],
   [
     "Signed webhooks",
-    "A job with a webhook_url POSTs an HMAC-signed event when it finishes, retried for about five hours.",
+    "A job with a webhook_url POSTs an HMAC-signed event when it finishes, retried for nearly three hours.",
   ],
   [
     "Debuggable",
@@ -131,11 +132,12 @@ const production: [ReactNode, ReactNode][] = [
 ];
 
 // Credits from cloudconvert.com/pricing (23 November 2026): 1 for most conversions, 2 for Office
-// to PDF, 4 for PDF to Office, plus 1 for every minute of conversion time past the first.
+// to PDF, plus 1 for every minute of conversion time past the first. Only pairs the convt API
+// itself supports (cloud-formats.json) are listed.
 const comparison: [string, string, string][] = [
   ["Photo, HEIC to JPG", "1 credit", "$0.01"],
   ["Word to PDF", "2 credits", "$0.01"],
-  ["PDF to Word", "4 credits", "$0.01"],
+  ["Excel to PDF", "2 credits", "$0.01"],
   ["Video, 6 minutes to convert", "6 credits", "$0.01"],
   ["Failed conversion", "Free", "Free"],
 ];
@@ -233,7 +235,8 @@ function ApiPage() {
             <p>
               Each conversion that succeeds costs one cent, whatever the format, the size (up to 2
               GB) or how long it takes. Failed and cancelled conversions cost nothing. Creating a
-              job reserves one cent against your spend cap, so you can never be billed past it.
+              job reserves one cent against your spend cap, and new jobs stop once billed plus
+              reserved spend reaches it.
             </p>
             <p>
               Billing runs through Polar once a month. Add a card and set a cap on the{" "}
@@ -259,8 +262,8 @@ function ApiPage() {
               failure in production is one id away from an answer.
             </p>
             <p>
-              Long video? Pass <Code>wait=0</Code> and a webhook, or use the jobs routes, and convt
-              tells you when it is done.
+              Long video? Create a job with a <Code>webhook_url</Code> instead, and convt tells your
+              server when it is done.
             </p>
           </div>
         </div>
@@ -309,10 +312,10 @@ function ApiPage() {
             Compared with credits
           </h2>
           <p className="text-[16px]/[26px] text-pretty text-ink-2">
-            CloudConvert charges in credits: 1 for most conversions, 2 for Office to PDF, 4 for PDF
-            to Office, and 1 more for every minute of conversion time past the first. Its credit
-            price depends on the package or subscription you buy. convt charges the same cent for
-            all of them. CloudConvert does have a free tier of 10 conversions a day; convt does not.
+            CloudConvert charges in credits: 1 for most conversions, 2 for Office to PDF, and 1 more
+            for every minute of conversion time past the first. Its credit price depends on the
+            package or subscription you buy. convt charges the same cent for all of them.
+            CloudConvert does have a free tier of 10 credits a day; convt does not.
           </p>
         </div>
         <div className="overflow-x-auto rounded-2xl shadow-[inset_0_0_0_1px_var(--line)]">
@@ -413,7 +416,7 @@ function CodePanel() {
   return (
     // The code stays dark in both themes, like a terminal.
     <div className="dark flex min-w-0 flex-col overflow-hidden rounded-xl bg-land-code text-ink shadow-[inset_0_0_0_1px_#232726,0_8px_30px_#0a1e1426]">
-      <div className="flex items-center justify-between gap-2 px-2 shadow-[inset_0_-1px_0_#ffffff0f]">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 px-2 shadow-[inset_0_-1px_0_#ffffff0f]">
         <div role="tablist" aria-label="Language" className="flex">
           {samples.map((s) => (
             <button
@@ -461,6 +464,7 @@ function CodePanel() {
       <pre
         id={`${base}-panel`}
         role="tabpanel"
+        tabIndex={0}
         aria-labelledby={`${base}-${active}`}
         className="min-h-[188px] overflow-x-auto px-4 py-4 font-mono text-[11.5px]/[21px] text-land-mono [scrollbar-width:thin] md:px-5 md:py-5 md:text-[13.5px]/[24px]"
       >
@@ -491,12 +495,12 @@ function CostMeter() {
         type="number"
         inputMode="numeric"
         min={0}
-        max={100_000_000}
+        max={1_000_000}
         step={1}
         value={count}
         onChange={(e) => {
           const next = Math.floor(Number(e.target.value));
-          setCount(Number.isFinite(next) ? Math.min(Math.max(next, 0), 100_000_000) : 0);
+          setCount(Number.isFinite(next) ? Math.min(Math.max(next, 0), 1_000_000) : 0);
         }}
         className={cx(
           "w-full rounded-lg border border-line bg-page px-3 py-2 font-mono text-[15px]/6 tabular-nums",
@@ -531,7 +535,8 @@ function CostMeter() {
         </output>
       </div>
       <p className="text-[13px]/5 text-ink-2">
-        No monthly fee and no minimum. Billed once a month.
+        No monthly fee and no minimum. Billed once a month. Spend caps go up to $10,000 a billing
+        period.
       </p>
     </div>
   );

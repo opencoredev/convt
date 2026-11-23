@@ -276,3 +276,48 @@ test("a create that keeps failing reports its idempotency key", async () => {
   expect(error.code).toBe("network_error");
   expect(error.idempotencyKey).toBe("k-1");
 });
+test("an empty idempotency key is refused before anything is sent", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    calls++;
+    return Response.json({});
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", idempotencyKey: "" })
+    .catch((e) => e);
+  expect(error.code).toBe("invalid_idempotency_key");
+  expect(calls).toBe(0);
+});
+test("a create cut off by the deadline reports the key it was sent with", async () => {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/v1/jobs"))
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{"));
+            init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+          },
+        }),
+        { status: 200 },
+      );
+    return Response.json({});
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 50 })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+});
+test("save streams the output to disk", async () => {
+  const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "convt-sdk-"));
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response(new Blob(["chunk-1", "chunk-2"]))) as typeof fetch;
+  await new Conversion({ ...job, status: "succeeded" }, [
+    { name: "input.png", url: "https://objects.test/out" },
+  ]).save(join(dir, "out.png"));
+  expect(await readFile(join(dir, "out.png"), "utf8")).toBe("chunk-1chunk-2");
+  await rm(dir, { recursive: true });
+});

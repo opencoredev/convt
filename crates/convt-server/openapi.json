@@ -1214,7 +1214,7 @@
             "name": "wait",
             "in": "query",
             "required": false,
-            "description": "Seconds to wait for the result, 0 to 300. Default 120. `0` queues the job and answers `202` at once.",
+            "description": "Seconds to wait for the result, 0 to 300. Default 120. When it runs out: `202` if you sent `Accept: application/json` (the job keeps running), `409 still_running` for a file request with an `Idempotency-Key` (the job keeps running), or `504 timeout` for a file request without one (the job is cancelled).",
             "schema": {
               "type": "integer",
               "minimum": 0,
@@ -1578,7 +1578,7 @@
             }
           },
           "202": {
-            "description": "Still running after `wait` seconds. The job keeps running and is billed if it succeeds; poll `Location`.",
+            "description": "Sent only with `Accept: application/json`: the job is still running after `wait` seconds. It keeps running and is billed if it succeeds; poll `Location`.",
             "headers": {
               "Location": {
                 "description": "`/v1/jobs/{id}`",

@@ -19,9 +19,10 @@ use crate::net_guard::{self, Policy};
 use crate::routes::JobView;
 use crate::storage::Storage;
 
-/// Attempts before a delivery is abandoned, spread over about five hours.
+/// Sends before a delivery is abandoned. The waits between them add up to
+/// 2 h 42 min 40 s.
 pub const MAX_ATTEMPTS: i32 = 8;
-const BACKOFF_SECONDS: [i64; 8] = [10, 30, 120, 600, 1800, 3600, 3600, 3600];
+const BACKOFF_SECONDS: [i64; 7] = [10, 30, 120, 600, 1800, 3600, 3600];
 
 /// Rows claimed per pass. Each send is bounded (10 s DNS plus 10 s HTTP) and they
 /// run concurrently, so a pass ends well inside the claim's lease.
@@ -75,6 +76,8 @@ struct Due {
     user_id: String,
     webhook_url: String,
     webhook_attempts: i32,
+    /// The lease this pass set; every later update must still find it.
+    lease: chrono::DateTime<chrono::Utc>,
     secret_version: i32,
 }
 
@@ -85,12 +88,19 @@ pub async fn deliver_due(
     master: &str,
     policy: Policy,
 ) -> anyhow::Result<usize> {
-    // The claim bumps `webhook_attempts`, which is also the claim's fencing token,
-    // and moves `webhook_next_at` two minutes ahead: a lease that keeps other
-    // replicas off the row while this one sends.
-    let due = sqlx::query_as!(Due, r#"update cloud_jobs j set webhook_attempts=j.webhook_attempts+1, webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as "webhook_url!", j.webhook_attempts, coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as "secret_version!""#, MAX_ATTEMPTS, BATCH).fetch_all(pool).await?;
+    // The claim moves `webhook_next_at` two minutes ahead: a lease that keeps
+    // other replicas off the row, and the fencing token for the updates below.
+    // `webhook_attempts` counts sends that failed, so a process that dies after
+    // claiming loses no attempt: the lease lapses and the row is claimed again.
+    let due = sqlx::query_as!(Due, r#"update cloud_jobs j set webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as "webhook_url!", j.webhook_attempts, j.webhook_next_at as "lease!", coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as "secret_version!""#, MAX_ATTEMPTS, BATCH).fetch_all(pool).await?;
     let sends = due.iter().map(|row| async move {
-        let result = send(pool, storage, master, policy, row).await;
+        // Building the event and sending it stay well inside the lease.
+        let result = tokio::time::timeout(
+            Duration::from_secs(45),
+            send(pool, storage, master, policy, row),
+        )
+        .await
+        .unwrap_or_else(|_| Err(anyhow::anyhow!("delivery timed out")));
         (row, result)
     });
     let mut delivered = 0;
@@ -98,23 +108,23 @@ pub async fn deliver_due(
         match result {
             Ok(()) => {
                 delivered += 1;
-                // Fenced: a newer claim of the same row owns its state.
                 sqlx::query!(
-                    r#"update cloud_jobs set webhook_delivered_at=now(), webhook_next_at=null where id=$1 and webhook_attempts=$2"#,
+                    r#"update cloud_jobs set webhook_delivered_at=now(), webhook_next_at=null where id=$1 and webhook_next_at=$2"#,
                     &row.id,
-                    row.webhook_attempts
+                    row.lease
                 )
                 .execute(pool)
                 .await?;
             }
             Err(error) => {
                 // Never log the URL: it may carry a receiver's token.
-                tracing::info!(job_id = row.id, attempt = row.webhook_attempts, error = %error, "webhook delivery failed");
-                let wait = BACKOFF_SECONDS[(row.webhook_attempts.max(1) as usize - 1).min(7)];
+                tracing::info!(job_id = row.id, attempt = row.webhook_attempts + 1, error = %error, "webhook delivery failed");
+                let wait =
+                    BACKOFF_SECONDS[(row.webhook_attempts as usize).min(BACKOFF_SECONDS.len() - 1)];
                 sqlx::query!(
-                    r#"update cloud_jobs set webhook_next_at=now()+make_interval(secs => $3) where id=$1 and webhook_attempts=$2 and webhook_delivered_at is null"#,
+                    r#"update cloud_jobs set webhook_attempts=webhook_attempts+1, webhook_next_at=now()+make_interval(secs => $3) where id=$1 and webhook_next_at=$2 and webhook_delivered_at is null"#,
                     &row.id,
-                    row.webhook_attempts,
+                    row.lease,
                     wait as f64
                 )
                 .execute(pool)
@@ -181,7 +191,10 @@ async fn send(
             "convt-event-type",
             event["type"].as_str().unwrap_or_default(),
         )
-        .header("convt-delivery-attempt", row.webhook_attempts.to_string())
+        .header(
+            "convt-delivery-attempt",
+            (row.webhook_attempts + 1).to_string(),
+        )
         .header("convt-signature", signature(&secret, now, &body))
         .body(body)
         .send()
@@ -195,7 +208,8 @@ async fn send(
     Ok(())
 }
 
-/// Delivers webhooks every two seconds until the process exits.
+/// Delivers webhooks every two seconds. Stops claiming once the server starts
+/// draining, so a deploy never leaves a claimed row waiting out its lease.
 pub fn spawn(
     pool: PgPool,
     storage: std::sync::Arc<dyn Storage>,
@@ -206,6 +220,9 @@ pub fn spawn(
         let mut tick = tokio::time::interval(Duration::from_secs(2));
         loop {
             tick.tick().await;
+            if crate::routes::draining() {
+                break;
+            }
             if let Err(error) = deliver_due(&pool, storage.as_ref(), &master, policy).await {
                 tracing::warn!(%error, "webhook dispatcher will retry");
             }

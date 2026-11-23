@@ -437,7 +437,7 @@ pub async fn run_job_backend(
         loop {
             tokio::select! {
                 result=&mut conversion=>break result,
-                _=heartbeat.tick()=>{match jobs::renew(pool,job).await { Ok(true) => {}, Ok(false) => break Err(anyhow::anyhow!("cancelled or lease lost")), Err(error) => break Err(error.into()) }},
+                _=heartbeat.tick()=>{match tokio::time::timeout(Duration::from_secs(5), jobs::renew(pool,job)).await { Ok(Ok(true)) => {}, Ok(Ok(false)) => break Err(anyhow::anyhow!("cancelled or lease lost")), Ok(Err(error)) => break Err(error.into()), Err(_) => {tracing::warn!(job_id=job.id,"lease renewal timed out; retrying")} }},
                 _=&mut timeout=>break Err(anyhow::anyhow!("wall-clock limit")),
                 _=wait_for_shutdown(shutdown), if !stopping=>{
                     stopping=true;
@@ -474,33 +474,40 @@ pub async fn run_job_backend(
         }
         return Ok(true);
     }
-    sandbox.stop(&name).await?;
-    match result {
+    let error = match result {
         Ok(keys) => {
-            if !jobs::finish(pool, job, &keys, None).await? {
+            // Settle first: the outputs are already stored, and a sandbox cleanup
+            // error must not leave a finished conversion to time out and run again.
+            let settled = jobs::finish(pool, job, &keys, None).await?;
+            if let Err(error) = sandbox.stop(&name).await {
+                tracing::warn!(job_id = job.id, %error, "sandbox cleanup failed after success");
+            }
+            if !settled {
                 for key in keys {
                     storage.delete(&key).await?;
                 }
             }
+            return Ok(stopping);
         }
-        Err(e) => {
-            tracing::warn!(job_id=job.id,error=%e,"conversion failed");
-            let code = if e.downcast_ref::<SourceError>().is_some() {
-                "source_fetch_failed"
-            } else {
-                "conversion_failed"
-            };
-            jobs::finish(pool, job, &[], Some(code)).await?;
-            storage
-                .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
-                .await?;
-        }
-    }
+        Err(error) => error,
+    };
+    sandbox.stop(&name).await?;
+    tracing::warn!(job_id=job.id,error=%error,"conversion failed");
+    let code = if error.downcast_ref::<SourceError>().is_some() {
+        "source_fetch_failed"
+    } else {
+        "conversion_failed"
+    };
+    jobs::finish(pool, job, &[], Some(code)).await?;
+    storage
+        .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
+        .await?;
     Ok(stopping)
 }
 
-/// How long a running conversion may keep going after SIGTERM. Below Railway's
-/// `drainingSeconds` (30) so the requeue lands before the process is killed.
+/// How long a running conversion may keep going after SIGTERM. Keep the
+/// container's stop timeout above it (`docker stop -t 30`, or `drainingSeconds`
+/// on Railway) so the requeue lands before the process is killed.
 pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(20);
 
 fn extract_outputs(archive: &Path, output: &Path) -> anyhow::Result<()> {

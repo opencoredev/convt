@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set input_key=null, source_url=null where id=$1 and expires_at<=now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "480db1651b4d4b274d7092eb44e55ec81e967546bd6524604d47390a1ad5d12a"
+}

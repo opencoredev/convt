@@ -1451,3 +1451,62 @@ async fn a_worker_shutdown_requeues_without_spending_an_attempt() {
     );
     db.drop().await;
 }
+
+#[test]
+fn job_views_never_show_url_secrets() {
+    assert_eq!(
+        routes::redact_url("https://bucket.s3.amazonaws.com/a/photo.png?X-Amz-Signature=abc"),
+        "https://bucket.s3.amazonaws.com/a/photo.png?…"
+    );
+    assert_eq!(
+        routes::redact_url("https://example.com/hooks/convt"),
+        "https://example.com/hooks/convt"
+    );
+    assert_eq!(
+        routes::redact_url("https://user:pw@example.com/h#tok"),
+        "https://example.com/h?…"
+    );
+}
+
+#[tokio::test]
+async fn web_credentials_cannot_read_api_jobs() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let (status, _, created) = send(
+        &state,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"target_format":"webp","source_url":"https://cdn.example.com/a.png?sig=secret"}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let created = json(&created);
+    assert_eq!(
+        created["job"]["source_url"],
+        "https://cdn.example.com/a.png?…"
+    );
+    let id = created["job"]["id"].as_str().unwrap();
+    let web = web_token(&state.web_secret, "usr_a");
+    for (method, path) in [
+        ("GET", format!("/v1/jobs/{id}")),
+        ("POST", format!("/v1/jobs/{id}/cancel")),
+    ] {
+        let (status, _, _) = send(
+            &state,
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("authorization", format!("Bearer {web}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+    db.drop().await;
+}

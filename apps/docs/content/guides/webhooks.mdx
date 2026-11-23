@@ -47,7 +47,7 @@ Headers on every delivery:
 
 ## Delivery and retries
 
-Answer with any `2xx` within 10 seconds. Anything else, a timeout or a refused connection counts as a failure and convt tries again after 10 s, 30 s, 2 min, 10 min, 30 min and then hourly, 8 attempts in all over about five hours. Delivery is at least once, so the same event can arrive twice.
+Answer with any `2xx` within 10 seconds. Anything else, a timeout or a refused connection counts as a failure and convt tries again after 10 s, 30 s, 2 min, 10 min, 30 min, 1 h and 1 h: 8 attempts in all over about 2 h 45 min. Delivery is at least once, so the same event can arrive twice.
 
 ## Verify the signature
 

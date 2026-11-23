@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set webhook_delivered_at=now(), webhook_next_at=null where id=$1 and webhook_next_at=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bcaf040163db2785d576a35c8dd00a41711282790b8a118982bb0f4a47a89156"
+}

@@ -69,8 +69,9 @@ export class ConvtError extends Error {
      * unknown, retry with the same key to get the original job instead of a new one.
      */
     readonly idempotencyKey?: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "ConvtError";
   }
 }
@@ -161,17 +162,30 @@ export class Conversion {
     readonly job: Job,
     readonly outputs: Output[],
   ) {}
-  async blob(index = 0): Promise<Blob> {
+  private async fetchOutput(index: number, timeoutMs: number): Promise<Response> {
     const output = this.outputs[index];
     if (!output) throw new ConvtError("missing_output", "Output does not exist.");
-    const response = await fetch(output.url, { signal: AbortSignal.timeout(60_000) });
-    if (!response.ok)
+    const response = await fetch(output.url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok || !response.body)
       throw new ConvtError(
         "download_failed",
-        "The download expired or is unavailable.",
+        "The download expired or is unavailable. Call convt.download(job.id) for fresh URLs.",
         response.status,
       );
-    return response.blob();
+    return response;
+  }
+  /** Reads one output into memory. For large files, prefer save() or saveAll(). */
+  async blob(index = 0): Promise<Blob> {
+    return (await this.fetchOutput(index, 60_000)).blob();
+  }
+  /** Streams one output to disk without holding it in memory. Node, Bun and Deno. */
+  private async stream(index: number, path: string): Promise<void> {
+    const { createWriteStream } = await import("node:fs");
+    const { Readable } = await import("node:stream");
+    const { pipeline } = await import("node:stream/promises");
+    const response = await this.fetchOutput(index, 30 * 60_000);
+    // `response.body` is checked in fetchOutput.
+    await pipeline(Readable.fromWeb(response.body as never), createWriteStream(path));
   }
   async save(path: string): Promise<void> {
     if (typeof window !== "undefined")
@@ -181,18 +195,14 @@ export class Conversion {
         "multiple_outputs",
         "Use saveAll(directory) for jobs with several outputs.",
       );
-    const { writeFile } = await import("node:fs/promises");
-    await writeFile(path, new Uint8Array(await (await this.blob()).arrayBuffer()));
+    await this.stream(0, path);
   }
   async saveAll(directory: string): Promise<void> {
-    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { mkdir } = await import("node:fs/promises");
     const { join, basename } = await import("node:path");
     await mkdir(directory, { recursive: true });
     for (let i = 0; i < this.outputs.length; i++)
-      await writeFile(
-        join(directory, basename(this.outputs[i].name)),
-        new Uint8Array(await (await this.blob(i)).arrayBuffer()),
-      );
+      await this.stream(i, join(directory, basename(this.outputs[i].name)));
   }
 }
 export type ConvtClientOptions =
@@ -236,9 +246,31 @@ export class Convt {
     signal?: AbortSignal;
     idempotencyKey?: string;
   }): Promise<T> {
+    if (idempotencyKey !== undefined && !/^[\x21-\x7e]{1,255}$/.test(idempotencyKey))
+      throw new ConvtError(
+        "invalid_idempotency_key",
+        "idempotencyKey must be 1 to 255 visible ASCII characters, such as a UUID.",
+      );
     const retryable = method === "GET" || idempotencyKey !== undefined || data === undefined;
-    const fail = (code: string, message: string, status?: number, requestId?: string) =>
-      new ConvtError(code, message, status, requestId, idempotencyKey);
+    const fail = (
+      code: string,
+      message: string,
+      status?: number,
+      requestId?: string,
+      cause?: unknown,
+    ) => new ConvtError(code, message, status, requestId, idempotencyKey, { cause });
+    // Once a keyed create is on the wire, an abort leaves its outcome unknown;
+    // say so and keep the key, so a retry can find the job instead of making one.
+    const unknown = (cause: unknown) =>
+      method === "POST" && idempotencyKey !== undefined
+        ? fail(
+            "create_outcome_unknown",
+            "The request may or may not have reached convt. Retry with the same idempotencyKey to find out without creating a second job.",
+            undefined,
+            undefined,
+            cause,
+          )
+        : cause;
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
       const key =
@@ -246,6 +278,8 @@ export class Convt {
       const again = async (delay: number) => {
         await sleep(delay, signal);
       };
+      // Nothing has been sent yet, so an abort here is just an abort.
+      signal.throwIfAborted();
       let response: Response;
       try {
         response = await fetch(`${this.baseUrl}${path}`, {
@@ -260,12 +294,18 @@ export class Convt {
           ...(data ? { body: JSON.stringify(data) } : {}),
         });
       } catch (error) {
-        if (signal.aborted) throw error;
+        if (signal.aborted) throw unknown(error);
         if (retryable && attempt < this.maxRetries) {
           await again(250 * 2 ** attempt);
           continue;
         }
-        throw fail("network_error", `The request did not complete: ${String(error)}`);
+        throw fail(
+          "network_error",
+          `The request did not complete: ${String(error)}`,
+          undefined,
+          undefined,
+          error,
+        );
       }
       const requestId = response.headers.get("x-request-id") ?? undefined;
       if (
@@ -284,8 +324,8 @@ export class Convt {
       let value: unknown;
       try {
         value = await response.json();
-      } catch {
-        if (signal.aborted) throw signal.reason;
+      } catch (error) {
+        if (signal.aborted) throw unknown(signal.reason ?? error);
         // The body broke off or was not JSON. For a create that already reserved a
         // job, retrying under the same key returns that job rather than a new one.
         if (retryable && attempt < this.maxRetries) {
@@ -355,9 +395,12 @@ export class Convt {
     if (typeof input === "string") {
       if (typeof window !== "undefined")
         throw new ConvtError("file_required", "Pass a File or Blob in the browser.");
-      const { readFile } = await import("node:fs/promises");
-      const bytes = await readFile(input);
-      body = new Blob([bytes]);
+      // A file-backed Blob streams from disk on upload instead of loading the file.
+      const fs = await import("node:fs");
+      body =
+        typeof fs.openAsBlob === "function"
+          ? await fs.openAsBlob(input)
+          : new Blob([await (await import("node:fs/promises")).readFile(input)]);
       name = input;
     } else if (input instanceof Blob) {
       body = input;

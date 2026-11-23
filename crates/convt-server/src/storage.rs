@@ -221,6 +221,32 @@ mod integration_tests {
     use super::*;
 
     #[tokio::test]
+    async fn s3_head_put_and_stream_round_trip() {
+        if std::env::var("CONVT_TEST_STORAGE").as_deref() != Ok("1") {
+            return;
+        }
+        use futures_util::StreamExt as _;
+        let storage = S3Storage::from_env().unwrap();
+        let key = format!("roundtrip-{}/input", crate::ids::new_id("t"));
+        assert_eq!(storage.head(&key).await.unwrap(), None);
+        let bytes: Vec<u8> = (0..300_000_u32).map(|i| (i % 251) as u8).collect();
+        storage
+            .put(&key, bytes::Bytes::from(bytes.clone()))
+            .await
+            .unwrap();
+        assert_eq!(storage.head(&key).await.unwrap(), Some(bytes.len() as i64));
+        let mut stream = storage.open(&key).await.unwrap();
+        let mut read = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            read.extend_from_slice(&chunk.unwrap());
+        }
+        assert_eq!(read, bytes);
+        assert!(storage.open(&format!("{key}-missing")).await.is_err());
+        storage.delete_prefix(&key).await.unwrap();
+        assert_eq!(storage.head(&key).await.unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn s3_rejects_uploads_larger_than_signed_reservation() {
         if std::env::var("CONVT_TEST_STORAGE").as_deref() != Ok("1") {
             return;

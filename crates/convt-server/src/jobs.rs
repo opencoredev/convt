@@ -276,8 +276,10 @@ pub fn validate_options(options: &convt_core::Options, target: &str) -> Result<(
     }
     Ok(())
 }
+/// A live job of the caller's account. A web credential (the browser converter's
+/// five-minute token) sees only web and desktop jobs, never API-key jobs.
 pub async fn owned(pool: &PgPool, who: &Principal, id: &str) -> Result<Job, ApiError> {
-    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()"#, id, &who.user_id)
+    sqlx::query_as!(Job, r#"select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as "options: _",input_key,input_bytes,output_keys as "output_keys: _",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url from cloud_jobs where id=$1 and user_id=$2 and expires_at>now() and ($3 or source<>'api')"#, id, &who.user_id, who.key_id.is_some())
         .fetch_optional(pool)
         .await?
         .ok_or_else(|| ApiError::not_found("Job not found."))

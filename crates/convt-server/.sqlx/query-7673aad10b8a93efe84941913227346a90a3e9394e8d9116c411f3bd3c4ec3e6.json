@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set webhook_attempts=webhook_attempts+1, webhook_next_at=now()+make_interval(secs => $3) where id=$1 and webhook_next_at=$2 and webhook_delivered_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7673aad10b8a93efe84941913227346a90a3e9394e8d9116c411f3bd3c4ec3e6"
+}
