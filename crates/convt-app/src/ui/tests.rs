@@ -1352,8 +1352,10 @@ fn settings_is_a_page_of_the_main_window(cx: &mut TestAppContext) {
     );
     assert_eq!(selected(cx, main, "nav-activity"), Some(true));
     assert_eq!(selected(cx, main, "nav-settings"), Some(false));
-    click(cx, main, "nav-automations");
-    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+    assert!(
+        !shown(cx, main, "nav-automations"),
+        "Automations is kept out of the primary sidebar"
+    );
 
     click(cx, main, "nav-presets");
     cx.read(|cx| assert_eq!(view.read(cx).page, Page::Presets));
@@ -2543,6 +2545,15 @@ fn presets_are_saved_used_and_deleted(cx: &mut TestAppContext) {
     click(cx, window, "delete-preset-web");
     assert!(!file.exists());
     assert!(!shown(cx, window, "delete-preset-web"));
+
+    // When empty, starter recipes can be added in one click.
+    assert!(shown(cx, window, "starter-preset-web"));
+    click(cx, window, "starter-preset-web");
+    assert!(file.exists(), "one-click starter writes presets/web.toml");
+    assert!(
+        !shown(cx, window, "starter-preset-web"),
+        "starter gallery yields to the saved list once populated"
+    );
 }
 
 #[gpui_kit::test]
@@ -3066,14 +3077,14 @@ fn onboarding_fits_small_normal_and_large_displays() {
         (f32::from(s.width), f32::from(s.height))
     };
     // Normal and large displays: focused Alloy window size, never sprawling.
-    assert_eq!(fit(1440., 900.), (600., 520.));
-    assert_eq!(fit(1920., 1080.), (600., 520.));
-    assert_eq!(fit(3840., 2160.), (600., 520.));
-    assert_eq!(fit(1024., 768.), (600., 520.));
+    assert_eq!(fit(1440., 900.), (540., 496.));
+    assert_eq!(fit(1920., 1080.), (540., 496.));
+    assert_eq!(fit(3840., 2160.), (540., 496.));
+    assert_eq!(fit(1024., 768.), (540., 496.));
     // Smaller displays: clamped to 95%, never past the edges.
-    assert_eq!(fit(600., 500.), (570., 475.));
+    assert_eq!(fit(500., 440.), (475., 418.));
     for (w, h) in [
-        (600., 480.),
+        (500., 440.),
         (800., 600.),
         (1024., 768.),
         (1280., 720.),
@@ -9007,6 +9018,8 @@ fn install_and_convert_waits_through_a_background_retry(cx: &mut TestAppContext)
 fn the_menu_tab_lists_documents_while_the_pack_can_be_downloaded(cx: &mut TestAppContext) {
     let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
     let (window, _) = f.settings(SettingsTab::Menu, cx);
+    assert!(shown(cx, window, "menu-kind-document"));
+    click(cx, window, "menu-kind-document");
     assert!(shown(cx, window, "menu-summary-document"));
     click(cx, window, "menu-document-pdf");
     cx.read(|cx| {
@@ -9027,6 +9040,6 @@ fn the_menu_tab_lists_documents_while_the_pack_can_be_downloaded(cx: &mut TestAp
     let (window, _) = g.settings(SettingsTab::Menu, cx);
     // Markdown, JSON and subtitles convert without the pack, so documents
     // keep their menu; slide decks have nothing to offer.
-    assert!(shown(cx, window, "menu-summary-document"));
-    assert!(!shown(cx, window, "menu-summary-presentation"));
+    assert!(shown(cx, window, "menu-kind-document"));
+    assert!(!shown(cx, window, "menu-kind-presentation"));
 }

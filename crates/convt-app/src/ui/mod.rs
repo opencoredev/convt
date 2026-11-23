@@ -517,7 +517,7 @@ pub(super) fn quick_height() -> Pixels {
 }
 
 /// Onboarding's focused window size, centered on the display.
-pub(super) const FIRST_RUN_SIZE: (f32, f32) = (600., 520.);
+pub(super) const FIRST_RUN_SIZE: (f32, f32) = (540., 496.);
 
 /// The display onboarding opens on: the one with the window in front (the
 /// user is looking there), else the primary one. GPUI can't tell where the

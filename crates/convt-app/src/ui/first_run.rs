@@ -582,22 +582,6 @@ impl FirstRunView {
                     .child(div().size(px(3.)).rounded_full().bg(p.tertiary))
                     .child(self.key_link(p, cx)),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .justify_center()
-                    .items_center()
-                    .gap(px(4.))
-                    .pt(px(4.))
-                    .child(
-                        styled(theme::size::CAPTION, p.tertiary)
-                            .child("By continuing, you agree to the"),
-                    )
-                    .child(underlined("terms", "Terms", TERMS_URL, p))
-                    .child(styled(theme::size::CAPTION, p.tertiary).child("and"))
-                    .child(underlined("privacy", "Privacy Policy", PRIVACY_URL, p)),
-            )
     }
 
     fn key_link(&self, p: &Palette, cx: &mut Context<Self>) -> theme::Clickable {
@@ -673,17 +657,17 @@ impl FirstRunView {
                     .aria_label(SharedString::from(detail.clone()))
                     .child(line(&detail, p)),
             )
-            .child(div().h(px(8.)))
             .child(
                 div()
                     .flex()
-                    .gap(px(16.))
+                    .pt(px(4.))
+                    .gap(px(14.))
                     .child(tile("question-yes", true, yes_icon, yes_label))
                     .child(tile("question-no", false, IconName::Close, no_label)),
             )
             .child(
                 styled(theme::size::CAPTION, p.tertiary)
-                    .pt(px(6.))
+                    .pt(px(2.))
                     .child("Use the arrow keys and Return"),
             )
     }
@@ -701,44 +685,6 @@ impl FirstRunView {
                 setup_content(d, t * total, &p, false)
             })
             .into_any_element()
-    }
-
-    /// Quiet step bar along the top of the onboarding window.
-    fn step_bar(&self, p: &Palette) -> Div {
-        let active = match self.screen {
-            Screen::Account | Screen::Key => 0,
-            Screen::Question(_) => 1,
-            Screen::Calibrating => 2,
-        };
-        let steps = ["Account", "Setup", "Ready"];
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(8.))
-            .children(steps.into_iter().enumerate().map(|(i, label)| {
-                let current = i == active;
-                let done = i < active;
-                let dot = if current || done {
-                    p.green
-                } else {
-                    p.control_border
-                };
-                let color = if current { p.text } else { p.tertiary };
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .when(i > 0, |d| {
-                        d.child(div().w(px(16.)).h(px(1.)).bg(p.hairline))
-                    })
-                    .child(div().size(px(6.)).rounded(px(3.)).bg(dot))
-                    .child(
-                        styled(theme::size::CAPTION, color)
-                            .when(current, |d| d.font_weight(FontWeight::MEDIUM))
-                            .child(label),
-                    )
-            }))
     }
 }
 
@@ -922,27 +868,43 @@ impl Render for FirstRunView {
             Screen::Calibrating => self.calibrating(&p, cx),
         };
         let calibrating = self.screen == Screen::Calibrating;
+        let show_terms = self.screen == Screen::Account && self.stage(cx) == Stage::SignIn;
         let mark_tile = div()
             .flex()
             .items_center()
             .justify_center()
-            .size(px(48.))
+            .size(px(44.))
             .rounded(px(theme::radius::CARD))
             .bg(p.surface)
             .shadow(theme::bevel(p.border, &p))
-            .child(theme::mark(24., &p));
+            .child(theme::mark(22., &p));
         let card = theme::card(&p)
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(20.))
+            .gap(px(16.))
             .w_full()
-            .max_w(px(468.))
+            .max_w(px(448.))
             .px(px(32.))
-            .py(px(32.))
+            .py(px(26.))
             .rounded(px(theme::radius::PANEL))
             .when(!calibrating, |d| d.child(mark_tile))
             .child(content);
+        let terms_footer = show_terms.then(|| {
+            div()
+                .flex()
+                .flex_wrap()
+                .justify_center()
+                .items_center()
+                .gap(px(4.))
+                .child(
+                    styled(theme::size::CAPTION, p.tertiary)
+                        .child("By continuing, you agree to the"),
+                )
+                .child(underlined("terms", "Terms", TERMS_URL, &p))
+                .child(styled(theme::size::CAPTION, p.tertiary).child("and"))
+                .child(underlined("privacy", "Privacy Policy", PRIVACY_URL, &p))
+        });
         div()
             .id("first-run")
             .track_focus(&self.focus)
@@ -950,36 +912,22 @@ impl Render for FirstRunView {
             .relative()
             .flex()
             .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(14.))
             .size_full()
             .overflow_hidden()
             .bg(p.recessed)
+            .px(px(24.))
+            .pt(px(if theme::transparent_titlebar() {
+                32.
+            } else {
+                20.
+            }))
+            .pb(px(20.))
             .font_family(theme::SANS)
             .text_color(p.text)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px(px(24.))
-                    .pt(px(if theme::transparent_titlebar() {
-                        36.
-                    } else {
-                        18.
-                    }))
-                    .pb(px(8.))
-                    .child(theme::lockup(15., &p))
-                    .child(self.step_bar(&p)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .items_center()
-                    .justify_center()
-                    .px(px(24.))
-                    .pb(px(24.))
-                    .child(card),
-            )
+            .child(card)
+            .children(terms_footer)
     }
 }

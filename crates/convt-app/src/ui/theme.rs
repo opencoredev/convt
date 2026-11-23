@@ -333,7 +333,6 @@ pub enum IconName {
     ArrowDown,
     ArrowRight,
     Ban,
-    Bot,
     Calendar,
     Check,
     ChevronDown,
@@ -370,13 +369,12 @@ pub enum IconName {
 
 impl IconName {
     #[cfg(test)]
-    pub const ALL: [IconName; 36] = {
+    pub const ALL: [IconName; 35] = {
         use IconName::*;
         [
             ArrowDown,
             ArrowRight,
             Ban,
-            Bot,
             Calendar,
             Check,
             ChevronDown,
@@ -419,7 +417,6 @@ impl IconName {
             ArrowDown => "arrow-down",
             ArrowRight => "arrow-right",
             Ban => "cancel-circle",
-            Bot => "magic-wand",
             Calendar => "calendar",
             Check => "check",
             ChevronDown => "chevron-down",

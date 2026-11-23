@@ -288,12 +288,6 @@ impl MainView {
     fn sidebar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let state = self.app.read(cx);
         let active = state.queue.active();
-        let enabled_rules = state
-            .settings
-            .automations
-            .iter()
-            .filter(|r| r.enabled)
-            .count();
         let preset_count = state.valid_presets().count();
         let license = state.license.clone();
         let can_start_trial = state.account.can_start_trial();
@@ -333,14 +327,6 @@ impl MainView {
                         .child(label),
                 )
                 .children(count.map(|(n, tone)| theme::badge(n.to_string(), tone, p)))
-        };
-        let group_label = |label: &'static str| {
-            styled(size::CAPTION, p.tertiary)
-                .font_weight(FontWeight::MEDIUM)
-                .px(px(10.))
-                .pt(px(14.))
-                .pb(px(4.))
-                .child(label)
         };
         let page = self.page;
         div()
@@ -385,25 +371,6 @@ impl MainView {
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.set_page(Page::Activity, cx))),
                     )
-                    .child(
-                        nav(
-                            "nav-automations",
-                            "Automations",
-                            IconName::Bot,
-                            page == Page::Automations,
-                            (enabled_rules > 0).then_some((enabled_rules, Tone::Neutral)),
-                        )
-                        .on_click(
-                            cx.listener(|this, _, _, cx| this.set_page(Page::Automations, cx)),
-                        ),
-                    ),
-            )
-            .child(group_label("Configure"))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
                     .child(
                         nav(
                             "nav-presets",
