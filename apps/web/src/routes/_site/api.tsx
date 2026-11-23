@@ -174,13 +174,13 @@ function ApiPage() {
   const onSale = sales === "all";
   return (
     <article className={cx(siteColumn, "pt-10 pb-20 md:pt-16")}>
-      <section className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:gap-14">
+      <section className="grid grid-cols-[minmax(0,1fr)] items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:gap-14">
         <div className="flex min-w-0 flex-col gap-5">
           <p className="font-mono text-xs/4 text-ink-2 uppercase">convt API</p>
           <h1 className="text-[36px]/[42px] font-semibold tracking-[-0.035em] text-balance md:text-[52px]/[56px]">
             Convert any file with one request.
           </h1>
-          <p className="flex items-baseline gap-2.5">
+          <p className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-2.5">
             <span className="text-[56px]/[60px] font-semibold tracking-[-0.045em] text-[#157f4a] tabular-nums dark:text-green">
               $0.01
             </span>
@@ -225,7 +225,7 @@ function ApiPage() {
 
       <section
         aria-labelledby="price"
-        className="mt-20 grid gap-10 md:mt-28 lg:grid-cols-2 lg:gap-14"
+        className="mt-20 grid grid-cols-[minmax(0,1fr)] gap-10 md:mt-28 lg:grid-cols-2 lg:gap-14"
       >
         <div className="flex flex-col gap-4">
           <h2 id="price" className="text-[28px]/[34px] font-semibold tracking-[-0.03em]">
@@ -249,7 +249,7 @@ function ApiPage() {
 
       <section
         aria-labelledby="response"
-        className="mt-20 grid gap-10 md:mt-28 lg:grid-cols-2 lg:gap-14"
+        className="mt-20 grid grid-cols-[minmax(0,1fr)] gap-10 md:mt-28 lg:grid-cols-2 lg:gap-14"
       >
         <div className="flex flex-col gap-4 lg:order-2">
           <h2 id="response" className="text-[28px]/[34px] font-semibold tracking-[-0.03em]">
