@@ -328,6 +328,9 @@ pub struct AppState {
     /// for this session.
     pub telemetry_save_error: Option<String>,
     settings_path: Option<PathBuf>,
+    /// Last bytes we loaded from or wrote to `settings.toml`, so external
+    /// edits (e.g. via Edit TOML) are detected even within coarse mtime ticks.
+    settings_snapshot: Option<Vec<u8>>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
     /// The formats right-click menus offer, by kind of file. The CLI reads
@@ -594,6 +597,7 @@ impl AppState {
                 .settings
                 .as_ref()
                 .is_some_and(|path| settings.save(path).is_ok());
+        let settings_snapshot = paths.settings.as_ref().and_then(|p| std::fs::read(p).ok());
         #[cfg(not(test))]
         let telemetry = crate::telemetry::Telemetry::new(
             settings.telemetry_anonymous_id.clone().unwrap_or_default(),
@@ -678,6 +682,7 @@ impl AppState {
             telemetry_persisted: telemetry_ready,
             telemetry_save_error: None,
             settings_path: paths.settings,
+            settings_snapshot,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
             menu,
@@ -785,13 +790,10 @@ impl AppState {
         if !self.settings.cloud_consent {
             return Err("Agree to upload files to convt's cloud before converting there.".into());
         }
-        let allowed = self.licensing.begin_conversion();
-        self.license = self.licensing.state();
+        // Cloud access above already authorized paid accounts (including
+        // Desktop + Cloud accounts without a local Pro key); refresh license
+        // state for telemetry without gating Cloud on a local key.
         self.observe_trial(cx);
-        if let Err(blocked) = allowed {
-            cx.notify();
-            return Err(blocked.to_string());
-        }
         let Some(session) = self.account.session.clone() else {
             return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
         };
@@ -1427,10 +1429,48 @@ impl AppState {
         Some(path)
     }
 
+    /// Picks up external edits to `settings.toml` (such as via Edit TOML) so
+    /// rules added on disk run and survive subsequent in-app toggles.
+    /// Returns `Err` if the external edit is invalid TOML so callers can
+    /// surface the parse error without clobbering the user's file.
+    fn reload_external_automations(&mut self) -> Result<bool, String> {
+        let Some(path) = &self.settings_path else {
+            return Ok(false);
+        };
+        let Ok(bytes) = std::fs::read(path) else {
+            return Ok(false);
+        };
+        if self.settings_snapshot.as_deref() == Some(bytes.as_slice()) {
+            return Ok(false);
+        }
+        match Settings::load(path) {
+            Ok(disk) => {
+                self.settings_snapshot = Some(bytes);
+                if disk.automations != self.settings.automations {
+                    self.settings.automations = disk.automations;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            Err(e) => Err(format!("External settings edit could not be read: {e}")),
+        }
+    }
+
     /// Lists each watched folder and converts new matching files. Tests call
     /// this twice after writing a file: once to see it, once after it is
     /// the same size.
     pub fn poll_automations(&mut self, cx: &mut Context<Self>) {
+        match self.reload_external_automations() {
+            Ok(true) => cx.notify(),
+            Ok(false) => {}
+            Err(e) => {
+                if !self.errors.contains(&e) {
+                    self.errors.push(e);
+                    cx.notify();
+                }
+            }
+        }
         let rules = self.settings.automations.clone();
         let ready = self.watch.drain_ready(&rules);
         for (index, path) in ready {
@@ -1705,15 +1745,23 @@ impl AppState {
     pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         let was_persisted = self.telemetry_persisted;
         let before_telemetry = self.settings.telemetry;
+        // Preserve valid external automation edits (e.g. from Edit TOML) made
+        // since our last load/save before applying an in-app change. If the
+        // file on disk was edited into invalid TOML, surface the parse error
+        // instead of silently overwriting it.
+        let external_err = self.reload_external_automations().err();
         change(&mut self.settings);
         if !self.settings.telemetry {
             self.telemetry.set_consent(Consent::Off);
         }
         self.runner.set_concurrency(self.settings.concurrency());
-        let saved = self
-            .settings_path
-            .as_ref()
-            .map(|path| self.settings.save(path));
+        let saved = if let Some(err) = external_err {
+            Some(Err(err))
+        } else {
+            self.settings_path
+                .as_ref()
+                .map(|path| self.settings.save(path).map_err(|e| e.to_string()))
+        };
         self.telemetry_persisted = matches!(saved, Some(Ok(())));
         match saved {
             Some(Err(e)) => {
@@ -1730,6 +1778,10 @@ impl AppState {
             }
             Some(Ok(())) => {
                 self.telemetry_save_error = None;
+                self.settings_snapshot = self
+                    .settings_path
+                    .as_ref()
+                    .and_then(|p| std::fs::read(p).ok());
             }
             None => {}
         }

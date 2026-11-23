@@ -8444,7 +8444,8 @@ fn update_checks_off_stop_the_download(cx: &mut TestAppContext) {
     )));
     manual_check(&f, cx);
     assert!(matches!(f.update(cx), Update::Downloading { .. }));
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
     click(cx, settings, "update-checks");
     assert_eq!(f.update(cx), Update::Idle);
     downloads.hold.store(false, Ordering::SeqCst);
@@ -8529,7 +8530,8 @@ fn a_stopped_download_never_touches_the_next_one(cx: &mut TestAppContext) {
         "the first attempt is half way",
         |cx| matches!(&f.app.read(cx).update, Update::Downloading { percent, .. } if *percent >= 50),
     );
-    let (settings, _) = f.settings(SettingsTab::General, cx);
+    let (settings, view) = f.settings(SettingsTab::General, cx);
+    view.update(cx, |v, cx| v.reveal_updates(cx));
     // Off and on again while the first attempt is still held mid-read.
     click(cx, settings, "update-checks");
     assert_eq!(f.update(cx), Update::Idle);
@@ -9092,7 +9094,78 @@ fn settings_general_links_to_automations(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn right_click_menu_tabs_fit_at_minimum_window_width(cx: &mut TestAppContext) {
-    let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
+    // Register every menu category so all 8 tabs render regardless of which
+    // external tools are installed on this runner.
+    struct AllCategoriesEngine;
+    impl convt_core::Engine for AllCategoriesEngine {
+        fn id(&self) -> &'static str {
+            "all-categories-test"
+        }
+        fn steps(&self) -> Vec<convt_core::Step> {
+            [
+                ("png", "jpeg"),
+                ("svg", "png"),
+                ("mp4", "mov"),
+                ("mp3", "wav"),
+                ("pdf", "png"),
+                ("docx", "pdf"),
+                ("xlsx", "csv"),
+                ("pptx", "pdf"),
+            ]
+            .into_iter()
+            .map(|(from, to)| convt_core::Step {
+                from: format_by_id(from).unwrap(),
+                to: format_by_id(to).unwrap(),
+            })
+            .collect()
+        }
+        fn convert(
+            &self,
+            _: &convt_core::Ctx,
+            _: &Path,
+            _: &Path,
+        ) -> convt_core::Result<Vec<PathBuf>> {
+            unreachable!()
+        }
+    }
+    struct AllCategoriesPacks;
+    impl crate::pack::Backend for AllCategoriesPacks {
+        fn registry(&self) -> convt_core::Registry {
+            let mut r = convt_core::Registry::new();
+            r.register(Arc::new(AllCategoriesEngine));
+            r
+        }
+        fn registry_without_documents(&self) -> convt_core::Registry {
+            self.registry()
+        }
+        fn planned_registry(&self) -> convt_core::Registry {
+            self.registry()
+        }
+        fn status(&self) -> crate::pack::Status {
+            crate::pack::Status::NotInstalled
+        }
+        fn offer(&self) -> crate::pack::Offer {
+            crate::pack::Offer::default()
+        }
+        fn install(
+            &self,
+            _: &dyn Fn(crate::pack::Progress),
+            _: &dyn Fn() -> bool,
+        ) -> Result<PathBuf, crate::pack::Failure> {
+            unreachable!()
+        }
+        fn remove(&self) -> Result<(), String> {
+            unreachable!()
+        }
+    }
+
+    let f = Fixture::build_with(cx, Arc::new(AllCategoriesPacks), |_| client::Config {
+        enforce: false,
+        public_key: None,
+        build_date: BUILD_DATE.into(),
+        trial_file: None,
+        store: KeyStore::None,
+    });
     let (main, _) = f.main(cx);
     gpui_kit::VisualTestContext::from_window(main, cx)
         .simulate_resize(size(px(super::MAIN_MIN_SIZE.0), px(super::MAIN_MIN_SIZE.1)));
@@ -9104,9 +9177,41 @@ fn right_click_menu_tabs_fit_at_minimum_window_width(cx: &mut TestAppContext) {
         "menu-kind-audio",
         "menu-kind-pdf",
         "menu-kind-document",
+        "menu-kind-spreadsheet",
+        "menu-kind-presentation",
     ] {
-        if shown(cx, main, id) {
-            assert!(fits(cx, main, id), "{id} overflowed at MAIN_MIN_SIZE");
-        }
+        assert!(shown(cx, main, id), "{id} was not rendered");
+        assert!(fits(cx, main, id), "{id} overflowed at MAIN_MIN_SIZE");
     }
+}
+
+#[gpui_kit::test]
+fn manual_toml_automation_edits_survive_in_app_toggle(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let settings_path = f.dir.path().join("settings.toml");
+    // Simulate a user adding a rule externally via Edit TOML.
+    let mut disk = crate::settings::Settings::load(&settings_path).unwrap();
+    let before_count = disk.automations.len();
+    disk.automations.push(crate::settings::Automation {
+        name: "Video".into(),
+        to: "mp3".into(),
+        source: "Downloads".into(),
+        detail: "save beside original".into(),
+        enabled: true,
+        watch: Some(crate::settings::WatchKind::Folder),
+        folder: Some(f.dir.path().to_path_buf()),
+        copy_to_clipboard: Some(false),
+    });
+    disk.save(&settings_path).unwrap();
+
+    // Toggling an existing rule in-app must preserve the manually added rule.
+    cx.update(|cx| {
+        f.app.update(cx, |s, cx| {
+            let flipped = !s.settings.automations[0].enabled;
+            s.set_automation(0, flipped, cx);
+        })
+    });
+    let saved = crate::settings::Settings::load(&settings_path).unwrap();
+    assert_eq!(saved.automations.len(), before_count + 1);
+    assert_eq!(saved.automations.last().unwrap().name, "Video");
 }
