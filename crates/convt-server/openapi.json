@@ -3,7 +3,7 @@
   "info": {
     "title": "convt API",
     "version": "0.1.0",
-    "description": "Paid conversions at 1 cent per successful job; failed and cancelled jobs are free. POST /v1/convert takes a file of up to 25 MB (or a source_url) and answers with the converted file in one request. For larger files, reserve a job with POST /v1/jobs, PUT exactly input_bytes to upload_url (the signature binds Content-Length), then POST start, poll and download every output. Send an Idempotency-Key on creates so retries never reserve twice. Jobs and their files expire after 24 hours. Each account may retain at most 100 job prefixes and 50 GB of declared input storage. 120 requests per minute per key; every response carries X-RateLimit-* headers and an X-Request-Id. Jobs created with webhook_url get one signed POST when they finish."
+    "description": "Paid conversions at 1 cent per successful job; failed and cancelled jobs are free. POST /v1/convert takes a file of up to 25 MB (or a source_url) and answers with the converted file in one request. For larger files, reserve a job with POST /v1/jobs, PUT exactly input_bytes to upload_url (the signature binds Content-Length), then POST start, poll and download every output. Send an Idempotency-Key on creates so retries never reserve twice. Jobs and their files expire after 24 hours. Each account may retain at most 100 job prefixes and 50 GB of declared input storage. 120 requests per minute per key; every response carries an X-Request-Id, and authenticated responses carry X-RateLimit-* headers. Jobs created with webhook_url get one signed POST when they finish."
   },
   "servers": [
     {
@@ -112,15 +112,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -377,15 +368,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -562,15 +544,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -771,15 +744,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -976,15 +940,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -1345,15 +1300,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -1806,15 +1752,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -1941,15 +1878,6 @@
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-RateLimit-Reset": {
-                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },

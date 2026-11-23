@@ -551,10 +551,7 @@ async fn convert(
         drop(bytes);
     }
     drop(_memory);
-    let wants_json = headers
-        .get(header::ACCEPT)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|a| a.contains("application/json"));
+    let wants_json = wants_json(&headers);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(wait);
     let mut pause = Duration::from_millis(150);
     while !matches!(job.status.as_str(), "succeeded" | "failed" | "cancelled") {
@@ -709,6 +706,25 @@ fn billed_error(error: ApiError, job: jobs::Job) -> Response {
     response
 }
 
+/// Whether `Accept` asks for JSON: an `application/json` range with a nonzero
+/// quality. `*/*` alone (curl, browsers) means the file.
+fn wants_json(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(header::ACCEPT)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .any(|range| {
+            let mut parts = range.split(';').map(str::trim);
+            let media = parts.next().unwrap_or_default().to_ascii_lowercase();
+            let quality = parts
+                .find_map(|p| p.strip_prefix("q=").or_else(|| p.strip_prefix("Q=")))
+                .and_then(|q| q.parse::<f32>().ok())
+                .unwrap_or(1.0);
+            media == "application/json" && quality > 0.0
+        })
+}
+
 fn source_name_owned(job: &jobs::Job) -> Option<&str> {
     job.source_url
         .as_deref()
@@ -740,6 +756,20 @@ mod tests {
         assert_eq!(format_id("nope"), None);
         assert_eq!(format_from_mime("image/png; charset=binary"), Some("png"));
         assert_eq!(format_from_mime("application/octet-stream"), None);
+    }
+
+    #[test]
+    fn accept_needs_a_nonzero_json_range() {
+        let with = |value: &str| {
+            let mut h = HeaderMap::new();
+            h.insert(header::ACCEPT, HeaderValue::from_str(value).unwrap());
+            wants_json(&h)
+        };
+        assert!(with("application/json"));
+        assert!(with("image/webp, application/json;q=0.5"));
+        assert!(!with("image/webp, application/json;q=0"));
+        assert!(!with("*/*"));
+        assert!(!wants_json(&HeaderMap::new()));
     }
 
     #[test]

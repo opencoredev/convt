@@ -1,4 +1,5 @@
 import { formats, type Format } from "./formats.js";
+import { Sha256 } from "./sha256.js";
 export { formats, type Format };
 export { verifyWebhook, type WebhookEvent } from "./webhooks.js";
 
@@ -120,25 +121,36 @@ function withContext(error: unknown, context: { jobId: string; idempotencyKey: s
   );
 }
 
-/** Hex SHA-256 of a Blob, streamed in Node, Bun and Deno. Stops on abort. */
+/**
+ * Hex SHA-256 of a Blob, streamed chunk by chunk in every runtime: node:crypto
+ * where it exists, a small built-in implementation elsewhere (browsers, where
+ * bundlers may stub node:crypto). Stops on abort.
+ */
 async function sha256Hex(blob: Blob, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  let crypto: typeof import("node:crypto") | undefined;
+  let hash: { update(data: Uint8Array): unknown; hex(): string } | undefined;
   try {
-    crypto = await import("node:crypto");
+    const nodeCrypto: unknown = await import("node:crypto");
+    if (
+      typeof nodeCrypto === "object" &&
+      nodeCrypto !== null &&
+      "createHash" in nodeCrypto &&
+      typeof nodeCrypto.createHash === "function"
+    ) {
+      const node = (
+        nodeCrypto.createHash as (algorithm: string) => {
+          update(data: Uint8Array): unknown;
+          digest(encoding: "hex"): string;
+        }
+      )("sha256");
+      hash = { update: (data) => node.update(data), hex: () => node.digest("hex") };
+    }
   } catch {
-    crypto = undefined;
+    hash = undefined;
   }
-  if (!crypto) {
-    const digest = await abortable(
-      async () => globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer()),
-      signal,
-    );
-    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-  }
+  hash ??= new Sha256();
   // The import above may have taken a while; an abort during it ends here.
   signal.throwIfAborted();
-  const hash = crypto.createHash("sha256");
   const reader = blob.stream().getReader();
   const stop = () => void reader.cancel(signal.reason).catch(() => {});
   signal.addEventListener("abort", stop, { once: true });
@@ -152,7 +164,7 @@ async function sha256Hex(blob: Blob, signal: AbortSignal): Promise<string> {
   } finally {
     signal.removeEventListener("abort", stop);
   }
-  return hash.digest("hex");
+  return hash.hex();
 }
 async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
@@ -259,9 +271,19 @@ export class Conversion {
     const { createWriteStream } = await import("node:fs");
     const { Readable } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
+    const { rename, rm } = await import("node:fs/promises");
     const response = await this.fetchOutput(index, 30 * 60_000);
-    // `response.body` is checked in fetchOutput.
-    await pipeline(Readable.fromWeb(response.body as never), createWriteStream(path));
+    // Write beside the target and rename once complete, so an interrupted
+    // download never replaces an existing file with a partial one.
+    const partial = `${path}.convt-${globalThis.crypto.randomUUID()}.part`;
+    try {
+      // `response.body` is checked in fetchOutput.
+      await pipeline(Readable.fromWeb(response.body as never), createWriteStream(partial));
+      await rename(partial, path);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
   }
   async save(path: string): Promise<void> {
     if (typeof window !== "undefined")

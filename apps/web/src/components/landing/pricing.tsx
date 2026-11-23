@@ -222,8 +222,8 @@ function ApiCard({ available, launched }: { available: boolean; launched: boolea
             Convert files from your own code.
           </h3>
           <p className="text-[14px]/[21px] text-ink-2">
-            Same engines as the app, one HTTP request per file. No plan, no credits, and failed
-            conversions are free.
+            Same engines as the app, one HTTP request per file up to 25 MB. No plan, no credits, and
+            failed conversions are free.
           </p>
         </div>
         <p className="flex items-baseline gap-1.5">

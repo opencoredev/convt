@@ -180,7 +180,7 @@ function ApiPage() {
         <div className="flex min-w-0 flex-col gap-5">
           <p className="font-mono text-xs/4 text-ink-2 uppercase">convt API</p>
           <h1 className="text-[36px]/[42px] font-semibold tracking-[-0.035em] text-balance md:text-[52px]/[56px]">
-            Convert any file with one request.
+            Convert files with one request.
           </h1>
           <p className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-2.5">
             <span className="text-[56px]/[60px] font-semibold tracking-[-0.045em] text-[#157f4a] tabular-nums dark:text-green">

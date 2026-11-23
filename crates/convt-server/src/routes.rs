@@ -86,8 +86,9 @@ impl ApiError {
         self.status
     }
     pub fn with_job(mut self, job: jobs::Job) -> Self {
+        let location = format!("/v1/jobs/{}", job.id);
         self.job = Some(Box::new(job.into()));
-        self
+        self.header(header::LOCATION, location)
     }
     /// Names a job the caller can't be handed in full (the database is what
     /// failed): its id in the body and headers, and where to check it.

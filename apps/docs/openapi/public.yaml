@@ -13,7 +13,7 @@ actions:
       description: |
         The convt API converts files on convt's servers. `POST /v1/convert` takes a file of up to 25 MB, or a `source_url`, and answers with the converted file in one request. For files up to 2 GB, a conversion is a **job**: you reserve it, upload the file to a signed URL, start it, poll until it finishes (or get a webhook), then fetch signed download URLs for its outputs.
 
-        Send an `Idempotency-Key` on creates so retries never reserve twice. Every response carries `X-Request-Id` and, on job routes, `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
+        Send an `Idempotency-Key` on creates so retries never reserve twice. Every response carries `X-Request-Id`. Authenticated responses on job routes also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a request refused for a missing or bad key does not.
 
         Every job route takes a `cvt_live_` API key as a Bearer token. Create keys in the [dashboard](https://convt.app/dashboard/api). Each successful job is billed once; failed and cancelled jobs are free.
 
