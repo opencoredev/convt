@@ -1354,12 +1354,30 @@ impl AppState {
         self.documents.worth_offering
     }
 
+    /// Finds `expected` in `rules`, preferring `index` when it still matches
+    /// so external `Edit TOML` insertions or removals cannot shift an action
+    /// onto a different rule.
+    fn resolve_automation_index(
+        rules: &[crate::settings::Automation],
+        index: usize,
+        expected: &crate::settings::Automation,
+    ) -> Option<usize> {
+        if rules.get(index) == Some(expected) {
+            Some(index)
+        } else {
+            rules.iter().position(|r| r == expected)
+        }
+    }
+
     /// Switches an automation rule on or off.
     pub fn set_automation(&mut self, index: usize, enabled: bool, cx: &mut Context<Self>) {
+        let Some(expected) = self.settings.automations.get(index).cloned() else {
+            return;
+        };
         self.update_settings(
             |s| {
-                if let Some(rule) = s.automations.get_mut(index) {
-                    rule.enabled = enabled;
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    s.automations[i].enabled = enabled;
                 }
             },
             cx,
@@ -1368,9 +1386,13 @@ impl AppState {
 
     /// Whether a finished automation should copy its result.
     pub fn set_automation_copy(&mut self, index: usize, copy: bool, cx: &mut Context<Self>) {
+        let Some(expected) = self.settings.automations.get(index).cloned() else {
+            return;
+        };
         self.update_settings(
             |s| {
-                if let Some(rule) = s.automations.get_mut(index) {
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    let rule = &mut s.automations[i];
                     rule.copy_to_clipboard = Some(copy);
                     rule.detail = if copy {
                         "copy to clipboard".into()
@@ -1390,10 +1412,13 @@ impl AppState {
 
     /// Removes an automation rule by index and saves settings.
     pub fn remove_automation(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(expected) = self.settings.automations.get(index).cloned() else {
+            return;
+        };
         self.update_settings(
             |s| {
-                if index < s.automations.len() {
-                    s.automations.remove(index);
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    s.automations.remove(i);
                 }
             },
             cx,
@@ -1401,11 +1426,24 @@ impl AppState {
     }
 
     /// Points an automation rule at a specific folder and saves settings.
-    pub fn set_automation_folder(&mut self, index: usize, folder: PathBuf, cx: &mut Context<Self>) {
+    /// `expected` lets async callers (like the folder picker) pin the exact
+    /// rule they opened for even if external TOML edits shifted indices while
+    /// the dialog was open.
+    pub fn set_automation_folder(
+        &mut self,
+        index: usize,
+        expected: Option<crate::settings::Automation>,
+        folder: PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(expected) = expected.or_else(|| self.settings.automations.get(index).cloned())
+        else {
+            return;
+        };
         self.update_settings(
             |s| {
-                if let Some(rule) = s.automations.get_mut(index) {
-                    rule.folder = Some(folder);
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    s.automations[i].folder = Some(folder);
                 }
             },
             cx,

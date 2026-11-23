@@ -1009,6 +1009,7 @@ impl MainView {
     }
 
     fn pick_automation_folder(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
+        let expected = index.and_then(|i| self.app.read(cx).settings.automations.get(i).cloned());
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,
@@ -1023,7 +1024,7 @@ impl MainView {
             {
                 match index {
                     Some(i) => {
-                        app.update(cx, |s, cx| s.set_automation_folder(i, dir, cx));
+                        app.update(cx, |s, cx| s.set_automation_folder(i, expected, dir, cx));
                     }
                     None => {
                         let _ = this.update(cx, |this, cx| {

@@ -9214,4 +9214,20 @@ fn manual_toml_automation_edits_survive_in_app_toggle(cx: &mut TestAppContext) {
     let saved = crate::settings::Settings::load(&settings_path).unwrap();
     assert_eq!(saved.automations.len(), before_count + 1);
     assert_eq!(saved.automations.last().unwrap().name, "Video");
+
+    // Removing rule 0 externally shifts rule 1 to index 0; toggling the old
+    // index 1 must still target the original rule 1 instead of shifting onto
+    // a different rule.
+    let target_name = cx.read(|cx| f.app.read(cx).settings.automations[1].name.clone());
+    let target_before = cx.read(|cx| f.app.read(cx).settings.automations[1].enabled);
+    let mut shifted = crate::settings::Settings::load(&settings_path).unwrap();
+    shifted.automations.remove(0);
+    shifted.save(&settings_path).unwrap();
+    cx.update(|cx| {
+        f.app
+            .update(cx, |s, cx| s.set_automation(1, !target_before, cx))
+    });
+    let after = crate::settings::Settings::load(&settings_path).unwrap();
+    assert_eq!(after.automations[0].name, target_name);
+    assert_eq!(after.automations[0].enabled, !target_before);
 }
