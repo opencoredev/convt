@@ -1259,12 +1259,32 @@ impl Engine for ImageIoEngine {
         let _ = std::fs::remove_file(&flattened);
         ran?;
         if format == "png" {
-            crate::image::optimize_heif_png(&output)?;
-            crate::image::background_png(&output, ctx.options)?;
-            crate::orientation::finish_heif_output(input, &output, "png", ctx.options)?;
+            finish_sips_png(ctx.step.from.id, input, &output, ctx.options)?;
         }
         Ok(vec![output])
     }
+}
+
+/// Finishes the PNG `sips` wrote at `output` from `input` (format `from`):
+/// shrinks a HEIC's oversized PNG, applies the options, and matches
+/// Preview's orientation. The shrinking is optional: when it fails, the
+/// valid PNG `sips` wrote is kept rather than failing the conversion. AVIF
+/// is left alone, since `optimize_heif_png` is tuned for what `sips` makes
+/// of iPhone HEIC.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn finish_sips_png(
+    from: &str,
+    input: &Path,
+    output: &Path,
+    options: &convt_core::Options,
+) -> Result<()> {
+    if matches!(from, "heic" | "heif")
+        && let Err(e) = crate::image::optimize_heif_png(output)
+    {
+        tracing::warn!("could not shrink the PNG sips wrote, keeping it as is: {e}");
+    }
+    crate::image::background_png(output, options)?;
+    crate::orientation::finish_heif_output(input, output, "png", options)
 }
 
 #[cfg(test)]

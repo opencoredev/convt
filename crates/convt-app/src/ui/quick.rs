@@ -22,7 +22,7 @@ use gpui_kit::*;
 use super::theme::IconName;
 
 use super::theme::{
-    self, Button, Choice, Palette, Tile, Tone, icon, mono, radius, size, space, styled,
+    self, Button, Choice, Palette, Segment, Tone, icon, mono, radius, size, space, styled,
 };
 use super::{blocked_banner, error_text, file_size, human_size, time_left};
 use crate::cloud::CloudAccess;
@@ -264,6 +264,62 @@ impl QuickView {
         view.load_controls();
         view.reset_name(window, cx);
         view
+    }
+
+    /// Adds more files, from another drop or Add files while the composer is
+    /// open. Files already listed are listed once. The picked format, the
+    /// options, the folder and Cloud stay, as long as every file can still
+    /// become that format; otherwise the usual one for the files is picked.
+    pub fn add_files(&mut self, paths: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
+        if paths.is_empty() || !self.jobs.is_empty() {
+            return;
+        }
+        let state = self.app.read(cx);
+        let expanded = model::expand_keeping_documents(&state.registry, paths);
+        let before = self.files.len();
+        for file in expanded.files {
+            if !self.files.contains(&file) {
+                self.files.push(file);
+            }
+        }
+        if !expanded.unreadable.is_empty() {
+            self.error = Some(expanded.unreadable.join("\n"));
+        }
+        if self.files.len() == before {
+            cx.notify();
+            return;
+        }
+        let state = self.app.read(cx);
+        self.targets = state.targets_with_pack(&self.files);
+        self.generation = state.registry_generation;
+        let file_needs_pack = self
+            .files
+            .iter()
+            .any(|f| pack::needs_pack(&state.registry, f));
+        if file_needs_pack {
+            self.waited_for_pack = true;
+        }
+        let kept = self.to.filter(|to| self.targets.formats.contains(to));
+        if kept.is_none() {
+            let to = if file_needs_pack {
+                None
+            } else {
+                recommended_target(&self.files, &self.targets)
+            };
+            self.to = to;
+            self.size = self.preset_size();
+            self.convert_when_ready = false;
+            if let Some(to) = to {
+                self.set_target(to);
+            }
+        }
+        if self.files.is_empty() {
+            self.error = Some("There are no files to convert here.".into());
+        } else if expanded.unreadable.is_empty() {
+            self.error = None;
+        }
+        self.reset_name(window, cx);
+        cx.notify();
     }
 
     /// Recomputes the targets after the document pack was installed or
@@ -1145,30 +1201,27 @@ impl QuickView {
                 .test_support()
                 .aria_label(title)
                 .pt(px(space::MD))
-                .child(theme::callout(
-                    IconName::TriangleAlert,
-                    Tone::Amber,
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(space::SM))
-                        .child(theme::callout_words(
-                            title,
-                            "PNG is lossless, so a photo can grow 5-10x larger. JPEG or WebP keeps \
-                             quality high at a fraction of the size.",
-                            p,
-                        ))
-                        .when(!actions.is_empty(), |d| {
-                            d.child(
-                                div()
-                                    .flex()
-                                    .flex_wrap()
-                                    .gap(px(space::SM))
-                                    .children(actions),
-                            )
-                        }),
-                    p,
-                ))
+                .child(
+                    theme::callout(
+                        IconName::TriangleAlert,
+                        Tone::Amber,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.))
+                            .child(theme::callout_words(
+                                title,
+                                "PNG is lossless, so photos take much more space than JPEG or \
+                                 WebP.",
+                                p,
+                            ))
+                            .when(!actions.is_empty(), |d| {
+                                d.child(div().flex().flex_wrap().gap(px(8.)).children(actions))
+                            }),
+                        p,
+                    )
+                    .p(px(12.)),
+                )
                 .into_any_element(),
         )
     }
@@ -1569,31 +1622,27 @@ impl QuickView {
         parts.join(" · ")
     }
 
-    /// Where the conversion runs, as two tiles.
-    fn where_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    /// Where the conversion runs: "Convert on", then This computer or
+    /// Cloud. Cloud stays readable while it can't run and says why on hover.
+    fn where_row(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let access = self.cloud_access(cx);
         let cloud = self.in_cloud(cx);
         let weak = cx.entity().downgrade();
-        div()
-            .flex()
-            .flex_col()
-            .px(px(self.gutter()))
-            .pb(px(SECTION_GAP))
-            .child(theme::tiles(
+        row_label(
+            "Convert on",
+            theme::segmented_with(
                 "where",
                 &[
-                    Tile {
+                    Segment {
                         key: "local",
-                        icon: IconName::Computer,
-                        title: theme::this_machine_label().into(),
-                        line: "Private, works offline".into(),
+                        icon: Some(IconName::Computer),
+                        label: theme::this_machine_label().into(),
                         disabled: None,
                     },
-                    Tile {
+                    Segment {
                         key: "cloud",
-                        icon: IconName::Cloud,
-                        title: "Cloud".into(),
-                        line: "Faster for big videos".into(),
+                        icon: Some(IconName::Cloud),
+                        label: "Cloud".into(),
                         disabled: access
                             .reason()
                             .or_else(|| self.cloud_blocked().map(Into::into))
@@ -1607,10 +1656,16 @@ impl QuickView {
                 move |key, _, cx| {
                     let _ = weak.update(cx, |this, cx| this.set_cloud(key == "cloud", cx));
                 },
-            ))
+            ),
+            p,
+        )
     }
 
-    fn save_section(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
+    /// Where it runs, the file name and the folder, in one group.
+    fn save_section(&self, p: &Palette, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        // A target that needs the pack converts here once it's in.
+        let place_to_run =
+            (self.to.is_some() && !self.needs_pack()).then(|| self.where_row(p, window, cx));
         let place = match &self.save_dir {
             Some(dir) => super::tilde(dir),
             None => "Same folder".to_string(),
@@ -1702,7 +1757,10 @@ impl QuickView {
             p,
         );
         section("Save", self.gutter(), p).child(theme::group(
-            name.into_iter().chain(std::iter::once(folder)),
+            place_to_run
+                .into_iter()
+                .chain(name)
+                .chain(std::iter::once(folder)),
             p,
         ))
     }
@@ -2354,11 +2412,7 @@ impl Render for QuickView {
             // Nothing to save while every file waits for the document pack
             // and no target is picked yet.
             if !self.supported().is_empty() || waiting == 0 || self.to.is_some() {
-                // A target that needs the pack converts here once it's in.
-                if self.to.is_some() && !self.needs_pack() {
-                    body.push(self.where_section(&p, window, cx).into_any_element());
-                }
-                body.push(self.save_section(&p, cx).into_any_element());
+                body.push(self.save_section(&p, window, cx).into_any_element());
             }
             body
         } else {

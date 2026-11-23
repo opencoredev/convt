@@ -1200,25 +1200,20 @@ fn reason_note(element_id: &SharedString, reason: SharedString, p: &Palette) -> 
         .into_any_element()
 }
 
-/// The look of anything picked from a set (format cards, tiles, presets,
-/// the onboarding questions): a raised surface, and for the picked one a
-/// 2px ring in the brand green with a softer, deeper shadow. The ring is
-/// also what the keyboard moves.
+/// The look of anything picked from a set (format cards, presets, the
+/// onboarding questions): a raised surface, and for the picked one a crisp
+/// 1.5px ring in the brand green on a green tint, with no drop of its own.
+/// The ring is also what the keyboard moves.
 pub fn choice(el: Clickable, on: bool, corner: f32, p: &Palette) -> Clickable {
-    choice_look(el, on, true, corner, p)
-}
-
-/// [`choice`], with no hover for a choice that can't be picked.
-fn choice_look(el: Clickable, on: bool, enabled: bool, corner: f32, p: &Palette) -> Clickable {
     el.rounded(px(corner))
         .bg(if on { p.green_tint } else { p.surface })
         .shadow(choice_shadow(on, p))
-        .when(!on && enabled, |d| d.hover(|s| s.bg(p.hover)))
+        .when(!on, |d| d.hover(|s| s.bg(p.hover)))
 }
 
 fn choice_shadow(on: bool, p: &Palette) -> Vec<BoxShadow> {
     if on {
-        vec![inset_ring(p.green, 2.), shadow_s(p)]
+        vec![inset_ring(p.green, 1.5)]
     } else {
         let mut s = vec![inset_ring(p.border, 1.)];
         s.extend(raise(p));
@@ -1253,111 +1248,85 @@ pub fn choice_tile(
         )
 }
 
-/// One choice of [`tiles`].
-pub struct Tile {
+/// One choice of [`segmented_with`].
+pub struct Segment {
     pub key: &'static str,
-    pub icon: IconName,
-    pub title: SharedString,
-    pub line: SharedString,
-    /// Why the choice can't be picked now; shown above it on hover.
+    pub icon: Option<IconName>,
+    pub label: SharedString,
+    /// Why the choice can't be picked now; shown above it on hover or click.
     pub disabled: Option<SharedString>,
 }
 
-/// Side-by-side choices drawn as cards, each with a large icon, a title and
-/// one line, such as where a conversion runs. The picked one has a green
-/// ring. A disabled one is dimmed, ignores clicks and says why in a note
-/// above it while hovered, so the note never covers the label it explains
-/// (GPUI's own tooltip follows the pointer and, near a window's bottom edge,
-/// lands on the control). Ids are `{id}-{key}`.
-pub fn tiles(
+/// [`segmented`] with an icon per choice and choices that can't be picked
+/// now, such as where a conversion runs. A disabled segment keeps its label
+/// readable (the tertiary ink, at least 4.5:1 on the track), ignores picks
+/// and says why in a note above it while hovered or after a click, so the
+/// note never covers the label it explains (GPUI's own tooltip follows the
+/// pointer and, near a window's bottom edge, lands on the control). Ids are
+/// `{id}-{key}`; the note is `{id}-{key}-reason`.
+pub fn segmented_with(
     id: &str,
-    choices: &[Tile],
+    choices: &[Segment],
     selected: &str,
     p: &Palette,
     window: &mut Window,
     cx: &mut App,
     on_pick: impl Fn(&'static str, &mut Window, &mut App) + Clone + 'static,
 ) -> Div {
-    div()
-        .flex()
-        .gap(px(space::MD))
-        .children(choices.iter().map(|tile| {
-            let key = tile.key;
-            let on = key == selected;
-            let element_id = SharedString::from(format!("{id}-{key}"));
-            let hover = tile.disabled.as_ref().map(|_| {
+    pill_track(p).children(choices.iter().map(|segment| {
+        let key = segment.key;
+        let on = key == selected && segment.disabled.is_none();
+        let element_id = SharedString::from(format!("{id}-{key}"));
+        let ink = if segment.disabled.is_some() {
+            p.tertiary
+        } else if on {
+            p.text
+        } else {
+            p.secondary
+        };
+        let el = clickable(element_id.clone(), segment.label.clone())
+            .aria_selected(on)
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .h(px(24.))
+            .px(px(10.))
+            .rounded(px(radius::CONTROL))
+            .when(on, |d| pill_segment_on(d, p))
+            .children(segment.icon.map(|glyph| icon(glyph, 13., ink)))
+            .child(
+                text(12., 16., ink)
+                    .font_weight(FontWeight::MEDIUM)
+                    .whitespace_nowrap()
+                    .child(segment.label.clone()),
+            );
+        match &segment.disabled {
+            None => {
+                let on_pick = on_pick.clone();
+                el.when(!on, |d| d.hover(|s| s.bg(p.hover)))
+                    .on_click(move |_, window, cx| on_pick(key, window, cx))
+            }
+            Some(reason) => {
                 let state = window.use_keyed_state(
                     SharedString::from(format!("{element_id}-hover")),
                     cx,
                     |_, _| false,
                 );
                 let shown = *state.read(cx);
-                (state, shown)
-            });
-            let off = tile.disabled.is_some();
-            let on_pick = on_pick.clone();
-            let (tile_bg, tile_ring, glyph) = if on {
-                (p.green_tint, p.green_border, p.green_text)
-            } else {
-                (p.chip, p.chip_border, p.secondary)
-            };
-            choice_look(
-                clickable(element_id.clone(), tile.title.clone()),
-                on,
-                !off,
-                radius::PANEL,
-                p,
-            )
-            .aria_selected(on)
-            .flex()
-            .flex_1()
-            .items_center()
-            .gap(px(space::MD))
-            .p(px(12.))
-            .when(off, |d| d.cursor_default())
-            .when_some(
-                hover.zip(tile.disabled.clone()),
-                |d, ((state, shown), reason)| {
-                    d.relative()
-                        .on_hover(hover_setter(state))
-                        .children(shown.then(|| reason_note(&element_id, reason, p)))
-                },
-            )
-            .when(!off, |d| {
-                d.on_click(move |_, window, cx| on_pick(key, window, cx))
-            })
-            .child(
-                div()
-                    .flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .justify_center()
-                    .size(px(34.))
-                    .rounded(px(radius::CONTROL + 1.))
-                    .bg(tile_bg)
-                    .shadow(vec![inset_ring(tile_ring, 1.)])
-                    .when(off, |d| d.opacity(0.5))
-                    .child(icon(tile.icon, 18., glyph)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .min_w_0()
-                    .gap(px(1.))
-                    .when(off, |d| d.opacity(0.5))
-                    .child(
-                        styled(size::BODY, p.text)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(tile.title.clone()),
-                    )
-                    .child(
-                        styled(size::SMALL, p.secondary)
-                            .truncate()
-                            .child(tile.line.clone()),
-                    ),
-            )
-        }))
+                let click = state.clone();
+                el.cursor_default()
+                    .relative()
+                    .on_hover(hover_setter(state))
+                    .on_click(move |_, _, cx| {
+                        click.update(cx, |s, cx| {
+                            *s = true;
+                            cx.notify();
+                        })
+                    })
+                    .children(shown.then(|| reason_note(&element_id, reason.clone(), p)))
+            }
+        }
+    }))
 }
 
 /// The tone of a [`badge`], [`callout`] or [`icon_tile`].
@@ -1429,29 +1398,18 @@ pub fn card(p: &Palette) -> Div {
         .shadow(soft(p))
 }
 
-/// The layered resting shadow of cards: a 1px-2px drop and a wide, faint
-/// elevation (in dark mode a crisp drop and a little depth).
+/// The resting shadow of cards, crisp like Alloy's: in light mode a 1px
+/// drop and a short, faint second one; in dark mode, where the hairline
+/// border does the work, one small drop.
 pub fn soft(p: &Palette) -> Vec<BoxShadow> {
-    vec![
-        shadow(
-            if p.dark {
-                ca(0x00000066)
-            } else {
-                ca(0x1018280D)
-            },
-            1.,
-            2.,
-        ),
-        shadow(
-            if p.dark {
-                ca(0x00000033)
-            } else {
-                ca(0x1018280A)
-            },
-            4.,
-            12.,
-        ),
-    ]
+    if p.dark {
+        vec![shadow(ca(0x0000004D), 1., 3.)]
+    } else {
+        vec![
+            shadow(ca(0x2021240F), 1., 2.),
+            shadow(ca(0x2021240A), 2., 6.),
+        ]
+    }
 }
 
 /// Rows in one card, with dividers between them, like grouped settings.
@@ -1681,9 +1639,12 @@ pub fn thumbnail(path: &std::path::Path, w: f32, h: f32, p: &Palette) -> AnyElem
         Some(Category::Image) if path.exists() => {
             let (path, p) = (path.to_path_buf(), *p);
             framed(
+                // Rounded itself: GPUI draws an image's square corners over
+                // a parent's rounded clip.
                 img(path.clone())
                     .w(px(w))
                     .h(px(h))
+                    .rounded(px(corner))
                     .object_fit(ObjectFit::Cover)
                     .with_fallback(move || badge_tile(&path, category, w, h, &p))
                     .into_any_element(),
@@ -1696,6 +1657,7 @@ pub fn thumbnail(path: &std::path::Path, w: f32, h: f32, p: &Palette) -> AnyElem
                     img(frame)
                         .w(px(w))
                         .h(px(h))
+                        .rounded(px(corner))
                         .object_fit(ObjectFit::Cover)
                         .with_fallback(move || badge_tile(&path, category, w, h, &p))
                         .into_any_element(),

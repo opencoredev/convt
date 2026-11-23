@@ -87,7 +87,8 @@ impl MainView {
 
     /// Opens the composer for the files at the top of Activity, as a
     /// right-click without a target opens Quick convert, so the user picks
-    /// the format. Built once this update is done, since it needs the window.
+    /// the format, or adds them to the composer already open. Done once this
+    /// update is over, since it needs the window.
     pub fn add(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
         if paths.is_empty() {
             return;
@@ -111,6 +112,16 @@ impl MainView {
     ) {
         // Status is read offline; it may have changed through the CLI.
         self.app.update(cx, |s, cx| s.refresh_pack(cx));
+        self.page = Page::Activity;
+        if let Some(open) = self.composer.clone() {
+            // More files for the conversion being set up, which keeps its
+            // format, options and folder.
+            open.update(cx, |c, cx| c.add_files(&request.files, window, cx));
+            let focus = open.read(cx).focus.clone();
+            window.focus(&focus, cx);
+            cx.notify();
+            return;
+        }
         let app = self.app.clone();
         let composer = cx.new(|cx| QuickView::new_inline(app, request, window, cx));
         // Enter converts and Escape closes it from the start.
@@ -573,8 +584,15 @@ impl MainView {
         ) =
             match &record.outcome {
                 Outcome::Done(outputs) => {
-                    let detail = match (file_size(&record.input), outputs.as_slice()) {
-                        (Some(a), [one]) => file_size(one).map(|b| {
+                    // The sizes kept when it finished, so a file moved or
+                    // edited since doesn't change what the row says.
+                    let before = record.input_bytes.or_else(|| file_size(&record.input));
+                    let after = record.output_bytes.or_else(|| match outputs.as_slice() {
+                        [one] => file_size(one),
+                        _ => None,
+                    });
+                    let detail = match (before, outputs.as_slice()) {
+                        (Some(a), [_]) => after.map(|b| {
                             let (delta, tone) = size_delta(a, b);
                             div()
                                 .flex()
@@ -593,9 +611,12 @@ impl MainView {
                                         .child(theme::badge(delta, tone, p)),
                                 )
                         }),
-                        (_, many) if many.len() > 1 => Some(div().child(
-                            mono(11., 14., p.tertiary).child(format!("{} files", many.len())),
-                        )),
+                        (_, many) if many.len() > 1 => {
+                            Some(div().child(mono(11., 14., p.tertiary).child(match after {
+                                Some(b) => format!("{} files · {}", many.len(), human_size(b)),
+                                None => format!("{} files", many.len()),
+                            })))
+                        }
                         _ => None,
                     };
                     let mut actions: Vec<AnyElement> = Vec::new();
@@ -1009,8 +1030,9 @@ fn action_cell(actions: Vec<AnyElement>) -> Div {
         .children(actions)
 }
 
-/// How much smaller or larger a conversion made the file: "-78%", "+45%"
-/// or "+4.2×". Smaller is green; at least 20% larger is amber.
+/// How much smaller or larger a conversion made the file: "-78%", "+45%",
+/// "4.2× larger" or "23× larger". Smaller is green; at least 20% larger is
+/// amber.
 pub(super) fn size_delta(before: u64, after: u64) -> (String, Tone) {
     let (a, b) = (before.max(1) as f64, after as f64);
     if b < a && (a - b) / a >= 0.01 {
@@ -1025,9 +1047,9 @@ pub(super) fn size_delta(before: u64, after: u64) -> (String, Tone) {
             Tone::Neutral
         };
         let label = if times >= 10. {
-            format!("+{times:.0}×")
+            format!("{times:.0}× larger")
         } else if times >= 2. {
-            format!("+{times:.1}×")
+            format!("{times:.1}× larger")
         } else {
             format!("+{:.0}%", (times - 1.) * 100.)
         };

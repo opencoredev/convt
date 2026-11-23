@@ -116,15 +116,21 @@ final class FinderSync: FIFinderSync {
         return item
     }
 
-    /// The items a click applies to: Finder's selection, else what the menu
-    /// was built for, else the item that was right-clicked.
+    /// The items a click applies to: exactly what the menu was built for,
+    /// else Finder's selection, else the item that was right-clicked. The
+    /// menu's items come first because Finder's selection can change between
+    /// opening the menu and clicking it, and converting what is selected by
+    /// then would convert files the user never picked. They are used once,
+    /// so a later click can't reuse an old menu's files.
     private func clickedItems() -> [URL]? {
+        if !lastMenuItems.isEmpty {
+            let items = lastMenuItems
+            lastMenuItems = []
+            return items
+        }
         let controller = FIFinderSyncController.default()
         if let selected = controller.selectedItemURLs(), !selected.isEmpty {
             return selected
-        }
-        if !lastMenuItems.isEmpty {
-            return lastMenuItems
         }
         if let targeted = controller.targetedURL() {
             return [targeted]
@@ -180,6 +186,7 @@ final class FinderSync: FIFinderSync {
             }
         }
         let requestID = UUID().uuidString
+        let requestURL: URL
         do {
             guard let group = Bundle.main.object(forInfoDictionaryKey: "ConvtAppGroup") as? String,
                   let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
@@ -190,7 +197,8 @@ final class FinderSync: FIFinderSync {
             let data = try JSONEncoder().encode(request)
             // The app drops request files over 1 MiB unread.
             guard data.count <= 1 << 20 else { throw CocoaError(.fileWriteOutOfSpace) }
-            try data.write(to: dir.appendingPathComponent(requestID + ".json"), options: .atomic)
+            requestURL = dir.appendingPathComponent(requestID + ".json")
+            try data.write(to: requestURL, options: .atomic)
         } catch {
             // No usable shared container (an ad-hoc build, which macOS
             // doesn't grant the group), or a selection too large for one
@@ -200,7 +208,14 @@ final class FinderSync: FIFinderSync {
             NSWorkspace.shared.open(items, withApplicationAt: appURL, configuration: configuration, completionHandler: done)
             return
         }
-        NSWorkspace.shared.open([URL(string: "convt://finder?id=\(requestID)")!], withApplicationAt: appURL, configuration: configuration, completionHandler: done)
+        // If the app didn't wake, take the request back: left in the
+        // container, it would run on some later, unrelated launch.
+        let woke: (NSRunningApplication?, Error?) -> Void = { _, error in
+            guard let error else { return }
+            NSLog("convt: could not start the app: \(error.localizedDescription); dropping request \(requestID)")
+            try? FileManager.default.removeItem(at: requestURL)
+        }
+        NSWorkspace.shared.open([URL(string: "convt://finder?id=\(requestID)")!], withApplicationAt: appURL, configuration: configuration, completionHandler: woke)
     }
 
     /// convt.app, which contains this extension at Contents/PlugIns/<name>.appex.

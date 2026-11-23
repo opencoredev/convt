@@ -53,6 +53,8 @@ const TABS: [(SettingsTab, &str, &str, IconName); 4] = [
 
 /// Space between the window edge and the settings content.
 const GUTTER: f32 = 24.;
+/// Space between the General tab's sections and above the first.
+const GENERAL_GAP: f32 = 18.;
 /// The width of the dropdowns in General, so they line up.
 const SELECT_WIDTH: f32 = 200.;
 
@@ -484,12 +486,14 @@ impl SettingsView {
             p,
         );
 
+        // A little tighter than the other tabs, so the cards above the fold
+        // at the window's opening height end on a card's edge.
         div()
             .flex()
             .flex_col()
-            .gap(px(space::XL))
+            .gap(px(GENERAL_GAP))
             .px(px(GUTTER))
-            .pt(px(space::XL))
+            .pt(px(GENERAL_GAP))
             .pb(px(space::XXL))
             .children((!errors.is_empty()).then(|| {
                 theme::callout(

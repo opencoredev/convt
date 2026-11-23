@@ -1241,6 +1241,8 @@ fn quick_convert_explains_targets_it_cannot_reach(cx: &mut TestAppContext) {
 fn settings_is_a_page_of_the_main_window(cx: &mut TestAppContext) {
     let f = Fixture::new(cx);
     let (main, view) = f.main(cx);
+    // As `open_main` keeps it, so the app finds this window.
+    cx.update(|cx| cx.set_global(Open(main, view.downgrade())));
     assert!(
         !shown(cx, main, "open-settings"),
         "no gear beside the brand"
@@ -1274,11 +1276,53 @@ fn settings_is_a_page_of_the_main_window(cx: &mut TestAppContext) {
         .unwrap();
     assert!(feedback.top() > nav.bottom() + px(100.), "{feedback:?}");
 
-    // Elsewhere, Settings still opens as its own window.
+    // With the main window open, every way to Settings (the tray, the menu,
+    // a license link) shows this page; no second Settings window opens.
+    click(cx, main, "nav-activity");
+    cx.update(|cx| super::show_settings(SettingsTab::Presets, cx));
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
+    assert_eq!(selected(cx, main, "tab-presets"), Some(true));
+    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
+    click(cx, main, "nav-activity");
+    cx.update(|cx| super::show_license(Some("CONVT-TEST-KEY".into()), cx));
+    cx.read(|cx| {
+        let main = view.read(cx);
+        assert_eq!(main.page, Page::Settings);
+        let settings = main.settings.read(cx);
+        assert_eq!(settings.tab, SettingsTab::License);
+        assert_eq!(settings.license_key.read(cx).value(), "CONVT-TEST-KEY");
+        assert!(Open::<SettingsView>::get(cx).is_none());
+    });
+
+    // With it closed, Settings opens as its own window.
+    main.update(cx, |_, window, _| window.remove_window())
+        .unwrap();
+    cx.run_until_parked();
     cx.update(|cx| super::show_settings(SettingsTab::General, cx));
     let (_, settings) = window_of::<SettingsView>(cx);
     cx.read(|cx| assert_eq!(settings.read(cx).tab, SettingsTab::General));
-    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
+}
+
+/// Files dropped or added while the composer is open join it; the format
+/// picked for the first files stays.
+#[gpui_kit::test]
+fn more_files_join_the_open_composer(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let a = f.bmp("a.bmp");
+    let b = f.bmp("b.bmp");
+    let (window, view) = f.main(cx);
+    view.update(cx, |v, cx| v.add(std::slice::from_ref(&a), cx));
+    let first = composer(cx, &view);
+    click(cx, window, "to-webp");
+    view.update(cx, |v, cx| v.add(&[b.clone(), a.clone()], cx));
+    let after = composer(cx, &view);
+    assert_eq!(first.entity_id(), after.entity_id(), "the same composer");
+    cx.read(|cx| {
+        let c = after.read(cx);
+        assert_eq!(c.files, [a.clone(), b.clone()]);
+        assert_eq!(c.to.map(|t| t.id), Some("webp"));
+    });
+    assert_eq!(selected(cx, window, "to-webp"), Some(true));
 }
 
 #[gpui_kit::test]
@@ -1562,8 +1606,19 @@ fn size_deltas_read_as_the_change() {
     );
     assert_eq!(size_delta(1000, 1100), ("+10%".to_string(), Tone::Neutral));
     assert_eq!(size_delta(1000, 1450), ("+45%".to_string(), Tone::Amber));
-    assert_eq!(size_delta(1000, 4200), ("+4.2×".to_string(), Tone::Amber));
-    assert_eq!(size_delta(1000, 23_000), ("+23×".to_string(), Tone::Amber));
+    assert_eq!(size_delta(1000, 1990), ("+99%".to_string(), Tone::Amber));
+    assert_eq!(
+        size_delta(1000, 2000),
+        ("2.0× larger".to_string(), Tone::Amber)
+    );
+    assert_eq!(
+        size_delta(1000, 4200),
+        ("4.2× larger".to_string(), Tone::Amber)
+    );
+    assert_eq!(
+        size_delta(1000, 23_000),
+        ("23× larger".to_string(), Tone::Amber)
+    );
     assert_eq!(
         size_delta(0, 10).1,
         Tone::Amber,
@@ -1618,7 +1673,10 @@ fn activity_rows_show_the_size_change(cx: &mut TestAppContext) {
             record.to
         );
         if record.to == "bmp" {
-            assert!(delta.starts_with('+'), "{delta}");
+            assert!(
+                delta.starts_with('+') || delta.ends_with("× larger"),
+                "{delta}"
+            );
         }
     }
 }
@@ -1673,6 +1731,82 @@ fn the_hud_shows_progress_then_the_result(cx: &mut TestAppContext) {
         cx.executor().advance_clock(Duration::from_secs(3));
         cx.run_until_parked();
         assert!(!hud_open(cx), "gone after 7s");
+    }
+}
+
+/// A batch where some files fail still offers the saved ones, says both
+/// counts, and stays up a little longer.
+#[gpui_kit::test]
+fn the_hud_keeps_the_saved_files_of_a_batch_with_failures(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let good = f.bmp("good.bmp");
+    let broken = f.dir.path().join("broken.bmp");
+    std::fs::write(&broken, "not a bmp").unwrap();
+    cx.update(|cx| super::route(cli(vec![good, broken], Some("png"), None), cx));
+    let (hud, _) = window_of::<HudView>(cx);
+    wait_for_label(cx, hud, "hud", |s| s == "mixed");
+    assert_eq!(
+        label(cx, hud, "hud-title").as_deref(),
+        Some("1 saved · 1 failed")
+    );
+    assert!(
+        label(cx, hud, "hud-line")
+            .unwrap()
+            .starts_with("broken.bmp: "),
+        "the line says which file failed"
+    );
+    assert!(shown(cx, hud, "hud-show"), "the saved file can be shown");
+    click(cx, hud, "hud-copy");
+    assert_eq!(label(cx, hud, "hud-copy").as_deref(), Some("Copied"));
+    cx.executor().advance_clock(Duration::from_secs(5));
+    cx.run_until_parked();
+    assert!(hud_open(cx), "still up after 5s");
+    cx.executor().advance_clock(Duration::from_secs(2));
+    cx.run_until_parked();
+    assert!(!hud_open(cx), "gone after 6s");
+
+    // Several saved files: the count, and where they are.
+    let files = vec![f.png("one.png"), f.png("two.png")];
+    cx.update(|cx| super::route(cli(files, Some("jpeg"), None), cx));
+    let (hud, _) = window_of::<HudView>(cx);
+    wait_for_label(cx, hud, "hud", |s| s == "done");
+    assert_eq!(
+        label(cx, hud, "hud-title").as_deref(),
+        Some("Saved 2 files")
+    );
+    assert_eq!(
+        label(cx, hud, "hud-line").as_deref(),
+        Some("In the original folder")
+    );
+}
+
+/// The HUD's two rows fit its size whole: the title row with ×, and the
+/// sizes with Copy and Show beside them.
+#[gpui_kit::test]
+fn the_hud_fits_its_rows(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let png = f.png(&format!("IMG_0990_{dark}.png"));
+        cx.update(|cx| super::route(cli(vec![png], Some("jpeg"), None), cx));
+        let (hud, _) = window_of::<HudView>(cx);
+        wait_for_label(cx, hud, "hud", |s| s == "done");
+        for name in ["hud-title", "hud-line", "hud-close", "hud-copy", "hud-show"] {
+            assert!(fits(cx, hud, name), "{name}, dark: {dark}");
+        }
+        let (close, show, line) = cx
+            .update_window(hud, |_, window, cx| {
+                window.render_frame(cx);
+                (
+                    window.find(id("hud-close")).bounds(),
+                    window.find(id("hud-show")).bounds(),
+                    window.find(id("hud-line")).bounds(),
+                )
+            })
+            .unwrap();
+        assert!(close.bottom() <= show.top(), "× sits on the title row");
+        assert!(line.right() <= show.left(), "Show doesn't cover the line");
+        click(cx, hud, "hud-close");
     }
 }
 
@@ -1758,6 +1892,8 @@ fn activity_marks_jobs_that_ran_in_the_cloud(cx: &mut TestAppContext) {
                         cloud,
                         ..Default::default()
                     }),
+                    input_bytes: None,
+                    output_bytes: None,
                 });
             }
             cx.notify();
@@ -3452,10 +3588,29 @@ fn silent_conversions_notify_but_never_reveal(cx: &mut TestAppContext) {
     });
     let png = f.png("a.png");
     cx.update(|cx| super::route(cli(vec![png.clone()], Some("jpeg"), None), cx));
+    let (hud, _) = window_of::<HudView>(cx);
     wait_until(cx, "the silent conversion", |cx| {
         f.app.read(cx).recent.len() == 1
     });
-    // A right-click conversion tells you it finished, as one from a window does.
+    // A right-click conversion says it finished in the HUD, and only there:
+    // no notification repeats it, and the folder isn't opened.
+    wait_for_label(cx, hud, "hud", |s| s == "done");
+    assert!(cx.shown_system_notifications().is_empty());
+    cx.read(|cx| assert!(f.app.read(cx).revealed.is_empty()));
+
+    // With no HUD to show it (it couldn't open, or was closed), the
+    // notification tells instead, still without opening the folder.
+    click(cx, hud, "hud-close");
+    let b = f.png("b.png");
+    cx.update(|cx| {
+        app.update(cx, |s, cx| {
+            s.convert_silently(&cli(vec![b], Some("jpeg"), None), cx)
+                .unwrap();
+        })
+    });
+    wait_until(cx, "the silent conversion without a HUD", |cx| {
+        f.app.read(cx).recent.len() == 2
+    });
     assert_eq!(cx.shown_system_notifications().len(), 1);
     cx.read(|cx| assert!(f.app.read(cx).revealed.is_empty()));
 
@@ -3467,7 +3622,7 @@ fn silent_conversions_notify_but_never_reveal(cx: &mut TestAppContext) {
         })
     });
     wait_until(cx, "the window's conversion", |cx| {
-        f.app.read(cx).recent.len() == 2
+        f.app.read(cx).recent.len() == 3
     });
     assert_eq!(cx.shown_system_notifications().len(), 2);
     cx.read(|cx| assert_eq!(f.app.read(cx).revealed, [f.dir.path().join("a.webp")]));
@@ -4064,6 +4219,10 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         click(cx, quick, "to-jpeg");
         assert!(fits(cx, quick, "convert"), "Quick convert, two files");
         assert!(fits(cx, quick, "where-cloud"), "Quick convert, Cloud");
+        assert!(
+            fits_above_the_footer(cx, quick, "change-folder"),
+            "Quick convert, two files, Save above the footer"
+        );
         cx.update(|cx| cx.set_global(super::quick::TestCloud(CloudAccess::Ready)));
         click(cx, quick, "where-cloud");
         assert!(
@@ -4159,6 +4318,29 @@ fn windows_fit_their_content_at_their_opening_sizes(cx: &mut TestAppContext) {
         let (main, _) = window_of::<MainView>(cx);
         assert!(fits(cx, main, "trial-buy"), "main window");
         assert!(fits(cx, main, "empty-add-files"), "main window, empty");
+        // Closed, so the next round's Settings opens as its own window
+        // again rather than as this window's page.
+        main.update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+        cx.run_until_parked();
+    }
+
+    // Licensed, a photo picked as PNG adds the size warning to Quick
+    // convert, and where it runs and Save still fit above the footer.
+    let f = Fixture::licensed(cx, None, Some(&license_key("a@b.c", "2027-10-01")));
+    for dark in [false, true] {
+        cx.update(|cx| theme::set_dark(dark, cx));
+        let photo = f.rgb(&format!("photo-{dark}.jpg"));
+        cx.update(|cx| super::open_quick(cli(vec![photo], Some("png"), None), cx));
+        let warned = *cx.update(|cx| cx.windows()).last().unwrap();
+        assert!(!shown(cx, warned, "license-banner"));
+        for name in ["png-size-hint", "where-cloud", "change-folder"] {
+            assert!(
+                fits_above_the_footer(cx, warned, name),
+                "Quick convert, PNG warning, {name} above the footer, dark: {dark}"
+            );
+        }
+        assert!(fits(cx, warned, "convert"), "Quick convert, PNG warning");
     }
 }
 
@@ -4704,6 +4886,7 @@ fn documents_added_dropped_or_in_folders_reach_the_offer(cx: &mut TestAppContext
     assert!(shown(cx, window, "pack-download"));
 
     // A folder's documents aren't dropped on the floor.
+    click(cx, window, "composer-close");
     main.update(cx, |v, cx| v.add(std::slice::from_ref(&folder), cx));
     let view = composer(cx, &main);
     cx.read(|cx| assert_eq!(view.read(cx).files, [folder.join("Budget.xlsx")]));
@@ -7165,8 +7348,10 @@ fn about_and_help_open_what_they_say(cx: &mut TestAppContext) {
     cx.update(|cx| cx.dispatch_action(&menus::ShowActivity));
     let (_, main) = window_of::<MainView>(cx);
     cx.read(|cx| assert_eq!(main.read(cx).page, Page::Activity));
+    // With the main window open, Settings is its page.
     cx.update(|cx| cx.dispatch_action(&menus::OpenSettings));
-    window_of::<SettingsView>(cx);
+    cx.read(|cx| assert_eq!(main.read(cx).page, Page::Settings));
+    cx.read(|cx| assert!(Open::<SettingsView>::get(cx).is_none()));
 }
 
 #[gpui_kit::test]

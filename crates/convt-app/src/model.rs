@@ -77,6 +77,9 @@ pub struct Batch {
     pub done: usize,
     pub failed: usize,
     pub cancelled: usize,
+    /// Finished jobs whose result the progress HUD didn't show. With none,
+    /// the HUD said it all and no notification repeats it.
+    pub outside_hud: usize,
 }
 
 impl Batch {
@@ -1242,7 +1245,13 @@ impl AppState {
             if revoked {
                 self.forget_revoked_session(cx);
             }
+            // The HUD shows how a silent job ended, unless it was closed
+            // or couldn't open; then the notification tells.
+            if !(silent && crate::ui::hud_follows(entry.id, cx)) {
+                self.batch.outside_hud += 1;
+            }
             let batch = &mut self.batch;
+            let mut sizes = crate::history::Sizes::default();
             let outcome = match &entry.status {
                 Status::Done(outputs) => {
                     batch.done += 1;
@@ -1259,6 +1268,15 @@ impl AppState {
                         #[cfg(test)]
                         self.revealed.push(first.clone());
                     }
+                    let size = |path: &Path| std::fs::metadata(path).ok().map(|m| m.len());
+                    sizes = crate::history::Sizes {
+                        input: size(&entry.input),
+                        output: outputs
+                            .iter()
+                            .map(|out| size(out))
+                            .sum::<Option<u64>>()
+                            .filter(|_| !outputs.is_empty()),
+                    };
                     Outcome::Done(outputs.clone())
                 }
                 Status::Failed(e) => {
@@ -1271,9 +1289,9 @@ impl AppState {
                     Outcome::Cancelled
                 }
             };
-            if let Err(e) = self
-                .history
-                .add(&entry.input, entry.to.id, &entry.setup, &outcome)
+            if let Err(e) =
+                self.history
+                    .add_sized(&entry.input, entry.to.id, &entry.setup, &outcome, sizes)
             {
                 tracing::warn!(error = %e, "could not record history");
             }
@@ -1290,6 +1308,7 @@ impl AppState {
         let in_background = cx.active_window().is_none();
         if self.settings.notifications
             && in_background
+            && batch.outside_hud > 0
             && let Some((title, body)) = batch.summary()
         {
             cx.show_system_notification(SystemNotification {
@@ -1299,8 +1318,19 @@ impl AppState {
                 actions: Vec::new(),
             });
         }
+        self.maybe_quit_after_hud(cx);
+    }
+
+    /// Quits once silent conversions are done and nothing keeps convt open:
+    /// no tray icon, no window, nothing converting. While the HUD shows the
+    /// result it stays up for its few seconds, so Copy and Show can be
+    /// clicked; once it closes, `last_window_closed` (main.rs) quits, as it
+    /// does after any last window, so the HUD needs no quit of its own.
+    pub fn maybe_quit_after_hud(&mut self, cx: &mut Context<Self>) {
         if self.quit_when_idle
+            && !crate::ui::hud_open(cx)
             && crate::ui::only_hud_open(cx)
+            && self.queue.active() == 0
             && !crate::tray::keeps_running(self.settings.menu_bar_icon, cx)
         {
             crate::menu::quit(cx);
@@ -1567,6 +1597,7 @@ mod tests {
                 done,
                 failed,
                 cancelled,
+                outside_hud: 0,
             }
             .summary()
         };

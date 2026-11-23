@@ -523,14 +523,58 @@ pub fn show_finder_guide(cx: &mut App) {
     }
 }
 
-/// Opens Settings on `tab`.
+/// Opens Settings on `tab`: the main window's Settings page while the main
+/// window is open, so there is one place for it, else the Settings window.
 pub fn show_settings(tab: SettingsTab, cx: &mut App) {
+    open_settings(tab, cx, |_, _, _| {});
+}
+
+/// Settings > General scrolled to Updates.
+pub fn show_updates(cx: &mut App) {
+    open_settings(SettingsTab::General, cx, |view, _, cx| {
+        view.reveal_updates(cx)
+    });
+}
+
+/// [`show_settings`], then `then` on the Settings view that shows it.
+fn open_settings(
+    tab: SettingsTab,
+    cx: &mut App,
+    then: impl FnOnce(&mut SettingsView, &mut Window, &mut Context<SettingsView>),
+) {
     let app = model::shared(cx);
     app.update(cx, |s, cx| s.refresh_pack(cx));
+    let mut then = Some(then);
+    if let Some((handle, main)) = Open::<MainView>::get(cx) {
+        let shown = handle.update(cx, |_, window, cx| {
+            window.activate_window();
+            let settings = main.update(cx, |main, cx| {
+                main.set_page(main_window::Page::Settings, cx);
+                main.settings.clone()
+            });
+            settings.update(cx, |view, cx| {
+                view.set_tab(tab, cx);
+                if let Some(then) = then.take() {
+                    then(view, window, cx);
+                }
+            });
+        });
+        if shown.is_ok() {
+            cx.activate(true);
+            return;
+        }
+    }
     if let Some((handle, view)) = show(size(px(620.), px(600.)), "Settings", cx, |window, cx| {
         cx.new(|cx| SettingsView::new(app, window, cx))
     }) {
-        let _ = handle.update(cx, |_, _, cx| view.update(cx, |v, cx| v.set_tab(tab, cx)));
+        let _ = handle.update(cx, |_, window, cx| {
+            view.update(cx, |view, cx| {
+                view.set_tab(tab, cx);
+                if let Some(then) = then.take() {
+                    then(view, window, cx);
+                }
+            })
+        });
     }
 }
 
@@ -548,12 +592,9 @@ pub fn show_feedback(cx: &mut App) {
 /// Opens the License tab of Settings, with `key` filled in. Keys from links
 /// are never activated without a click: any web page can open one.
 pub fn show_license(key: Option<String>, cx: &mut App) {
-    show_settings(SettingsTab::License, cx);
-    if let Some((handle, view)) = Open::<SettingsView>::get(cx) {
-        let _ = handle.update(cx, |_, window, cx| {
-            view.update(cx, |view, cx| view.fill_license(key, window, cx))
-        });
-    }
+    open_settings(SettingsTab::License, cx, move |view, window, cx| {
+        view.fill_license(key, window, cx)
+    });
 }
 
 /// Shows the progress HUD for jobs started without a window, or adds them
@@ -610,6 +651,18 @@ pub fn show_hud(jobs: Vec<crate::jobs::JobId>, cx: &mut App) {
         Ok((handle, view)) => cx.set_global(Open(handle, view.downgrade())),
         Err(e) => tracing::warn!(error = %e, "could not show the progress HUD"),
     }
+}
+
+/// Whether the progress HUD is up.
+pub(crate) fn hud_open(cx: &App) -> bool {
+    Open::<HudView>::get(cx).is_some_and(|(handle, _)| cx.windows().contains(&handle))
+}
+
+/// Whether the progress HUD is up and shows how `job` ends.
+pub(crate) fn hud_follows(job: crate::jobs::JobId, cx: &App) -> bool {
+    Open::<HudView>::get(cx).is_some_and(|(handle, view)| {
+        cx.windows().contains(&handle) && view.read(cx).jobs.contains(&job)
+    })
 }
 
 /// Whether no window is open but the HUD. The HUD alone doesn't keep convt

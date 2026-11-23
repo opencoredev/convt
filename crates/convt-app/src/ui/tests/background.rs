@@ -249,7 +249,11 @@ fn closing_the_last_window_keeps_convt_running_while_the_tray_is_up(cx: &mut Tes
 
     // The tray brings the windows back and quits.
     send(cx, Event::Open);
-    window_of::<MainView>(cx);
+    let (main, view) = window_of::<MainView>(cx);
+    send(cx, Event::Settings);
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
+    // With the main window closed, Settings opens as its own window.
+    close(cx, main);
     send(cx, Event::Settings);
     window_of::<SettingsView>(cx);
     send(cx, Event::Quit);
@@ -290,8 +294,9 @@ fn with_the_setting_off_closing_the_last_window_quits(cx: &mut TestAppContext) {
 }
 
 /// Converts one file from the command line with no window open, and returns
-/// how often the app asked to quit by the time the job finished.
-fn quits_after_a_silent_conversion(cx: &mut TestAppContext, tray_works: bool) -> usize {
+/// how often the app asked to quit by the time the job finished, while the
+/// HUD still shows the result, and once the HUD has closed by itself.
+fn quits_after_a_silent_conversion(cx: &mut TestAppContext, tray_works: bool) -> (usize, usize) {
     let f = Fixture::new(cx);
     background(&f, cx, tray_works);
     let png = f.png("silent.png");
@@ -320,17 +325,27 @@ fn quits_after_a_silent_conversion(cx: &mut TestAppContext, tray_works: bool) ->
             .entry(job)
             .is_some_and(|e| e.status.is_finished())
     });
-    quits(cx)
+    // The HUD shows the result for a few seconds, Copy and Show included.
+    assert!(hud_open(cx), "the HUD shows the result");
+    let while_shown = quits(cx);
+    cx.executor().advance_clock(Duration::from_secs(5));
+    cx.run_until_parked();
+    assert!(!hud_open(cx), "the HUD closed by itself");
+    (while_shown, quits(cx))
 }
 
 #[gpui_kit::test]
 fn a_silent_conversion_keeps_convt_running_while_the_tray_is_up(cx: &mut TestAppContext) {
-    assert_eq!(quits_after_a_silent_conversion(cx, true), 0);
+    assert_eq!(quits_after_a_silent_conversion(cx, true), (0, 0));
 }
 
 #[gpui_kit::test]
 fn without_a_tray_a_silent_conversion_quits_when_done(cx: &mut TestAppContext) {
-    assert_eq!(quits_after_a_silent_conversion(cx, false), 1);
+    assert_eq!(
+        quits_after_a_silent_conversion(cx, false),
+        (0, 1),
+        "not while the HUD shows the result, once when it closes"
+    );
 }
 
 #[gpui_kit::test]
@@ -500,5 +515,7 @@ fn a_silent_conversion_as_the_last_window_closes_finishes_first(cx: &mut TestApp
         let status = &f.app.read(cx).entry(job).unwrap().status;
         assert!(matches!(status, crate::jobs::Status::Done(_)), "{status:?}");
     });
-    assert_eq!(quits(cx), 1, "then once");
+    assert_eq!(quits(cx), 0, "not while the HUD shows the result");
+    cx.executor().advance_clock(Duration::from_secs(5));
+    assert_eq!(quits(cx), 1, "then once, when it closes");
 }
