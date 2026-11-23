@@ -34,7 +34,7 @@ Fix these in your code. Retrying will not help.
 
 - `succeeded`: it was billed. Fetch its outputs with `GET /v1/jobs/{id}/download`; never convert again.
 - `queued` or `running`: it is still going. Poll it, or retry the original request with the same `Idempotency-Key`, which waits for the same job.
-- `created`: convt never received the file. Retry the original request with the same key (it uploads again into the same job), or cancel the job to release its reservation.
+- `created`: the job has not started. On the jobs routes, your `PUT` may or may not have landed: call `POST /v1/jobs/{id}/start`, and if it answers `409 upload_missing`, upload to `upload_url` (replay the create with the same key for a fresh one) and start again. For `POST /v1/convert`, retry the request with the same key; it uploads into the same job. Or cancel the job to release its reservation.
 - `failed` or `cancelled`: it was not billed. Fix the cause and start over with a new key.
 
 Sending the create again without the key makes a second job and can bill twice.

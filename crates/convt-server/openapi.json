@@ -1197,7 +1197,7 @@
         },
         "responses": {
           "200": {
-            "description": "The converted file, when the job produced one output and `Accept` does not ask for JSON. With several outputs or `Accept: application/json`, JSON with signed URLs.",
+            "description": "The converted file, when the job produced one output of at most 25 MB, this is its first delivery, and `Accept` does not ask for JSON. With several outputs or `Accept: application/json`, JSON with signed URLs.",
             "headers": {
               "Convt-Job-Id": {
                 "$ref": "#/components/headers/Convt-Job-Id"
@@ -1365,7 +1365,7 @@
                 "$ref": "#/components/headers/Convt-Job-Id"
               },
               "Location": {
-                "description": "Where to recover the job: `/v1/jobs/{id}` (409) or `/v1/jobs/{id}/download` (502 after success).",
+                "description": "`/v1/jobs/{id}`",
                 "schema": {
                   "type": "string"
                 }
@@ -1435,6 +1435,12 @@
               },
               "Convt-Job-Id": {
                 "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1614,6 +1620,12 @@
               },
               "Convt-Job-Id": {
                 "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1652,6 +1664,42 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "A result over 25 MB, or a replay of a finished request: `Location` is the signed storage URL of the only output (valid for `expires_in` seconds). Follow it; the body is the same JSON as with `Accept: application/json`.",
+            "headers": {
+              "Location": {
+                "description": "Signed URL of the output.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "$ref": "#/components/schemas/Job"
+                    },
+                    "outputs": {
+                      "$ref": "#/components/schemas/Outputs/properties/outputs"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    }
+                  }
                 }
               }
             }

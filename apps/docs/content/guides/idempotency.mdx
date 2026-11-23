@@ -6,7 +6,7 @@ description: Send an Idempotency-Key so a retried create or convert never reserv
 Networks drop responses. If `POST /v1/jobs` or `POST /v1/convert` times out, you cannot tell whether convt created the job. Send an `Idempotency-Key` header and you don't have to: retry with the same key, and convt returns the job the first request made instead of reserving another.
 
 ```bash
-curl -fsS {{api}}/v1/convert \
+curl -fsSL {{api}}/v1/convert \
   -H "Authorization: Bearer $CONVT_API_KEY" \
   -H "Idempotency-Key: 7f1c2e4a-order-1042" \
   -F file=@photo.png -F to=webp -o photo.webp
@@ -27,7 +27,7 @@ curl -fsS {{api}}/v1/convert \
 | `POST /v1/jobs`    | Started or finished          | The job, with `upload_url: null`. Its input can no longer be replaced.                                                                |
 | `POST /v1/convert` | Not uploaded yet             | convt stores the file from the retry and runs the job.                                                                                |
 | `POST /v1/convert` | Queued or running            | Waits for the same job, then answers as the first request would have, or `409 still_running` again if it is still going after `wait`. |
-| `POST /v1/convert` | Finished                     | The same answer: the file, the JSON outputs or the failure.                                                                           |
+| `POST /v1/convert` | Finished                     | The same outcome: a `303` redirect to the stored file (or JSON outputs, or the failure).                                              |
 
 ## Hanging up
 

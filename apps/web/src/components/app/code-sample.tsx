@@ -24,7 +24,7 @@ await out.save("report.pdf");`,
     id: "curl",
     label: "cURL",
     code: `# One request: the response is the converted file.
-curl -fsS ${apiBaseUrl}/v1/convert \\
+curl -fsSL ${apiBaseUrl}/v1/convert \\
   -H "Authorization: Bearer $CONVT_API_KEY" \\
   -F file=@report.docx -F to=pdf -o report.pdf`,
   },

@@ -40,6 +40,8 @@ use crate::routes::{self, ApiError, CloudState, JobView};
 pub const MAX_INLINE_BYTES: usize = 25_000_000;
 pub const DEFAULT_WAIT_SECONDS: u64 = 120;
 pub const MAX_WAIT_SECONDS: u64 = 300;
+/// Largest result streamed back in the response; larger ones redirect to storage.
+pub const MAX_INLINE_OUTPUT_BYTES: i64 = 25_000_000;
 /// Largest form field or JSON body other than the file itself.
 const MAX_METADATA_BYTES: usize = 16 * 1024;
 
@@ -231,21 +233,15 @@ async fn read_body(request: Request, s: &CloudState) -> Result<Parsed, ApiError>
                 from: Option<String>,
                 options: Option<serde_json::Value>,
             }
-            if request
-                .headers()
-                .get(header::CONTENT_LENGTH)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<usize>().ok())
-                .is_none_or(|n| n > MAX_METADATA_BYTES)
-            {
-                return Err(ApiError::bad(
-                    "invalid_request",
-                    "A JSON body must declare its Content-Length and stay under 16 KB.",
-                ));
-            }
-            let bytes = Bytes::from_request(request, s)
+            // Capped while reading, so chunked and sized bodies both work.
+            let bytes = axum::body::to_bytes(request.into_body(), MAX_METADATA_BYTES)
                 .await
-                .map_err(|_| ApiError::bad("invalid_request", "Could not read the body."))?;
+                .map_err(|_| {
+                    ApiError::bad(
+                        "invalid_request",
+                        "A JSON body must be under 16 KB. Send files as multipart or a raw body.",
+                    )
+                })?;
             let body: JsonBody = serde_path_to_error::deserialize(
                 &mut serde_json::Deserializer::from_slice(&bytes),
             )
@@ -341,14 +337,19 @@ impl Drop for HangupGuard {
 
 fn job_error(status: StatusCode, code: &str, message: &str, job: jobs::Job) -> Response {
     let request_id = routes::REQUEST_ID.try_with(Clone::clone).ok();
-    (
+    let location = HeaderValue::from_str(&format!("/v1/jobs/{}", job.id)).ok();
+    let mut response = (
         status,
         Json(serde_json::json!({
             "error": {"code": code, "message": message, "request_id": request_id},
             "job": JobView::from(job),
         })),
     )
-        .into_response()
+        .into_response();
+    if let Some(location) = location {
+        response.headers_mut().insert(header::LOCATION, location);
+    }
+    response
 }
 
 /// `name.ext` from the uploaded file name's stem and the output's extension,
@@ -657,15 +658,36 @@ async fn convert(
         return Ok(finish(response, &id, replayed));
     }
     let key = job.output_keys.0[0].clone();
-    let opened = async {
-        let length = s.storage.head(&key).await?;
-        let stream = s.storage.open(&key).await?;
-        Ok::<_, ApiError>((length, stream))
+    let length = match s.storage.head(&key).await {
+        Ok(length) => length,
+        Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
+    };
+    // Bytes sent through this service cost egress on every delivery, so only a
+    // small result's first delivery streams from here. A large result, and every
+    // replay, is a redirect to its signed storage URL (follow it: curl -L).
+    if replayed || length.is_none_or(|n| n > MAX_INLINE_OUTPUT_BYTES) {
+        let (outputs, ttl) = match routes::output_links(&s, &job).await {
+            Ok(links) => links,
+            Err(error) => return Ok(finish(billed_error(error, job), &id, replayed)),
+        };
+        let target = outputs[0]["url"].as_str().unwrap_or_default().to_owned();
+        let mut response = (
+            StatusCode::SEE_OTHER,
+            Json(serde_json::json!({
+                "job": JobView::from(job),
+                "outputs": outputs,
+                "expires_in": ttl,
+            })),
+        )
+            .into_response();
+        if let Ok(location) = HeaderValue::from_str(&target) {
+            response.headers_mut().insert(header::LOCATION, location);
+        }
+        return Ok(finish(response, &id, replayed));
     }
-    .await;
-    let (length, stream) = match opened {
-        Ok(opened) => opened,
-        Err(error) => return Ok(finish(billed_error(error, job), &id, replayed)),
+    let stream = match s.storage.open(&key).await {
+        Ok(stream) => stream,
+        Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
     };
     let mime = convt_core::format_by_id(&job.target_format)
         .map(|f| f.mime)

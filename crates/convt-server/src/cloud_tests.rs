@@ -1666,3 +1666,38 @@ async fn errors_after_a_job_exists_name_it() {
             .contains("GET /v1/jobs/job_abc")
     );
 }
+
+#[tokio::test]
+async fn a_replayed_conversion_redirects_to_storage_instead_of_streaming_again() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let storage = Arc::new(MemoryStorage::default());
+    let state = state_with(&db, storage.clone());
+    let request = || {
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .header("idempotency-key", "replay-1")
+            .body(Body::from("png-bytes"))
+            .unwrap()
+    };
+    let worker = {
+        let pool = db.server.clone();
+        let storage = storage.clone();
+        tokio::spawn(async move { work_one(&pool, &storage, b"webp").await })
+    };
+    let (status, _, body) = send(&state, request()).await;
+    worker.await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, b"webp");
+    let (status, headers, body) = send(&state, request()).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(
+        headers["location"]
+            .to_str()
+            .unwrap()
+            .starts_with("https://download.test/")
+    );
+    assert_eq!(headers["idempotent-replayed"], "true");
+    assert_eq!(json(&body)["job"]["status"], "succeeded");
+    db.drop().await;
+}

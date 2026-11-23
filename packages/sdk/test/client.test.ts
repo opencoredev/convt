@@ -497,3 +497,20 @@ test("an abort right as convert starts stops before reading the file", async () 
   expect(String(error.message ?? error)).toContain("user cancelled");
   expect(calls).toBe(0);
 });
+test("save keeps a private file private and accepts long names", async () => {
+  const { mkdtemp, readFile, rm, stat, writeFile, readdir } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "convt-sdk-"));
+  const target = join(dir, `${"n".repeat(235)}.png`);
+  await writeFile(target, "old", { mode: 0o600 });
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response(new Blob(["new-bytes"]))) as typeof fetch;
+  await new Conversion({ ...job, status: "succeeded" }, [
+    { name: "input.png", url: "https://objects.test/out" },
+  ]).save(target);
+  expect(await readFile(target, "utf8")).toBe("new-bytes");
+  expect((await stat(target)).mode & 0o777).toBe(0o600);
+  expect((await readdir(dir)).length).toBe(1);
+  await rm(dir, { recursive: true });
+});

@@ -53,7 +53,10 @@ impl S3Storage {
             Err(std::env::VarError::NotPresent) => parse_path_style(None)?,
             Err(_) => anyhow::bail!("S3_PATH_STYLE must be true or false"),
         };
-        let bucket = configured_bucket(&required("S3_BUCKET")?, region, credentials, path_style)?;
+        let mut bucket =
+            configured_bucket(&required("S3_BUCKET")?, region, credentials, path_style)?;
+        // The default 60 s can cut off a 2 GB transfer to or from the worker.
+        bucket.set_request_timeout(Some(std::time::Duration::from_secs(900)));
         Ok(Self { bucket })
     }
 }

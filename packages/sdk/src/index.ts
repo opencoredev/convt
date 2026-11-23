@@ -268,21 +268,34 @@ export class Conversion {
   }
   /** Streams one output to disk without holding it in memory. Node, Bun and Deno. */
   private async stream(index: number, path: string): Promise<void> {
-    const { createWriteStream } = await import("node:fs");
     const { Readable } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
-    const { rename, rm } = await import("node:fs/promises");
+    const { chmod, open, rename, rm, stat } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
     const response = await this.fetchOutput(index, 30 * 60_000);
-    // Write beside the target and rename once complete, so an interrupted
-    // download never replaces an existing file with a partial one.
-    const partial = `${path}.convt-${globalThis.crypto.randomUUID()}.part`;
+    // Keep the mode of a file being replaced, else the usual mode for a new file.
+    const mode = await stat(path).then(
+      (existing) => existing.mode & 0o777,
+      () => 0o666 & ~process.umask(),
+    );
+    // Write a private temporary file beside the target and rename it into place
+    // once complete, so an interrupted download never replaces an existing file
+    // with a partial one, and nobody else can read the bytes meanwhile.
+    const partial = join(
+      dirname(path),
+      `.convt-${globalThis.crypto.randomUUID().slice(0, 8)}.part`,
+    );
+    const handle = await open(partial, "wx", 0o600);
     try {
       // `response.body` is checked in fetchOutput.
-      await pipeline(Readable.fromWeb(response.body as never), createWriteStream(partial));
+      await pipeline(Readable.fromWeb(response.body as never), handle.createWriteStream());
+      await chmod(partial, mode);
       await rename(partial, path);
     } catch (error) {
       await rm(partial, { force: true });
       throw error;
+    } finally {
+      await handle.close().catch(() => {});
     }
   }
   async save(path: string): Promise<void> {

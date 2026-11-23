@@ -56,7 +56,7 @@ const samples: Sample[] = [
   {
     id: "curl",
     label: "cURL",
-    code: `curl -fsS ${API}/v1/convert \\
+    code: `curl -fsSL ${API}/v1/convert \\
   -H "Authorization: Bearer $CONVT_API_KEY" \\
   -F file=@photo.heic \\
   -F to=jpg -o photo.jpg`,

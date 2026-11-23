@@ -6,7 +6,7 @@ description: Convert a file that is already online, such as a presigned S3 or R2
 When the file already sits in object storage or behind a CDN, pass its URL as `source_url`. convt's worker downloads it, so nothing goes through your server.
 
 ```bash
-curl -fsS {{api}}/v1/convert \
+curl -fsSL {{api}}/v1/convert \
   -H "Authorization: Bearer $CONVT_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"source_url":"https://my-bucket.s3.amazonaws.com/photo.heic?X-Amz-Signature=...","to":"jpg"}' \

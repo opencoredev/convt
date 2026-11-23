@@ -15,12 +15,12 @@ Then convert `photo.png` to WebP. `POST /v1/convert` takes the file and answers 
 <Tab title="cURL">
 
 ```bash
-curl -fsS {{api}}/v1/convert \
+curl -fsSL {{api}}/v1/convert \
   -H "Authorization: Bearer $CONVT_API_KEY" \
   -F file=@photo.png -F to=webp -o photo.webp
 ```
 
-`-f` makes curl exit non-zero on an error, so a JSON error never lands in `photo.webp`. Drop it while you experiment to see the error body.
+`-f` makes curl exit non-zero on an error, so a JSON error never lands in `photo.webp`; drop it while you experiment to see the error body. `-L` follows the redirect convt sends for results over 25 MB and for replays (see below).
 
 Once you script it, make one key per file and reuse it on every retry of that file, so a retry can't run the conversion twice: `KEY=$(uuidgen)` once, then `-H "Idempotency-Key: $KEY"` on each attempt. See [Idempotent requests](/guides/idempotency).
 
@@ -171,15 +171,16 @@ The job, its upload and its output are deleted 24 hours after it was created.
 
 convt waits up to `wait` seconds for the result (default 120, at most 300). What happens next depends on what you asked for:
 
-| Status | Meaning                                                                                                                                            |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `200`  | The converted file, or JSON when there are several outputs or you sent `Accept: application/json`.                                                 |
-| `202`  | You asked for JSON and the job is still running. It keeps going; poll the `Location` it returns. `wait=0` answers at once.                         |
-| `409`  | `still_running`: you asked for the file and sent an `Idempotency-Key`. The job keeps going; send the same request with the same key to collect it. |
-| `504`  | `timeout`: you asked for the file without a key. The job was cancelled and you were not charged. Raise `wait`, send a key, or use the jobs routes. |
-| `413`  | Over 25 MB. Use [the jobs routes](/guides/uploading), which take 2 GB, or `source_url`.                                                            |
-| `422`  | The conversion failed. You are not charged.                                                                                                        |
-| `4xx`  | A bad request, key or spend cap. The JSON `error.code` says which; see [Errors](/reference/errors).                                                |
+| Status | Meaning                                                                                                                                                                                                                               |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200`  | The converted file (up to 25 MB), or JSON when there are several outputs or you sent `Accept: application/json`.                                                                                                                      |
+| `303`  | A result over 25 MB, or a replay of a finished request: `Location` is a signed link to the file, valid for a few minutes. curl needs `-L`; Python, Go and Node follow it on their own. The body is JSON with the job and its outputs. |
+| `202`  | You asked for JSON and the job is still running. It keeps going; poll the `Location` it returns. `wait=0` answers at once.                                                                                                            |
+| `409`  | `still_running`: you asked for the file and sent an `Idempotency-Key`. The job keeps going; send the same request with the same key to collect it.                                                                                    |
+| `504`  | `timeout`: you asked for the file without a key. The job was cancelled and you were not charged. Raise `wait`, send a key, or use the jobs routes.                                                                                    |
+| `413`  | Over 25 MB. Use [the jobs routes](/guides/uploading), which take 2 GB, or `source_url`.                                                                                                                                               |
+| `422`  | The conversion failed. You are not charged.                                                                                                                                                                                           |
+| `4xx`  | A bad request, key or spend cap. The JSON `error.code` says which; see [Errors](/reference/errors).                                                                                                                                   |
 
 Without an `Idempotency-Key`, hanging up before the answer cancels the job. That is best effort: if the conversion already succeeded, it is billed. To retry safely instead, send an [`Idempotency-Key`](/guides/idempotency); a retry with the same key picks up the same job rather than starting another.
 

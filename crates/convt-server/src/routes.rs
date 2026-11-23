@@ -156,7 +156,17 @@ impl IntoResponse for ApiError {
 #[derive(Clone, Copy)]
 struct RateWindow {
     remaining: i32,
-    reset_seconds: i64,
+    /// When the window resets; reported relative to the moment of the response,
+    /// so a long /v1/convert wait does not return a stale countdown.
+    resets_at: tokio::time::Instant,
+}
+impl RateWindow {
+    fn reset_seconds(&self) -> u64 {
+        self.resets_at
+            .saturating_duration_since(tokio::time::Instant::now())
+            .as_secs_f64()
+            .ceil() as u64
+    }
 }
 
 async fn authenticate(
@@ -195,7 +205,8 @@ async fn authenticate(
     let window = sqlx::query!(r#"insert into otp_send_limits (key,window_start,count,expires_at) values ($1,now(),1,now()+interval '1 minute') on conflict (key) do update set count=case when otp_send_limits.expires_at<=now() then 1 else otp_send_limits.count+1 end, expires_at=case when otp_send_limits.expires_at<=now() then now()+interval '1 minute' else otp_send_limits.expires_at end returning count, ceil(extract(epoch from expires_at-now()))::bigint as "reset!""#, bucket).fetch_one(&state.pool).await?;
     let rate = RateWindow {
         remaining: (RATE_LIMIT - window.count).max(0),
-        reset_seconds: window.reset.max(1),
+        resets_at: tokio::time::Instant::now()
+            + std::time::Duration::from_secs(window.reset.max(1) as u64),
     };
     if window.count > RATE_LIMIT {
         return Err(rate_headers(
@@ -206,7 +217,7 @@ async fn authenticate(
             ),
             rate,
         )
-        .header(header::RETRY_AFTER, rate.reset_seconds.to_string()));
+        .header(header::RETRY_AFTER, rate.reset_seconds().max(1).to_string()));
     }
     Ok((who, rate))
 }
@@ -223,7 +234,7 @@ fn rate_headers(error: ApiError, rate: RateWindow) -> ApiError {
         )
         .header(
             HeaderName::from_static("x-ratelimit-reset"),
-            rate.reset_seconds.to_string(),
+            rate.reset_seconds().max(1).to_string(),
         )
 }
 
@@ -238,8 +249,13 @@ async fn auth(State(s): State<CloudState>, mut request: Request, next: Next) -> 
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert("x-ratelimit-limit", HeaderValue::from(RATE_LIMIT));
-    headers.insert("x-ratelimit-remaining", HeaderValue::from(rate.remaining));
-    headers.insert("x-ratelimit-reset", HeaderValue::from(rate.reset_seconds));
+    // A window that ended during a long wait has a fresh one waiting: say so.
+    let (remaining, reset) = match rate.reset_seconds() {
+        0 => (RATE_LIMIT, 60),
+        reset => (rate.remaining, reset),
+    };
+    headers.insert("x-ratelimit-remaining", HeaderValue::from(remaining));
+    headers.insert("x-ratelimit-reset", HeaderValue::from(reset));
     response
 }
 
