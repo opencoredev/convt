@@ -111,7 +111,31 @@ function withContext(error: unknown, context: { jobId: string; idempotencyKey: s
       cause: error.cause ?? error,
     });
   }
-  return error;
+  // A transport failure (a reset upload, a dropped poll) after the job exists:
+  // keep the job id so the caller can check on it or cancel it.
+  return new ConvtError(
+    "network_error",
+    `The request did not complete: ${String(error)}. The job may still be open; check it with convt.status(error.jobId).`,
+    { ...context, cause: error },
+  );
+}
+
+/** Hex SHA-256 of a Blob, streamed in Node, Bun and Deno. */
+async function sha256Hex(blob: Blob): Promise<string> {
+  try {
+    const { createHash } = await import("node:crypto");
+    const hash = createHash("sha256");
+    const reader = blob.stream().getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hash.update(value);
+    }
+    return hash.digest("hex");
+  } catch {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
 }
 async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
@@ -175,6 +199,11 @@ export type CreateInput = {
   target_format: Format;
   options?: JobOptions;
   webhook_url?: string;
+  /**
+   * Hex SHA-256 of the file. With an idempotency key, a retry that would upload
+   * different bytes under that key is refused instead of converting them.
+   */
+  input_sha256?: string;
 } & ({ input_bytes: number; source_url?: never } | { source_url: string; input_bytes?: never });
 export type Created = {
   job: Job;
@@ -539,6 +568,7 @@ export class Convt {
     // aborted. Otherwise errors carry the job id, to resume or cancel explicitly.
     const ownsJob = options.idempotencyKey === undefined;
     const idempotencyKey = options.idempotencyKey ?? newIdempotencyKey();
+    if (!ownsJob && body) input = { ...input, input_sha256: await sha256Hex(body) };
     const created = await this.create(input, { signal, idempotencyKey });
     const context = { jobId: created.job.id, idempotencyKey };
     try {
@@ -583,7 +613,17 @@ export class Convt {
       // Billed already: never cancel, just point at the outputs.
       if (error instanceof ConvtError && error.code === "download_failed" && error.jobId)
         throw error;
-      if (!ownsJob && !signal.aborted) throw withContext(error, context);
+      // The caller's own key may be shared by another call, so never cancel its
+      // job from here, not even on abort: stop waiting and say how to cancel.
+      if (!ownsJob) {
+        if (signal.aborted)
+          throw new ConvtError(
+            "stopped_waiting",
+            "Stopped waiting for the conversion. The job keeps running and is billed if it succeeds; call convt.cancel(error.jobId) to stop it.",
+            { ...context, cause: error },
+          );
+        throw withContext(error, context);
+      }
       let terminal: Job;
       try {
         terminal = await this.cancel(created.job.id);

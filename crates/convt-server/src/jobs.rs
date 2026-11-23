@@ -8,7 +8,21 @@ pub const MAX_FILE_BYTES: i64 = 2_000_000_000;
 pub const PRO_MONTH_BYTES: i64 = 50_000_000_000;
 pub const API_CENTS: i32 = 1;
 pub const MAX_STORED_INPUT_BYTES: i64 = 50_000_000_000;
+/// Default for `CONVT_MAX_STORED_JOBS`: unexpired job prefixes an account may
+/// hold. Every job, finished or not, holds one for 24 hours, so this is also the
+/// account's conversions per rolling 24 hours.
 pub const MAX_STORED_JOBS: i64 = 100;
+
+pub fn max_stored_jobs() -> i64 {
+    static LIMIT: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *LIMIT.get_or_init(|| {
+        std::env::var("CONVT_MAX_STORED_JOBS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(MAX_STORED_JOBS)
+    })
+}
 
 #[derive(Clone, Debug)]
 pub struct Principal {
@@ -37,6 +51,11 @@ pub struct CreateJob {
     /// An https URL that gets a signed POST when the job finishes.
     #[serde(default)]
     pub webhook_url: Option<String>,
+    /// Hex SHA-256 of the file the client will upload. Not checked against the
+    /// upload; it joins the Idempotency-Key fingerprint, so a retry that would
+    /// upload different bytes under the same key is refused.
+    #[serde(default)]
+    pub input_sha256: Option<String>,
 }
 impl CreateJob {
     /// The parameters that identify a request for `Idempotency-Key` reuse checks.
@@ -50,6 +69,7 @@ impl CreateJob {
             self.options,
             self.source_url,
             self.webhook_url,
+            self.input_sha256,
             extra,
         ]);
         hex::encode(Sha256::digest(canonical.to_string().as_bytes()))
@@ -156,6 +176,14 @@ pub async fn create_with(
         }
         (None, Some(_)) => {}
     }
+    if let Some(hash) = &data.input_sha256
+        && !(hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+    {
+        return Err(ApiError::bad(
+            "invalid_request",
+            "input_sha256 must be 64 hexadecimal characters.",
+        ));
+    }
     if let Some(url) = &data.webhook_url {
         crate::net_guard::check(url, policy)
             .map_err(|e| ApiError::bad("invalid_webhook_url", &format!("webhook_url {e}.")))?;
@@ -237,7 +265,7 @@ pub async fn create_with(
         ));
     }
     let stored = sqlx::query!(r#"select count(*)::bigint as "count!", coalesce(sum(input_bytes),0)::bigint as "bytes!" from cloud_jobs where user_id=$1 and input_key is not null"#, &who.user_id).fetch_one(&mut *tx).await?;
-    if stored.count >= MAX_STORED_JOBS
+    if stored.count >= max_stored_jobs()
         || stored.bytes + data.input_bytes.unwrap_or(0) > MAX_STORED_INPUT_BYTES
     {
         return Err(ApiError::forbidden(

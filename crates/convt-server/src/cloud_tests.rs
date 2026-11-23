@@ -107,6 +107,7 @@ fn data(bytes: i64) -> CreateJob {
         options: Default::default(),
         source_url: None,
         webhook_url: None,
+        input_sha256: None,
     }
 }
 async fn key(pool: &sqlx::PgPool) {
@@ -1589,5 +1590,54 @@ async fn upload_urls_never_outlive_their_job_and_expiry_drops_customer_urls() {
             .await
             .unwrap();
     assert_eq!((source, webhook), (None, None));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_keyed_upload_with_different_bytes_is_refused_and_metadata_is_capped() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let create = |hash: &str| {
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .header("idempotency-key", "same-size")
+            .body(Body::from(format!(
+                r#"{{"input_format":"png","target_format":"webp","input_bytes":7,"input_sha256":"{hash}"}}"#
+            )))
+            .unwrap()
+    };
+    let (status, _, _) = send(&state, create(&"a".repeat(64))).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, conflict) = send(&state, create(&"b".repeat(64))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(&conflict)["error"]["code"], "idempotency_key_reused");
+    let (status, _, bad) = send(&state, create("not-a-hash")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&bad)["error"]["code"], "invalid_request");
+    let boundary = "B";
+    let form = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"options\"\r\n\r\n{}\r\n--{boundary}--\r\n",
+        "x".repeat(17 * 1024)
+    );
+    let (status, _, refused) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(form))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        json(&refused)["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("16 KB")
+    );
     db.drop().await;
 }

@@ -93,18 +93,25 @@ pub async fn deliver_due(
     // `webhook_attempts` counts sends that failed, so a process that dies after
     // claiming loses no attempt: the lease lapses and the row is claimed again.
     let due = sqlx::query_as!(Due, r#"update cloud_jobs j set webhook_next_at=now()+interval '120 seconds' from (select id from cloud_jobs where webhook_url is not null and webhook_delivered_at is null and webhook_attempts<$1 and status in ('succeeded','failed','cancelled') and (webhook_next_at is null or webhook_next_at<=now()) order by webhook_next_at nulls first limit $2 for update skip locked) c where j.id=c.id returning j.id, j.user_id, j.webhook_url as "webhook_url!", j.webhook_attempts, j.webhook_next_at as "lease!", coalesce((select version from webhook_secrets w where w.user_id=j.user_id),1) as "secret_version!""#, MAX_ATTEMPTS, BATCH).fetch_all(pool).await?;
-    let sends = due.iter().map(|row| async move {
-        // Building the event and sending it stay well inside the lease.
-        let result = tokio::time::timeout(
-            Duration::from_secs(22),
-            send(pool, storage, master, policy, row),
-        )
-        .await
-        .unwrap_or_else(|_| Err(anyhow::anyhow!("delivery timed out")));
-        (row, result)
-    });
+    use futures_util::StreamExt as _;
+    // Each result is recorded as soon as its send finishes, so a fast receiver's
+    // acknowledgment is saved even if a slow one in the same pass outlives a
+    // shutdown.
+    let mut sends = futures_util::stream::FuturesUnordered::new();
+    for row in &due {
+        sends.push(async move {
+            // Building the event and sending it stay well inside the lease.
+            let result = tokio::time::timeout(
+                Duration::from_secs(22),
+                send(pool, storage, master, policy, row),
+            )
+            .await
+            .unwrap_or_else(|_| Err(anyhow::anyhow!("delivery timed out")));
+            (row, result)
+        });
+    }
     let mut delivered = 0;
-    for (row, result) in futures_util::future::join_all(sends).await {
+    while let Some((row, result)) = sends.next().await {
         match result {
             Ok(()) => {
                 delivered += 1;

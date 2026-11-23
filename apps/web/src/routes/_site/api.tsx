@@ -480,10 +480,10 @@ function CodePanel() {
   );
 }
 
-const presets = [1_000, 10_000, 100_000];
+const presets = [1_000, 3_000, 10_000];
 
 function CostMeter() {
-  const [count, setCount] = useState(10_000);
+  const [count, setCount] = useState(3_000);
   const inputId = useId();
   const dollars = (count / 100).toLocaleString("en-US", {
     style: "currency",
@@ -541,8 +541,8 @@ function CostMeter() {
         </output>
       </div>
       <p className="text-[13px]/5 text-ink-2">
-        No monthly fee and no minimum. Billed once a month. Spend caps go up to $10,000 a billing
-        period.
+        No monthly fee and no minimum. Billed once a month. Accounts start at 100 conversions per
+        rolling 24 hours, about 3,000 a month; we raise that on request.
       </p>
     </div>
   );

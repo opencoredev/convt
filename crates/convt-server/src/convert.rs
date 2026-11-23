@@ -40,6 +40,8 @@ use crate::routes::{self, ApiError, CloudState, JobView};
 pub const MAX_INLINE_BYTES: usize = 25_000_000;
 pub const DEFAULT_WAIT_SECONDS: u64 = 120;
 pub const MAX_WAIT_SECONDS: u64 = 300;
+/// Largest form field or JSON body other than the file itself.
+const MAX_METADATA_BYTES: usize = 16 * 1024;
 
 /// Request bodies held in memory at once across this process, in MB. Each inline
 /// request holds its share from before the body is read until the bytes are
@@ -156,7 +158,7 @@ async fn read_body(request: Request, s: &CloudState) -> Result<Parsed, ApiError>
                 .await
                 .map_err(|e| ApiError::bad("invalid_request", &e.body_text()))?;
             loop {
-                let field = match form.next_field().await {
+                let mut field = match form.next_field().await {
                     Ok(Some(field)) => field,
                     Ok(None) => break,
                     Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => {
@@ -179,10 +181,25 @@ async fn read_body(request: Request, s: &CloudState) -> Result<Parsed, ApiError>
                         parsed.input = Some(Input::Bytes(bytes));
                     }
                     "to" | "from" | "options" | "source_url" => {
-                        let text = field
-                            .text()
+                        // Metadata is small; cap it before it is decoded so the
+                        // memory budget, sized for file bytes, stays honest.
+                        let mut text = Vec::new();
+                        while let Some(chunk) = field
+                            .chunk()
                             .await
-                            .map_err(|e| ApiError::bad("invalid_request", &e.body_text()))?;
+                            .map_err(|e| ApiError::bad("invalid_request", &e.body_text()))?
+                        {
+                            text.extend_from_slice(&chunk);
+                            if text.len() > MAX_METADATA_BYTES {
+                                return Err(ApiError::bad(
+                                    "invalid_request",
+                                    &format!("The `{name}` field is over 16 KB."),
+                                ));
+                            }
+                        }
+                        let text = String::from_utf8(text).map_err(|_| {
+                            ApiError::bad("invalid_request", "Form fields must be UTF-8.")
+                        })?;
                         match name.as_str() {
                             "to" => parsed.to = Some(text),
                             "from" => parsed.from = Some(text),
@@ -213,6 +230,18 @@ async fn read_body(request: Request, s: &CloudState) -> Result<Parsed, ApiError>
                 to: Option<String>,
                 from: Option<String>,
                 options: Option<serde_json::Value>,
+            }
+            if request
+                .headers()
+                .get(header::CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<usize>().ok())
+                .is_none_or(|n| n > MAX_METADATA_BYTES)
+            {
+                return Err(ApiError::bad(
+                    "invalid_request",
+                    "A JSON body must declare its Content-Length and stay under 16 KB.",
+                ));
             }
             let bytes = Bytes::from_request(request, s)
                 .await
@@ -447,6 +476,7 @@ async fn convert(
                     options,
                     source_url: None,
                     webhook_url: None,
+                    input_sha256: None,
                 },
                 Some(bytes),
                 digest,
@@ -460,6 +490,7 @@ async fn convert(
                 options,
                 source_url: Some(url),
                 webhook_url: None,
+                input_sha256: None,
             },
             None,
             String::new(),

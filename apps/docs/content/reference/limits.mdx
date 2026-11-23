@@ -22,18 +22,18 @@ A `POST /v1/convert` that waits for its result counts as one request, however lo
 
 ## Sizes and counts
 
-| Limit                                               | Value                                |
-| --------------------------------------------------- | ------------------------------------ |
-| Input file size, jobs routes and `source_url`       | 1 byte to 2,000,000,000 bytes (2 GB) |
-| Input file size, body of `POST /v1/convert`         | 1 byte to 25,000,000 bytes (25 MB)   |
-| Wait for a `POST /v1/convert` result                | 120 seconds by default, at most 300  |
-| Unexpired jobs with uploads, per account            | 100                                  |
-| Declared input bytes across those jobs, per account | 50 GB                                |
-| Outputs per job                                     | 256 files, 4 GB in total             |
-| Conversion time per attempt                         | 10 minutes                           |
-| Attempts per job                                    | 3                                    |
+| Limit                                               | Value                                  |
+| --------------------------------------------------- | -------------------------------------- |
+| Input file size, jobs routes and `source_url`       | 1 byte to 2,000,000,000 bytes (2 GB)   |
+| Input file size, body of `POST /v1/convert`         | 1 byte to 25,000,000 bytes (25 MB)     |
+| Wait for a `POST /v1/convert` result                | 120 seconds by default, at most 300    |
+| Jobs from the last 24 hours, per account            | 100 by default; we raise it on request |
+| Declared input bytes across those jobs, per account | 50 GB                                  |
+| Outputs per job                                     | 256 files, 4 GB in total               |
+| Conversion time per attempt                         | 10 minutes                             |
+| Attempts per job                                    | 3                                      |
 
-The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
+Every job holds one of those slots until it expires, so the default allows about 100 conversions per rolling 24 hours. [Contact us](https://convt.app/contact) to raise it. The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
 
 ## Lifetimes
 

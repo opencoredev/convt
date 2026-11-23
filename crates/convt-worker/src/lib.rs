@@ -453,12 +453,23 @@ pub async fn run_job_backend(
         // Hand the job back before any cleanup: if the platform kills this process
         // during cleanup, the job is already queued for another worker instead of
         // waiting out its lease and losing an attempt.
-        let requeued = jobs::requeue(pool, job).await?;
-        tracing::info!(
-            job_id = job.id,
-            requeued,
-            "shutdown: handed the job back to the queue"
-        );
+        // Bounded too: if Postgres is slow, the lease lapses and lease recovery
+        // takes over (at the cost of one attempt) rather than the stop timeout
+        // killing the process mid-query.
+        match tokio::time::timeout(Duration::from_secs(3), jobs::requeue(pool, job)).await {
+            Ok(Ok(requeued)) => tracing::info!(
+                job_id = job.id,
+                requeued,
+                "shutdown: handed the job back to the queue"
+            ),
+            Ok(Err(error)) => {
+                tracing::warn!(job_id = job.id, %error, "shutdown requeue failed; lease recovery will retry the job")
+            }
+            Err(_) => tracing::warn!(
+                job_id = job.id,
+                "shutdown requeue timed out; lease recovery will retry the job"
+            ),
+        }
         let cleanup = async {
             sandbox.stop(&name).await?;
             storage
@@ -467,7 +478,7 @@ pub async fn run_job_backend(
         };
         // The attempt's prefix is unique to it and expiry removes the job's whole
         // prefix, so a cut-short cleanup leaks nothing lasting.
-        match tokio::time::timeout(Duration::from_secs(5), cleanup).await {
+        match tokio::time::timeout(Duration::from_secs(4), cleanup).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => tracing::warn!(job_id = job.id, %error, "shutdown cleanup failed"),
             Err(_) => tracing::warn!(job_id = job.id, "shutdown cleanup timed out"),

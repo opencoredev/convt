@@ -371,3 +371,47 @@ test("a deadline during retry backoff still reports the create's key", async () 
   expect(error.code).toBe("create_outcome_unknown");
   expect(error.idempotencyKey).toBeTruthy();
 });
+test("with the caller's own key, a deadline stops waiting without cancelling", async () => {
+  const calls: string[] = [];
+  const bodies: Record<string, unknown>[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/v1/jobs")) {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ job, upload_url: "https://objects.test/in" });
+    }
+    if (url.includes("objects.test")) return new Response("", { status: 200 });
+    return Response.json(job);
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convert(new Blob(["abc"]), {
+      from: "svg",
+      to: "png",
+      idempotencyKey: "order-11",
+      timeoutMs: 80,
+    })
+    .catch((e) => e);
+  expect(error.code).toBe("stopped_waiting");
+  expect(error.jobId).toBe(job.id);
+  expect(calls.some((u) => u.endsWith("/cancel"))).toBe(false);
+  // SHA-256 of "abc".
+  expect(bodies[0].input_sha256).toBe(
+    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  );
+});
+test("a reset upload keeps the job id and key", async () => {
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs"))
+      return Response.json({ job, upload_url: "https://objects.test/in" });
+    if (url.includes("objects.test")) throw new TypeError("socket hang up");
+    return Response.json(job);
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convert(new Blob(["x"]), { from: "svg", to: "png", idempotencyKey: "order-12" })
+    .catch((e) => e);
+  expect(error.code).toBe("network_error");
+  expect(error.jobId).toBe(job.id);
+  expect(error.idempotencyKey).toBe("order-12");
+});

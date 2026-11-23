@@ -52,11 +52,20 @@ The client takes `{ apiKey, baseUrl, maxRetries }`. `baseUrl` defaults to `{{api
 - `save(path)` writes the only output to disk. Node only.
 - `saveAll(directory)` writes every output into a folder under the names the API returns, such as `input.png` and `input-2.png`. Node only.
 
+## Your own idempotency key
+
+Pass `idempotencyKey` (an order id, say) and a second run after a crash returns the same job instead of converting again. With your own key the SDK:
+
+- sends the file's SHA-256 as `input_sha256`, so a retry that would upload different bytes under that key fails with `idempotency_key_reused` instead of converting them;
+- never cancels the job for you, because another call with the same key may be waiting on it. A deadline or abort throws `stopped_waiting` with `jobId`; call `convt.cancel(jobId)` if you want the job stopped.
+
+Without a key, each call uses its own and cancels its job when it fails or you abort, so the reservation is released.
+
 ## Retries and errors
 
 Every job is created with a fresh [`Idempotency-Key`](/guides/idempotency), so the SDK can retry a create whose response was lost without reserving twice. It retries `429`, `502`, `503` and `504` with backoff, honoring `Retry-After`, on calls that are safe to repeat.
 
-Errors are `ConvtError` instances with the API's `code`, the HTTP `status` and the `requestId` from `X-Request-Id`. Quote `requestId` when you contact us.
+Errors are `ConvtError` instances with the API's `code`, the HTTP `status`, the `requestId` from `X-Request-Id` and, once a job exists, its `jobId` and `idempotencyKey`. A conversion that succeeded but whose output links failed throws `download_failed` with `jobId`: it was billed, so call `convt.download(jobId)` rather than converting again.
 
 ## Webhooks
 
@@ -75,4 +84,4 @@ const event = await verifyWebhook({ body: rawBody, signature: headers["convt-sig
 
 ## Browser apps
 
-Never put a `cvt_live_` key in browser code. Run the SDK in your server route, or issue short-lived tokens and pass `new Convt({ token, baseUrl })`. See [Browser apps](/guides/browser-apps).
+Never put a `cvt_live_` key in browser code. Run the SDK in your server route and send the browser the result. See [Browser apps](/guides/browser-apps) and the [server upload route](/examples/server-upload-route) example.

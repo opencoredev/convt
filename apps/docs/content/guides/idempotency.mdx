@@ -16,7 +16,7 @@ curl -fsS {{api}}/v1/convert \
 
 - A key is any 1 to 255 visible ASCII characters. A UUID per logical request works well. Use a value tied to your own record, such as an order id, when you want the same job back after your process restarts.
 - Keys belong to your account and last as long as the job: 24 hours. After the job expires, the key is free again.
-- A retry must send the same request. convt fingerprints the route, formats, options, `source_url`, `webhook_url` and, for `/v1/convert`, the file's bytes. The same key with a different request fails with `409 idempotency_key_reused`.
+- A retry must send the same request. convt fingerprints the route, formats, options, `source_url`, `webhook_url`, `input_sha256` and, for `/v1/convert`, the file's bytes. `POST /v1/jobs` only sees the declared size, so send the file's SHA-256 as `input_sha256` with a key; otherwise two different files of the same size look like the same request. The same key with a different request fails with `409 idempotency_key_reused`.
 - A replay answers with the original job and an `Idempotent-Replayed: true` header. It never touches your spend cap.
 
 ## What a replay returns

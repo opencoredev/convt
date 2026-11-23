@@ -20,9 +20,9 @@ Create an API key on the [dashboard](https://convt.app/dashboard/api). Keep it o
 
 - `convert(input, { to })` takes a file path (Node, Bun, Deno), a `Blob` or `File`, or bytes, up to 2 GB. It reserves a job, uploads straight to storage, starts it, polls and returns a `Conversion` with `save()`, `saveAll()`, `blob()` and signed `outputs`.
 - `convertUrl(url, { to })` converts a file convt downloads from a public https URL, such as a presigned S3 or R2 link, so nothing is uploaded from your machine.
-- Every conversion is created with a fresh `Idempotency-Key`, so retried requests never reserve or bill twice. Rate limits (`429`) and gateway errors are retried with backoff, honoring `Retry-After`.
+- Every conversion is created with an `Idempotency-Key`, so retried requests never reserve or bill twice. Rate limits (`429`) and gateway errors are retried with backoff, honoring `Retry-After`. Pass your own `idempotencyKey` (an order id, say) to resume after a crash; the SDK then also sends the file's SHA-256, so a retry with different bytes is refused, and it never cancels that job for you.
 - Abort with `signal` or `timeoutMs` and the job is cancelled, which releases its reservation.
-- Errors are `ConvtError` with a stable `code`, the HTTP `status` and the `requestId` to quote to support.
+- Errors are `ConvtError` with a stable `code`, the HTTP `status`, the `requestId` to quote to support and, once a job exists, its `jobId` and `idempotencyKey`.
 
 ```ts
 const out = await convt.convert(file, {
@@ -54,7 +54,7 @@ if (event.type === "job.succeeded") console.log(event.data.outputs);
 
 ## Requirements
 
-Node 20.3 or newer, Bun, Deno, or a modern browser for server-issued tokens (`new Convt({ token, baseUrl })`).
+Node 20.3 or newer, or Bun: both stream files from disk. Other runtimes read a file passed by path into memory. Run the SDK on your server; a `cvt_live_` key never belongs in browser code.
 
 ## License
 
