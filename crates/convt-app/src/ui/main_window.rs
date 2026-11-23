@@ -568,6 +568,35 @@ impl MainView {
                         .child(Button::primary("telemetry-notice-accept", "Share usage statistics").small().build(p).on_click(move |_, _, cx| accept.update(cx, |s, cx| s.telemetry_notice(true, cx))))
                         .child(Button::secondary("telemetry-notice-off", "Turn off").small().build(p).on_click(move |_, _, cx| decline.update(cx, |s, cx| s.telemetry_notice(false, cx))))), p).into_any_element());
         }
+        if let Some(err) = self.app.read(cx).telemetry_save_error.clone() {
+            let retry = self.app.clone();
+            notices.push(
+                theme::callout(
+                    IconName::TriangleAlert,
+                    Tone::Error,
+                    div()
+                        .id("telemetry-save-error")
+                        .test_support()
+                        .aria_label(SharedString::from(err.clone()))
+                        .flex()
+                        .flex_col()
+                        .gap(px(space::SM))
+                        .child(styled(size::SMALL, p.error).child(err))
+                        .child(
+                            div().flex().child(
+                                Button::secondary("telemetry-retry-save", "Retry save")
+                                    .small()
+                                    .build(p)
+                                    .on_click(move |_, _, cx| {
+                                        retry.update(cx, |s, cx| s.retry_telemetry_save(cx))
+                                    }),
+                            ),
+                        ),
+                    p,
+                )
+                .into_any_element(),
+            );
+        }
         notices
     }
 

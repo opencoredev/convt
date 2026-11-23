@@ -9062,3 +9062,51 @@ fn the_menu_tab_lists_documents_while_the_pack_can_be_downloaded(cx: &mut TestAp
     assert!(shown(cx, window, "menu-kind-document"));
     assert!(!shown(cx, window, "menu-kind-presentation"));
 }
+
+#[gpui_kit::test]
+fn share_starter_preset_uses_video_height_for_mp4(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (window, _) = f.settings(SettingsTab::Presets, cx);
+    assert!(shown(cx, window, "starter-preset-share"));
+    click(cx, window, "starter-preset-share");
+    cx.read(|cx| {
+        let preset = f.app.read(cx).preset("share").unwrap();
+        assert_eq!(preset.to.as_deref(), Some("mp4"));
+        assert_eq!(preset.options.quality, Some(75));
+        assert_eq!(preset.options.video_height, Some(1080));
+        assert_eq!(preset.options.max_size, None);
+    });
+}
+
+#[gpui_kit::test]
+fn settings_general_links_to_automations(cx: &mut TestAppContext) {
+    let f = Fixture::new(cx);
+    let (main, view) = f.main(cx);
+    cx.update(|cx| cx.set_global(Open(main, view.downgrade())));
+    click(cx, main, "nav-settings");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Settings));
+    assert!(shown(cx, main, "open-automations"));
+    click(cx, main, "open-automations");
+    cx.read(|cx| assert_eq!(view.read(cx).page, Page::Automations));
+}
+
+#[gpui_kit::test]
+fn right_click_menu_tabs_fit_at_minimum_window_width(cx: &mut TestAppContext) {
+    let f = Fixture::with_packs(cx, Arc::new(TestPacks::default()));
+    let (main, _) = f.main(cx);
+    gpui_kit::VisualTestContext::from_window(main, cx)
+        .simulate_resize(size(px(super::MAIN_MIN_SIZE.0), px(super::MAIN_MIN_SIZE.1)));
+    click(cx, main, "nav-menu");
+    for id in [
+        "menu-kind-image",
+        "menu-kind-vector",
+        "menu-kind-video",
+        "menu-kind-audio",
+        "menu-kind-pdf",
+        "menu-kind-document",
+    ] {
+        if shown(cx, main, id) {
+            assert!(fits(cx, main, id), "{id} overflowed at MAIN_MIN_SIZE");
+        }
+    }
+}

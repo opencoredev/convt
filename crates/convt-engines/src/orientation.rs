@@ -121,11 +121,13 @@ fn orient_png(path: &Path, orientation: Orientation, options: &Options) -> Resul
     });
     let _ = std::fs::remove_file(&tmp);
     written?;
-    if options
-        .target_size
-        .is_some_and(|t| std::fs::metadata(path).is_ok_and(|m| m.len() > t))
+    if options.background.is_none()
+        && options
+            .target_size
+            .is_some_and(|t| std::fs::metadata(path).is_ok_and(|m| m.len() > t))
     {
-        // Only the size: a background and stripping already ran.
+        // Only the size: stripping already ran, and when a background color is
+        // requested the caller flattens transparency before fitting target_size.
         let fit = Options {
             background: None,
             strip_metadata: false,
@@ -2026,6 +2028,72 @@ mod tests {
         let mut want = DynamicImage::ImageRgba16(deep);
         want.apply_orientation(Orientation::Rotate90);
         assert_eq!(open_stored(&dest).unwrap().to_rgb16(), want.to_rgb16());
+    }
+
+    #[test]
+    fn finish_sips_png_flattens_background_before_fitting_target_size() {
+        use convt_core::Background;
+        let dir = tempfile::tempdir().unwrap();
+        // Noisy RGB under mostly-transparent alpha: as RGBA it compresses
+        // poorly, while flattened onto white it becomes tiny at full size.
+        let rgba = image::RgbaImage::from_fn(240, 160, |x, y| {
+            let n = ((x.wrapping_mul(73) ^ y.wrapping_mul(151)).wrapping_mul(31) & 0xff) as u8;
+            let a = if x < 12 && y < 12 { 255 } else { 0 };
+            image::Rgba([n, n.wrapping_add(53), n.wrapping_add(137), a])
+        });
+        let raw_png = dir.path().join("raw.png");
+        {
+            let file = std::fs::File::create(&raw_png).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 240, 160);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().unwrap();
+            writer
+                .write_chunk(png::chunk::ChunkType(*b"eXIf"), &exif_with_camera(6))
+                .unwrap();
+            writer.write_image_data(rgba.as_raw()).unwrap();
+        }
+        let heif = dir.path().join("IMG_0002.heic");
+        std::fs::write(&heif, minimal_still_heif()).unwrap();
+
+        let flat_png = dir.path().join("flat.png");
+        std::fs::copy(&raw_png, &flat_png).unwrap();
+        let white_only = Options {
+            background: Some(Background::WHITE),
+            ..Options::default()
+        };
+        crate::heic::finish_sips_png("heic", &heif, &flat_png, &white_only, true).unwrap();
+        let flat_len = std::fs::metadata(&flat_png).unwrap().len();
+
+        let rgba_rot = dir.path().join("rgba_rot.png");
+        std::fs::copy(&raw_png, &rgba_rot).unwrap();
+        crate::heic::finish_sips_png("heic", &heif, &rgba_rot, &Options::default(), true).unwrap();
+        let rgba_len = std::fs::metadata(&rgba_rot).unwrap().len();
+        assert!(
+            flat_len * 2 < rgba_len,
+            "fixture must shrink sharply when flattened: flat={flat_len}, rgba={rgba_len}"
+        );
+
+        // Pick a target between flattened size and RGBA size: flattening first
+        // fits at full rotated resolution (160x240); shrinking before flattening
+        // would have downscaled unnecessarily.
+        let target = flat_len + (rgba_len - flat_len) / 4;
+        let out = dir.path().join("out.png");
+        std::fs::copy(&raw_png, &out).unwrap();
+        let opts = Options {
+            background: Some(Background::WHITE),
+            target_size: Some(target),
+            ..Options::default()
+        };
+        crate::heic::finish_sips_png("heic", &heif, &out, &opts, true).unwrap();
+        let len = std::fs::metadata(&out).unwrap().len();
+        assert!(len <= target, "len={len} > target={target}");
+        let img = open_stored(&out).unwrap();
+        assert_eq!(
+            (img.width(), img.height()),
+            (160, 240),
+            "should keep full rotated resolution once flattened"
+        );
     }
 
     #[test]

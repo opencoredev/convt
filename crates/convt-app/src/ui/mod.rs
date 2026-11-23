@@ -442,6 +442,21 @@ fn open_main(cx: &mut App) -> Option<(AnyWindowHandle, Entity<MainView>)> {
     opened
 }
 
+/// Opens or focuses the main window on `page`.
+pub(super) fn show_main_page(page: main_window::Page, cx: &mut App) {
+    if let Some((handle, view)) = Open::<MainView>::get(cx) {
+        view.update(cx, |v, cx| v.set_page(page, cx));
+        // If clicked from embedded Settings, the main window is already active
+        // and borrowed by the click dispatch, so activate_window is a no-op;
+        // from standalone Settings it brings the main window forward.
+        let _ = handle.update(cx, |_, window, _| window.activate_window());
+        return;
+    }
+    if let Some((_, view)) = open_main(cx) {
+        view.update(cx, |v, cx| v.set_page(page, cx));
+    }
+}
+
 /// File > Add Files…: the main window's file picker. Until first run is
 /// done, the first-run window comes forward instead.
 pub fn add_files(cx: &mut App) {

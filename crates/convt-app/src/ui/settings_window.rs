@@ -494,6 +494,98 @@ impl SettingsView {
             p,
         );
 
+        let automation_count = settings.automations.len();
+        let automation_active = settings.automations.iter().filter(|a| a.enabled).count();
+        let automation_detail = match (automation_count, automation_active) {
+            (0, _) => "Watch folders and convert new files automatically.".to_string(),
+            (1, 1) => "1 rule active.".to_string(),
+            (1, 0) => "1 rule, paused.".to_string(),
+            (total, 0) => format!("{total} rules, all paused."),
+            (total, active) if active == total => format!("{total} rules active."),
+            (total, active) => format!("{total} rules ({active} active)."),
+        };
+        let automations_row = theme::row(
+            "Folder automations",
+            Some(theme::detail(automation_detail, p)),
+            Button::secondary("open-automations", "Manage")
+                .small()
+                .build(p)
+                .on_click(|_, _, cx| {
+                    super::show_main_page(super::main_window::Page::Automations, cx)
+                }),
+            p,
+        )
+        .into_any_element();
+        let telemetry_save_error = state.telemetry_save_error.clone();
+        let mut telemetry_rows = vec![
+            theme::row(
+                "Share usage statistics",
+                Some(theme::detail(
+                    if crate::telemetry::do_not_track() {
+                        "Off because DO_NOT_TRACK is set."
+                    } else {
+                        "No file names, paths or content. Signed-in usage is linked to your account."
+                    },
+                    p,
+                )),
+                theme::switch(
+                    "telemetry",
+                    "Share usage statistics",
+                    settings.telemetry && !crate::telemetry::do_not_track(),
+                    crate::telemetry::do_not_track(),
+                    p,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if !crate::telemetry::do_not_track() {
+                        let had_error = this.app.update(cx, |s, cx| {
+                            s.telemetry_notice(!s.settings.telemetry, cx);
+                            s.telemetry_save_error.is_some()
+                        });
+                        if had_error {
+                            this.scroll.scroll_to_bottom();
+                        }
+                    }
+                })),
+                p,
+            )
+            .into_any_element(),
+        ];
+        if let Some(err) = telemetry_save_error {
+            let retry = self.app.clone();
+            telemetry_rows.push(
+                div()
+                    .id("telemetry-save-error")
+                    .test_support()
+                    .aria_label(SharedString::from(err.clone()))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(space::MD))
+                    .px(px(space::MD))
+                    .py(px(10.))
+                    .bg(p.error_tint)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(space::SM))
+                            .flex_1()
+                            .min_w_0()
+                            .child(icon(IconName::TriangleAlert, 14., p.error))
+                            .child(styled(size::SMALL, p.error).child(err)),
+                    )
+                    .child(
+                        Button::secondary("telemetry-retry-save", "Retry save")
+                            .small()
+                            .build(p)
+                            .on_click(move |_, _, cx| {
+                                retry.update(cx, |s, cx| s.retry_telemetry_save(cx))
+                            }),
+                    )
+                    .into_any_element(),
+            );
+        }
+
         // A little tighter than the other tabs, so the cards above the fold
         // at the window's opening height end on a card's edge.
         div()
@@ -562,6 +654,11 @@ impl SettingsView {
             ))
             .child(desktop)
             .child(section(
+                "Automations",
+                theme::group([automations_row], p),
+                p,
+            ))
+            .child(section(
                 "Documents",
                 theme::group([documents.into_any_element()], p),
                 p,
@@ -572,14 +669,11 @@ impl SettingsView {
                 p,
             ))
             .child(section("What reaches the network", network(p), p))
-            .child(section("Usage statistics", theme::group([theme::row(
-                "Share usage statistics",
-                Some(theme::detail(if crate::telemetry::do_not_track() { "Off because DO_NOT_TRACK is set." } else { "No file names, paths or content. Signed-in usage is linked to your account." }, p)),
-                theme::switch("telemetry", "Share usage statistics", settings.telemetry && !crate::telemetry::do_not_track(), crate::telemetry::do_not_track(), p).on_click({
-                    let app = self.app.clone();
-                    move |_, _, cx| { if !crate::telemetry::do_not_track() { app.update(cx, |s, cx| s.telemetry_notice(!s.settings.telemetry, cx)); } }
-                }), p,
-            ).into_any_element()], p), p))
+            .child(section(
+                "Usage statistics",
+                theme::group(telemetry_rows, p),
+                p,
+            ))
     }
 
     /// Master-detail right-click menu designer: category switcher across the
@@ -598,7 +692,7 @@ impl SettingsView {
             .unwrap_or(Category::Image);
 
         let kind_tabs =
-            theme::pill_track(p).children(self.menu_options.iter().map(|(kind, options)| {
+            theme::pill_track_wrap(p).children(self.menu_options.iter().map(|(kind, options)| {
                 let kind = *kind;
                 let key = category_key(kind);
                 let on = kind == active_kind;
@@ -609,6 +703,7 @@ impl SettingsView {
                 )
                 .aria_selected(on)
                 .flex()
+                .flex_shrink_0()
                 .items_center()
                 .gap(px(6.))
                 .h(px(28.))
@@ -634,6 +729,7 @@ impl SettingsView {
                 .child(
                     styled(size::SMALL, if on { p.text } else { p.secondary })
                         .font_weight(FontWeight::MEDIUM)
+                        .whitespace_nowrap()
                         .child(kind_label(kind)),
                 )
                 .child(
@@ -989,7 +1085,7 @@ impl SettingsView {
                     p,
                 )
             }))
-            .child(div().flex().child(kind_tabs))
+            .child(kind_tabs)
             .children(workspace)
     }
 
@@ -1111,6 +1207,7 @@ impl SettingsView {
                                         options: Options {
                                             quality: s.quality,
                                             max_size: s.max_size,
+                                            video_height: s.video_height,
                                             ..Options::default()
                                         },
                                     };
@@ -1659,6 +1756,7 @@ struct StarterPreset {
     to_label: &'static str,
     quality: Option<u8>,
     max_size: Option<u32>,
+    video_height: Option<u32>,
     spec: &'static str,
     note: &'static str,
 }
@@ -1670,6 +1768,7 @@ const STARTER_PRESETS: [StarterPreset; 3] = [
         to_label: "WebP",
         quality: Some(82),
         max_size: Some(1600),
+        video_height: None,
         spec: "Quality 82 · 1600 px",
         note: "Small, sharp images for websites",
     },
@@ -1679,6 +1778,7 @@ const STARTER_PRESETS: [StarterPreset; 3] = [
         to_label: "JPEG",
         quality: Some(75),
         max_size: Some(1920),
+        video_height: None,
         spec: "Quality 75 · 1920 px",
         note: "Compact photos ready to attach",
     },
@@ -1687,8 +1787,9 @@ const STARTER_PRESETS: [StarterPreset; 3] = [
         to: "mp4",
         to_label: "MP4",
         quality: Some(75),
-        max_size: Some(1080),
-        spec: "Quality 75 · 1080 px",
+        max_size: None,
+        video_height: Some(1080),
+        spec: "Quality 75 · 1080p",
         note: "Lightweight clips for chat & Slack",
     },
 ];

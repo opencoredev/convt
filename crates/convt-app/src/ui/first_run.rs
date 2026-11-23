@@ -322,11 +322,17 @@ impl FirstRunView {
     /// Ends onboarding: only here, so closing earlier shows it again. The
     /// main window opens first, so the app never sees its last window close.
     pub(super) fn finish(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Only record the enabled disclosure as shown when DO_NOT_TRACK didn't
+        // suppress it; otherwise removing DO_NOT_TRACK later must still show
+        // the notice before anything sends.
+        let dnt = crate::telemetry::do_not_track();
         self.app.update(cx, |s, cx| {
             s.update_settings(
                 |s| {
                     s.first_run_done = true;
-                    s.telemetry_notice_version = 1;
+                    if !dnt {
+                        s.telemetry_notice_version = 1;
+                    }
                 },
                 cx,
             );
@@ -940,7 +946,7 @@ impl Render for FirstRunView {
                 let disclosure = if self.app.read(cx).settings.telemetry
                     && !crate::telemetry::do_not_track()
                 {
-                    "Anonymous usage statistics are on. Signing in links usage to your account. No file names, paths or content are sent. Turn off in Settings → General → Usage statistics."
+                    "Usage statistics are on. Signing in links usage to your account. No file names, paths or content are sent. Turn off in Settings → General → Usage statistics."
                 } else {
                     "Usage statistics are off. You can change this in Settings → General → Usage statistics."
                 };

@@ -927,4 +927,130 @@ fn the_enabled_disclosure_keeps_onboarding_actions_reachable(cx: &mut TestAppCon
         assert!(fits(cx, first, id), "{id}");
     }
     assert!(shown(cx, first, "telemetry-first-run"));
+    assert!(
+        !label(cx, first, "telemetry-first-run")
+            .unwrap()
+            .starts_with("Anonymous "),
+        "avoid calling account-linked telemetry anonymous"
+    );
+}
+
+#[gpui_kit::test]
+fn onboarding_under_do_not_track_leaves_telemetry_notice_pending(cx: &mut TestAppContext) {
+    if std::env::var_os("CONVT_DNT_ONBOARDING_CHILD").is_some() {
+        assert!(crate::telemetry::do_not_track());
+        let f = Fixture::licensed(cx, None, None);
+        cx.update(|cx| {
+            f.app.update(cx, |s, cx| {
+                s.update_settings(
+                    |s| {
+                        s.telemetry = true;
+                        s.telemetry_notice_version = 0;
+                        s.first_run_done = false;
+                    },
+                    cx,
+                )
+            })
+        });
+        let app = f.app.clone();
+        let (first, view) = open(cx, move |window, cx| {
+            cx.new(|cx| FirstRunView::new(app, Screen::Account, window, cx))
+        });
+        assert!(
+            label(cx, first, "telemetry-first-run")
+                .unwrap()
+                .contains("Usage statistics are off")
+        );
+        cx.update_window(first, |_, window, cx| {
+            view.update(cx, |v, cx| v.finish(window, cx))
+        })
+        .unwrap();
+        let saved = crate::settings::Settings::load(&f.dir.path().join("settings.toml")).unwrap();
+        assert!(saved.first_run_done);
+        assert!(saved.telemetry);
+        assert_eq!(
+            saved.telemetry_notice_version, 0,
+            "notice must stay pending when DO_NOT_TRACK suppressed the enabled disclosure"
+        );
+        return;
+    }
+    assert!(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "ui::tests::telemetry::onboarding_under_do_not_track_leaves_telemetry_notice_pending",
+            ])
+            .env("CONVT_DNT_ONBOARDING_CHILD", "1")
+            .env("DO_NOT_TRACK", "1")
+            .status()
+            .unwrap()
+            .success()
+    );
+}
+
+#[gpui_kit::test]
+fn failed_opt_out_save_keeps_sending_off_and_offers_retry(cx: &mut TestAppContext) {
+    let (url, got) = crate::telemetry::tests::sink(Duration::ZERO);
+    let sender = crate::telemetry::Telemetry::local(
+        "00000000-0000-4000-8000-000000000099".into(),
+        true,
+        url,
+        Duration::from_secs(60),
+    );
+    let f = Fixture::build_with_telemetry(
+        cx,
+        Arc::new(SystemPacks),
+        |dir| {
+            crate::settings::Settings {
+                telemetry: true,
+                telemetry_notice_version: 1,
+                first_run_done: true,
+                ..Default::default()
+            }
+            .save(&dir.join("settings.toml"))
+            .unwrap();
+            client::Config {
+                enforce: false,
+                public_key: None,
+                build_date: BUILD_DATE.into(),
+                trial_file: None,
+                store: KeyStore::None,
+            }
+        },
+        Some(sender.clone()),
+    );
+    let settings_path = f.dir.path().join("settings.toml");
+    // Replacing settings.toml with a directory forces atomic rename to fail.
+    std::fs::remove_file(&settings_path).unwrap();
+    std::fs::create_dir(&settings_path).unwrap();
+
+    let (settings, settings_view) = f.settings(SettingsTab::General, cx);
+    settings_view.update(cx, |v, cx| v.reveal_updates(cx));
+    click(cx, settings, "telemetry");
+    assert_eq!(toggled(cx, settings, "telemetry"), Some(false));
+    assert!(shown(cx, settings, "telemetry-save-error"));
+    assert!(shown(cx, settings, "telemetry-retry-save"));
+
+    // Sending stays off for this session despite the failed save.
+    cx.update(|cx| {
+        f.app.update(cx, |s, _| {
+            s.upgrade_clicked("after_failed_opt_out");
+        })
+    });
+    sender.flush_now();
+    assert_eq!(
+        got.recv_timeout(Duration::from_millis(75)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    );
+
+    // Clear the blocker, scroll the newly added error row into view, and click Retry save.
+    std::fs::remove_dir(&settings_path).unwrap();
+    settings_view.update(cx, |v, cx| v.reveal_updates(cx));
+    click(cx, settings, "telemetry-retry-save");
+    assert!(!shown(cx, settings, "telemetry-save-error"));
+    assert!(!shown(cx, settings, "telemetry-retry-save"));
+    let saved = crate::settings::Settings::load(&settings_path).unwrap();
+    assert!(!saved.telemetry);
+    assert_eq!(saved.telemetry_notice_version, 1);
+    sender.shutdown();
 }

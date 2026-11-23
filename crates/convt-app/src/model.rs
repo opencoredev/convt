@@ -323,6 +323,10 @@ pub struct AppState {
     pub(crate) telemetry: crate::telemetry::Telemetry,
     telemetry_opened: bool,
     telemetry_persisted: bool,
+    /// Set when turning telemetry off couldn't be written to `settings.toml`,
+    /// so the UI can warn the user and offer a retry while keeping sending off
+    /// for this session.
+    pub telemetry_save_error: Option<String>,
     settings_path: Option<PathBuf>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
@@ -452,6 +456,11 @@ impl AppState {
             cx,
         );
         self.observe_trial(cx);
+    }
+
+    /// Retries writing `settings.toml` after an opt-out save failed.
+    pub fn retry_telemetry_save(&mut self, cx: &mut Context<Self>) {
+        self.update_settings(|_| {}, cx);
     }
 
     fn configure_telemetry(&mut self) {
@@ -667,6 +676,7 @@ impl AppState {
             telemetry,
             telemetry_opened: false,
             telemetry_persisted: telemetry_ready,
+            telemetry_save_error: None,
             settings_path: paths.settings,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
@@ -1694,6 +1704,7 @@ impl AppState {
     /// Applies a settings change and saves it.
     pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         let was_persisted = self.telemetry_persisted;
+        let before_telemetry = self.settings.telemetry;
         change(&mut self.settings);
         if !self.settings.telemetry {
             self.telemetry.set_consent(Consent::Off);
@@ -1704,8 +1715,23 @@ impl AppState {
             .as_ref()
             .map(|path| self.settings.save(path));
         self.telemetry_persisted = matches!(saved, Some(Ok(())));
-        if let Some(Err(e)) = saved {
-            self.errors.push(format!("Settings were not saved: {e}"));
+        match saved {
+            Some(Err(e)) => {
+                self.errors.push(format!("Settings were not saved: {e}"));
+                if !self.settings.telemetry
+                    && (before_telemetry || !was_persisted || self.telemetry_save_error.is_some())
+                {
+                    self.telemetry_save_error = Some(format!(
+                        "Off for this session, but the change could not be saved: {e}"
+                    ));
+                } else if self.settings.telemetry {
+                    self.telemetry_save_error = None;
+                }
+            }
+            Some(Ok(())) => {
+                self.telemetry_save_error = None;
+            }
+            None => {}
         }
         if !was_persisted && self.telemetry_persisted {
             self.sync_telemetry_identity(cx);

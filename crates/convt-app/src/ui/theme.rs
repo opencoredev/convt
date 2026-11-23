@@ -1179,6 +1179,20 @@ pub fn pill_track(p: &Palette) -> Div {
         .shadow(well(p))
 }
 
+/// A [`pill_track`] that wraps onto another line when narrow instead of
+/// overflowing its container.
+pub fn pill_track_wrap(p: &Palette) -> Div {
+    div()
+        .flex()
+        .flex_wrap()
+        .w_full()
+        .p(px(4.))
+        .gap(px(2.))
+        .rounded(px(radius::CARD))
+        .bg(p.recessed)
+        .shadow(well(p))
+}
+
 /// The picked segment of a [`pill_track`]: a raised, beveled surface.
 pub fn pill_segment_on(d: Clickable, p: &Palette) -> Clickable {
     d.bg(segment_fill(p)).shadow(bevel(p.border, p))
