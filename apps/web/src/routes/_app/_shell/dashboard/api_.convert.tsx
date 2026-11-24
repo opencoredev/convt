@@ -105,7 +105,7 @@ function Converter() {
       setError(
         e instanceof ConvtError && e.code === "create_outcome_unknown"
           ? // The SDK's own key never reaches the page; the job, if any, has no file.
-            "We couldn't confirm the conversion started. If it did, it never got your file and won't run; its hold on your allowance is released within 24 hours. You can convert again now."
+            "We couldn't confirm the conversion started. If it did, it never got your file and won't run, but it holds part of your allowance until it expires after 24 hours. Convert again if your allowance has room."
           : e instanceof Error
             ? e.message
             : "Conversion failed. Try again.",

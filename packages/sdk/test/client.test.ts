@@ -893,3 +893,67 @@ test("a 200 without a job leaves a keyed create unknown", async () => {
   expect(error.code).toBe("create_outcome_unknown");
   expect(error.cause.code).toBe("invalid_response");
 });
+test("every retry under a key sends the body of the first attempt", async () => {
+  const bodies: string[] = [];
+  const input: {
+    input_format: string;
+    target_format: string;
+    input_bytes: number;
+    options?: unknown;
+  } = { input_format: "png", target_format: "webp", input_bytes: 1, options: { quality: 70 } };
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    bodies.push(String(init?.body));
+    if (bodies.length === 1) {
+      input.options = { quality: 85 };
+      return new Response("gateway timeout", { status: 504, headers: { "retry-after": "0" } });
+    }
+    return Response.json({ job, upload_url: null, upload_expires_in: null });
+  }) as typeof fetch;
+  await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 1 }).create(
+    input as never,
+    { idempotencyKey: "k-11" },
+  );
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toBe(bodies[0]);
+});
+test("an abort while backing off from a 429 stays an abort", async () => {
+  const controller = new AbortController();
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    setTimeout(() => controller.abort(new Error("user stopped")), 20);
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "5" } },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create(createInput, { idempotencyKey: "k-12", signal: controller.signal })
+    .catch((e) => e);
+  expect(error.message).toBe("user stopped");
+});
+test("a credential failure after a 429 is that failure", async () => {
+  let tokens = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "0" } },
+    )) as typeof fetch;
+  const error = await new Convt({
+    baseUrl: "https://api.test",
+    maxRetries: 1,
+    token: async () => {
+      if (++tokens > 1) throw new Error("token service down");
+      return "t";
+    },
+  })
+    .create(createInput, { idempotencyKey: "k-13" })
+    .catch((e) => e);
+  expect(error.message).toBe("token service down");
+});
+test("a 200 with a partial job leaves a keyed create unknown", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    Response.json({ job: { id: "job_1" } })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .create(createInput, { idempotencyKey: "k-14" })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+});

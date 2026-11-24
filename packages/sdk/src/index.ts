@@ -488,9 +488,8 @@ export class Convt {
         onDispatch: () => (dispatched = true),
       });
     } catch (error) {
-      // Once anything was sent, a failure outside the API's own answers leaves a
-      // keyed create's outcome unknown; keep the key on it.
-      if (dispatched && !(error instanceof ConvtError)) throw unknown(error);
+      // attempts() already turned every failure that may hide a landed create
+      // into create_outcome_unknown; an abort after a refusal stays an abort.
       // A ConvtError raised after dispatch (say, by a credential callback on a
       // retry) still concerns a create that may have landed: add the key.
       if (
@@ -548,6 +547,9 @@ export class Convt {
     // path, so a retry under the same key finds the job instead of paying twice.
     const settle = (error: unknown) =>
       mayHaveLanded && method === "POST" && idempotencyKey !== undefined ? unknown(error) : error;
+    // Serialized once: every retry under the key must send the same request,
+    // even if the caller changes the object meanwhile.
+    const body = data ? JSON.stringify(data) : undefined;
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
       let key: string;
@@ -558,10 +560,13 @@ export class Convt {
         throw settle(error);
       }
       const again = async (delay: number) => {
-        await sleep(delay, signal);
+        await sleep(delay, signal).catch((error: unknown) => {
+          throw settle(error);
+        });
       };
-      // Nothing has been sent yet, so an abort here is just an abort.
-      signal.throwIfAborted();
+      // Nothing more has been sent, so an abort here means only what earlier
+      // attempts mean.
+      if (signal.aborted) throw settle(signal.reason);
       let response: Response;
       onDispatch();
       try {
@@ -574,7 +579,7 @@ export class Convt {
             ...(data ? { "content-type": "application/json" } : {}),
             ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
           },
-          ...(data ? { body: JSON.stringify(data) } : {}),
+          ...(body === undefined ? {} : { body }),
         });
       } catch (error) {
         if (signal.aborted) throw unknown(error);
@@ -624,7 +629,11 @@ export class Convt {
       try {
         value = await response.json();
       } catch (error) {
-        if (signal.aborted) throw unknown(signal.reason ?? error);
+        if (signal.aborted) {
+          // The status arrived; only a 4xx rules out a landed create.
+          if (response.status < 400 || response.status >= 500) mayHaveLanded = true;
+          throw settle(signal.reason ?? error);
+        }
         readable = false;
       }
       // A success without the documented shape is as unreadable as no JSON.
@@ -878,10 +887,23 @@ function isAbortSignal(value: unknown): value is AbortSignal {
   }
 }
 
+/** The create answer's fields the SDK acts on: the job and its upload. */
 function isCreated(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("job" in value)) return false;
+  if (
+    !("upload_url" in value) ||
+    (value.upload_url !== null && typeof value.upload_url !== "string")
+  )
+    return false;
   const job: unknown = value.job;
-  return typeof job === "object" && job !== null && "id" in job && typeof job.id === "string";
+  return (
+    typeof job === "object" &&
+    job !== null &&
+    "id" in job &&
+    typeof job.id === "string" &&
+    "status" in job &&
+    typeof job.status === "string"
+  );
 }
 
 function formatFromName(name: string): Format | undefined {
