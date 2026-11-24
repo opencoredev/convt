@@ -683,10 +683,12 @@ pub async fn expire_rows(s: &CloudState) -> anyhow::Result<()> {
 }
 
 /// Deletes expired jobs' files and only then releases their storage commitment.
+/// Only rows the database pass has already closed: a job still settling must
+/// never lose its outputs to the sweep.
 /// Runs on its own timer, so a slow bucket never delays the database pass above.
 pub async fn sweep_expired_files(s: &CloudState) -> anyhow::Result<()> {
     let ids: Vec<String> = sqlx::query_scalar!(
-        r#"select id from cloud_jobs where expires_at<=now() and input_key is not null"#
+        r#"select id from cloud_jobs where expires_at<=now() and input_key is not null and status in ('succeeded','failed','cancelled') and reservation<>'open'"#
     )
     .fetch_all(&s.pool)
     .await?;

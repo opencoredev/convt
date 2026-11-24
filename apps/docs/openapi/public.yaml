@@ -371,4 +371,4 @@ actions:
   # that already succeeded and was billed.
   - target: $.paths['/v1/convert'].post.responses['502']
     update:
-      description: "`storage_unavailable`: storage did not answer. If the body names a job, read it with `GET /v1/jobs/{id}` first: a succeeded job was billed, so fetch its outputs from `/download` instead of converting again; a job still `created` or `queued` can be collected by retrying with the same `Idempotency-Key`. `output_missing`: the job succeeded and was billed but an output is gone from storage; fresh links will not help, so contact us with the job id."
+      description: "`storage_unavailable`: storage did not answer. If the body names a job, read it with `GET /v1/jobs/{id}` first: a succeeded job was billed, so fetch its outputs from `/download` instead of converting again; a job still `created`, `queued` or `running` can be collected by retrying the original request with its original `Idempotency-Key`. `output_missing`: the job succeeded and was billed but an output is gone from storage; fresh links will not help, so contact us with the job id."
