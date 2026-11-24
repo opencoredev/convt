@@ -175,9 +175,9 @@ function HandbrakeAlternative() {
         </h1>
         <div className="flex flex-col gap-4 text-[17px]/[27px] text-pretty text-ink-2">
           <p>
-            Keep HandBrake if you want a free video encoder with presets, filters, every audio and
-            subtitle track, and smaller MP4s from big ones. Pick convt if your everyday job is
-            turning video, audio, images or documents into another format from Finder&apos;s
+            Keep HandBrake if you want a free video encoder with presets, filters, the audio and
+            subtitle tracks you pick, and smaller MP4s from big ones. Pick convt if your everyday
+            job is turning video, audio, images or documents into another format from Finder&apos;s
             right-click menu or one command over a folder, for $39 once.
           </p>
           <p>
@@ -215,7 +215,15 @@ function HandbrakeAlternative() {
               </Checked>
             }
           >
-            <div className="overflow-x-auto rounded-2xl shadow-[inset_0_0_0_1px_var(--line)] [scrollbar-width:thin]">
+            <div
+              role="region"
+              aria-label="HandBrake and five alternatives compared"
+              tabIndex={0}
+              className={cx(
+                "overflow-x-auto rounded-2xl shadow-[inset_0_0_0_1px_var(--line)] [scrollbar-width:thin]",
+                focusRing,
+              )}
+            >
               <table className="w-full min-w-[640px] border-collapse text-left text-[14px]/5">
                 <thead className="bg-sunken text-ink-2">
                   <tr>
@@ -457,7 +465,8 @@ videos/a.MOV -> mp4/a.mp4
               </Question>
               <Question q="Does convt upload my videos?">
                 Not for local conversions, which is everything on this page. The only uploads are
-                cloud jobs, which you pick per job and which need Desktop + Cloud.
+                cloud jobs, which you pick per job and which need a cloud plan such as Desktop +
+                Cloud.
               </Question>
             </dl>
           </GuideSection>
