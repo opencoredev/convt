@@ -370,7 +370,7 @@ test("with the caller's own key, a failed upload leaves the shared job alone", a
 });
 test("a deadline during retry backoff still reports the create's key", async () => {
   globalThis.fetch = (async (_input: string | URL | Request) =>
-    new Response("busy", { status: 503, headers: { "retry-after": "30" } })) as typeof fetch;
+    new Response("busy", { status: 503, headers: { "retry-after": "10" } })) as typeof fetch;
   const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
     .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 100 })
     .catch((e) => e);
@@ -596,4 +596,34 @@ test("a remote create may leave the input format to the URL", async () => {
     target_format: "webp",
   });
   expect(created.job.id).toBe(job.id);
+});
+test("create still takes an AbortSignal as its second argument", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    init?.signal?.throwIfAborted();
+    return Response.json({ job, upload_url: null, upload_expires_in: null });
+  }) as typeof fetch;
+  const controller = new AbortController();
+  controller.abort(new Error("stop"));
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create({ input_format: "png", target_format: "webp", input_bytes: 1 }, controller.signal)
+    .catch((e) => e);
+  expect(String(error.message ?? error)).toContain("stop");
+});
+test("a Retry-After longer than the call's deadline is reported, not slept on", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    calls++;
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "45" } },
+    );
+  }) as typeof fetch;
+  const started = Date.now();
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .status("job_x")
+    .catch((e) => e);
+  expect(Date.now() - started).toBeLessThan(1000);
+  expect(calls).toBe(1);
+  expect(error.code).toBe("rate_limited");
+  expect(error.message).toContain("45");
 });

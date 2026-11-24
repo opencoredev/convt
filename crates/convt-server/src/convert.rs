@@ -592,8 +592,16 @@ async fn convert(
                 return Ok(finish(response, &job.id, replayed));
             }
             // A file caller without a key could never fetch this job's result, so
-            // stop it. If it finished in the meantime, serve it after all.
-            job = jobs::cancel(&s.pool, &who, &job.id).await?;
+            // stop it. If it finished in the meantime, serve it after all. The
+            // cancel runs as its own task: a client hanging up now must not drop
+            // it halfway, after the hang-up guard was already disarmed.
+            let cancel = {
+                let (pool, who, id) = (s.pool.clone(), who.clone(), job.id.clone());
+                tokio::spawn(async move { jobs::cancel(&pool, &who, &id).await })
+            };
+            job = cancel.await.map_err(|_| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal", "Request failed.")
+            })??;
             if job.status != "succeeded" {
                 return Ok(finish(
                     job_error(

@@ -277,7 +277,7 @@ export class Conversion {
   private async stream(index: number, path: string): Promise<void> {
     const { Readable } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
-    const { link, mkdtemp, open, rm } = await import("node:fs/promises");
+    const { link, mkdtemp, open, rm, stat, statfs } = await import("node:fs/promises");
     const { createReadStream } = await import("node:fs");
     const { dirname, join } = await import("node:path");
     const response = await this.fetchOutput(index, 30 * 60_000);
@@ -299,22 +299,53 @@ export class Conversion {
       // Decide only now whether the target exists, so a file created meanwhile
       // is never replaced. A new target appears atomically through a hard link
       // that fails if the name is taken.
-      const created = await link(partial, path).then(
-        () => true,
-        (error: NodeJS.ErrnoException) => {
-          if (error.code === "EEXIST") return false;
-          throw error;
-        },
-      );
-      if (!created) {
-        // An existing file is written in place: opening it truncates it but
-        // keeps its inode, owner, mode and ACLs, which a rename would replace.
-        const target = await open(path, "w");
+      const copyInto = async (flags: "w" | "wx") => {
+        const target = await open(path, flags, 0o666);
         try {
           await pipeline(createReadStream(partial), target.createWriteStream());
         } finally {
           await target.close().catch(() => {});
         }
+      };
+      const linked = await link(partial, path).then(
+        () => "created" as const,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "EEXIST") return "exists" as const;
+          // Filesystems without hard links (exFAT, FAT, some network shares).
+          if (["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV"].includes(error.code ?? ""))
+            return "no_links" as const;
+          throw error;
+        },
+      );
+      if (linked === "no_links") {
+        // Exclusive create: fails rather than replacing a file that appeared.
+        const made = await copyInto("wx").then(
+          () => true,
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "EEXIST") return false;
+            throw error;
+          },
+        );
+        if (!made) await replaceInPlace();
+      } else if (linked === "exists") {
+        await replaceInPlace();
+      }
+      async function replaceInPlace() {
+        // Refuse rather than truncate when the disk could not hold the new
+        // bytes: the existing file must never end up half-written.
+        const size = (await stat(partial)).size;
+        const free = await statfs(dirname(path)).then(
+          (s) => s.bavail * s.bsize,
+          () => Number.POSITIVE_INFINITY,
+        );
+        if (free < size)
+          throw new ConvtError(
+            "disk_full",
+            `Not enough free space to replace ${path} safely; it was left unchanged.`,
+          );
+        // An existing file is written in place: opening it truncates it but
+        // keeps its inode, owner, mode and ACLs, which a rename would replace.
+        await copyInto("w");
       }
     } finally {
       await rm(staging, { recursive: true, force: true });
@@ -511,6 +542,17 @@ export class Convt {
         RETRYABLE_STATUS.has(response.status)
       ) {
         const after = Number(response.headers.get("retry-after"));
+        // A wait longer than a call's own deadline would only end in a timeout:
+        // report the rate limit instead, with how long to wait.
+        if (Number.isFinite(after) && after > 20) {
+          await response.body?.cancel().catch(() => {});
+          throw fail(
+            response.status === 429 ? "rate_limited" : "unavailable",
+            `The API asked to wait ${after} seconds before retrying.`,
+            response.status,
+            requestId,
+          );
+        }
         await response.body?.cancel().catch(() => {});
         await again(
           Number.isFinite(after) && after > 0 ? Math.min(after, 60) * 1000 : 500 * 2 ** attempt,
@@ -548,7 +590,10 @@ export class Convt {
       return value as T;
     }
   }
-  create(input: CreateInput, { signal, idempotencyKey }: RequestOptions = {}) {
+  create(input: CreateInput, options: RequestOptions | AbortSignal = {}) {
+    // Earlier versions took the AbortSignal itself as the second argument.
+    const { signal, idempotencyKey } =
+      options instanceof AbortSignal ? { signal: options, idempotencyKey: undefined } : options;
     return this.request<Created>({
       path: "/v1/jobs",
       method: "POST",
