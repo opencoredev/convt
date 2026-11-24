@@ -47,12 +47,26 @@ export const commandLineConverter = {
   operatingSystem: "macOS (Apple silicon), Windows (x86_64), Linux (x86_64)",
 } as const satisfies LandingPage;
 
+export const handbrakeAlternative = {
+  path: routes.handbrakeAlternative,
+  title: "HandBrake alternatives for everyday conversions (2026) · convt",
+  heading: "HandBrake alternatives for everyday conversions",
+  footerLabel: "HandBrake alternatives",
+  description:
+    "HandBrake can't make MP3s, photos or PDFs. convt, Shutter Encoder, Permute, VidCoder and FFmpeg compared on price, platforms and what they convert.",
+  summary:
+    "When to keep HandBrake and when to switch, a comparison of convt, Shutter Encoder, Permute, VidCoder and FFmpeg (price, platforms, what each converts), where HandBrake is better, and the same jobs in convt.",
+  campaign: "handbrake-alternative",
+  operatingSystem: "macOS (Apple silicon), Windows (x86_64), Linux (x86_64)",
+} as const satisfies LandingPage;
+
 /** The download page with a landing page's campaign tags. */
 const landingDownloadUrl = (page: LandingPage) =>
   `${routes.download}?utm_source=convt_guides&utm_medium=organic&utm_campaign=${page.campaign}`;
 
 export const macFileConverterDownloadUrl = landingDownloadUrl(macFileConverter);
 export const commandLineConverterDownloadUrl = landingDownloadUrl(commandLineConverter);
+export const handbrakeAlternativeDownloadUrl = landingDownloadUrl(handbrakeAlternative);
 
 /** Head tags for a landing page: SEO and Open Graph, plus WebPage, app and breadcrumb JSON-LD. */
 function landingPageHead(page: LandingPage) {
@@ -108,3 +122,6 @@ export const macFileConverterHead = () => landingPageHead(macFileConverter);
 
 /** Head tags for /command-line-file-converter. */
 export const commandLineConverterHead = () => landingPageHead(commandLineConverter);
+
+/** Head tags for /handbrake-alternative. */
+export const handbrakeAlternativeHead = () => landingPageHead(handbrakeAlternative);

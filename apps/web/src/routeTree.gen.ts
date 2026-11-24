@@ -26,6 +26,7 @@ import { Route as SiteCommandLineFileConverterRouteImport } from './routes/_site
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDownloadRouteImport } from './routes/_site/download'
 import { Route as SiteFormatsRouteImport } from './routes/_site/formats'
+import { Route as SiteHandbrakeAlternativeRouteImport } from './routes/_site/handbrake-alternative'
 import { Route as SiteMacFileConverterRouteImport } from './routes/_site/mac-file-converter'
 import { Route as SitePrivacyRouteImport } from './routes/_site/privacy'
 import { Route as SiteTermsRouteImport } from './routes/_site/terms'
@@ -145,6 +146,12 @@ const SiteFormatsRoute = SiteFormatsRouteImport.update({
   path: '/formats',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteHandbrakeAlternativeRoute =
+  SiteHandbrakeAlternativeRouteImport.update({
+    id: '/handbrake-alternative',
+    path: '/handbrake-alternative',
+    getParentRoute: () => SiteRoute,
+  } as any)
 const SiteMacFileConverterRoute = SiteMacFileConverterRouteImport.update({
   id: '/mac-file-converter',
   path: '/mac-file-converter',
@@ -337,6 +344,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/handbrake-alternative': typeof SiteHandbrakeAlternativeRoute
   '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
@@ -387,6 +395,7 @@ export interface FileRoutesByTo {
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
   '/formats': typeof SiteFormatsRoute
+  '/handbrake-alternative': typeof SiteHandbrakeAlternativeRoute
   '/mac-file-converter': typeof SiteMacFileConverterRoute
   '/privacy': typeof SitePrivacyRoute
   '/terms': typeof SiteTermsRoute
@@ -441,6 +450,7 @@ export interface FileRoutesById {
   '/_site/contact': typeof SiteContactRoute
   '/_site/download': typeof SiteDownloadRoute
   '/_site/formats': typeof SiteFormatsRoute
+  '/_site/handbrake-alternative': typeof SiteHandbrakeAlternativeRoute
   '/_site/mac-file-converter': typeof SiteMacFileConverterRoute
   '/_site/privacy': typeof SitePrivacyRoute
   '/_site/terms': typeof SiteTermsRoute
@@ -493,6 +503,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/download'
     | '/formats'
+    | '/handbrake-alternative'
     | '/mac-file-converter'
     | '/privacy'
     | '/terms'
@@ -543,6 +554,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/download'
     | '/formats'
+    | '/handbrake-alternative'
     | '/mac-file-converter'
     | '/privacy'
     | '/terms'
@@ -596,6 +608,7 @@ export interface FileRouteTypes {
     | '/_site/contact'
     | '/_site/download'
     | '/_site/formats'
+    | '/_site/handbrake-alternative'
     | '/_site/mac-file-converter'
     | '/_site/privacy'
     | '/_site/terms'
@@ -773,6 +786,13 @@ declare module '@tanstack/react-router' {
       path: '/formats'
       fullPath: '/formats'
       preLoaderRoute: typeof SiteFormatsRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/handbrake-alternative': {
+      id: '/_site/handbrake-alternative'
+      path: '/handbrake-alternative'
+      fullPath: '/handbrake-alternative'
+      preLoaderRoute: typeof SiteHandbrakeAlternativeRouteImport
       parentRoute: typeof SiteRoute
     }
     '/_site/mac-file-converter': {
@@ -1069,6 +1089,7 @@ interface SiteRouteChildren {
   SiteContactRoute: typeof SiteContactRoute
   SiteDownloadRoute: typeof SiteDownloadRoute
   SiteFormatsRoute: typeof SiteFormatsRoute
+  SiteHandbrakeAlternativeRoute: typeof SiteHandbrakeAlternativeRoute
   SiteMacFileConverterRoute: typeof SiteMacFileConverterRoute
   SitePrivacyRoute: typeof SitePrivacyRoute
   SiteTermsRoute: typeof SiteTermsRoute
@@ -1090,6 +1111,7 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteContactRoute: SiteContactRoute,
   SiteDownloadRoute: SiteDownloadRoute,
   SiteFormatsRoute: SiteFormatsRoute,
+  SiteHandbrakeAlternativeRoute: SiteHandbrakeAlternativeRoute,
   SiteMacFileConverterRoute: SiteMacFileConverterRoute,
   SitePrivacyRoute: SitePrivacyRoute,
   SiteTermsRoute: SiteTermsRoute,

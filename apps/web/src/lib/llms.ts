@@ -1,7 +1,7 @@
 import formats from "../../content/formats.json";
 
 import { guidePath, guides } from "#/lib/guides";
-import { commandLineConverter, macFileConverter } from "#/lib/landing-pages";
+import { commandLineConverter, handbrakeAlternative, macFileConverter } from "#/lib/landing-pages";
 import { GITHUB_URL, RAYCAST_URL, SITE_ORIGIN, routes } from "#/lib/site";
 
 // /llms.txt (llmstxt.org): a plain summary of convt and its public pages for AI agents and
@@ -35,6 +35,7 @@ ${[
   ),
   page(macFileConverter.heading, macFileConverter.path, macFileConverter.summary),
   page(commandLineConverter.heading, commandLineConverter.path, commandLineConverter.summary),
+  page(handbrakeAlternative.heading, handbrakeAlternative.path, handbrakeAlternative.summary),
   page("Guides", routes.guides, "step-by-step conversion guides, built-in methods first."),
   page("Changelog", routes.changelog, "what changed in each release."),
   page("Contact and help", routes.contact, "support email, license keys, billing and bug reports."),
