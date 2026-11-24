@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { addApiKey, removeApiKey, fetchApiSpend } from "#/server/cloud-fns";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 
@@ -43,39 +43,6 @@ function ApiPage() {
   const [shownKey, setShownKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  // The enrollment card promises to update once the card is confirmed: check again
-  // every few seconds while it waits.
-  const pending = api.enrollment.state === "pending";
-  // Ask quietly every few seconds; reload the whole page only once enrollment has
-  // finished. A failed or slow check is just tried again, and an answer arriving
-  // after the visitor left is ignored. "none" is not finished: Polar can confirm
-  // the checkout before its subscription is readable, so keep waiting then.
-  useEffect(() => {
-    if (!pending) return;
-    let cancelled = false;
-    let checking = false;
-    const timer = setInterval(async () => {
-      if (checking || cancelled) return;
-      checking = true;
-      try {
-        const next = await Promise.race([
-          getApiOverview(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
-        ]);
-        const state = next?.enrollment.state;
-        if (!cancelled && state && state !== "pending" && state !== "none")
-          window.location.reload();
-      } catch {
-        // Transient; the next tick asks again.
-      } finally {
-        checking = false;
-      }
-    }, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [pending]);
   async function create() {
     setBusy(true);
     setError("");

@@ -168,7 +168,8 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
           <Heading eyebrow="CONVT API">Your card is still being confirmed</Heading>
           <p className={lead}>
             API billing turns on as soon as the payment provider confirms your card, usually within
-            a minute. The API page shows it, and lets you create keys from then on.
+            a minute. Open the API page then to create keys; reload it if it still shows the card as
+            pending.
           </p>
           <Actions primary={{ href: "/dashboard/api", label: "Go to API billing" }} />
         </>
