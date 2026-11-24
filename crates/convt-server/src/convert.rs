@@ -293,10 +293,14 @@ struct HangupGuard {
     state: Arc<Mutex<Hangup>>,
     pool: sqlx::PgPool,
     who: Principal,
+    /// The request's span, captured while the handler runs: a hang-up drops
+    /// the guard after Tower's span has been left.
+    span: tracing::Span,
 }
-fn cancel_later(pool: sqlx::PgPool, who: Principal, id: String) {
+fn cancel_later(pool: sqlx::PgPool, who: Principal, id: String, span: tracing::Span) {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        // Spawned tasks do not inherit the request's span (and its request id).
+        // Spawned tasks do not inherit the request's span (and its request id),
+        // and a hang-up drops the guard outside it, so the span is passed in.
         handle.spawn(
             async move {
                 if let Err(error) = jobs::cancel(&pool, &who, &id).await {
@@ -307,7 +311,7 @@ fn cancel_later(pool: sqlx::PgPool, who: Principal, id: String) {
                     );
                 }
             }
-            .instrument(tracing::Span::current()),
+            .instrument(span),
         );
     }
 }
@@ -320,13 +324,20 @@ impl HangupGuard {
             })),
             pool,
             who,
+            span: tracing::Span::current(),
         }
     }
     /// Called by the creating task once the job is committed.
     fn register(state: &Mutex<Hangup>, pool: &sqlx::PgPool, who: &Principal, id: &str) {
         let mut hangup = state.lock().unwrap_or_else(|e| e.into_inner());
         if hangup.gone && hangup.armed {
-            cancel_later(pool.clone(), who.clone(), id.to_owned());
+            // Called inside the instrumented create task, so this is the request's span.
+            cancel_later(
+                pool.clone(),
+                who.clone(),
+                id.to_owned(),
+                tracing::Span::current(),
+            );
         } else {
             hangup.job = Some(id.to_owned());
         }
@@ -342,7 +353,7 @@ impl Drop for HangupGuard {
         if hangup.armed
             && let Some(id) = hangup.job.take()
         {
-            cancel_later(self.pool.clone(), self.who.clone(), id);
+            cancel_later(self.pool.clone(), self.who.clone(), id, self.span.clone());
         }
     }
 }

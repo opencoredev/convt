@@ -993,9 +993,21 @@ test("save rewrites a writable file in a folder that allows no new files", async
   await mkdir(folder);
   await writeFile(join(folder, "out.png"), "old");
   await chmod(folder, 0o555);
+  // Root (and some filesystems) ignore the mode; then there is no fallback to test.
+  const enforced = await mkdtemp(join(folder, "probe-")).then(
+    async (made) => {
+      await rm(made, { recursive: true, force: true });
+      return false;
+    },
+    () => true,
+  );
   globalThis.fetch = (async (_input: string | URL | Request) =>
     new Response("new bytes")) as typeof fetch;
   try {
+    if (!enforced) {
+      console.warn("skipping: this folder's mode does not stop new files here");
+      return;
+    }
     await new Conversion({ ...job, status: "succeeded" }, [
       { name: "a.png", url: "https://objects.test/out" },
     ]).save(join(folder, "out.png"));
