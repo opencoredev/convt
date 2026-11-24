@@ -430,12 +430,14 @@ export class Convt {
     data,
     signal: given,
     idempotencyKey,
+    check,
   }: {
     path: string;
     method?: "GET" | "POST";
     data?: unknown;
     signal?: AbortSignal;
     idempotencyKey?: string;
+    check?: (value: unknown) => boolean;
   }): Promise<T> {
     // A call without the caller's signal gets the SDK's own 30-second deadline.
     const signal = given ?? AbortSignal.timeout(30_000);
@@ -480,6 +482,7 @@ export class Convt {
         idempotencyKey,
         retryable,
         waitBudgetMs,
+        check,
         fail,
         unknown,
         onDispatch: () => (dispatched = true),
@@ -514,6 +517,7 @@ export class Convt {
     idempotencyKey,
     retryable,
     waitBudgetMs,
+    check,
     fail,
     unknown,
     onDispatch,
@@ -525,6 +529,7 @@ export class Convt {
     idempotencyKey?: string;
     retryable: boolean;
     waitBudgetMs: () => number;
+    check?: (value: unknown) => boolean;
     fail: (
       code: string,
       message: string,
@@ -541,12 +546,17 @@ export class Convt {
     let mayHaveLanded = false;
     // A keyed create that may have landed ends with its outcome unknown on every
     // path, so a retry under the same key finds the job instead of paying twice.
-    const settle = (error: ConvtError) =>
+    const settle = (error: unknown) =>
       mayHaveLanded && method === "POST" && idempotencyKey !== undefined ? unknown(error) : error;
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
-      const key =
-        typeof credential === "function" ? await abortable(credential, signal) : credential;
+      let key: string;
+      try {
+        key = typeof credential === "function" ? await abortable(credential, signal) : credential;
+      } catch (error) {
+        // A refreshed credential can fail after an earlier attempt landed.
+        throw settle(error);
+      }
       const again = async (delay: number) => {
         await sleep(delay, signal);
       };
@@ -610,13 +620,20 @@ export class Convt {
         continue;
       }
       let value: unknown;
+      let readable = true;
       try {
         value = await response.json();
       } catch (error) {
         if (signal.aborted) throw unknown(signal.reason ?? error);
-        mayHaveLanded = true;
-        // The body broke off or was not JSON. For a create that already reserved a
-        // job, retrying under the same key returns that job rather than a new one.
+        readable = false;
+      }
+      // A success without the documented shape is as unreadable as no JSON.
+      if (readable && response.ok && check && !check(value)) readable = false;
+      if (!readable) {
+        // The body broke off or was not what the API sends. A 4xx is still the
+        // API (or its edge) refusing; anything else may have reserved a job, and
+        // retrying under the same key returns that job rather than a new one.
+        if (response.status < 400 || response.status >= 500) mayHaveLanded = true;
         if (retryable && attempt < this.maxRetries) {
           await again(250 * 2 ** attempt);
           continue;
@@ -624,7 +641,7 @@ export class Convt {
         throw settle(
           fail(
             response.ok ? "invalid_response" : "request_failed",
-            `The API answered HTTP ${response.status} without a readable JSON body.`,
+            `The API answered HTTP ${response.status} without the JSON body it documents.`,
             response.status,
             requestId,
           ),
@@ -632,9 +649,15 @@ export class Convt {
       }
       if (!response.ok) {
         const { code, message } = errorFields(value);
-        throw settle(
-          fail(code ?? "request_failed", message ?? "Request failed.", response.status, requestId),
+        const error = fail(
+          code ?? "request_failed",
+          message ?? "Request failed.",
+          response.status,
+          requestId,
         );
+        // The API looked the key up and found it taken by another request: that
+        // is settled, and retrying with the same key would only repeat it.
+        throw code === "idempotency_key_reused" ? error : settle(error);
       }
       // The API's JSON matches the documented shape for each route.
       return value as T;
@@ -651,6 +674,7 @@ export class Convt {
       data: input,
       signal,
       idempotencyKey,
+      check: isCreated,
     });
   }
   start(id: string, signal?: AbortSignal) {
@@ -852,6 +876,12 @@ function isAbortSignal(value: unknown): value is AbortSignal {
   } catch {
     return false;
   }
+}
+
+function isCreated(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || !("job" in value)) return false;
+  const job: unknown = value.job;
+  return typeof job === "object" && job !== null && "id" in job && typeof job.id === "string";
 }
 
 function formatFromName(name: string): Format | undefined {

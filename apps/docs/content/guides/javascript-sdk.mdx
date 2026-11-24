@@ -66,6 +66,8 @@ Every job is created with a fresh [`Idempotency-Key`](/guides/idempotency), so t
 
 Errors are `ConvtError` instances with the API's `code`, the HTTP `status`, the `requestId` from `X-Request-Id` and, once a job exists, its `jobId` and `idempotencyKey`. A conversion that succeeded but whose output links failed throws `download_failed` with `jobId`: it was billed, so call `convt.download(jobId)` rather than converting again.
 
+A create with a key whose answer was lost, unreadable or a `5xx` may have made a job anyway. Then the error is `create_outcome_unknown` with `idempotencyKey` and no `jobId`, whatever went wrong last: retry the same call with that key and the API returns the job if it exists, without reserving twice. The underlying error, with its `status` and `requestId`, is on `error.cause`. A `4xx` answer, such as `rate_limited` or `idempotency_key_reused`, means no job was made by that request and is reported as itself.
+
 ## Webhooks
 
 ```ts

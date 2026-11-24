@@ -656,7 +656,10 @@ test("a ConvtError from the credential callback after a send keeps the key", asy
   const error = await client
     .convertUrl("https://cdn.example.com/a.svg", { to: "png" })
     .catch((e) => e);
-  expect(error.code).toBe("token_failed");
+  // The 503 may hide a create that landed, so the outcome is unknown; the
+  // credential failure is the cause.
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.cause.code).toBe("token_failed");
   expect(error.idempotencyKey).toBeTruthy();
 });
 test("a remote create may leave the input format to the URL", async () => {
@@ -855,4 +858,38 @@ test("a 429 without Retry-After stays a refusal when the fallback wait cannot fi
     .catch((e) => e);
   expect(error.code).toBe("rate_limited");
   expect(error.idempotencyKey).toBeTruthy();
+});
+test("a key conflict after a gateway error stays the conflict", async () => {
+  let creates = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    creates++;
+    if (creates === 1) return new Response("gateway timeout", { status: 504 });
+    return Response.json(
+      { error: { code: "idempotency_key_reused", message: "Key used for another request." } },
+      { status: 409 },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 1 })
+    .create(createInput, { idempotencyKey: "k-7" })
+    .catch((e) => e);
+  expect(error.code).toBe("idempotency_key_reused");
+  expect(error.idempotencyKey).toBe("k-7");
+});
+test("an HTML 429 is still a refusal", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("<html>too many</html>", { status: 429 })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .create(createInput, { idempotencyKey: "k-8" })
+    .catch((e) => e);
+  expect(error.code).toBe("request_failed");
+  expect(error.status).toBe(429);
+});
+test("a 200 without a job leaves a keyed create unknown", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    Response.json({ ok: true })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .create(createInput, { idempotencyKey: "k-9" })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.cause.code).toBe("invalid_response");
 });
