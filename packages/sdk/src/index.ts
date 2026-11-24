@@ -288,7 +288,16 @@ export class Conversion {
     // nobody else can read the bytes meanwhile. The staged file is created with
     // the ordinary mode for a new file, so the umask and any default ACL the
     // directory passes down apply exactly as for any other new file there.
-    const staging = await mkdtemp(join(dirname(path), ".convt-"));
+    // A folder that lets you write an existing file but not create one there
+    // gets the staging copy in the temp directory; the file is then written in
+    // place, since a link across filesystems fails.
+    const staging = await mkdtemp(join(dirname(path), ".convt-")).catch(
+      async (error: NodeJS.ErrnoException) => {
+        if (error.code !== "EACCES" && error.code !== "EPERM") throw error;
+        const { tmpdir } = await import("node:os");
+        return mkdtemp(join(tmpdir(), "convt-"));
+      },
+    );
     const partial = join(staging, "part");
     try {
       const handle = await open(partial, "wx", 0o666);

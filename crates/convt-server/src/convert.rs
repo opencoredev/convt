@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tracing::Instrument;
 
 use axum::{
     Extension, Json, Router,
@@ -295,15 +296,19 @@ struct HangupGuard {
 }
 fn cancel_later(pool: sqlx::PgPool, who: Principal, id: String) {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        handle.spawn(async move {
-            if let Err(error) = jobs::cancel(&pool, &who, &id).await {
-                tracing::warn!(
-                    job_id = id,
-                    error = error.code(),
-                    "cancel after hang-up failed"
-                );
+        // Spawned tasks do not inherit the request's span (and its request id).
+        handle.spawn(
+            async move {
+                if let Err(error) = jobs::cancel(&pool, &who, &id).await {
+                    tracing::warn!(
+                        job_id = id,
+                        error = error.code(),
+                        "cancel after hang-up failed"
+                    );
+                }
             }
-        });
+            .instrument(tracing::Span::current()),
+        );
     }
 }
 impl HangupGuard {
@@ -511,15 +516,19 @@ async fn convert(
     let created = {
         let (s, who, headers, state) =
             (s.clone(), who.clone(), headers.clone(), guard.state.clone());
-        tokio::spawn(async move {
-            let created = routes::create_job(&s, &who, &headers, &data, "convert", &extra).await;
-            if let Ok(created) = &created
-                && !created.replayed
-            {
-                HangupGuard::register(&state, &s.pool, &who, &created.job.id);
+        tokio::spawn(
+            async move {
+                let created =
+                    routes::create_job(&s, &who, &headers, &data, "convert", &extra).await;
+                if let Ok(created) = &created
+                    && !created.replayed
+                {
+                    HangupGuard::register(&state, &s.pool, &who, &created.job.id);
+                }
+                created
             }
-            created
-        })
+            .instrument(tracing::Span::current()),
+        )
         .await
         .map_err(|_| {
             ApiError::new(
@@ -597,7 +606,10 @@ async fn convert(
             // it halfway, after the hang-up guard was already disarmed.
             let cancel = {
                 let (pool, who, id) = (s.pool.clone(), who.clone(), job.id.clone());
-                tokio::spawn(async move { jobs::cancel(&pool, &who, &id).await })
+                tokio::spawn(
+                    async move { jobs::cancel(&pool, &who, &id).await }
+                        .instrument(tracing::Span::current()),
+                )
             };
             job = cancel.await.map_err(|_| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal", "Request failed.")

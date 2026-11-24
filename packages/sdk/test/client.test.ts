@@ -983,3 +983,26 @@ test("an already aborted create reports the abort without reading its payload", 
     .catch((e) => e);
   expect(error.message).toBe("stopped first");
 });
+test("save rewrites a writable file in a folder that allows no new files", async () => {
+  const { mkdtemp, mkdir, writeFile, readFile, chmod, readdir, rm } =
+    await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const root = await mkdtemp(join(tmpdir(), "sdk-ro-"));
+  const folder = join(root, "ro");
+  await mkdir(folder);
+  await writeFile(join(folder, "out.png"), "old");
+  await chmod(folder, 0o555);
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("new bytes")) as typeof fetch;
+  try {
+    await new Conversion({ ...job, status: "succeeded" }, [
+      { name: "a.png", url: "https://objects.test/out" },
+    ]).save(join(folder, "out.png"));
+    expect(await readFile(join(folder, "out.png"), "utf8")).toBe("new bytes");
+    expect(await readdir(folder)).toEqual(["out.png"]);
+  } finally {
+    await chmod(folder, 0o755);
+    await rm(root, { recursive: true, force: true });
+  }
+});

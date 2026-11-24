@@ -1146,6 +1146,61 @@ async fn hanging_up_on_convert_cancels_the_job_unless_a_key_was_sent() {
     db.drop().await;
 }
 
+/// The same hang-up through a real socket: axum::serve and Hyper, not a
+/// dropped future, decide that the client is gone.
+#[tokio::test]
+async fn closing_the_socket_on_convert_cancels_the_job() {
+    use tokio::io::AsyncWriteExt;
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let app = crate::service(Some(routes::router(state.clone())));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await });
+    let mut socket = tokio::net::TcpStream::connect(addr).await.unwrap();
+    socket
+        .write_all(
+            format!(
+                "POST /v1/convert?to=webp&from=png HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {KEY}\r\ncontent-length: 3\r\n\r\npng"
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    // Wait until the job exists and the handler is waiting on it, then hang up.
+    let mut queued = false;
+    for _ in 0..50 {
+        let status: Option<String> =
+            sqlx::query_scalar("select status from cloud_jobs where user_id='usr_a' limit 1")
+                .fetch_optional(&db.owner)
+                .await
+                .unwrap();
+        if status.as_deref() == Some("queued") {
+            queued = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(queued, "the job was never queued");
+    drop(socket);
+    let mut status = String::new();
+    for _ in 0..100 {
+        status = sqlx::query_scalar("select status from cloud_jobs where user_id='usr_a' limit 1")
+            .fetch_one(&db.owner)
+            .await
+            .unwrap();
+        if status == "cancelled" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    server.abort();
+    assert_eq!(status, "cancelled");
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn urls_are_checked_and_webhooks_need_the_server_secret() {
     let Some(db) = test_db().await else { return };
