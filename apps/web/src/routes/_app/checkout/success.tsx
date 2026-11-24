@@ -75,7 +75,11 @@ function SuccessPage() {
 
   return (
     <AuthLayout
-      aside={checkoutAside({ kind: state.state === "trial" ? "trial" : "key", os, origin })}
+      aside={checkoutAside({
+        kind: state.state === "trial" ? "trial" : state.state === "api_enrolled" ? "api" : "key",
+        os,
+        origin,
+      })}
     >
       <div aria-live="polite" className="flex flex-col gap-6">
         <Body state={state} os={os} origin={origin} />
@@ -137,7 +141,7 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
             Your card is saved and your spend cap is set. Conversions are billed at the end of each
             month.
           </p>
-          <Actions primary={{ href: "/dashboard/api", label: "Go to API" }} />
+          <Actions primary={{ href: "/dashboard/api", label: "Create an API key" }} />
         </>
       );
     case "email":

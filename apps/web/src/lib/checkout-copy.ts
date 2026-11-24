@@ -13,16 +13,26 @@ export function checkoutOrigin(from: unknown): CheckoutOrigin {
 /**
  * The checkout success page's "what's next" panel. From the app the buyer already has
  * convt open, so it sends them back there; from the web it starts with the download.
+ * API billing has nothing to download: its next steps are a key and a first request.
  */
 export function checkoutAside({
   kind,
   os,
   origin,
 }: {
-  kind: "key" | "trial";
+  kind: "key" | "trial" | "api";
   os: Os | null;
   origin: CheckoutOrigin;
 }) {
+  if (kind === "api")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "Create an API key on the API page",
+        "Convert your first file with one curl command",
+        "Track spend against your cap on the same page",
+      ],
+    };
   if (origin === "app")
     return {
       title: "WHAT'S NEXT",

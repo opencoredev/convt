@@ -122,6 +122,12 @@ test("checkout success panel and button follow the visitor's OS", () => {
     checkoutAside({ kind: "key", os: osFromUserAgent(agents.mac), origin: web }).items[0],
   ).toBe("Download convt for macOS");
   expect(checkoutAside({ kind: "trial", os: null, origin: web }).items[0]).toBe("Download convt");
+  // API billing has nothing to download, from the web or the app.
+  for (const origin of [web, "app" as const]) {
+    const api = checkoutAside({ kind: "api", os: windows, origin }).items;
+    expect(api[0]).toBe("Create an API key on the API page");
+    expect(api.join(" ")).not.toMatch(/Download|Licenses/);
+  }
   expect(downloadAction(windows)).toEqual({
     href: "/download?os=windows",
     label: "Download for Windows",
