@@ -24,10 +24,32 @@ private struct Target: Decodable {
 /// extensions shouldn't run long conversions themselves.
 ///
 /// Picking a format converts in place with no window; "More options…" opens
-/// Quick convert. Either way the request goes through the App Group
+/// Quick convert, as does a format click whose menu snapshot is gone. Either way the request goes through the App Group
 /// container (see `send`), which only processes in the group can write, so a
 /// `convt://` link from a web page can never start a conversion.
 final class FinderSync: FIFinderSync {
+    /// What one menu was built for: its files, and the target id behind each
+    /// format item's exact title. A click uses only its own menu's snapshot,
+    /// so it converts the files that menu showed into the format it showed.
+    private struct MenuSnapshot {
+        let items: [URL]
+        /// Exact menu title to target id.
+        let targetsByTitle: [String: String]
+    }
+
+    /// Each recent menu's snapshot, by the tag its items carry. By the time
+    /// an item is clicked, Finder may report a different selection or none
+    /// at all (right-clicking an item that wasn't selected targets it
+    /// without selecting it), and Finder can build another menu, in another
+    /// window, before the first one's click arrives. The tag ties a click to
+    /// the menu it came from. Only the newest `maxMenuSnapshots` are kept, so
+    /// the memory stays tiny.
+    private var menuSnapshots: [Int: MenuSnapshot] = [:]
+    /// `menuSnapshots`' tags, oldest first.
+    private var menuTagOrder: [Int] = []
+    private var nextMenuTag = 100
+    private let maxMenuSnapshots = 16
+
     override init() {
         super.init()
         // Watch the whole disk so the menu shows up everywhere.
@@ -35,10 +57,19 @@ final class FinderSync: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
-        guard menuKind == .contextualMenuForItems,
-              let items = FIFinderSyncController.default().selectedItemURLs(),
-              !items.isEmpty
-        else { return nil }
+        guard menuKind == .contextualMenuForItems else { return nil }
+        let controller = FIFinderSyncController.default()
+        let items: [URL]
+        if let selected = controller.selectedItemURLs(), !selected.isEmpty {
+            items = selected
+        } else if let targeted = controller.targetedURL() {
+            items = [targeted]
+        } else {
+            return nil
+        }
+        let tag = nextMenuTag
+        nextMenuTag = nextMenuTag >= 10000 ? 100 : nextMenuTag + 1
+        var targetsByTitle: [String: String] = [:]
 
         let submenu = NSMenu(title: "Convert with convt")
         if let list = loadTargets() {
@@ -58,21 +89,24 @@ final class FinderSync: FIFinderSync {
             let isVideo = targets.contains { $0.category == "Video" }
             for target in targets {
                 let title = isVideo && target.category == "Audio" ? "\(target.name) (audio only)" : target.name
-                // Finder copies this menu into its own process and keeps only
-                // each item's title and action, so `convert` finds the
-                // target again by title.
+                // Finder copies this menu into its own process, so the item
+                // that comes back is a copy: `convert` finds this menu's
+                // snapshot by the tag and the target by the exact title.
                 let item = NSMenuItem(title: title, action: #selector(convert(_:)), keyEquivalent: "")
                 item.target = self
+                item.tag = tag
+                targetsByTitle[title] = target.id
                 submenu.addItem(item)
             }
             submenu.addItem(.separator())
-            submenu.addItem(moreItem(title: "More options…"))
+            submenu.addItem(moreItem(title: "More options…", tag: tag))
         } else {
             // The app hasn't published its list yet (it has never run, or
             // the list is unreadable): let the app work out the targets
             // rather than guess from the format table.
-            submenu.addItem(moreItem(title: "Open in convt…"))
+            submenu.addItem(moreItem(title: "Open in convt…", tag: tag))
         }
+        remember(MenuSnapshot(items: items, targetsByTitle: targetsByTitle), tag: tag)
 
         let menu = NSMenu(title: "")
         let root = NSMenuItem(title: "Convert with convt", action: nil, keyEquivalent: "")
@@ -97,33 +131,73 @@ final class FinderSync: FIFinderSync {
         return list
     }
 
-    private func moreItem(title: String) -> NSMenuItem {
+    private func moreItem(title: String, tag: Int) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(moreOptions(_:)), keyEquivalent: "")
         item.target = self
+        item.tag = tag
         return item
     }
 
-    /// Converts the selection in place, with no window.
-    @objc private func convert(_ sender: NSMenuItem) {
-        guard let items = FIFinderSyncController.default().selectedItemURLs(), !items.isEmpty else {
-            return
+    /// Records the snapshot of the menu with `tag`, forgetting the oldest
+    /// menu past `maxMenuSnapshots`.
+    private func remember(_ snapshot: MenuSnapshot, tag: Int) {
+        if menuSnapshots.updateValue(snapshot, forKey: tag) != nil {
+            menuTagOrder.removeAll { $0 == tag }
         }
-        let name = sender.title.replacingOccurrences(of: " (audio only)", with: "")
-        let target = loadTargets().flatMap { list in
-            list.targets.values.lazy.flatMap { $0 }.first { $0.name == name }
+        menuTagOrder.append(tag)
+        while menuTagOrder.count > maxMenuSnapshots {
+            menuSnapshots.removeValue(forKey: menuTagOrder.removeFirst())
         }
-        guard let target else {
-            // The list changed since the menu was built: let the app decide.
-            NSLog("convt: no target named \(name); opening Quick convert")
-            send(to: nil, items: items, activate: true)
-            return
-        }
-        send(to: target.id, items: items, activate: false)
     }
 
-    /// Opens Quick convert for the selection.
+    /// The snapshot of the menu `sender` came from, found by its tag and
+    /// used once, so a later click can't reuse an old menu's files.
+    private func takeSnapshot(for sender: NSMenuItem) -> MenuSnapshot? {
+        guard sender.tag != 0, let snapshot = menuSnapshots.removeValue(forKey: sender.tag) else {
+            return nil
+        }
+        menuTagOrder.removeAll { $0 == sender.tag }
+        return snapshot.items.isEmpty ? nil : snapshot
+    }
+
+    /// Finder's selection at the moment of a click whose menu can't be found
+    /// (the tag was lost when Finder copied the menu, or the snapshot
+    /// expired or was already used). Another menu's files are never used
+    /// instead: Finder may have built a menu for other files since. Callers
+    /// only ever open Quick convert with it, so the user sees which files
+    /// they are about to convert. Without a selection, nothing happens.
+    private func liveSelection(tag: Int) -> [URL]? {
+        if let selected = FIFinderSyncController.default().selectedItemURLs(), !selected.isEmpty {
+            NSLog("convt: menu snapshot unavailable (tag=\(tag)); opening Quick convert for confirmation")
+            return selected
+        }
+        NSLog("convt: ignoring click with no bound menu snapshot (tag=\(tag)) or active Finder selection")
+        return nil
+    }
+
+    /// Converts the menu's files in place, with no window. Only a click
+    /// bound to its menu's snapshot converts directly: without one, the
+    /// files Finder selects now may not be the ones the menu showed, so
+    /// Quick convert opens instead and the user confirms.
+    @objc private func convert(_ sender: NSMenuItem) {
+        if let snapshot = takeSnapshot(for: sender) {
+            guard let id = snapshot.targetsByTitle[sender.title] else {
+                NSLog("convt: no target for \(sender.title) in its menu; opening Quick convert")
+                send(to: nil, items: snapshot.items, activate: true)
+                return
+            }
+            send(to: id, items: snapshot.items, activate: false)
+            return
+        }
+        guard let items = liveSelection(tag: sender.tag) else { return }
+        send(to: nil, items: items, activate: true)
+    }
+
+    /// Opens Quick convert for the menu's files, or for Finder's current
+    /// selection when the menu's snapshot is gone: Quick convert always
+    /// shows the files before anything is converted.
     @objc private func moreOptions(_ sender: NSMenuItem) {
-        guard let items = FIFinderSyncController.default().selectedItemURLs() else { return }
+        guard let items = takeSnapshot(for: sender)?.items ?? liveSelection(tag: sender.tag) else { return }
         send(to: nil, items: items, activate: true)
     }
 
@@ -139,7 +213,9 @@ final class FinderSync: FIFinderSync {
     /// sandboxed callers, so the request goes into the App Group container
     /// and `convt://finder` only wakes the app, which takes it from there. The
     /// link is opened with this bundle's app by path, because another app may
-    /// also claim the `convt` scheme.
+    /// also claim the `convt` scheme. Each link carries the request's id, so
+    /// macOS doesn't merge two quick clicks into one identical open; the app
+    /// reads every waiting request either way.
     private func send(to: String?, items: [URL], activate: Bool) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = activate
@@ -149,6 +225,8 @@ final class FinderSync: FIFinderSync {
                 NSLog("convt: could not start the app: \(error.localizedDescription)")
             }
         }
+        let requestID = UUID().uuidString
+        let requestURL: URL
         do {
             guard let group = Bundle.main.object(forInfoDictionaryKey: "ConvtAppGroup") as? String,
                   let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
@@ -159,7 +237,8 @@ final class FinderSync: FIFinderSync {
             let data = try JSONEncoder().encode(request)
             // The app drops request files over 1 MiB unread.
             guard data.count <= 1 << 20 else { throw CocoaError(.fileWriteOutOfSpace) }
-            try data.write(to: dir.appendingPathComponent(UUID().uuidString + ".json"), options: .atomic)
+            requestURL = dir.appendingPathComponent(requestID + ".json")
+            try data.write(to: requestURL, options: .atomic)
         } catch {
             // No usable shared container (an ad-hoc build, which macOS
             // doesn't grant the group), or a selection too large for one
@@ -169,7 +248,14 @@ final class FinderSync: FIFinderSync {
             NSWorkspace.shared.open(items, withApplicationAt: appURL, configuration: configuration, completionHandler: done)
             return
         }
-        NSWorkspace.shared.open([URL(string: "convt://finder")!], withApplicationAt: appURL, configuration: configuration, completionHandler: done)
+        // If the app didn't wake, take the request back: left in the
+        // container, it would run on some later, unrelated launch.
+        let woke: (NSRunningApplication?, Error?) -> Void = { _, error in
+            guard let error else { return }
+            NSLog("convt: could not start the app: \(error.localizedDescription); dropping request \(requestID)")
+            try? FileManager.default.removeItem(at: requestURL)
+        }
+        NSWorkspace.shared.open([URL(string: "convt://finder?id=\(requestID)")!], withApplicationAt: appURL, configuration: configuration, completionHandler: woke)
     }
 
     /// convt.app, which contains this extension at Contents/PlugIns/<name>.appex.

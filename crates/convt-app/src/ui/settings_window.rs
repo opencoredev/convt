@@ -1,9 +1,11 @@
-//! The Settings window: General, Menu, Presets and License.
+//! Settings: General, Menu, Presets and License. It is a page of the main
+//! window ([`SettingsView::new_embedded`]) and, for the tray, links and the
+//! Settings… menu item, a window of its own.
 
 use convt_core::{
     Category, FORMATS, Format, MENU_KINDS, MenuChoices, Options, Preset, category_key, format_by_id,
 };
-use convt_license::client::{BUY_URL, State, TRIAL_DAYS};
+use convt_license::client::{State, TRIAL_DAYS};
 use gpui_kit::component::input::InputState;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -34,7 +36,7 @@ const TABS: [(SettingsTab, &str, &str, IconName); 4] = [
         "General",
         IconName::Settings,
     ),
-    (SettingsTab::Menu, "tab-menu", "Menu", IconName::Menu),
+    (SettingsTab::Menu, "tab-menu", "Menu", IconName::RightClick),
     (
         SettingsTab::Presets,
         "tab-presets",
@@ -51,6 +53,8 @@ const TABS: [(SettingsTab, &str, &str, IconName); 4] = [
 
 /// Space between the window edge and the settings content.
 const GUTTER: f32 = 24.;
+/// Space between the General tab's sections and above the first.
+const GENERAL_GAP: f32 = 18.;
 /// The width of the dropdowns in General, so they line up.
 const SELECT_WIDTH: f32 = 200.;
 
@@ -71,6 +75,10 @@ pub struct SettingsView {
     /// registry rebuild it was worked out for.
     menu_options: Vec<(Category, Vec<&'static Format>)>,
     menu_options_generation: u64,
+    /// Which file kind is selected in the Right-click menu designer.
+    menu_kind: Category,
+    /// Which target group is shown in the New preset form (0 = Popular).
+    preset_group: usize,
     pub(super) preset_name: Entity<InputState>,
     pub(super) preset_quality: Entity<InputState>,
     pub(super) preset_max_size: Entity<InputState>,
@@ -85,11 +93,26 @@ pub struct SettingsView {
     /// Remove was clicked once under Documents; the row asks again.
     pub(super) confirm_remove_pack: bool,
     scroll: ScrollHandle,
+    /// Drawn as a page of the main window, under its header: no title bar,
+    /// and the tabs on the page rather than on a toolbar.
+    pub(super) embedded: bool,
     _observe: Subscription,
     _appearance: Subscription,
 }
 
 impl SettingsView {
+    /// Settings as a page of the main window.
+    pub fn new_embedded(
+        app: Entity<AppState>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self {
+            embedded: true,
+            ..Self::new(app, window, cx)
+        }
+    }
+
     pub fn new(app: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let registry = app.read(cx).registry.clone();
         let menu_options_generation = app.read(cx).registry_generation;
@@ -122,11 +145,15 @@ impl SettingsView {
             tab: SettingsTab::General,
             open: None,
             outputs,
+            menu_kind: menu_options
+                .first()
+                .map_or(Category::Image, |(kind, _)| *kind),
             menu_options,
             menu_options_generation,
-            preset_name: input("Name, e.g. web", window, cx),
-            preset_quality: input("Quality 1-100", window, cx),
-            preset_max_size: input("Longest edge in px", window, cx),
+            preset_group: 0,
+            preset_name: input("e.g. web", window, cx),
+            preset_quality: input("e.g. 82", window, cx),
+            preset_max_size: input("e.g. 1600", window, cx),
             preset_to: None,
             preset_error: None,
             editing: None,
@@ -135,6 +162,7 @@ impl SettingsView {
             license_notice: None,
             confirm_remove_pack: false,
             scroll: ScrollHandle::new(),
+            embedded: false,
         }
     }
 
@@ -466,12 +494,106 @@ impl SettingsView {
             p,
         );
 
+        let automation_count = settings.automations.len();
+        let automation_active = settings.automations.iter().filter(|a| a.enabled).count();
+        let automation_detail = match (automation_count, automation_active) {
+            (0, _) => "Watch folders and convert new files automatically.".to_string(),
+            (1, 1) => "1 rule active.".to_string(),
+            (1, 0) => "1 rule, paused.".to_string(),
+            (total, 0) => format!("{total} rules, all paused."),
+            (total, active) if active == total => format!("{total} rules active."),
+            (total, active) => format!("{total} rules ({active} active)."),
+        };
+        let automations_row = theme::row(
+            "Folder automations",
+            Some(theme::detail(automation_detail, p)),
+            Button::secondary("open-automations", "Manage")
+                .small()
+                .build(p)
+                .on_click(|_, _, cx| {
+                    super::show_main_page(super::main_window::Page::Automations, cx)
+                }),
+            p,
+        )
+        .into_any_element();
+        let telemetry_save_error = state.telemetry_save_error.clone();
+        let mut telemetry_rows = vec![
+            theme::row(
+                "Share usage statistics",
+                Some(theme::detail(
+                    if crate::telemetry::do_not_track() {
+                        "Off because DO_NOT_TRACK is set."
+                    } else {
+                        "No file names, paths or content. Signed-in usage is linked to your account."
+                    },
+                    p,
+                )),
+                theme::switch(
+                    "telemetry",
+                    "Share usage statistics",
+                    settings.telemetry && !crate::telemetry::do_not_track(),
+                    crate::telemetry::do_not_track(),
+                    p,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if !crate::telemetry::do_not_track() {
+                        let had_error = this.app.update(cx, |s, cx| {
+                            s.telemetry_notice(!s.settings.telemetry, cx);
+                            s.telemetry_save_error.is_some()
+                        });
+                        if had_error {
+                            this.scroll.scroll_to_bottom();
+                        }
+                    }
+                })),
+                p,
+            )
+            .into_any_element(),
+        ];
+        if let Some(err) = telemetry_save_error {
+            let retry = self.app.clone();
+            telemetry_rows.push(
+                div()
+                    .id("telemetry-save-error")
+                    .test_support()
+                    .aria_label(SharedString::from(err.clone()))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(space::MD))
+                    .px(px(space::MD))
+                    .py(px(10.))
+                    .bg(p.error_tint)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(space::SM))
+                            .flex_1()
+                            .min_w_0()
+                            .child(icon(IconName::TriangleAlert, 14., p.error))
+                            .child(styled(size::SMALL, p.error).child(err)),
+                    )
+                    .child(
+                        Button::secondary("telemetry-retry-save", "Retry save")
+                            .small()
+                            .build(p)
+                            .on_click(move |_, _, cx| {
+                                retry.update(cx, |s, cx| s.retry_telemetry_save(cx))
+                            }),
+                    )
+                    .into_any_element(),
+            );
+        }
+
+        // A little tighter than the other tabs, so the cards above the fold
+        // at the window's opening height end on a card's edge.
         div()
             .flex()
             .flex_col()
-            .gap(px(space::XL))
+            .gap(px(GENERAL_GAP))
             .px(px(GUTTER))
-            .pt(px(space::XL))
+            .pt(px(GENERAL_GAP))
             .pb(px(space::XXL))
             .children((!errors.is_empty()).then(|| {
                 theme::callout(
@@ -532,6 +654,11 @@ impl SettingsView {
             ))
             .child(desktop)
             .child(section(
+                "Automations",
+                theme::group([automations_row], p),
+                p,
+            ))
+            .child(section(
                 "Documents",
                 theme::group([documents.into_any_element()], p),
                 p,
@@ -542,173 +669,409 @@ impl SettingsView {
                 p,
             ))
             .child(section("What reaches the network", network(p), p))
+            .child(section(
+                "Usage statistics",
+                theme::group(telemetry_rows, p),
+                p,
+            ))
     }
 
-    /// One card per kind of file: every format it can become, with the
-    /// ones its right-click menu offers picked and numbered in menu order.
+    /// Master-detail right-click menu designer: category switcher across the
+    /// top, a live native context-menu preview on the left, and an organized
+    /// format grid on the right (no wall of tag-cloud pills).
     fn menu(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx);
         let choices = state.menu.clone();
         let error = state.menu_error.clone();
-        let cards =
-            self.menu_options.iter().map(|(kind, options)| {
+        let active_kind = self
+            .menu_options
+            .iter()
+            .find(|(k, _)| *k == self.menu_kind)
+            .or_else(|| self.menu_options.first())
+            .map(|(k, _)| *k)
+            .unwrap_or(Category::Image);
+
+        let kind_tabs =
+            theme::pill_track_wrap(p).children(self.menu_options.iter().map(|(kind, options)| {
                 let kind = *kind;
                 let key = category_key(kind);
-                // Picks this machine can't convert to (document support was
-                // removed) get no chip and no number, but stay saved for when
-                // they can.
-                let (picked, _hidden) = shown_and_hidden(&choices, kind, options);
-                let custom = choices.get(kind).is_some();
-                let chip = |to: &'static Format| {
-                    let place = picked.iter().position(|f| *f == to);
-                    let on = place.is_some();
+                let on = kind == active_kind;
+                let (picked, _) = shown_and_hidden(&choices, kind, options);
+                theme::clickable(
+                    SharedString::from(format!("menu-kind-{key}")),
+                    kind_label(kind),
+                )
+                .aria_selected(on)
+                .flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(6.))
+                .h(px(28.))
+                .pl(px(10.))
+                .pr(px(12.))
+                .rounded(px(radius::CONTROL))
+                .map(|d| {
+                    if on {
+                        theme::pill_segment_on(d, p)
+                    } else {
+                        d.hover(|s| s.bg(p.hover))
+                    }
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.menu_kind = kind;
+                    cx.notify();
+                }))
+                .child(icon(
+                    kind_icon(kind),
+                    14.,
+                    if on { p.green_text } else { p.tertiary },
+                ))
+                .child(
+                    styled(size::SMALL, if on { p.text } else { p.secondary })
+                        .font_weight(FontWeight::MEDIUM)
+                        .whitespace_nowrap()
+                        .child(kind_label(kind)),
+                )
+                .child(
+                    mono(10., 12., if on { p.green_text } else { p.tertiary })
+                        .child(picked.len().to_string()),
+                )
+            }));
+
+        let workspace =
+            self.menu_options
+                .iter()
+                .find(|(k, _)| *k == active_kind)
+                .map(|(kind, options)| {
+                    let kind = *kind;
+                    let key = category_key(kind);
+                    let (picked, _hidden) = shown_and_hidden(&choices, kind, options);
+                    let custom = choices.get(kind).is_some();
+                    let summary = format!("Offers {}", list_names(&picked));
+                    let gif_note = (kind == Category::Image && !custom)
+                        .then_some("GIFs offer MP4, WebP and PNG until you customize Images.");
                     let app = self.app.clone();
-                    let options = options.clone();
-                    theme::clickable(SharedString::from(format!("menu-{key}-{}", to.id)), to.name)
+
+                    // Left column: live Finder/Explorer submenu preview.
+                    let can_remove = picked.len() > 1;
+                    let preview_rows: Vec<AnyElement> = picked
+                        .iter()
+                        .map(|&to| {
+                            let app = self.app.clone();
+                            let options = options.clone();
+                            let group = SharedString::from(format!("menu-row-{key}-{}", to.id));
+                            div()
+                                .id(group.clone())
+                                .group(group.clone())
+                                .flex()
+                                .items_center()
+                                .gap(px(9.))
+                                .h(px(28.))
+                                .pl(px(8.))
+                                .pr(px(5.))
+                                .rounded(px(radius::SM))
+                                .hover(|s| s.bg(p.hover))
+                                .child(icon(format_icon(to), 15., p.secondary))
+                                .child(
+                                    styled(size::SMALL, p.text)
+                                        .flex_1()
+                                        .min_w_0()
+                                        .truncate()
+                                        .child(to.name),
+                                )
+                                .children(can_remove.then(|| {
+                                    theme::clickable(
+                                        SharedString::from(format!("menu-remove-{key}-{}", to.id)),
+                                        format!("Remove {}", to.name),
+                                    )
+                                    .flex()
+                                    .flex_shrink_0()
+                                    .items_center()
+                                    .justify_center()
+                                    .size(px(20.))
+                                    .rounded(px(5.))
+                                    .opacity(0.45)
+                                    .group_hover(group.clone(), |s| s.opacity(1.))
+                                    .hover(|s| s.bg(p.error_tint))
+                                    .on_click(move |_, _, cx| {
+                                        app.update(cx, |s, cx| {
+                                            s.update_menu(|m| toggle(m, kind, to, &options), cx)
+                                        });
+                                    })
+                                    .child(icon(
+                                        IconName::Close,
+                                        11.,
+                                        p.secondary,
+                                    ))
+                                }))
+                                .into_any_element()
+                        })
+                        .collect();
+
+                    let separator = || div().h(px(1.)).mx(px(8.)).my(px(3.)).bg(p.hairline);
+                    let preview_card = div()
+                        .flex()
+                        .flex_col()
+                        .w(px(236.))
+                        .flex_shrink_0()
+                        .gap(px(space::SM))
+                        .child(theme::section_label("Menu preview", p))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .bg(p.overlay)
+                                .rounded(px(10.))
+                                .p(px(5.))
+                                .gap(px(1.))
+                                .shadow(menu_shadow(p))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(9.))
+                                        .h(px(26.))
+                                        .px(px(8.))
+                                        .child(theme::mark(14., p))
+                                        .child(
+                                            styled(size::SMALL, p.text)
+                                                .flex_1()
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .child("Convert with convt"),
+                                        )
+                                        .child(icon(IconName::ChevronDown, 12., p.tertiary)),
+                                )
+                                .child(separator())
+                                .children(preview_rows)
+                                .child(separator())
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(9.))
+                                        .h(px(28.))
+                                        .px(px(8.))
+                                        .rounded(px(radius::SM))
+                                        .child(icon(IconName::Settings, 15., p.tertiary))
+                                        .child(
+                                            styled(size::SMALL, p.secondary).child("More options…"),
+                                        ),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.))
+                                .px(px(2.))
+                                .child(
+                                    div()
+                                        .id(SharedString::from(format!("menu-summary-{key}")))
+                                        .test_support()
+                                        .aria_label(SharedString::from(summary.clone()))
+                                        .child(styled(size::CAPTION, p.secondary).child(summary)),
+                                )
+                                .children(
+                                    gif_note
+                                        .map(|note| styled(size::CAPTION, p.tertiary).child(note)),
+                                )
+                                .children(custom.then(|| {
+                                    div().pt(px(2.)).child(
+                                        text_button(
+                                            SharedString::from(format!("menu-reset-{key}")),
+                                            "Reset to default",
+                                            p.green_text,
+                                            12.,
+                                        )
+                                        .on_click(
+                                            move |_, _, cx| {
+                                                app.update(cx, |s, cx| {
+                                                    s.update_menu(|m| m.reset(kind), cx)
+                                                })
+                                            },
+                                        ),
+                                    )
+                                })),
+                        );
+
+                    // Right column: curated category-specific 3-col grid + compact Other 4-col grid.
+                    let curated = popular_for_kind(kind);
+                    let mut popular: Vec<&'static Format> = Vec::new();
+                    for id in curated {
+                        if let Some(f) = options.iter().copied().find(|f| f.id == *id) {
+                            popular.push(f);
+                        }
+                    }
+                    let other: Vec<&'static Format> = options
+                        .iter()
+                        .copied()
+                        .filter(|f| !popular.contains(f))
+                        .collect();
+                    let primary_list = if popular.is_empty() {
+                        other.clone()
+                    } else {
+                        popular
+                    };
+                    let secondary_list = if primary_list.len() == options.len() {
+                        Vec::new()
+                    } else {
+                        other
+                    };
+
+                    let tile = |to: &'static Format, compact: bool| {
+                        let place = picked.iter().position(|f| *f == to);
+                        let on = place.is_some();
+                        let app = self.app.clone();
+                        let options = options.clone();
+                        theme::choice(
+                            theme::clickable(
+                                SharedString::from(format!("menu-{key}-{}", to.id)),
+                                to.name,
+                            ),
+                            on,
+                            radius::CONTROL,
+                            p,
+                        )
                         .aria_selected(on)
                         .flex()
                         .items_center()
-                        .gap(px(5.))
-                        .h(px(26.))
-                        .pl(px(if on { 4. } else { 11. }))
-                        .pr(px(11.))
-                        .rounded_full()
-                        .map(|d| {
-                            if on {
-                                d.bg(p.green_tint)
-                                    .shadow(vec![theme::inset_ring(p.green, 1.5)])
-                            } else {
-                                d.bg(p.surface)
-                                    .shadow(vec![theme::inset_ring(p.border, 1.)])
-                                    .hover(|s| s.bg(p.recessed))
-                            }
-                        })
+                        .justify_between()
+                        .gap(px(6.))
+                        .px(px(10.))
+                        .py(px(if compact { 7. } else { 9. }))
+                        .min_w_0()
                         .on_click(move |_, _, cx| {
                             app.update(cx, |s, cx| {
                                 s.update_menu(|m| toggle(m, kind, to, &options), cx)
                             });
                         })
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .min_w_0()
+                                .gap(px(1.))
+                                .child(
+                                    mono(12., 15., p.text)
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .truncate()
+                                        .child(to.name),
+                                )
+                                .when(!compact, |d| {
+                                    d.child(
+                                        styled(
+                                            size::CAPTION,
+                                            if on { p.secondary } else { p.tertiary },
+                                        )
+                                        .truncate()
+                                        .child(format_note(to)),
+                                    )
+                                }),
+                        )
                         .children(place.map(|i| {
                             div()
                                 .flex()
+                                .flex_shrink_0()
                                 .items_center()
                                 .justify_center()
                                 .size(px(18.))
-                                .rounded_full()
+                                .rounded(px(5.))
                                 .bg(p.green)
                                 .child(
-                                    mono(10., 12., p.window)
+                                    mono(10., 12., p.on_green)
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .child((i + 1).to_string()),
                                 )
                         }))
-                        .child(
-                            mono(11., 14., if on { p.green_text } else { p.text })
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(to.name),
-                        )
-                };
-                let app = self.app.clone();
-                let summary = format!("Offers {}", list_names(&picked));
-                // GIFs have their own default (MP4, WebP, PNG) until Images is
-                // changed; then they follow it.
-                let gif_note = (kind == Category::Image && !custom)
-                    .then_some("GIFs offer MP4, WebP and PNG until you change this.");
-                // Group the chips by what they are, as the Finder menu does, when
-                // a kind can become more than one sort of file.
-                let mut groups: Vec<(Category, Vec<&'static Format>)> = Vec::new();
-                for f in options.iter().copied() {
-                    match groups.iter_mut().find(|(c, _)| *c == f.category) {
-                        Some((_, list)) => list.push(f),
-                        None => groups.push((f.category, vec![f])),
-                    }
-                }
-                let grouped = groups.len() > 1;
-                theme::card(p)
-                    .id(SharedString::from(format!("menu-kind-{key}")))
-                    .gap(px(space::MD))
-                    .p(px(space::LG))
-                    .child(
+                        .into_any_element()
+                    };
+
+                    let picker_col =
                         div()
                             .flex()
-                            .items_start()
-                            .justify_between()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
                             .gap(px(space::MD))
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .gap(px(2.))
-                                    .child(
-                                        styled(size::BODY, p.text)
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .child(kind_label(kind)),
-                                    )
-                                    .child(
-                                        div()
-                                            .id(SharedString::from(format!("menu-summary-{key}")))
-                                            .test_support()
-                                            .aria_label(SharedString::from(summary.clone()))
-                                            .child(styled(size::SMALL, p.secondary).child(summary)),
-                                    )
-                                    .children(
-                                        gif_note.map(|note| {
-                                            styled(size::SMALL, p.tertiary).child(note)
-                                        }),
-                                    ),
+                                    .child(theme::section_label(
+                                        format!("Formats for {}", kind_label(kind)),
+                                        p,
+                                    ))
+                                    .child(div().grid().grid_cols(3).gap(px(space::SM)).children(
+                                        primary_list.into_iter().map(|f| tile(f, false)),
+                                    )),
                             )
-                            .child(if custom {
-                                text_button(
-                                    SharedString::from(format!("menu-reset-{key}")),
-                                    "Reset",
-                                    p.green_text,
-                                    12.,
-                                )
-                                .on_click(move |_, _, cx| {
-                                    app.update(cx, |s, cx| s.update_menu(|m| m.reset(kind), cx))
-                                })
-                                .into_any_element()
-                            } else {
-                                styled(size::SMALL, p.tertiary)
-                                    .child("Default")
-                                    .into_any_element()
-                            }),
-                    )
-                    .child(div().flex().flex_col().gap(px(space::SM)).children(
-                        groups.into_iter().map(|(category, formats)| {
-                            div()
-                                .flex()
-                                .items_start()
-                                .gap(px(space::MD))
-                                .when(grouped, |row| {
-                                    row.child(
-                                        styled(size::SMALL, p.secondary)
-                                            .w(px(84.))
-                                            .flex_shrink_0()
-                                            .pt(px(4.))
-                                            .child(match (kind, category) {
-                                                (Category::Video, Category::Audio) => "Audio only",
-                                                _ => kind_label(category),
-                                            }),
-                                    )
-                                })
-                                .child(
+                            .when(!secondary_list.is_empty(), |d| {
+                                // An animated GIF can become a video, so the
+                                // Images menu offers video containers too.
+                                // They get their own labelled row so they
+                                // don't read as still-image formats.
+                                let (animated, still): (Vec<_>, Vec<_>) =
+                                    secondary_list.into_iter().partition(|f| {
+                                        kind == Category::Image && f.category == Category::Video
+                                    });
+                                d.child(
                                     div()
                                         .flex()
-                                        .flex_1()
-                                        .flex_wrap()
-                                        .gap(px(6.))
-                                        .children(formats.into_iter().map(chip)),
+                                        .flex_col()
+                                        .child(theme::section_label("Other formats", p))
+                                        .when(!still.is_empty(), |d| {
+                                            d.child(
+                                                div().grid().grid_cols(4).gap(px(6.)).children(
+                                                    still.into_iter().map(|f| tile(f, true)),
+                                                ),
+                                            )
+                                        })
+                                        .when(!animated.is_empty(), |d| {
+                                            d.child(
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "menu-animated-{key}"
+                                                    )))
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap(px(6.))
+                                                    .px(px(2.))
+                                                    .pt(px(space::MD))
+                                                    .pb(px(space::SM))
+                                                    .child(icon(IconName::Video, 13., p.tertiary))
+                                                    .child(
+                                                        styled(size::CAPTION, p.secondary)
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .child("For animated GIFs"),
+                                                    )
+                                                    .child(
+                                                        styled(size::CAPTION, p.tertiary)
+                                                            .child("· only GIFs offer these"),
+                                                    ),
+                                            )
+                                            .child(
+                                                div().grid().grid_cols(4).gap(px(6.)).children(
+                                                    animated.into_iter().map(|f| tile(f, true)),
+                                                ),
+                                            )
+                                        }),
                                 )
-                        }),
-                    ))
-            });
+                            });
+
+                    div()
+                        .flex()
+                        .items_start()
+                        .gap(px(space::XL))
+                        .child(preview_card)
+                        .child(picker_col)
+                });
+
         div()
             .flex()
             .flex_col()
-            .gap(px(space::MD))
+            .gap(px(space::LG))
             .px(px(GUTTER))
-            .pt(px(space::XL))
+            .pt(px(space::LG))
             .pb(px(space::XXL))
             .children(error.map(|e| {
                 theme::callout(
@@ -722,36 +1085,23 @@ impl SettingsView {
                     p,
                 )
             }))
-            .child(
-                styled(size::SMALL, p.secondary)
-                    .px(px(2.))
-                    .child(MENU_INTRO),
-            )
-            .children(cards)
+            .child(kind_tabs)
+            .children(workspace)
     }
 
     fn presets(&self, p: &Palette, cx: &mut Context<Self>) -> Div {
         let state = self.app.read(cx);
         let dir = state.presets_dir.clone();
         let empty = state.presets.is_empty();
-        let list: Vec<(String, Result<String, String>)> = state
+        let list: Vec<(String, Result<Preset, String>)> = state
             .presets
             .iter()
-            .map(|(name, preset)| {
-                (
-                    name.clone(),
-                    preset.as_ref().map(describe).map_err(Clone::clone),
-                )
-            })
+            .map(|(name, preset)| (name.clone(), preset.clone()))
             .collect();
         let rows: Vec<AnyElement> = list
             .into_iter()
-            .map(|(name, about)| {
-                let valid = about.is_ok();
-                let (about, color) = match about {
-                    Ok(text) => (text, p.secondary),
-                    Err(e) => (e, p.error),
-                };
+            .map(|(name, preset)| {
+                let valid = preset.is_ok();
                 let edit_name = name.clone();
                 let edit = valid.then(|| {
                     Button::secondary(SharedString::from(format!("edit-preset-{name}")), "Edit")
@@ -763,9 +1113,29 @@ impl SettingsView {
                 });
                 let app = self.app.clone();
                 let delete_name = name.clone();
+                let detail = match &preset {
+                    Ok(preset) => {
+                        let to_badge = preset
+                            .to
+                            .as_deref()
+                            .and_then(format_by_id)
+                            .map(|f| theme::badge(f.name, Tone::Green, p));
+                        let specs = describe(preset);
+                        div()
+                            .flex()
+                            .items_center()
+                            .flex_wrap()
+                            .gap(px(6.))
+                            .children(to_badge)
+                            .child(mono(11., 15., p.secondary).child(specs))
+                            .child(mono(11., 15., p.tertiary).child(format!("· --preset {name}")))
+                            .into_any_element()
+                    }
+                    Err(e) => mono(11., 15., p.error).child(e.clone()).into_any_element(),
+                };
                 theme::row(
                     name.clone(),
-                    Some(mono(11., 15., color).child(about).into_any_element()),
+                    Some(detail),
                     div().flex().gap(px(space::SM)).children(edit).child(
                         Button::ghost(
                             SharedString::from(format!("delete-preset-{name}")),
@@ -786,26 +1156,137 @@ impl SettingsView {
                 .into_any_element()
             })
             .collect();
-        let chip = |to: &'static Format| {
-            let on = self.preset_to == Some(to);
-            let weak = cx.entity().downgrade();
-            theme::clickable(SharedString::from(format!("new-to-{}", to.id)), to.name)
+
+        // Starter recipes shown when the user has no presets yet, so the page
+        // teaches by example and lets you add a useful recipe in one click.
+        let starters =
+            div()
+                .grid()
+                .grid_cols(3)
+                .gap(px(space::SM))
+                .children(STARTER_PRESETS.iter().map(|starter| {
+                    let s = *starter;
+                    theme::card(p)
+                        .p(px(14.))
+                        .gap(px(8.))
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .justify_between()
+                                        .gap(px(6.))
+                                        .child(
+                                            styled(size::BODY, p.text)
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .child(s.name),
+                                        )
+                                        .child(theme::badge(s.to_label, Tone::Green, p)),
+                                )
+                                .child(styled(size::CAPTION, p.secondary).child(s.note))
+                                .child(mono(11., 14., p.tertiary).child(s.spec)),
+                        )
+                        .child(
+                            div().pt(px(2.)).child(
+                                Button::secondary(
+                                    SharedString::from(format!("starter-preset-{}", s.name)),
+                                    "Add preset",
+                                )
+                                .icon(IconName::Plus)
+                                .small()
+                                .build(p)
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        let preset = Preset {
+                                            to: Some(s.to.into()),
+                                            options: Options {
+                                                quality: s.quality,
+                                                max_size: s.max_size,
+                                                video_height: s.video_height,
+                                                ..Options::default()
+                                            },
+                                        };
+                                        match this.app.update(cx, |st, cx| {
+                                            st.save_preset(s.name, &preset, cx)
+                                        }) {
+                                            Ok(()) => this.preset_error = None,
+                                            Err(e) => this.preset_error = Some(e),
+                                        }
+                                        cx.notify();
+                                    },
+                                )),
+                            ),
+                        )
+                }));
+
+        // Target picker: category segmented filter (default Popular = 6 clean
+        // tiles) instead of dumping all 37 formats at once.
+        let group_tabs = theme::pill_track(p).children(PRESET_TARGET_TABS.iter().enumerate().map(
+            |(i, label)| {
+                let on = self.preset_group == i;
+                theme::clickable(SharedString::from(format!("preset-group-{i}")), *label)
+                    .aria_selected(on)
+                    .flex()
+                    .items_center()
+                    .h(px(24.))
+                    .px(px(10.))
+                    .rounded(px(radius::SM))
+                    .map(|d| {
+                        if on {
+                            theme::pill_segment_on(d, p)
+                        } else {
+                            d.hover(|s| s.bg(p.hover))
+                        }
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.preset_group = i;
+                        cx.notify();
+                    }))
+                    .child(
+                        styled(size::CAPTION, if on { p.text } else { p.secondary })
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(*label),
+                    )
+            },
+        ));
+        let group_formats: Vec<&'static Format> = match self.preset_group {
+            0 => PRESET_POPULAR
+                .iter()
+                .filter_map(|id| self.outputs.iter().copied().find(|f| f.id == *id))
+                .collect(),
+            idx => {
+                let kinds = TARGET_GROUPS
+                    .get(idx - 1)
+                    .map_or(&[][..], |(_, kinds)| *kinds);
+                self.outputs
+                    .iter()
+                    .copied()
+                    .filter(|f| kinds.contains(&f.category))
+                    .collect()
+            }
+        };
+        let target_cols: u16 = if self.preset_group == 0 { 6 } else { 5 };
+        let target_grid = div().grid().grid_cols(target_cols).gap(px(6.)).children(
+            group_formats.into_iter().map(|to| {
+                let on = self.preset_to == Some(to);
+                let weak = cx.entity().downgrade();
+                theme::choice(
+                    theme::clickable(SharedString::from(format!("new-to-{}", to.id)), to.name),
+                    on,
+                    radius::CONTROL,
+                    p,
+                )
                 .aria_selected(on)
                 .flex()
                 .items_center()
-                .h(px(26.))
-                .px(px(11.))
-                .rounded_full()
-                .map(|d| {
-                    if on {
-                        d.bg(p.green_tint)
-                            .shadow(vec![theme::inset_ring(p.green, 1.5)])
-                    } else {
-                        d.bg(p.surface)
-                            .shadow(vec![theme::inset_ring(p.border, 1.)])
-                            .hover(|s| s.bg(p.recessed))
-                    }
-                })
+                .justify_center()
+                .h(px(32.))
+                .px(px(8.))
                 .on_click(move |_, _, cx| {
                     let _ = weak.update(cx, |this, cx| {
                         this.preset_to = (this.preset_to != Some(to)).then_some(to);
@@ -813,46 +1294,18 @@ impl SettingsView {
                     });
                 })
                 .child(
-                    mono(11., 14., if on { p.green_text } else { p.text })
-                        .font_weight(FontWeight::MEDIUM)
+                    mono(12., 15., p.text)
+                        .font_weight(if on {
+                            FontWeight::SEMIBOLD
+                        } else {
+                            FontWeight::MEDIUM
+                        })
+                        .truncate()
                         .child(to.name),
                 )
-        };
-        // The targets by kind, so the list reads in groups.
-        let chips =
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(space::SM))
-                .children(TARGET_GROUPS.iter().filter_map(|(label, kinds)| {
-                    let formats: Vec<&'static Format> = self
-                        .outputs
-                        .iter()
-                        .copied()
-                        .filter(|f| kinds.contains(&f.category))
-                        .collect();
-                    (!formats.is_empty()).then(|| {
-                        div()
-                            .flex()
-                            .items_start()
-                            .gap(px(space::MD))
-                            .child(
-                                styled(size::SMALL, p.secondary)
-                                    .w(px(76.))
-                                    .flex_shrink_0()
-                                    .pt(px(4.))
-                                    .child(*label),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_1()
-                                    .flex_wrap()
-                                    .gap(px(6.))
-                                    .children(formats.into_iter().map(chip)),
-                            )
-                    })
-                }));
+            }),
+        );
+
         let labelled = |label: &'static str, field: AnyElement| {
             div()
                 .flex()
@@ -866,69 +1319,108 @@ impl SettingsView {
                 )
                 .child(field)
         };
+        let typed_name = self.preset_name.read(cx).value().trim().to_string();
+        let cli_preview = format!(
+            "convt file --preset {}",
+            if typed_name.is_empty() {
+                "web"
+            } else {
+                &typed_name
+            }
+        );
         let form = theme::card(p)
-            .gap(px(14.))
-            .p(px(space::LG))
-            .child(labelled(
-                "Name",
-                theme::field(&self.preset_name, "preset-name").into_any_element(),
-            ))
-            .child(labelled("Target (optional)", chips.into_any_element()))
+            .p(px(0.))
             .child(
                 div()
                     .flex()
-                    .gap(px(space::MD))
-                    .child(labelled(
-                        "Quality",
-                        theme::field(&self.preset_quality, "preset-quality").into_any_element(),
-                    ))
-                    .child(labelled(
-                        "Longest edge",
-                        theme::field(&self.preset_max_size, "preset-max-size").into_any_element(),
-                    )),
-            )
-            .children(self.preset_error.clone().map(|e| error_text(e, p)))
-            .child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .gap(px(space::SM))
-                    .when(self.editing.is_some(), |row| {
-                        row.child(secondary_button("cancel-edit", "Cancel", p).on_click(
-                            cx.listener(|this, _, window, cx| this.reset_preset_form(window, cx)),
-                        ))
-                    })
+                    .flex_col()
+                    .gap(px(14.))
+                    .p(px(space::LG))
                     .child(
-                        primary_button("save-preset", "Save preset", p).on_click(
-                            cx.listener(|this, _, window, cx| this.save_preset(window, cx)),
-                        ),
+                        div()
+                            .flex()
+                            .gap(px(space::MD))
+                            .child(labelled(
+                                "Name",
+                                theme::field(&self.preset_name, "preset-name").into_any_element(),
+                            ))
+                            .child(labelled(
+                                "Quality (1–100)",
+                                theme::field(&self.preset_quality, "preset-quality")
+                                    .into_any_element(),
+                            ))
+                            .child(labelled(
+                                "Longest edge (px)",
+                                theme::field(&self.preset_max_size, "preset-max-size")
+                                    .into_any_element(),
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap(px(space::SM))
+                                    .child(
+                                        styled(size::CAPTION, p.secondary)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child(match self.preset_to {
+                                                Some(to) => format!("Target format · {}", to.name),
+                                                None => "Target format (optional)".to_string(),
+                                            }),
+                                    )
+                                    .child(group_tabs),
+                            )
+                            .child(target_grid),
+                    )
+                    .children(self.preset_error.clone().map(|e| error_text(e, p))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(space::SM))
+                    .px(px(space::LG))
+                    .py(px(10.))
+                    .bg(p.recessed)
+                    .rounded_b(px(radius::CARD - 1.))
+                    .border_t_1()
+                    .border_color(p.hairline)
+                    .child(mono(11., 14., p.tertiary).truncate().child(cli_preview))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(space::SM))
+                            .when(self.editing.is_some(), |row| {
+                                row.child(secondary_button("cancel-edit", "Cancel", p).on_click(
+                                    cx.listener(|this, _, window, cx| {
+                                        this.reset_preset_form(window, cx)
+                                    }),
+                                ))
+                            })
+                            .child(primary_button("save-preset", "Save preset", p).on_click(
+                                cx.listener(|this, _, window, cx| this.save_preset(window, cx)),
+                            )),
                     ),
             );
         let list = if empty {
-            theme::card(p)
-                .items_center()
-                .gap(px(4.))
-                .py(px(space::XL))
-                .px(px(space::LG))
-                .child(
-                    styled(size::BODY, p.text)
-                        .font_weight(FontWeight::MEDIUM)
-                        .child("No presets yet."),
-                )
-                .child(
-                    styled(size::SMALL, p.secondary)
-                        .text_center()
-                        .child("Save one below. Quick convert and the CLI's --preset use them."),
-                )
+            starters.into_any_element()
         } else {
-            theme::group(rows, p)
+            theme::group(rows, p).into_any_element()
         };
         div()
             .flex()
             .flex_col()
             .gap(px(space::XL))
             .px(px(GUTTER))
-            .pt(px(space::XL))
+            .pt(px(space::LG))
             .pb(px(space::XXL))
             .child(
                 div()
@@ -939,7 +1431,14 @@ impl SettingsView {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(theme::section_label("Presets", p))
+                            .child(theme::section_label(
+                                if empty {
+                                    "Starter presets"
+                                } else {
+                                    "Saved presets"
+                                },
+                                p,
+                            ))
                             .children(dir.map(|dir| {
                                 div().pb(px(space::SM)).child(
                                     text_button(
@@ -957,7 +1456,7 @@ impl SettingsView {
             .child(section(
                 match &self.editing {
                     Some(name) => format!("Edit preset \"{name}\""),
-                    None => "New preset".to_string(),
+                    None => "Create custom preset".to_string(),
                 },
                 form,
                 p,
@@ -1132,7 +1631,7 @@ impl SettingsView {
                                 p.green_text,
                                 12.,
                             )
-                            .on_click(|_, _, cx| cx.open_url(BUY_URL)),
+                            .on_click(|_, _, cx| super::open_upgrade("settings", cx)),
                         )
                     })
                     .when(licensed, |row| {
@@ -1220,9 +1719,114 @@ impl SettingsView {
             input.update(cx, |s, cx| s.set_value(value, window, cx));
         }
         self.preset_to = preset.to.as_deref().and_then(format_by_id);
+        if let Some(to) = self.preset_to {
+            self.preset_group = if PRESET_POPULAR.contains(&to.id) {
+                0
+            } else {
+                TARGET_GROUPS
+                    .iter()
+                    .position(|(_, kinds)| kinds.contains(&to.category))
+                    .map_or(0, |i| i + 1)
+            };
+        }
         self.preset_error = None;
         self.editing = Some(name.to_string());
         cx.notify();
+    }
+}
+
+/// Curated primary formats per file kind in the Right-click menu's main 3-col grid.
+/// Keeps each category focused and balanced without cross-category video/container clutter.
+fn popular_for_kind(kind: Category) -> &'static [&'static str] {
+    match kind {
+        Category::Image => &["jpeg", "png", "webp", "avif", "gif", "pdf"],
+        Category::Vector => &["png", "pdf", "webp", "jpeg", "avif", "ico"],
+        Category::Video => &["mp4", "mov", "webm", "mkv", "gif", "mp3"],
+        Category::Audio => &["mp3", "m4a", "wav", "flac", "ogg", "opus"],
+        Category::Pdf => &["png", "jpeg", "webp", "txt", "docx", "html"],
+        Category::Document | Category::Spreadsheet | Category::Presentation => {
+            &["pdf", "docx", "xlsx", "pptx", "txt", "html", "csv"]
+        }
+    }
+}
+
+/// Popular targets shown on the default tab of the New preset builder.
+const PRESET_POPULAR: &[&str] = &["webp", "jpeg", "png", "mp4", "mp3", "pdf"];
+
+const PRESET_TARGET_TABS: [&str; 5] = ["Popular", "Images", "Video", "Audio", "Documents"];
+
+#[derive(Clone, Copy)]
+struct StarterPreset {
+    name: &'static str,
+    to: &'static str,
+    to_label: &'static str,
+    quality: Option<u8>,
+    max_size: Option<u32>,
+    video_height: Option<u32>,
+    spec: &'static str,
+    note: &'static str,
+}
+
+const STARTER_PRESETS: [StarterPreset; 3] = [
+    StarterPreset {
+        name: "web",
+        to: "webp",
+        to_label: "WebP",
+        quality: Some(82),
+        max_size: Some(1600),
+        video_height: None,
+        spec: "Quality 82 · 1600 px",
+        note: "Small, sharp images for websites",
+    },
+    StarterPreset {
+        name: "email",
+        to: "jpeg",
+        to_label: "JPEG",
+        quality: Some(75),
+        max_size: Some(1920),
+        video_height: None,
+        spec: "Quality 75 · 1920 px",
+        note: "Compact photos ready to attach",
+    },
+    StarterPreset {
+        name: "share",
+        to: "mp4",
+        to_label: "MP4",
+        quality: Some(75),
+        max_size: None,
+        video_height: Some(1080),
+        spec: "Quality 75 · 1080p",
+        note: "Lightweight clips for chat & Slack",
+    },
+];
+
+fn format_note(f: &Format) -> &'static str {
+    match f.id {
+        "jpeg" => "Photos",
+        "png" => "Lossless",
+        "webp" => "Small, sharp",
+        "avif" => "Smallest",
+        "gif" => "Simple graphics",
+        "heic" => "Apple photos",
+        "pdf" => "Print, share",
+        "mp4" => "Plays anywhere",
+        "mov" => "Apple video",
+        "webm" => "Web video",
+        "mkv" => "Container",
+        "mp3" => "Plays anywhere",
+        "m4a" => "Apple audio",
+        "wav" => "Uncompressed",
+        "flac" => "Lossless",
+        "aac" => "Compact audio",
+        "docx" => "Word",
+        "xlsx" => "Excel",
+        "pptx" => "PowerPoint",
+        "md" => "Markdown",
+        "txt" => "Plain text",
+        "html" => "Web page",
+        "json" => "Structured data",
+        "csv" => "Spreadsheet",
+        _ => "Format",
     }
 }
 
@@ -1262,9 +1866,13 @@ pub(super) const NETWORK_LINES: [(&str, &str); 3] = [
     ),
     (
         "network-other",
-        "Anything else waits for your click, such as downloading document support or sending \
-         feedback. Files leave this computer only when you pick Cloud in Quick convert and agree \
-         to the upload.",
+        "Usage statistics: when enabled, the app sends PostHog app opens, conversion formats, \
+         engine, coarse file size, success or error category and duration, trial and license \
+         activity, and upgrade clicks. A random installation ID links repeat use; signing in \
+         links it to your account ID. No file names, paths, content or error messages are sent. \
+         Turn this off in Usage statistics. Other requests wait for your click, such as \
+         downloading document support or sending feedback. Files leave this computer only when \
+         you pick Cloud in Quick convert and agree to the upload.",
     ),
 ];
 
@@ -1300,11 +1908,6 @@ fn network(p: &Palette) -> Div {
         p,
     )
 }
-
-/// What the Menu tab is for, above its cards.
-const MENU_INTRO: &str = "Click formats in the order you want \"Convert with convt\" to list them \
-     when you right-click a file. The number is each one's place in the menu. Every other \
-     format stays under More options…";
 
 /// Every kind of file with something to convert to, and what it can become.
 fn kinds_and_targets(registry: &convt_core::Registry) -> Vec<(Category, Vec<&'static Format>)> {
@@ -1363,6 +1966,41 @@ fn kind_label(kind: Category) -> &'static str {
     }
 }
 
+/// The icon for a kind of file, on the Right-click menu's category tabs.
+fn kind_icon(kind: Category) -> IconName {
+    match kind {
+        Category::Image => IconName::Image,
+        Category::Vector => IconName::Vector,
+        Category::Video => IconName::Video,
+        Category::Audio => IconName::Music,
+        Category::Pdf => IconName::Pdf,
+        Category::Document => IconName::Document,
+        Category::Spreadsheet => IconName::Spreadsheet,
+        Category::Presentation => IconName::Presentation,
+    }
+}
+
+/// The icon beside a target in the menu preview: what kind of file it makes.
+fn format_icon(to: &Format) -> IconName {
+    kind_icon(to.category)
+}
+
+/// The menu preview's surface: a hairline ring, a highlight along the top
+/// edge and the soft drop of a floating menu, like the native popovers.
+fn menu_shadow(p: &Palette) -> Vec<BoxShadow> {
+    let highlight = if p.dark {
+        hsla(0., 0., 1., 0.07)
+    } else {
+        hsla(0., 0., 1., 0.9)
+    };
+    vec![
+        theme::inset_ring(p.border, 1.),
+        theme::inset_edge(highlight, 1.),
+        theme::shadow(p.shadow_soft, 6., 18.),
+        theme::shadow_s(p),
+    ]
+}
+
 /// "MP3, M4A and WAV".
 fn list_names(formats: &[&Format]) -> String {
     match formats {
@@ -1413,43 +2051,65 @@ impl Render for SettingsView {
             .iter()
             .find(|(t, ..)| *t == self.tab)
             .map_or("Settings", |(_, _, label, _)| label);
-        let tabs = div()
-            .flex()
-            .flex_shrink_0()
-            .justify_center()
-            .px(px(space::LG))
-            .pb(px(10.))
-            .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
-            .bg(p.chrome)
-            .border_b_1()
-            .border_color(p.chrome_border)
-            .child(theme::pill_track(&p).children(TABS.into_iter().map(
-                |(tab, id, label, glyph)| {
-                    let on = self.tab == tab;
-                    theme::clickable(id, label)
-                        .aria_selected(on)
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .h(px(28.))
-                        .px(px(16.))
-                        .rounded_full()
-                        .map(|d| {
-                            if on {
-                                theme::pill_segment_on(d, &p)
-                            } else {
-                                d.hover(|s| s.bg(p.hover))
-                            }
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
-                        .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
-                        .child(
-                            styled(size::SMALL, if on { p.text } else { p.secondary })
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(label),
-                        )
-                },
-            )));
+        let embedded = self.embedded;
+        // When embedded in the main window, Menu and Presets have their own
+        // top-level sidebar pages and headers, so Settings only shows the
+        // General / License tabs. Standalone Settings still offers all four.
+        let show_tabs =
+            !embedded || matches!(self.tab, SettingsTab::General | SettingsTab::License);
+        let visible_tabs: Vec<_> = TABS
+            .into_iter()
+            .filter(|(tab, ..)| {
+                !embedded || matches!(tab, SettingsTab::General | SettingsTab::License)
+            })
+            .collect();
+        let tabs = show_tabs.then(|| {
+            div()
+                .flex()
+                .flex_shrink_0()
+                .when(embedded, |d| {
+                    d.px(px(GUTTER))
+                        .pb(px(space::MD))
+                        .border_b_1()
+                        .border_color(p.hairline)
+                })
+                .when(!embedded, |d| {
+                    d.justify_center()
+                        .px(px(space::LG))
+                        .pb(px(10.))
+                        .when(!theme::transparent_titlebar(), |d| d.pt(px(12.)))
+                        .bg(p.chrome)
+                        .border_b_1()
+                        .border_color(p.chrome_border)
+                })
+                .child(theme::pill_track(&p).children(visible_tabs.into_iter().map(
+                    |(tab, id, label, glyph)| {
+                        let on = self.tab == tab;
+                        theme::clickable(id, label)
+                            .aria_selected(on)
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .h(px(28.))
+                            .px(px(16.))
+                            .rounded(px(radius::CONTROL))
+                            .map(|d| {
+                                if on {
+                                    theme::pill_segment_on(d, &p)
+                                } else {
+                                    d.hover(|s| s.bg(p.hover))
+                                }
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
+                            .child(icon(glyph, 13., if on { p.text } else { p.tertiary }))
+                            .child(
+                                styled(size::SMALL, if on { p.text } else { p.secondary })
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(label),
+                            )
+                    },
+                )))
+        });
         let body = match self.tab {
             SettingsTab::General => self.general(&p, cx),
             SettingsTab::Menu => self.menu(&p, cx),
@@ -1464,8 +2124,10 @@ impl Render for SettingsView {
             .bg(p.window)
             .font_family(theme::SANS)
             .text_color(p.text)
-            .children(theme::title_bar(Some(title), 40., Some(p.chrome), &p))
-            .child(tabs)
+            .when(!embedded, |d| {
+                d.children(theme::title_bar(Some(title), 40., Some(p.chrome), &p))
+            })
+            .children(tabs)
             .child(
                 div()
                     .id("settings-body")

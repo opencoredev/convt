@@ -27,6 +27,7 @@ use crate::jobs::{Entry, JobId, Queue, Runner, Status};
 use crate::pack::{self, Failure};
 use crate::request::Request;
 use crate::settings::{Kind, Settings, write_atomic};
+use crate::telemetry::Consent;
 use crate::update::{Update, UpdateConfig};
 
 /// How many rows the History tab shows.
@@ -34,6 +35,8 @@ const RECENT: usize = 200;
 
 /// Where the app keeps its files. Tests point these at a temp directory.
 pub struct Paths {
+    #[cfg(test)]
+    pub telemetry: Option<crate::telemetry::Telemetry>,
     /// `None` keeps settings in memory only.
     pub settings: Option<PathBuf>,
     /// `None` keeps history in memory only.
@@ -58,6 +61,8 @@ impl Paths {
     pub fn from_env() -> Self {
         use convt_engines::paths;
         Self {
+            #[cfg(test)]
+            telemetry: None,
             settings: Settings::path(),
             history: History::path(),
             presets: paths::presets_dir(),
@@ -77,6 +82,9 @@ pub struct Batch {
     pub done: usize,
     pub failed: usize,
     pub cancelled: usize,
+    /// Finished jobs whose result the progress HUD didn't show. With none,
+    /// the HUD said it all and no notification repeats it.
+    pub outside_hud: usize,
 }
 
 impl Batch {
@@ -308,8 +316,21 @@ pub struct AppState {
     history: History,
     /// The newest history rows, refreshed whenever history changes.
     pub recent: Vec<Record>,
+    /// The history record id written for each finished job in this session, so
+    /// Details can open the exact failed attempt even for repeated runs.
+    recorded: HashMap<JobId, i64>,
     pub settings: Settings,
+    pub(crate) telemetry: crate::telemetry::Telemetry,
+    telemetry_opened: bool,
+    telemetry_persisted: bool,
+    /// Set when turning telemetry off couldn't be written to `settings.toml`,
+    /// so the UI can warn the user and offer a retry while keeping sending off
+    /// for this session.
+    pub telemetry_save_error: Option<String>,
     settings_path: Option<PathBuf>,
+    /// Last bytes we loaded from or wrote to `settings.toml`, so external
+    /// edits (e.g. via Edit TOML) are detected even within coarse mtime ticks.
+    settings_snapshot: Option<Vec<u8>>,
     pub presets: BTreeMap<String, Result<Preset, String>>,
     pub presets_dir: Option<PathBuf>,
     /// The formats right-click menus offer, by kind of file. The CLI reads
@@ -394,6 +415,145 @@ pub struct Shared(pub Entity<AppState>);
 impl Global for Shared {}
 
 impl AppState {
+    pub(crate) fn sync_telemetry_identity(&mut self, cx: &mut Context<Self>) {
+        if !self.telemetry_persisted {
+            self.telemetry.set_consent(Consent::Off);
+            return;
+        }
+        let user = self
+            .account
+            .session
+            .as_ref()
+            .and_then(|s| s.user_id.clone());
+        if self.settings.telemetry_account != user {
+            if self.settings.telemetry_account.is_some() {
+                self.telemetry.set_consent(Consent::Off);
+                self.settings.telemetry_anonymous_id = crate::telemetry::install_id();
+                self.telemetry.reset_anonymous_id(
+                    self.settings
+                        .telemetry_anonymous_id
+                        .clone()
+                        .unwrap_or_default(),
+                );
+            }
+            self.settings.telemetry_account = user.clone();
+            self.telemetry.identify(user.as_deref(), &self.license);
+            self.update_settings(|_| {}, cx);
+        } else {
+            self.telemetry.identify(user.as_deref(), &self.license);
+        }
+    }
+
+    pub fn needs_telemetry_notice(&self) -> bool {
+        self.settings.telemetry
+            && self.settings.telemetry_notice_version < 1
+            && !crate::telemetry::do_not_track()
+    }
+
+    pub fn telemetry_notice(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.update_settings(
+            |s| {
+                s.telemetry = enabled;
+                s.telemetry_notice_version = 1;
+            },
+            cx,
+        );
+        self.observe_trial(cx);
+    }
+
+    /// Retries writing `settings.toml` after an opt-out save failed.
+    pub fn retry_telemetry_save(&mut self, cx: &mut Context<Self>) {
+        self.update_settings(|_| {}, cx);
+    }
+
+    fn configure_telemetry(&mut self) {
+        let enabled = self.settings.telemetry
+            && self.telemetry_persisted
+            && self
+                .settings
+                .telemetry_anonymous_id
+                .as_deref()
+                .is_some_and(crate::telemetry::valid_id);
+        let consent = if !enabled || crate::telemetry::do_not_track() {
+            Consent::Off
+        } else if self.needs_telemetry_notice() {
+            Consent::AwaitingDisclosure
+        } else {
+            Consent::On
+        };
+        self.telemetry.set_consent(consent);
+        if consent != Consent::Off && !self.telemetry_opened {
+            self.telemetry
+                .capture(crate::telemetry::Event::Opened, &self.license);
+            self.telemetry_opened = true;
+        }
+    }
+
+    pub(crate) fn observe_trial(&mut self, cx: &mut Context<Self>) {
+        self.license = self.licensing.state();
+        if self.needs_telemetry_notice() || (self.settings.telemetry && !self.telemetry_persisted) {
+            return;
+        }
+        let account = self
+            .account
+            .session
+            .as_ref()
+            .and_then(|s| s.user_id.clone());
+        let started = match (&self.license, account.as_deref()) {
+            (client::State::AccountTrial { ends_on, .. }, Some(user)) => Some(format!(
+                "{user}:{}",
+                self.settings
+                    .trial_cache
+                    .as_ref()
+                    .map_or(ends_on.as_str(), |cache| cache.ends_at.as_str())
+            )),
+            _ => None,
+        };
+        if let Some(key) = started.map(|key| format!("started:{key}"))
+            && !self.settings.telemetry_trials.contains(&key)
+        {
+            self.telemetry
+                .capture(crate::telemetry::Event::TrialStarted, &self.license);
+            self.update_settings(
+                |s| {
+                    s.telemetry_trials.insert(key);
+                },
+                cx,
+            );
+        }
+        let expired = self.settings.trial_cache.as_ref().is_some_and(|cache| {
+            account.is_some()
+                && !cache.ends_at.is_empty()
+                && self.licensing.account_trial_expired()
+                && !matches!(self.license, client::State::Licensed(_))
+        });
+        let key = if expired {
+            account
+                .as_ref()
+                .zip(self.settings.trial_cache.as_ref())
+                .map(|(user, cache)| format!("{user}:{}", cache.ends_at))
+        } else {
+            None
+        };
+        if let Some(key) = key.map(|key| format!("expired:{key}"))
+            && !self.settings.telemetry_trials.contains(&key)
+        {
+            self.telemetry
+                .capture(crate::telemetry::Event::TrialExpired, &self.license);
+            self.update_settings(
+                |s| {
+                    s.telemetry_trials.insert(key);
+                },
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn upgrade_clicked(&self, source: &'static str) {
+        self.telemetry
+            .capture(crate::telemetry::Event::Upgrade(source), &self.license);
+    }
+
     pub fn new(packs: Arc<dyn pack::Backend>, paths: Paths, cx: &mut Context<Self>) -> Self {
         let registry = Arc::new(packs.registry());
         let planned = Arc::new(packs.planned_registry());
@@ -405,15 +565,53 @@ impl AppState {
             notice: None,
         };
         let mut errors = Vec::new();
-        let settings = match &paths.settings {
+        let mut settings = match &paths.settings {
             Some(path) => Settings::load(path).unwrap_or_else(|e| {
                 errors.push(format!(
                     "Settings were not loaded: {e}. Saving a change replaces the file."
                 ));
-                Settings::default()
+                Settings {
+                    telemetry: false,
+                    ..Settings::default()
+                }
             }),
             None => Settings::default(),
         };
+        if !settings
+            .install_id
+            .as_deref()
+            .is_some_and(crate::telemetry::valid_id)
+        {
+            settings.install_id = crate::telemetry::install_id();
+        }
+        if !settings
+            .telemetry_anonymous_id
+            .as_deref()
+            .is_some_and(crate::telemetry::valid_id)
+        {
+            settings.telemetry_anonymous_id = settings.install_id.clone();
+        }
+        let telemetry_ready = errors.is_empty()
+            && settings.install_id.is_some()
+            && paths
+                .settings
+                .as_ref()
+                .is_some_and(|path| settings.save(path).is_ok());
+        let settings_snapshot = paths.settings.as_ref().and_then(|p| std::fs::read(p).ok());
+        #[cfg(not(test))]
+        let telemetry = crate::telemetry::Telemetry::new(
+            settings.telemetry_anonymous_id.clone().unwrap_or_default(),
+            Consent::Off,
+        );
+        #[cfg(test)]
+        let telemetry = paths.telemetry.unwrap_or_else(|| {
+            crate::telemetry::Telemetry::new(
+                settings.telemetry_anonymous_id.clone().unwrap_or_default(),
+                Consent::Off,
+            )
+        });
+        #[cfg(test)]
+        telemetry.reset_anonymous_id(settings.telemetry_anonymous_id.clone().unwrap_or_default());
         let mut menu_error = None;
         let menu = match &paths.menu {
             Some(path) => MenuChoices::load(path).unwrap_or_else(|e| {
@@ -477,8 +675,14 @@ impl AppState {
             queue: Queue::default(),
             history,
             recent: Vec::new(),
+            recorded: HashMap::new(),
             settings,
+            telemetry,
+            telemetry_opened: false,
+            telemetry_persisted: telemetry_ready,
+            telemetry_save_error: None,
             settings_path: paths.settings,
+            settings_snapshot,
             presets: BTreeMap::new(),
             presets_dir: paths.presets,
             menu,
@@ -533,6 +737,9 @@ impl AppState {
         state.summarize_documents();
         state.reload_presets();
         state.refresh_history();
+        state.sync_telemetry_identity(cx);
+        state.configure_telemetry();
+        state.observe_trial(cx);
         state
     }
 
@@ -583,6 +790,10 @@ impl AppState {
         if !self.settings.cloud_consent {
             return Err("Agree to upload files to convt's cloud before converting there.".into());
         }
+        // Cloud access above already authorized paid accounts (including
+        // Desktop + Cloud accounts without a local Pro key); refresh license
+        // state for telemetry without gating Cloud on a local key.
+        self.observe_trial(cx);
         let Some(session) = self.account.session.clone() else {
             return Err(CloudAccess::SignedOut.reason().unwrap_or_default());
         };
@@ -605,7 +816,12 @@ impl AppState {
                 };
                 let id = self.queue.add_cloud(&job);
                 self.cloud_tokens.insert(id, session.token.clone());
-                self.runner.submit_cloud(id, job, batch.clone());
+                self.runner.submit_cloud_tracked(
+                    id,
+                    job,
+                    batch.clone(),
+                    self.telemetry.conversion(&self.license),
+                );
                 id
             })
             .collect();
@@ -656,6 +872,7 @@ impl AppState {
         }
         let allowed = self.licensing.begin_conversion();
         self.license = self.licensing.state();
+        self.observe_trial(cx);
         if let Err(blocked) = allowed {
             cx.notify();
             return Err(blocked.to_string());
@@ -676,7 +893,8 @@ impl AppState {
                 if silent {
                     self.silent.insert(id);
                 }
-                self.runner.submit(id, job);
+                self.runner
+                    .submit_tracked(id, job, self.telemetry.conversion(&self.license));
                 id
             })
             .collect();
@@ -780,7 +998,7 @@ impl AppState {
             !request.show_progress,
             cx,
         )?;
-        if cx.windows().is_empty() {
+        if crate::ui::only_hud_open(cx) {
             // Nothing else keeps the app open, so quit once the files are done.
             self.quit_when_idle = true;
         }
@@ -1136,12 +1354,30 @@ impl AppState {
         self.documents.worth_offering
     }
 
+    /// Finds `expected` in `rules`, preferring `index` when it still matches
+    /// so external `Edit TOML` insertions or removals cannot shift an action
+    /// onto a different rule.
+    fn resolve_automation_index(
+        rules: &[crate::settings::Automation],
+        index: usize,
+        expected: &crate::settings::Automation,
+    ) -> Option<usize> {
+        if rules.get(index) == Some(expected) {
+            Some(index)
+        } else {
+            rules.iter().position(|r| r == expected)
+        }
+    }
+
     /// Switches an automation rule on or off.
     pub fn set_automation(&mut self, index: usize, enabled: bool, cx: &mut Context<Self>) {
+        let Some(expected) = self.settings.automations.get(index).cloned() else {
+            return;
+        };
         self.update_settings(
             |s| {
-                if let Some(rule) = s.automations.get_mut(index) {
-                    rule.enabled = enabled;
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    s.automations[i].enabled = enabled;
                 }
             },
             cx,
@@ -1150,9 +1386,13 @@ impl AppState {
 
     /// Whether a finished automation should copy its result.
     pub fn set_automation_copy(&mut self, index: usize, copy: bool, cx: &mut Context<Self>) {
+        let Some(expected) = self.settings.automations.get(index).cloned() else {
+            return;
+        };
         self.update_settings(
             |s| {
-                if let Some(rule) = s.automations.get_mut(index) {
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    let rule = &mut s.automations[i];
                     rule.copy_to_clipboard = Some(copy);
                     rule.detail = if copy {
                         "copy to clipboard".into()
@@ -1165,10 +1405,110 @@ impl AppState {
         );
     }
 
+    /// Appends a new automation rule and saves settings.
+    pub fn add_automation(&mut self, rule: crate::settings::Automation, cx: &mut Context<Self>) {
+        self.update_settings(|s| s.automations.push(rule), cx);
+    }
+
+    /// Removes an automation rule by index and saves settings.
+    pub fn remove_automation(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(expected) = self.settings.automations.get(index).cloned() else {
+            return;
+        };
+        self.update_settings(
+            |s| {
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    s.automations.remove(i);
+                }
+            },
+            cx,
+        );
+    }
+
+    /// Points an automation rule at a specific folder and saves settings.
+    /// `expected` lets async callers (like the folder picker) pin the exact
+    /// rule they opened for even if external TOML edits shifted indices while
+    /// the dialog was open.
+    pub fn set_automation_folder(
+        &mut self,
+        index: usize,
+        expected: Option<crate::settings::Automation>,
+        folder: PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(expected) = expected.or_else(|| self.settings.automations.get(index).cloned())
+        else {
+            return;
+        };
+        self.update_settings(
+            |s| {
+                if let Some(i) = Self::resolve_automation_index(&s.automations, index, &expected) {
+                    s.automations[i].folder = Some(folder);
+                }
+            },
+            cx,
+        );
+    }
+
+    /// Whether this instance is backed by a `settings.toml` file on disk.
+    pub fn ensure_settings_file_exists_hint(&self) -> bool {
+        self.settings_path.is_some()
+    }
+
+    /// Path to `settings.toml`, creating it with the current settings if it
+    /// hasn't been written yet so "Edit config" opens a real file.
+    pub fn ensure_settings_file(&mut self) -> Option<PathBuf> {
+        let path = self.settings_path.clone()?;
+        if !path.exists()
+            && let Err(e) = self.settings.save(&path)
+        {
+            tracing::warn!(error = %e, "could not write settings file before opening");
+        }
+        Some(path)
+    }
+
+    /// Picks up external edits to `settings.toml` (such as via Edit TOML) so
+    /// rules added on disk run and survive subsequent in-app toggles.
+    /// Returns `Err` if the external edit is invalid TOML so callers can
+    /// surface the parse error without clobbering the user's file.
+    fn reload_external_automations(&mut self) -> Result<bool, String> {
+        let Some(path) = &self.settings_path else {
+            return Ok(false);
+        };
+        let Ok(bytes) = std::fs::read(path) else {
+            return Ok(false);
+        };
+        if self.settings_snapshot.as_deref() == Some(bytes.as_slice()) {
+            return Ok(false);
+        }
+        match Settings::load(path) {
+            Ok(disk) => {
+                self.settings_snapshot = Some(bytes);
+                if disk.automations != self.settings.automations {
+                    self.settings.automations = disk.automations;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            Err(e) => Err(format!("External settings edit could not be read: {e}")),
+        }
+    }
+
     /// Lists each watched folder and converts new matching files. Tests call
     /// this twice after writing a file: once to see it, once after it is
     /// the same size.
     pub fn poll_automations(&mut self, cx: &mut Context<Self>) {
+        match self.reload_external_automations() {
+            Ok(true) => cx.notify(),
+            Ok(false) => {}
+            Err(e) => {
+                if !self.errors.contains(&e) {
+                    self.errors.push(e);
+                    cx.notify();
+                }
+            }
+        }
         let rules = self.settings.automations.clone();
         let ready = self.watch.drain_ready(&rules);
         for (index, path) in ready {
@@ -1200,6 +1540,12 @@ impl AppState {
     pub fn activate(&mut self, key: &str, cx: &mut Context<Self>) -> Result<License, String> {
         let result = self.licensing.activate(key).map_err(|e| e.to_string());
         self.license = self.licensing.state();
+        if let Ok(license) = &result {
+            self.telemetry.capture(
+                crate::telemetry::Event::Activated(license.plan),
+                &self.license,
+            );
+        }
         self.reselect_update(cx);
         cx.notify();
         result
@@ -1222,6 +1568,11 @@ impl AppState {
         self.queue.get(id)
     }
 
+    /// The history record id written when `job` finished, if recorded.
+    pub fn record_id(&self, job: JobId) -> Option<i64> {
+        self.recorded.get(&job).copied()
+    }
+
     /// Whether this build checks licenses.
     pub fn license_enforced(&self) -> bool {
         self.licensing.enforced()
@@ -1242,7 +1593,13 @@ impl AppState {
             if revoked {
                 self.forget_revoked_session(cx);
             }
+            // The HUD shows how a silent job ended, unless it was closed
+            // or couldn't open; then the notification tells.
+            if !(silent && crate::ui::hud_follows(entry.id, cx)) {
+                self.batch.outside_hud += 1;
+            }
             let batch = &mut self.batch;
+            let mut sizes = crate::history::Sizes::default();
             let outcome = match &entry.status {
                 Status::Done(outputs) => {
                     batch.done += 1;
@@ -1259,6 +1616,15 @@ impl AppState {
                         #[cfg(test)]
                         self.revealed.push(first.clone());
                     }
+                    let size = |path: &Path| std::fs::metadata(path).ok().map(|m| m.len());
+                    sizes = crate::history::Sizes {
+                        input: size(&entry.input),
+                        output: outputs
+                            .iter()
+                            .map(|out| size(out))
+                            .sum::<Option<u64>>()
+                            .filter(|_| !outputs.is_empty()),
+                    };
                     Outcome::Done(outputs.clone())
                 }
                 Status::Failed(e) => {
@@ -1271,11 +1637,16 @@ impl AppState {
                     Outcome::Cancelled
                 }
             };
-            if let Err(e) = self
+            match self
                 .history
-                .add(&entry.input, entry.to.id, &entry.setup, &outcome)
+                .add_sized(&entry.input, entry.to.id, &entry.setup, &outcome, sizes)
             {
-                tracing::warn!(error = %e, "could not record history");
+                Ok(id) => {
+                    self.recorded.insert(entry.id, id);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "could not record history");
+                }
             }
             self.refresh_history();
             if self.queue.active() == 0 {
@@ -1290,6 +1661,7 @@ impl AppState {
         let in_background = cx.active_window().is_none();
         if self.settings.notifications
             && in_background
+            && batch.outside_hud > 0
             && let Some((title, body)) = batch.summary()
         {
             cx.show_system_notification(SystemNotification {
@@ -1299,8 +1671,19 @@ impl AppState {
                 actions: Vec::new(),
             });
         }
+        self.maybe_quit_after_hud(cx);
+    }
+
+    /// Quits once silent conversions are done and nothing keeps convt open:
+    /// no tray icon, no window, nothing converting. While the HUD shows the
+    /// result it stays up for its few seconds, so Copy and Show can be
+    /// clicked; once it closes, `last_window_closed` (main.rs) quits, as it
+    /// does after any last window, so the HUD needs no quit of its own.
+    pub fn maybe_quit_after_hud(&mut self, cx: &mut Context<Self>) {
         if self.quit_when_idle
-            && cx.windows().is_empty()
+            && !crate::ui::hud_open(cx)
+            && crate::ui::only_hud_open(cx)
+            && self.queue.active() == 0
             && !crate::tray::keeps_running(self.settings.menu_bar_icon, cx)
         {
             crate::menu::quit(cx);
@@ -1398,13 +1781,52 @@ impl AppState {
 
     /// Applies a settings change and saves it.
     pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        let was_persisted = self.telemetry_persisted;
+        let before_telemetry = self.settings.telemetry;
+        // Preserve valid external automation edits (e.g. from Edit TOML) made
+        // since our last load/save before applying an in-app change. If the
+        // file on disk was edited into invalid TOML, surface the parse error
+        // instead of silently overwriting it.
+        let external_err = self.reload_external_automations().err();
         change(&mut self.settings);
-        self.runner.set_concurrency(self.settings.concurrency());
-        if let Some(path) = &self.settings_path
-            && let Err(e) = self.settings.save(path)
-        {
-            self.errors.push(format!("Settings were not saved: {e}"));
+        if !self.settings.telemetry {
+            self.telemetry.set_consent(Consent::Off);
         }
+        self.runner.set_concurrency(self.settings.concurrency());
+        let saved = if let Some(err) = external_err {
+            Some(Err(err))
+        } else {
+            self.settings_path
+                .as_ref()
+                .map(|path| self.settings.save(path).map_err(|e| e.to_string()))
+        };
+        self.telemetry_persisted = matches!(saved, Some(Ok(())));
+        match saved {
+            Some(Err(e)) => {
+                self.errors.push(format!("Settings were not saved: {e}"));
+                if !self.settings.telemetry
+                    && (before_telemetry || !was_persisted || self.telemetry_save_error.is_some())
+                {
+                    self.telemetry_save_error = Some(format!(
+                        "Off for this session, but the change could not be saved: {e}"
+                    ));
+                } else if self.settings.telemetry {
+                    self.telemetry_save_error = None;
+                }
+            }
+            Some(Ok(())) => {
+                self.telemetry_save_error = None;
+                self.settings_snapshot = self
+                    .settings_path
+                    .as_ref()
+                    .and_then(|p| std::fs::read(p).ok());
+            }
+            None => {}
+        }
+        if !was_persisted && self.telemetry_persisted {
+            self.sync_telemetry_identity(cx);
+        }
+        self.configure_telemetry();
         cx.notify();
     }
 
@@ -1567,6 +1989,7 @@ mod tests {
                 done,
                 failed,
                 cancelled,
+                outside_hud: 0,
             }
             .summary()
         };

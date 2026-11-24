@@ -28,3 +28,8 @@ fn image_format(path: &Path) -> Option<ImageFormat> {
         _ => return None,
     })
 }
+
+/// Puts finished files on the clipboard, as [`clipboard_item`] makes them.
+pub fn copy_files(outputs: &[PathBuf], cx: &mut gpui_kit::App) {
+    cx.write_to_clipboard(clipboard_item(outputs));
+}

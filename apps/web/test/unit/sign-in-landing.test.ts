@@ -5,6 +5,7 @@ import {
   browserRedirectStore,
   downloadEntryHref,
   downloadGate,
+  isDownloadRedirect,
   isNewAccount,
   landingAfterSignIn,
   rememberSignInRedirect,
@@ -54,6 +55,25 @@ test("/download sends signed-out visitors to sign-in with redirect, and unverifi
     "/sign-in/verify-email?redirect=%2Fdownload",
   );
   expect(downloadGate({ emailVerified: true }, "/download")).toBeNull();
+});
+
+test("sign-in offers the no-account install for any same-origin /download redirect", () => {
+  for (const redirect of [
+    "/download",
+    "/download?utm_source=convt_guides&utm_medium=organic&utm_campaign=heic-to-jpg-mac",
+    "/download?os=macos",
+    "/download#foo",
+  ])
+    expect(isDownloadRedirect(redirect, origin)).toBe(true);
+  for (const redirect of [
+    undefined,
+    "",
+    "/download-other",
+    "/dashboard",
+    "https://evil.example/download",
+    "//evil.example/download",
+  ])
+    expect(isDownloadRedirect(redirect, origin)).toBe(false);
 });
 
 test("Get convt goes straight to sign-in with one redirect when signed out", () => {

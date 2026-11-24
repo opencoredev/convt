@@ -17,9 +17,10 @@ export type Guide = {
   summary: string;
   /** The /formats section that links here. */
   category: "images" | "video" | "audio" | "documents";
-  /** ISO dates. */
+  /** ISO dates. `listingUpdated` moves listing pages when heading or description changes. */
   published: string;
   updated: string;
+  listingUpdated?: string;
 };
 
 export const guides = [
@@ -34,7 +35,7 @@ export const guides = [
       "Finder Quick Actions, Preview, Photos and sips, then folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
     published: "2026-10-29",
-    updated: "2026-10-30",
+    updated: "2026-11-23",
   },
   {
     slug: "batch-heic-to-jpg-windows",
@@ -47,20 +48,21 @@ export const guides = [
       "The HEIF and HEVC extensions and Photos for single photos, then whole folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
     published: "2026-10-29",
-    updated: "2026-10-30",
+    updated: "2026-11-23",
   },
   {
     slug: "mov-to-mp4-mac",
-    title: "How to convert MOV to MP4 on Mac: rename, iMovie, FFmpeg or batch",
+    title: "Convert MOV (QuickTime) to MP4 on Mac: rename, iMovie, FFmpeg",
     heading: "How to convert MOV to MP4 on a Mac",
     footerLabel: "MOV to MP4 on Mac",
     description:
-      "Convert MOV videos to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg without losing quality, or batch-convert and shrink folders with convt.",
+      "QuickTime Player can't export MP4. Convert MOV to MP4 on a Mac: rename H.264 files, export from iMovie, remux with FFmpeg or batch folders with convt.",
     summary:
       "When renaming works, iMovie, FFmpeg remux vs re-encode with tested commands, and whole folders plus smaller files with the convt CLI. Covers Windows too.",
     category: "video",
     published: "2026-10-30",
-    updated: "2026-10-30",
+    updated: "2026-11-23",
+    listingUpdated: "2026-11-23",
   },
   {
     slug: "webp-to-png-jpg",
@@ -73,7 +75,7 @@ export const guides = [
       "Preview and Paint for one image, then whole folders with the convt CLI. Covers transparency, JPG backgrounds and animated WebP.",
     category: "images",
     published: "2026-10-30",
-    updated: "2026-10-30",
+    updated: "2026-11-23",
   },
   {
     slug: "pdf-to-png-mac-windows",
@@ -86,7 +88,7 @@ export const guides = [
       "Preview on a Mac and the Snipping Tool workaround on Windows, then every page, page ranges, DPI and folders of PDFs with the convt CLI.",
     category: "documents",
     published: "2026-10-31",
-    updated: "2026-10-31",
+    updated: "2026-11-23",
   },
   {
     slug: "mp4-flac-wav-to-mp3-mac",
@@ -99,7 +101,7 @@ export const guides = [
       "QuickTime Audio Only and Music's MP3 Encoder (no FLAC), then single files and folders with subfolders in the convt CLI, with bitrate options. Tags carry over; cover art is dropped.",
     category: "audio",
     published: "2026-11-01",
-    updated: "2026-11-01",
+    updated: "2026-11-23",
   },
   {
     slug: "svg-to-png-mac",
@@ -112,7 +114,7 @@ export const guides = [
       "The built-in qlmanage thumbnail command, then convt for size (--dpi, --max-size), transparent or solid backgrounds and folders with subfolders. Notes the font and size limits.",
     category: "images",
     published: "2026-11-03",
-    updated: "2026-11-03",
+    updated: "2026-11-23",
   },
   {
     slug: "mkv-to-mp4-mac",
@@ -125,15 +127,18 @@ export const guides = [
       "FFmpeg remux with every audio and subtitle track kept (and what a plain -c copy drops), HandBrake, and folders with subfolders in the convt CLI. Notes that convt 0.5.0 keeps one audio track and no subtitles.",
     category: "video",
     published: "2026-11-10",
-    updated: "2026-11-10",
+    updated: "2026-11-23",
   },
 ] as const satisfies readonly Guide[];
 
 export type GuideSlug = (typeof guides)[number]["slug"];
 
+/** A guide from `guides`, whose slug is known to be one of theirs. */
+export type ListedGuide = Guide & { slug: GuideSlug };
+
 export const guidePath = (slug: GuideSlug) => `${routes.guides}/${slug}`;
 
-export function guideBySlug(slug: GuideSlug): Guide {
+export function guideBySlug(slug: GuideSlug): ListedGuide {
   const guide = guides.find((g) => g.slug === slug);
   if (!guide) throw new Error(`unknown guide: ${slug}`);
   return guide;

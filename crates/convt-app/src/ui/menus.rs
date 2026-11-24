@@ -7,7 +7,7 @@
 use gpui_kit::component::input;
 use gpui_kit::*;
 
-use super::{SettingsTab, SettingsView};
+use super::SettingsTab;
 use crate::model;
 
 actions!(
@@ -148,9 +148,6 @@ fn on_active_window(cx: &mut App, f: impl FnOnce(&mut Window)) {
 /// Check for Updates…: checks now, whether or not automatic checks are on,
 /// and shows Settings at the Updates card, where the result appears.
 pub fn check_for_updates(cx: &mut App) {
-    super::show_settings(SettingsTab::General, cx);
-    if let Some((handle, view)) = super::Open::<SettingsView>::get(cx) {
-        let _ = handle.update(cx, |_, _, cx| view.update(cx, |v, cx| v.reveal_updates(cx)));
-    }
+    super::show_updates(cx);
     model::shared(cx).update(cx, |s, cx| s.check_updates(cx));
 }

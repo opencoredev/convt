@@ -6,7 +6,12 @@ import { usePlaceholderAction } from "#/components/app/notice";
 import { authErrorMessage, sendSignInCode, startSocialSignIn } from "#/lib/auth-client";
 import { links } from "#/lib/config";
 import { safeRedirect } from "#/lib/safe-redirect";
-import { browserRedirectStore, rememberSignInRedirect, siteOrigin } from "#/lib/sign-in";
+import {
+  browserRedirectStore,
+  isDownloadRedirect,
+  rememberSignInRedirect,
+  siteOrigin,
+} from "#/lib/sign-in";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 import { AuthTitle, Rise, authInput, lightPill } from "./auth-screen";
@@ -159,7 +164,7 @@ export function SignInPanel({
           </p>
         </Rise>
 
-        {redirect === routes.download ? (
+        {isDownloadRedirect(redirect) ? (
           <Rise index={5}>
             <WithoutAccount />
           </Rise>
