@@ -215,6 +215,7 @@ export function ApiEnrollmentCard({
           ) : (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <SecondaryButton
+                disabled={busy}
                 onClick={() => {
                   // Start from the cap in force, which may have changed since this
                   // card first rendered (for example once enrollment completed).

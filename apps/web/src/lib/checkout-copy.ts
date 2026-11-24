@@ -20,17 +20,26 @@ export function checkoutAside({
   os,
   origin,
 }: {
-  kind: "key" | "trial" | "api" | "confirming" | "unconfirmed";
+  kind: "key" | "trial" | "api" | "confirming" | "unconfirmed" | "retry";
   os: Os | null;
   origin: CheckoutOrigin;
 }) {
+  if (kind === "retry")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "Nothing was charged",
+        "Start the checkout again when you're ready",
+        "If the card was declined, try another one",
+      ],
+    };
   if (kind === "unconfirmed")
     return {
       title: "WHAT'S NEXT",
       items: [
-        "A license purchase arrives by email and under Licenses",
-        "API billing turns on by itself on the API page",
-        "Your account shows both once the payment is confirmed",
+        "Bought convt? Your key arrives by email and under Licenses",
+        "Added a card for the API? Billing shows on the API page",
+        "Either way, it appears once the payment is confirmed",
       ],
     };
   if (kind === "confirming")
@@ -91,7 +100,10 @@ export function checkoutAside({
 export function checkoutAsideKind(view: {
   state: string;
   product?: string | null;
-}): "key" | "trial" | "api" | "confirming" | "unconfirmed" {
+}): "key" | "trial" | "api" | "confirming" | "unconfirmed" | "retry" {
+  // A checkout that did not go through has no next steps beyond trying again,
+  // whatever was being bought.
+  if (view.state === "failed") return "retry";
   if (view.state === "api_enrolled" || view.state === "api_pending" || view.product === "api")
     return "api";
   if (view.state === "trial") return "trial";

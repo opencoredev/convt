@@ -144,6 +144,12 @@ test("checkout success panel and button follow the visitor's OS", () => {
   expect(checkoutGiveUp(null, false)).toEqual({ state: "unconfirmed" });
   expect(checkoutGiveUp(undefined)).toEqual({ state: "unconfirmed" });
   expect(checkoutAsideKind({ state: "unconfirmed" })).toBe("unconfirmed");
+  // A failed checkout gets retry steps, even when it was an API checkout.
+  expect(checkoutAsideKind({ state: "failed", product: "api" })).toBe("retry");
+  expect(checkoutAsideKind({ state: "failed", product: "desktop" })).toBe("retry");
+  expect(checkoutAside({ kind: "retry", os: windows, origin: web }).items[0]).toBe(
+    "Nothing was charged",
+  );
   expect(
     checkoutAside({ kind: "confirming", os: windows, origin: web }).items.join(" "),
   ).not.toMatch(/Download|Licenses|API key/);
