@@ -45,6 +45,7 @@ type State =
   | { state: "loading" }
   | { state: "email" }
   | { state: "api_pending" }
+  | { state: "unconfirmed" }
   | { state: "error"; reason: string };
 
 const errors: Record<string, string> = {
@@ -147,6 +148,18 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
             month.
           </p>
           <Actions primary={{ href: "/dashboard/api", label: "Go to API keys" }} />
+        </>
+      );
+    case "unconfirmed":
+      return (
+        <>
+          <Heading eyebrow="CHECKOUT">We couldn't confirm this checkout yet</Heading>
+          <p className={lead}>
+            Nothing is lost if you paid. A license purchase arrives by email and appears under
+            Licenses, and API billing turns on by itself on the API page, as soon as the payment
+            provider confirms it.
+          </p>
+          <Actions primary={{ href: "/dashboard", label: "Go to your account" }} />
         </>
       );
     case "api_pending":

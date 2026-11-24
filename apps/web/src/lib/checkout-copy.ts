@@ -20,10 +20,19 @@ export function checkoutAside({
   os,
   origin,
 }: {
-  kind: "key" | "trial" | "api" | "confirming";
+  kind: "key" | "trial" | "api" | "confirming" | "unconfirmed";
   os: Os | null;
   origin: CheckoutOrigin;
 }) {
+  if (kind === "unconfirmed")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "A license purchase arrives by email and under Licenses",
+        "API billing turns on by itself on the API page",
+        "Your account shows both once the payment is confirmed",
+      ],
+    };
   if (kind === "confirming")
     return {
       title: "WHAT'S NEXT",
@@ -82,10 +91,11 @@ export function checkoutAside({
 export function checkoutAsideKind(view: {
   state: string;
   product?: string | null;
-}): "key" | "trial" | "api" | "confirming" {
+}): "key" | "trial" | "api" | "confirming" | "unconfirmed" {
   if (view.state === "api_enrolled" || view.state === "api_pending" || view.product === "api")
     return "api";
   if (view.state === "trial") return "trial";
+  if (view.state === "unconfirmed") return "unconfirmed";
   if (view.state === "loading" || view.state === "pending") return "confirming";
   return "key";
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { addApiKey, removeApiKey, fetchApiSpend } from "#/server/cloud-fns";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 
@@ -43,6 +43,14 @@ function ApiPage() {
   const [shownKey, setShownKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // The enrollment card promises to update once the card is confirmed: check again
+  // every few seconds while it waits.
+  const pending = api.enrollment.state === "pending";
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => void router.invalidate(), 5000);
+    return () => clearInterval(timer);
+  }, [pending, router]);
   async function create() {
     setBusy(true);
     setError("");

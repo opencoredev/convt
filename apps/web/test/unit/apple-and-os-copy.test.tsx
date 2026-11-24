@@ -140,6 +140,10 @@ test("checkout success panel and button follow the visitor's OS", () => {
   expect(checkoutAsideKind({ state: "trial", product: "pro" })).toBe("trial");
   expect(checkoutGiveUp("api", false)).toEqual({ state: "api_pending" });
   expect(checkoutGiveUp("desktop", false)).toEqual({ state: "email" });
+  // When no answer said what was bought, the page promises nothing product-specific.
+  expect(checkoutGiveUp(null, false)).toEqual({ state: "unconfirmed" });
+  expect(checkoutGiveUp(undefined)).toEqual({ state: "unconfirmed" });
+  expect(checkoutAsideKind({ state: "unconfirmed" })).toBe("unconfirmed");
   expect(
     checkoutAside({ kind: "confirming", os: windows, origin: web }).items.join(" "),
   ).not.toMatch(/Download|Licenses|API key/);
