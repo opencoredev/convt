@@ -536,8 +536,13 @@ export class Convt {
     onDispatch: () => void;
   }): Promise<T> {
     // Whether an attempt so far could have created the job: its answer was
-    // lost, unreadable, or came from a gateway rather than the API refusing.
+    // lost or unreadable, or it was a 5xx (a gateway's or a crash's) rather
+    // than the API refusing with a 4xx.
     let mayHaveLanded = false;
+    // A keyed create that may have landed ends with its outcome unknown on every
+    // path, so a retry under the same key finds the job instead of paying twice.
+    const settle = (error: ConvtError) =>
+      mayHaveLanded && method === "POST" && idempotencyKey !== undefined ? unknown(error) : error;
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
       const key =
@@ -568,15 +573,18 @@ export class Convt {
           await again(250 * 2 ** attempt);
           continue;
         }
-        throw fail(
-          "network_error",
-          `The request did not complete: ${String(error)}`,
-          undefined,
-          undefined,
-          error,
+        throw settle(
+          fail(
+            "network_error",
+            `The request did not complete: ${String(error)}`,
+            undefined,
+            undefined,
+            error,
+          ),
         );
       }
       const requestId = response.headers.get("x-request-id") ?? undefined;
+      if (response.status >= 500) mayHaveLanded = true;
       if (
         !response.ok &&
         retryable &&
@@ -584,27 +592,21 @@ export class Convt {
         RETRYABLE_STATUS.has(response.status)
       ) {
         const after = Number(response.headers.get("retry-after"));
-        // Only a 429, or a 503 carrying the API's own request id, is the API
-        // refusing; a 502, 504 or bare 503 may hide a create that landed.
-        if (!(response.status === 429 || (response.status === 503 && requestId)))
-          mayHaveLanded = true;
-        // A wait past the call's budget would only end in a timeout or a stall:
-        // report the rate limit instead, with how long to wait. Timers also
-        // overflow past about 24.8 days and would fire at once.
-        if (Number.isFinite(after) && after * 1000 > Math.min(waitBudgetMs(), 2_147_483_647)) {
-          await response.body?.cancel().catch(() => {});
-          const message = `The API asked to wait ${after} seconds before retrying.`;
-          if (mayHaveLanded && method === "POST" && idempotencyKey !== undefined)
-            throw unknown(new Error(message));
-          throw fail(
-            response.status === 429 ? "rate_limited" : "unavailable",
-            message,
-            response.status,
-            requestId,
-          );
-        }
+        const delay = Number.isFinite(after) && after > 0 ? after * 1000 : 500 * 2 ** attempt;
         await response.body?.cancel().catch(() => {});
-        await again(Number.isFinite(after) && after > 0 ? after * 1000 : 500 * 2 ** attempt);
+        // A wait past the call's budget would only end in a timeout or a stall:
+        // report the answer now instead, with how long to wait. Timers also
+        // overflow past about 24.8 days and would fire at once.
+        if (delay > Math.min(waitBudgetMs(), 2_147_483_647))
+          throw settle(
+            fail(
+              response.status === 429 ? "rate_limited" : "unavailable",
+              `The API asked to wait ${Math.ceil(delay / 1000)} seconds before retrying.`,
+              response.status,
+              requestId,
+            ),
+          );
+        await again(delay);
         continue;
       }
       let value: unknown;
@@ -619,20 +621,19 @@ export class Convt {
           await again(250 * 2 ** attempt);
           continue;
         }
-        throw fail(
-          response.ok ? "invalid_response" : "request_failed",
-          `The API answered HTTP ${response.status} without a readable JSON body.`,
-          response.status,
-          requestId,
+        throw settle(
+          fail(
+            response.ok ? "invalid_response" : "request_failed",
+            `The API answered HTTP ${response.status} without a readable JSON body.`,
+            response.status,
+            requestId,
+          ),
         );
       }
       if (!response.ok) {
         const { code, message } = errorFields(value);
-        throw fail(
-          code ?? "request_failed",
-          message ?? "Request failed.",
-          response.status,
-          requestId,
+        throw settle(
+          fail(code ?? "request_failed", message ?? "Request failed.", response.status, requestId),
         );
       }
       // The API's JSON matches the documented shape for each route.

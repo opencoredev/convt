@@ -280,7 +280,9 @@ test("a create that keeps failing reports its idempotency key", async () => {
       { idempotencyKey: "k-1" },
     )
     .catch((e) => e);
-  expect(error.code).toBe("network_error");
+  // A request that failed on the wire may still have reached convt.
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.cause.code).toBe("network_error");
   expect(error.idempotencyKey).toBe("k-1");
 });
 test("an empty idempotency key is refused before anything is sent", async () => {
@@ -438,7 +440,9 @@ test("the wait budget counts time spent waiting on the answer", async () => {
     );
   }) as typeof fetch;
   const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
-    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 1200 })
+    // 1750 ms: the budget left after the first poll pause (about 1250 ms) still
+    // fits the 1 s wait, so only a budget rechecked after the slow answer refuses.
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 1750 })
     .catch((e) => e);
   expect(polls).toBe(1);
   expect(error.code).toBe("rate_limited");
@@ -802,4 +806,53 @@ test("a create retried after a gateway error reports an unknown outcome on a lon
   expect(creates).toBe(2);
   expect(error.code).toBe("create_outcome_unknown");
   expect(error.idempotencyKey).toBe("k-2");
+});
+const createInput = { input_format: "png", target_format: "webp", input_bytes: 1 } as const;
+test("a keyed create whose only answer is a 504 ends unknown when retries run out", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("<html>gateway timeout</html>", { status: 504 })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .create(createInput, { idempotencyKey: "k-4" })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.idempotencyKey).toBe("k-4");
+});
+test("a 504 then a final 429 leaves a keyed create unknown", async () => {
+  let creates = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    creates++;
+    if (creates === 1) return new Response("gateway timeout", { status: 504 });
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "0" } },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 1 })
+    .create(createInput, { idempotencyKey: "k-5" })
+    .catch((e) => e);
+  expect(creates).toBe(2);
+  expect(error.code).toBe("create_outcome_unknown");
+});
+test("a 503 is never taken as a refusal, whatever request id it carries", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("busy", {
+      status: 503,
+      headers: { "retry-after": "999", "x-request-id": "req_proxy" },
+    })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create(createInput, { idempotencyKey: "k-6" })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+});
+test("a 429 without Retry-After stays a refusal when the fallback wait cannot fit", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429 },
+    )) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 120 })
+    .catch((e) => e);
+  expect(error.code).toBe("rate_limited");
+  expect(error.idempotencyKey).toBeTruthy();
 });

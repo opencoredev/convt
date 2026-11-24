@@ -1,6 +1,7 @@
 import {
   Convt,
   ConvtCancellationError,
+  ConvtError,
   formats,
   Conversion,
   type Format,
@@ -46,6 +47,9 @@ function Converter() {
   const [error, setError] = useState("");
   const [pendingCancel, setPendingCancel] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
+  // When a create's outcome is unknown, converting the same file with the same
+  // settings again reuses its key, so it finds that job instead of paying twice.
+  const unsettled = useRef<{ key: string; input: string } | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   const inputFormat = formats.find((f) =>
     (f.extensions as readonly string[]).includes(file?.name.split(".").pop()?.toLowerCase() ?? ""),
@@ -73,6 +77,9 @@ function Converter() {
     }
     controller.current = new AbortController();
     setStage("uploading");
+    const options = jobOptions({ from: inputFormat.id, to: target }, { quality, size });
+    const input = JSON.stringify([file.name, file.size, file.lastModified, target, options]);
+    const idempotencyKey = unsettled.current?.input === input ? unsettled.current.key : undefined;
     try {
       let credential = await fetchCloudCredential();
       let issued = Date.now();
@@ -88,20 +95,30 @@ function Converter() {
       });
       const converted = await client.convert(file, {
         to: target,
-        options: jobOptions({ from: inputFormat.id, to: target }, { quality, size }),
+        options,
+        idempotencyKey,
         signal: controller.current.signal,
         onProgress: (j) => {
           setJob(j);
           setStage(j.status);
         },
       });
+      unsettled.current = null;
       setResult(converted);
       setStage("succeeded");
       await router.invalidate();
     } catch (e) {
       setStage("failed");
       if (e instanceof ConvtCancellationError) setPendingCancel(e.jobId);
-      setError(e instanceof Error ? e.message : "Conversion failed. Try again.");
+      if (e instanceof ConvtError && e.code === "create_outcome_unknown" && e.idempotencyKey) {
+        unsettled.current = { key: e.idempotencyKey, input };
+        setError(
+          "We couldn't confirm the conversion started. Convert again to check; the same file and settings won't be charged twice.",
+        );
+      } else {
+        unsettled.current = null;
+        setError(e instanceof Error ? e.message : "Conversion failed. Try again.");
+      }
       await router.invalidate();
     }
   }
