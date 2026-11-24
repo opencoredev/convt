@@ -28,8 +28,8 @@ export function checkoutAside({
     return {
       title: "WHAT'S NEXT",
       items: [
-        "This checkout didn't go through",
-        "Start a new one when you're ready",
+        "Nothing is active from this checkout",
+        "If you were charged, check your receipt email and your account first",
         "If a card was declined, try another one",
       ],
     };

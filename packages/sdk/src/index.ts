@@ -177,6 +177,8 @@ async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): P
       .finally(() => signal.removeEventListener("abort", abort));
   });
 }
+/** When each conversion's own signal times out, for the retry wait budget. */
+const conversionDeadlines = new WeakMap<AbortSignal, number>();
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const abort = () => {
@@ -306,19 +308,29 @@ export class Conversion {
           // acts on this file, never on whatever the name points at by then.
           for await (const chunk of createReadStream(partial)) await target.writeFile(chunk);
         } catch (error) {
-          if (flags !== "wx") throw error;
-          // A file this call created must not stay behind half-written. Removing
-          // it by name could hit a file that replaced it meanwhile, so empty it
-          // through the handle instead and say where it is.
-          await target.truncate(0).catch(() => {});
+          if (flags === "w") {
+            await target.close().catch(() => {});
+            throw error;
+          }
+          // A file this call created must not stay behind half-written. It is
+          // emptied through the handle, not removed by name: the name may point
+          // at another file by now.
+          const emptied = await target.truncate(0).then(
+            () => "the file this call created was emptied",
+            (cleanup: unknown) =>
+              `emptying the file this call created failed too (${String(cleanup)}), so it may hold part of the output`,
+          );
+          await target.close().catch(() => {});
           throw new ConvtError(
             "save_failed",
-            `Saving to ${path} failed (${String(error)}); an empty file was left there.`,
-            { cause: error },
+            `Saving to ${path} failed (${String(error)}); ${emptied}.`,
+            {
+              cause: error,
+            },
           );
-        } finally {
-          await target.close().catch(() => {});
         }
+        // Closing reports a delayed write error (network filesystems do this).
+        await target.close();
       };
       const linked = await link(partial, path).then(
         () => "created" as const,
@@ -426,8 +438,16 @@ export class Convt {
     idempotencyKey?: string;
   }): Promise<T> {
     // A call without the caller's signal gets the SDK's own 30-second deadline.
-    const ownDeadline = given === undefined;
     const signal = given ?? AbortSignal.timeout(30_000);
+    // How long a Retry-After may be waited out before it is reported instead:
+    // what is left of a conversion's deadline, else a minute for a caller's own
+    // signal (it may never fire), else what fits in the SDK's 30 seconds.
+    const conversionEnd = given && conversionDeadlines.get(given);
+    const waitBudgetMs = conversionEnd
+      ? Math.max(0, conversionEnd - Date.now())
+      : given
+        ? 60_000
+        : 20_000;
     if (idempotencyKey !== undefined && !/^[\x21-\x7e]{1,255}$/.test(idempotencyKey))
       throw new ConvtError(
         "invalid_idempotency_key",
@@ -462,7 +482,7 @@ export class Convt {
         signal,
         idempotencyKey,
         retryable,
-        ownDeadline,
+        waitBudgetMs,
         fail,
         unknown,
         onDispatch: () => (dispatched = true),
@@ -496,7 +516,7 @@ export class Convt {
     signal,
     idempotencyKey,
     retryable,
-    ownDeadline,
+    waitBudgetMs,
     fail,
     unknown,
     onDispatch,
@@ -507,7 +527,7 @@ export class Convt {
     signal: AbortSignal;
     idempotencyKey?: string;
     retryable: boolean;
-    ownDeadline: boolean;
+    waitBudgetMs: number;
     fail: (
       code: string,
       message: string,
@@ -563,21 +583,24 @@ export class Convt {
         RETRYABLE_STATUS.has(response.status)
       ) {
         const after = Number(response.headers.get("retry-after"));
-        // A wait longer than a call's own deadline would only end in a timeout:
-        // report the rate limit instead, with how long to wait.
-        // Only the SDK's own 30-second deadline is known here; a caller's signal
-        // (a conversion's 11 minutes, say) decides for itself how long to wait.
-        if (ownDeadline && Number.isFinite(after) && after > 20) {
+        // A wait past the call's budget would only end in a timeout or a stall:
+        // report the rate limit instead, with how long to wait. Timers also
+        // overflow past about 24.8 days and would fire at once.
+        if (Number.isFinite(after) && after * 1000 > Math.min(waitBudgetMs, 2_147_483_647)) {
           await response.body?.cancel().catch(() => {});
+          const message = `The API asked to wait ${after} seconds before retrying.`;
+          // An earlier attempt of a keyed create may have landed (its answer was
+          // lost or a gateway error), so its outcome is unknown, not refused.
+          if (attempt > 0 && method === "POST" && idempotencyKey !== undefined)
+            throw unknown(new Error(message));
           throw fail(
             response.status === 429 ? "rate_limited" : "unavailable",
-            `The API asked to wait ${after} seconds before retrying.`,
+            message,
             response.status,
             requestId,
           );
         }
         await response.body?.cancel().catch(() => {});
-        // The caller's signal bounds any wait the server asks for.
         await again(Number.isFinite(after) && after > 0 ? after * 1000 : 500 * 2 ** attempt);
         continue;
       }
@@ -718,8 +741,10 @@ export class Convt {
     body: Blob | undefined,
     options: ConvertOptions,
   ): Promise<Conversion> {
-    const deadline = AbortSignal.timeout(options.timeoutMs ?? 660_000);
+    const timeoutMs = options.timeoutMs ?? 660_000;
+    const deadline = AbortSignal.timeout(timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    conversionDeadlines.set(signal, Date.now() + timeoutMs);
     // A caller's own key can be shared with another call (a retry still running),
     // so this call cancels the job only when the key is its own or the caller
     // aborted. Otherwise errors carry the job id, to resume or cancel explicitly.

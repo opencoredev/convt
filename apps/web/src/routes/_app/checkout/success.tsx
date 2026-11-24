@@ -200,9 +200,10 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
     case "failed":
       return (
         <>
-          <Heading eyebrow="CHECKOUT">This checkout didn't complete</Heading>
+          <Heading eyebrow="CHECKOUT">Nothing is active from this checkout</Heading>
           <p className={lead}>
-            This checkout didn't go through. You can start a new one whenever you're ready.
+            If you were charged, your receipt email and your account have the details; check them
+            before you buy again.
           </p>
           <Actions primary={{ href: links.pricing, label: "See pricing" }} />
         </>

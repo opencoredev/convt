@@ -374,7 +374,8 @@ test("a deadline during retry backoff still reports the create's key", async () 
   const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
     .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 100 })
     .catch((e) => e);
-  expect(error.code).toBe("create_outcome_unknown");
+  // The server refused the only attempt, and a 10 s wait cannot fit in 100 ms.
+  expect(error.code).toBe("unavailable");
   expect(error.idempotencyKey).toBeTruthy();
 });
 test("with the caller's own key, a deadline stops waiting without cancelling", async () => {
@@ -683,4 +684,56 @@ test("create tells an AbortSignal from an options object that looks like one", a
     options,
   );
   expect(keys).toEqual(["order-9"]);
+});
+test("a caller's own signal does not wait out a day-long Retry-After", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    calls++;
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "86400" } },
+    );
+  }) as typeof fetch;
+  const started = Date.now();
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .status("job_x", new AbortController().signal)
+    .catch((e) => e);
+  expect(Date.now() - started).toBeLessThan(1000);
+  expect(calls).toBe(1);
+  expect(error.code).toBe("rate_limited");
+});
+test("a Retry-After past a conversion's deadline is reported, not retried at once", async () => {
+  let polls = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs")) return Response.json({ job, upload_url: null });
+    if (url.endsWith("/cancel")) return Response.json({ ...job, status: "cancelled" });
+    polls++;
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "2147484" } },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png" })
+    .catch((e) => e);
+  expect(polls).toBe(1);
+  expect(error.code).toBe("rate_limited");
+});
+test("a create retried after a gateway error reports an unknown outcome on a long Retry-After", async () => {
+  let creates = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    creates++;
+    if (creates === 1) return new Response("bad gateway", { status: 502 });
+    return new Response("busy", { status: 503, headers: { "retry-after": "999" } });
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create(
+      { input_format: "png", target_format: "webp", input_bytes: 1 },
+      { idempotencyKey: "k-2" },
+    )
+    .catch((e) => e);
+  expect(creates).toBe(2);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.idempotencyKey).toBe("k-2");
 });
