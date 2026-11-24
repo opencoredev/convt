@@ -58,12 +58,24 @@ async fn main() -> anyhow::Result<()> {
             convt_server::routes::router(state.clone())
                 .merge(convt_server::routes::ready_router(state.clone())),
         );
+        let sweeper = state.clone();
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(Duration::from_secs(60));
             loop {
                 tick.tick().await;
-                if let Err(e) = convt_server::routes::expire(&state).await {
-                    tracing::warn!(error=%e,"expiry cleanup failed");
+                if let Err(e) = convt_server::routes::expire_rows(&state).await {
+                    tracing::warn!(error=%e,"expiry failed");
+                }
+            }
+        });
+        // File cleanup on its own timer: a stalled bucket slows only this loop.
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                tick.tick().await;
+                if let Err(e) = convt_server::routes::sweep_expired_files(&sweeper).await {
+                    tracing::warn!(error=%e,"expiry file cleanup failed");
                 }
             }
         });

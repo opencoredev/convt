@@ -669,7 +669,9 @@ pub fn ready_router(state: CloudState) -> Router {
     Router::new().route("/ready", get(ready)).with_state(state)
 }
 
-pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
+/// The database side of expiry: releases reservations, fails unfinished jobs and
+/// drops customer URLs. Fast, and independent of storage.
+pub async fn expire_rows(s: &CloudState) -> anyhow::Result<()> {
     // Only rows that still hold something: an open reservation or an unfinished
     // status. Finished rows keep their status, so a cancelled job stays cancelled.
     sqlx::query!(r#"update cloud_jobs set status=case when status in ('succeeded','failed','cancelled') then status else 'failed' end,reservation=case when reservation='open' then 'released' else reservation end,lease_expires_at=null,error_code=case when reservation='open' then 'expired' else error_code end,updated_at=now() where expires_at<=now() and (reservation='open' or status not in ('succeeded','failed','cancelled'))"#).execute(&s.pool).await?;
@@ -677,6 +679,12 @@ pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
     // cleanup succeeds; a webhook URL stays until its delivery is done or given up,
     // which takes under three hours.
     sqlx::query!(r#"update cloud_jobs set source_url=null, webhook_url=case when webhook_delivered_at is not null or webhook_attempts>=$1 or expires_at<=now()-interval '6 hours' then null else webhook_url end, updated_at=now() where expires_at<=now() and (source_url is not null or (webhook_url is not null and (webhook_delivered_at is not null or webhook_attempts>=$1 or expires_at<=now()-interval '6 hours')))"#, crate::webhooks::MAX_ATTEMPTS).execute(&s.pool).await?;
+    Ok(())
+}
+
+/// Deletes expired jobs' files and only then releases their storage commitment.
+/// Runs on its own timer, so a slow bucket never delays the database pass above.
+pub async fn sweep_expired_files(s: &CloudState) -> anyhow::Result<()> {
     let ids: Vec<String> = sqlx::query_scalar!(
         r#"select id from cloud_jobs where expires_at<=now() and input_key is not null"#
     )
@@ -698,4 +706,10 @@ pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
         .await?;
     }
     Ok(())
+}
+
+/// Both halves of expiry, in order. Used by tests and one-off runs.
+pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
+    expire_rows(s).await?;
+    sweep_expired_files(s).await
 }
