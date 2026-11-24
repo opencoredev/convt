@@ -116,7 +116,7 @@ function withContext(error: unknown, context: { jobId: string; idempotencyKey: s
   // keep the job id so the caller can check on it or cancel it.
   return new ConvtError(
     "network_error",
-    `The request did not complete: ${String(error)}. The job may still be open; check it with convt.status(error.jobId).`,
+    `The request did not complete: ${describe(error)}. The job may still be open; check it with convt.status(error.jobId).`,
     { ...context, cause: error },
   );
 }
@@ -318,12 +318,12 @@ export class Conversion {
           const emptied = await target.truncate(0).then(
             () => "the file this call created was emptied",
             (cleanup: unknown) =>
-              `emptying the file this call created failed too (${String(cleanup)}), so it may hold part of the output`,
+              `emptying the file this call created failed too (${describe(cleanup)}), so it may hold part of the output`,
           );
           await target.close().catch(() => {});
           throw new ConvtError(
             "save_failed",
-            `Saving to ${path} failed (${String(error)}); ${emptied}.`,
+            `Saving to ${path} failed (${describe(error)}); ${emptied}.`,
             {
               cause: error,
             },
@@ -547,6 +547,8 @@ export class Convt {
     // path, so a retry under the same key finds the job instead of paying twice.
     const settle = (error: unknown) =>
       mayHaveLanded && method === "POST" && idempotencyKey !== undefined ? unknown(error) : error;
+    // An abort before anything happens wins over reading the payload.
+    signal.throwIfAborted();
     // Serialized once: every retry under the key must send the same request,
     // even if the caller changes the object meanwhile.
     const body = data ? JSON.stringify(data) : undefined;
@@ -591,7 +593,7 @@ export class Convt {
         throw settle(
           fail(
             "network_error",
-            `The request did not complete: ${String(error)}`,
+            `The request did not complete: ${describe(error)}`,
             undefined,
             undefined,
             error,
@@ -888,6 +890,15 @@ function isAbortSignal(value: unknown): value is AbortSignal {
 }
 
 /** The create answer's fields the SDK acts on: the job and its upload. */
+/** Text for an error of any shape; String() itself throws on some objects. */
+function describe(error: unknown): string {
+  try {
+    return String(error);
+  } catch {
+    return "an error that cannot be shown as text";
+  }
+}
+
 function isCreated(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("job" in value)) return false;
   if (

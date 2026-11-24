@@ -957,3 +957,29 @@ test("a 200 with a partial job leaves a keyed create unknown", async () => {
     .catch((e) => e);
   expect(error.code).toBe("create_outcome_unknown");
 });
+test("a create rejected with an object String() cannot show still keeps its key", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    throw Object.create(null);
+  }) as unknown as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 0 })
+    .create(createInput, { idempotencyKey: "k-15" })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.idempotencyKey).toBe("k-15");
+});
+test("an already aborted create reports the abort without reading its payload", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("stopped first"));
+  const input = {
+    input_format: "png",
+    target_format: "webp",
+    input_bytes: 1,
+    get options(): never {
+      throw new Error("payload read");
+    },
+  };
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create(input as never, { signal: controller.signal })
+    .catch((e) => e);
+  expect(error.message).toBe("stopped first");
+});
