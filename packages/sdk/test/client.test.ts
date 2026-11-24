@@ -627,25 +627,60 @@ test("a Retry-After longer than the call's deadline is reported, not slept on", 
   expect(error.code).toBe("rate_limited");
   expect(error.message).toContain("45");
 });
-test("a long Retry-After while a conversion polls waits instead of cancelling the job", async () => {
+test("a long Retry-After while a conversion polls is waited out in full, then polling resumes", async () => {
   const calls: string[] = [];
+  let polls = 0;
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input);
     calls.push(url);
     if (url.endsWith("/v1/jobs")) return Response.json({ job, upload_url: null });
     if (url.endsWith("/cancel")) return Response.json({ ...job, status: "cancelled" });
-    return Response.json(
-      { error: { code: "rate_limited", message: "slow down" } },
-      { status: 429, headers: { "retry-after": "21" } },
-    );
+    if (url.endsWith("/download"))
+      return Response.json({ outputs: [{ name: "a.png", url: "https://objects.test/out" }] });
+    if (++polls === 1)
+      return Response.json(
+        { error: { code: "rate_limited", message: "slow down" } },
+        { status: 429, headers: { "retry-after": "90" } },
+      );
+    return Response.json({ ...job, status: "succeeded" });
   }) as typeof fetch;
-  const controller = new AbortController();
-  const pending = new Convt({ apiKey: "test", baseUrl: "https://api.test" })
-    .convertUrl("https://cdn.example.com/a.svg", { to: "png", signal: controller.signal })
-    .catch((e) => e);
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-  // Still waiting out the 21 s: no cancellation was sent on its own.
+  // A controlled clock: record each long wait and run it at once.
+  const realSetTimeout = globalThis.setTimeout;
+  const waits: number[] = [];
+  globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+    if ((ms ?? 0) >= 20_000) {
+      waits.push(ms ?? 0);
+      return realSetTimeout(fn, 0);
+    }
+    return realSetTimeout(fn, ms);
+  }) as typeof setTimeout;
+  try {
+    const result = await new Convt({ apiKey: "test", baseUrl: "https://api.test" }).convertUrl(
+      "https://cdn.example.com/a.svg",
+      { to: "png" },
+    );
+    expect(result.outputs).toHaveLength(1);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+  expect(waits).toContain(90_000);
+  expect(polls).toBe(2);
   expect(calls.some((u) => u.endsWith("/cancel"))).toBe(false);
-  controller.abort(new Error("done"));
-  await pending;
+});
+test("create tells an AbortSignal from an options object that looks like one", async () => {
+  const keys: (string | null)[] = [];
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    keys.push(new Headers(init?.headers).get("idempotency-key"));
+    return Response.json({ job, upload_url: null, upload_expires_in: null });
+  }) as typeof fetch;
+  const options = Object.assign(new EventTarget(), {
+    aborted: false,
+    signal: new AbortController().signal,
+    idempotencyKey: "order-9",
+  });
+  await new Convt({ apiKey: "test", baseUrl: "https://api.test" }).create(
+    { input_format: "png", target_format: "webp", input_bytes: 1 },
+    options,
+  );
+  expect(keys).toEqual(["order-9"]);
 });

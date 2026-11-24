@@ -302,17 +302,20 @@ export class Conversion {
       const copyInto = async (flags: "w" | "wx") => {
         const target = await open(path, flags, 0o666);
         try {
-          await pipeline(createReadStream(partial), target.createWriteStream());
+          // Written through the handle itself, so on failure the cleanup below
+          // acts on this file, never on whatever the name points at by then.
+          for await (const chunk of createReadStream(partial)) await target.writeFile(chunk);
         } catch (error) {
-          // A file this call created itself must not stay behind half-written;
-          // remove it only if the name still points at that same file.
-          if (flags === "wx") {
-            const mine = await target.stat().catch(() => null);
-            const there = await stat(path).catch(() => null);
-            if (mine && there && mine.ino === there.ino && mine.dev === there.dev)
-              await rm(path, { force: true });
-          }
-          throw error;
+          if (flags !== "wx") throw error;
+          // A file this call created must not stay behind half-written. Removing
+          // it by name could hit a file that replaced it meanwhile, so empty it
+          // through the handle instead and say where it is.
+          await target.truncate(0).catch(() => {});
+          throw new ConvtError(
+            "save_failed",
+            `Saving to ${path} failed (${String(error)}); an empty file was left there.`,
+            { cause: error },
+          );
         } finally {
           await target.close().catch(() => {});
         }
@@ -343,17 +346,14 @@ export class Conversion {
       async function replaceInPlace() {
         // Refuse rather than truncate when the disk could not hold the new
         // bytes: the existing file must never end up half-written.
-        // Advisory: truncating the old file frees its space before the copy.
+        // The old file's size says nothing reliable about what truncating it
+        // frees (a sparse or deduplicated file holds far less), so count none.
         const size = (await stat(partial)).size;
-        const old = await stat(path).then(
-          (s) => s.size,
-          () => 0,
-        );
         const free = await statfs(dirname(path)).then(
           (s) => s.bavail * s.bsize,
           () => Number.POSITIVE_INFINITY,
         );
-        if (free + old < size)
+        if (free < size)
           throw new ConvtError(
             "disk_full",
             `Not enough free space to replace ${path} safely; it was left unchanged.`,
@@ -577,9 +577,8 @@ export class Convt {
           );
         }
         await response.body?.cancel().catch(() => {});
-        await again(
-          Number.isFinite(after) && after > 0 ? Math.min(after, 60) * 1000 : 500 * 2 ** attempt,
-        );
+        // The caller's signal bounds any wait the server asks for.
+        await again(Number.isFinite(after) && after > 0 ? after * 1000 : 500 * 2 ** attempt);
         continue;
       }
       let value: unknown;
@@ -809,15 +808,20 @@ export class Convt {
   }
 }
 
-/** An AbortSignal from any realm (an iframe's signal fails `instanceof`). */
+const abortedGetter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
+/**
+ * An AbortSignal from any realm: the native getter accepts any real signal (an
+ * iframe's fails `instanceof`) and throws for anything else, including an
+ * options object that happens to have an `aborted` field.
+ */
 function isAbortSignal(value: unknown): value is AbortSignal {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "aborted" in value &&
-    typeof value.aborted === "boolean" &&
-    "addEventListener" in value
-  );
+  if (typeof value !== "object" || value === null || abortedGetter === undefined) return false;
+  try {
+    abortedGetter.call(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function formatFromName(name: string): Format | undefined {

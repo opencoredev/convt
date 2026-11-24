@@ -201,7 +201,9 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
       return (
         <>
           <Heading eyebrow="CHECKOUT">This checkout didn't complete</Heading>
-          <p className={lead}>Nothing was charged. You can start again whenever you're ready.</p>
+          <p className={lead}>
+            This checkout didn't go through. You can start a new one whenever you're ready.
+          </p>
           <Actions primary={{ href: links.pricing, label: "See pricing" }} />
         </>
       );
