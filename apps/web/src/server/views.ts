@@ -487,6 +487,7 @@ export type CheckoutView =
 /** After the success page stops polling. A Pro trial issues no key. */
 export type CheckoutGiveUp =
   | { state: "trial"; product: "pro"; allowTrial: true }
+  | { state: "api_pending" }
   | { state: "email" };
 
 export function checkoutGiveUp(
@@ -494,6 +495,8 @@ export function checkoutGiveUp(
   allowTrial?: boolean,
 ): CheckoutGiveUp {
   if (product === "pro" && allowTrial) return { state: "trial", product: "pro", allowTrial: true };
+  // API billing issues no license key, so there is nothing to email.
+  if (product === "api") return { state: "api_pending" };
   return { state: "email" };
 }
 

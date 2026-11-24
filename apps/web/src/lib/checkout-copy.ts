@@ -20,10 +20,19 @@ export function checkoutAside({
   os,
   origin,
 }: {
-  kind: "key" | "trial" | "api";
+  kind: "key" | "trial" | "api" | "confirming";
   os: Os | null;
   origin: CheckoutOrigin;
 }) {
+  if (kind === "confirming")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "We confirm the checkout with our payment provider",
+        "This page updates by itself in a few seconds",
+        "Keep this tab open until it does",
+      ],
+    };
   if (kind === "api")
     return {
       title: "WHAT'S NEXT",
@@ -64,6 +73,21 @@ export function checkoutAside({
             "Find it again under Licenses",
           ],
   };
+}
+
+/**
+ * Which "what's next" panel a success-page state gets. While the product is unknown
+ * the panel stays neutral, so an API checkout never shows desktop download steps.
+ */
+export function checkoutAsideKind(view: {
+  state: string;
+  product?: string | null;
+}): "key" | "trial" | "api" | "confirming" {
+  if (view.state === "api_enrolled" || view.state === "api_pending" || view.product === "api")
+    return "api";
+  if (view.state === "trial") return "trial";
+  if (view.state === "loading" || view.state === "pending") return "confirming";
+  return "key";
 }
 
 /** The download button: the visitor's build when the OS is known, otherwise the picker. */

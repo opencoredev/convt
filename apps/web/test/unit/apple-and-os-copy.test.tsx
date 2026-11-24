@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { GoogleSignIn, OtherSignIn } from "../../src/components/app/social-sign-in";
-import { checkoutAside, checkoutOrigin, downloadAction } from "../../src/lib/checkout-copy";
+import {
+  checkoutAside,
+  checkoutAsideKind,
+  checkoutOrigin,
+  downloadAction,
+} from "../../src/lib/checkout-copy";
+import { checkoutGiveUp } from "../../src/server/views";
 import {
   downloadCtaLabel,
   downloadHref,
@@ -122,6 +128,21 @@ test("checkout success panel and button follow the visitor's OS", () => {
     checkoutAside({ kind: "key", os: osFromUserAgent(agents.mac), origin: web }).items[0],
   ).toBe("Download convt for macOS");
   expect(checkoutAside({ kind: "trial", os: null, origin: web }).items[0]).toBe("Download convt");
+  // The success page picks the API panel for every API state, and stays neutral
+  // while it does not yet know what was bought.
+  expect(checkoutAsideKind({ state: "loading" })).toBe("confirming");
+  expect(checkoutAsideKind({ state: "pending", product: null })).toBe("confirming");
+  expect(checkoutAsideKind({ state: "pending", product: "api" })).toBe("api");
+  expect(checkoutAsideKind({ state: "api_enrolled", product: "api" })).toBe("api");
+  expect(checkoutAsideKind(checkoutGiveUp("api", false))).toBe("api");
+  expect(checkoutAsideKind({ state: "pending", product: "desktop" })).toBe("confirming");
+  expect(checkoutAsideKind({ state: "ready", product: "desktop" })).toBe("key");
+  expect(checkoutAsideKind({ state: "trial", product: "pro" })).toBe("trial");
+  expect(checkoutGiveUp("api", false)).toEqual({ state: "api_pending" });
+  expect(checkoutGiveUp("desktop", false)).toEqual({ state: "email" });
+  expect(
+    checkoutAside({ kind: "confirming", os: windows, origin: web }).items.join(" "),
+  ).not.toMatch(/Download|Licenses|API key/);
   // API billing has nothing to download, from the web or the app.
   for (const origin of [web, "app" as const]) {
     const api = checkoutAside({ kind: "api", os: windows, origin }).items;

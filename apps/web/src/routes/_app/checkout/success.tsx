@@ -8,6 +8,7 @@ import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
 import {
   checkoutAside,
+  checkoutAsideKind,
   checkoutOrigin,
   downloadAction,
   type CheckoutOrigin,
@@ -43,6 +44,7 @@ type State =
   | CheckoutView
   | { state: "loading" }
   | { state: "email" }
+  | { state: "api_pending" }
   | { state: "error"; reason: string };
 
 const errors: Record<string, string> = {
@@ -76,7 +78,10 @@ function SuccessPage() {
   return (
     <AuthLayout
       aside={checkoutAside({
-        kind: state.state === "trial" ? "trial" : state.state === "api_enrolled" ? "api" : "key",
+        kind: checkoutAsideKind({
+          state: state.state,
+          product: "product" in state ? state.product : null,
+        }),
         os,
         origin,
       })}
@@ -141,7 +146,18 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
             Your card is saved and your spend cap is set. Conversions are billed at the end of each
             month.
           </p>
-          <Actions primary={{ href: "/dashboard/api", label: "Create an API key" }} />
+          <Actions primary={{ href: "/dashboard/api", label: "Go to API keys" }} />
+        </>
+      );
+    case "api_pending":
+      return (
+        <>
+          <Heading eyebrow="CONVT API">Your card is still being confirmed</Heading>
+          <p className={lead}>
+            API billing turns on as soon as the payment provider confirms your card, usually within
+            a minute. The API page shows it, and lets you create keys from then on.
+          </p>
+          <Actions primary={{ href: "/dashboard/api", label: "Go to API billing" }} />
         </>
       );
     case "email":
