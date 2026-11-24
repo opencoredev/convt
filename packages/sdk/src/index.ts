@@ -303,6 +303,16 @@ export class Conversion {
         const target = await open(path, flags, 0o666);
         try {
           await pipeline(createReadStream(partial), target.createWriteStream());
+        } catch (error) {
+          // A file this call created itself must not stay behind half-written;
+          // remove it only if the name still points at that same file.
+          if (flags === "wx") {
+            const mine = await target.stat().catch(() => null);
+            const there = await stat(path).catch(() => null);
+            if (mine && there && mine.ino === there.ino && mine.dev === there.dev)
+              await rm(path, { force: true });
+          }
+          throw error;
         } finally {
           await target.close().catch(() => {});
         }
@@ -333,12 +343,17 @@ export class Conversion {
       async function replaceInPlace() {
         // Refuse rather than truncate when the disk could not hold the new
         // bytes: the existing file must never end up half-written.
+        // Advisory: truncating the old file frees its space before the copy.
         const size = (await stat(partial)).size;
+        const old = await stat(path).then(
+          (s) => s.size,
+          () => 0,
+        );
         const free = await statfs(dirname(path)).then(
           (s) => s.bavail * s.bsize,
           () => Number.POSITIVE_INFINITY,
         );
-        if (free < size)
+        if (free + old < size)
           throw new ConvtError(
             "disk_full",
             `Not enough free space to replace ${path} safely; it was left unchanged.`,
@@ -401,7 +416,7 @@ export class Convt {
     path,
     method = "GET",
     data,
-    signal = AbortSignal.timeout(30_000),
+    signal: given,
     idempotencyKey,
   }: {
     path: string;
@@ -410,6 +425,9 @@ export class Convt {
     signal?: AbortSignal;
     idempotencyKey?: string;
   }): Promise<T> {
+    // A call without the caller's signal gets the SDK's own 30-second deadline.
+    const ownDeadline = given === undefined;
+    const signal = given ?? AbortSignal.timeout(30_000);
     if (idempotencyKey !== undefined && !/^[\x21-\x7e]{1,255}$/.test(idempotencyKey))
       throw new ConvtError(
         "invalid_idempotency_key",
@@ -444,6 +462,7 @@ export class Convt {
         signal,
         idempotencyKey,
         retryable,
+        ownDeadline,
         fail,
         unknown,
         onDispatch: () => (dispatched = true),
@@ -477,6 +496,7 @@ export class Convt {
     signal,
     idempotencyKey,
     retryable,
+    ownDeadline,
     fail,
     unknown,
     onDispatch,
@@ -487,6 +507,7 @@ export class Convt {
     signal: AbortSignal;
     idempotencyKey?: string;
     retryable: boolean;
+    ownDeadline: boolean;
     fail: (
       code: string,
       message: string,
@@ -544,7 +565,9 @@ export class Convt {
         const after = Number(response.headers.get("retry-after"));
         // A wait longer than a call's own deadline would only end in a timeout:
         // report the rate limit instead, with how long to wait.
-        if (Number.isFinite(after) && after > 20) {
+        // Only the SDK's own 30-second deadline is known here; a caller's signal
+        // (a conversion's 11 minutes, say) decides for itself how long to wait.
+        if (ownDeadline && Number.isFinite(after) && after > 20) {
           await response.body?.cancel().catch(() => {});
           throw fail(
             response.status === 429 ? "rate_limited" : "unavailable",
@@ -592,8 +615,9 @@ export class Convt {
   }
   create(input: CreateInput, options: RequestOptions | AbortSignal = {}) {
     // Earlier versions took the AbortSignal itself as the second argument.
-    const { signal, idempotencyKey } =
-      options instanceof AbortSignal ? { signal: options, idempotencyKey: undefined } : options;
+    const { signal, idempotencyKey } = isAbortSignal(options)
+      ? { signal: options, idempotencyKey: undefined }
+      : options;
     return this.request<Created>({
       path: "/v1/jobs",
       method: "POST",
@@ -783,6 +807,17 @@ export class Convt {
       throw withContext(error, context);
     }
   }
+}
+
+/** An AbortSignal from any realm (an iframe's signal fails `instanceof`). */
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "aborted" in value &&
+    typeof value.aborted === "boolean" &&
+    "addEventListener" in value
+  );
 }
 
 function formatFromName(name: string): Format | undefined {

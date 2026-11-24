@@ -148,7 +148,7 @@ test("checkout success panel and button follow the visitor's OS", () => {
   expect(checkoutAsideKind({ state: "failed", product: "api" })).toBe("retry");
   expect(checkoutAsideKind({ state: "failed", product: "desktop" })).toBe("retry");
   expect(checkoutAside({ kind: "retry", os: windows, origin: web }).items[0]).toBe(
-    "Nothing was charged",
+    "This checkout didn't go through",
   );
   expect(
     checkoutAside({ kind: "confirming", os: windows, origin: web }).items.join(" "),

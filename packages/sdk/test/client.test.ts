@@ -627,3 +627,25 @@ test("a Retry-After longer than the call's deadline is reported, not slept on", 
   expect(error.code).toBe("rate_limited");
   expect(error.message).toContain("45");
 });
+test("a long Retry-After while a conversion polls waits instead of cancelling the job", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/v1/jobs")) return Response.json({ job, upload_url: null });
+    if (url.endsWith("/cancel")) return Response.json({ ...job, status: "cancelled" });
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "21" } },
+    );
+  }) as typeof fetch;
+  const controller = new AbortController();
+  const pending = new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", signal: controller.signal })
+    .catch((e) => e);
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  // Still waiting out the 21 s: no cancellation was sent on its own.
+  expect(calls.some((u) => u.endsWith("/cancel"))).toBe(false);
+  controller.abort(new Error("done"));
+  await pending;
+});

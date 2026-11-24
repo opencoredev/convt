@@ -28,9 +28,9 @@ export function checkoutAside({
     return {
       title: "WHAT'S NEXT",
       items: [
-        "Nothing was charged",
-        "Start the checkout again when you're ready",
-        "If the card was declined, try another one",
+        "This checkout didn't go through",
+        "Start a new one when you're ready",
+        "If a card was declined, try another one",
       ],
     };
   if (kind === "unconfirmed")
