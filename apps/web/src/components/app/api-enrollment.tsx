@@ -211,7 +211,17 @@ export function ApiEnrollmentCard({
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <SecondaryButton onClick={() => setEditing(true)}>Change cap</SecondaryButton>
+              <SecondaryButton
+                onClick={() => {
+                  // Start from the cap in force, which may have changed since this
+                  // card first rendered (for example once enrollment completed).
+                  if (enrollment.spendCapCents !== null)
+                    setCap(String(enrollment.spendCapCents / 100));
+                  setEditing(true);
+                }}
+              >
+                Change cap
+              </SecondaryButton>
               {enrollment.endsOn ? (
                 <TextButton disabled={busy} onClick={() => setEnding(false)}>
                   Keep API billing

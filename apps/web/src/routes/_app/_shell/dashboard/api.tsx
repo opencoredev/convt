@@ -46,9 +46,23 @@ function ApiPage() {
   // The enrollment card promises to update once the card is confirmed: check again
   // every few seconds while it waits.
   const pending = api.enrollment.state === "pending";
+  // Ask quietly and reload the page data only once the state changes, so a
+  // failed check is simply tried again instead of replacing the page with an error.
   useEffect(() => {
     if (!pending) return;
-    const timer = setInterval(() => void router.invalidate(), 5000);
+    let checking = false;
+    const timer = setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const next = await getApiOverview();
+        if (next.enrollment.state !== "pending") await router.invalidate();
+      } catch {
+        // Transient; the next tick asks again.
+      } finally {
+        checking = false;
+      }
+    }, 5000);
     return () => clearInterval(timer);
   }, [pending, router]);
   async function create() {
