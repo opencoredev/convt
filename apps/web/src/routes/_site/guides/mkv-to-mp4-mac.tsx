@@ -386,7 +386,8 @@ function MkvToMp4Mac() {
             HandBrake is free and open source. It always re-encodes the video, so it takes far
             longer than a remux and the copy is a new encode, but it fixes any codec in one go.
             Check its Audio and Subtitles tabs if you need more than one language: a preset decides
-            which tracks it takes.
+            which tracks it takes. If HandBrake is more than you need for everyday files, see{" "}
+            <TextLink href={routes.handbrakeAlternative}>HandBrake alternatives</TextLink>.
           </p>
         </Prose>
       </GuideSection>

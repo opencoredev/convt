@@ -127,7 +127,7 @@ export const guides = [
       "FFmpeg remux with every audio and subtitle track kept (and what a plain -c copy drops), HandBrake, and folders with subfolders in the convt CLI. Notes that convt 0.5.0 keeps one audio track and no subtitles.",
     category: "video",
     published: "2026-11-10",
-    updated: "2026-11-23",
+    updated: "2026-11-24",
   },
 ] as const satisfies readonly Guide[];
 

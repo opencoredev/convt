@@ -1,5 +1,5 @@
 import { guidePath, guides } from "#/lib/guides";
-import { commandLineConverter, macFileConverter } from "#/lib/landing-pages";
+import { commandLineConverter, handbrakeAlternative, macFileConverter } from "#/lib/landing-pages";
 import { GITHUB_URL, routes } from "#/lib/site";
 
 /** Footer columns, shared by the landing page and the other public pages. */
@@ -10,6 +10,7 @@ export const footerColumns = [
       { label: "Download", href: routes.download },
       { label: "Formats", href: routes.formats },
       { label: macFileConverter.footerLabel, href: macFileConverter.path },
+      { label: handbrakeAlternative.footerLabel, href: handbrakeAlternative.path },
       { label: "Pricing", href: routes.pricing },
       { label: "Changelog", href: routes.changelog },
     ],

@@ -432,7 +432,9 @@ Photos/2026/b.png -> webp/2026/b.webp
                 HandBrake is a free video encoder with many settings. It makes video files only, not
                 images, audio files or documents. Permute is a paid Mac app that converts video,
                 audio, images and PDFs. convt also converts Office documents, has a command-line
-                tool for folders and scripts, and runs on Windows and Linux too.
+                tool for folders and scripts, and runs on Windows and Linux too. The{" "}
+                <TextLink href={routes.handbrakeAlternative}>HandBrake alternatives</TextLink> page
+                compares them side by side.
               </Question>
               <Question q="Does it work on Windows?">
                 Yes, the app and the <Code>convt</Code> command run on Windows. The Explorer
