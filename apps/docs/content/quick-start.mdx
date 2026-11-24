@@ -135,10 +135,9 @@ func convert(input, to, output string) error {
 	if err != nil {
 		return err
 	}
+	defer os.Remove(out.Name()) // no-op once renamed
 	_, copyErr := io.Copy(out, res.Body)
-	closeErr := out.Close()
-	if err := errors.Join(copyErr, closeErr); err != nil {
-		os.Remove(out.Name())
+	if err := errors.Join(copyErr, out.Close()); err != nil {
 		return err
 	}
 	return os.Rename(out.Name(), output)

@@ -82,6 +82,18 @@ fn configured_bucket(
     })
 }
 
+/// Bounds one storage call. The client's own timeout is long because worker
+/// transfers move up to 2 GB; metadata and small calls must answer quickly, or
+/// a stalled bucket would hold API requests (and their memory) for minutes.
+async fn within<T>(
+    seconds: u64,
+    call: impl std::future::Future<Output = anyhow::Result<T>>,
+) -> anyhow::Result<T> {
+    tokio::time::timeout(std::time::Duration::from_secs(seconds), call)
+        .await
+        .map_err(|_| anyhow::anyhow!("object storage did not answer within {seconds} s"))?
+}
+
 fn success(code: u16) -> anyhow::Result<()> {
     anyhow::ensure!((200..300).contains(&code), "object storage HTTP {code}");
     Ok(())
@@ -107,36 +119,51 @@ impl Storage for S3Storage {
         Ok(self.bucket.presign_get(key, seconds, None).await?)
     }
     async fn size(&self, key: &str) -> anyhow::Result<i64> {
-        let (h, c) = self.bucket.head_object(key).await?;
-        success(c)?;
-        h.content_length
-            .ok_or_else(|| anyhow::anyhow!("missing content length"))
+        within(20, async {
+            let (h, c) = self.bucket.head_object(key).await?;
+            success(c)?;
+            h.content_length
+                .ok_or_else(|| anyhow::anyhow!("missing content length"))
+        })
+        .await
     }
     async fn head(&self, key: &str) -> anyhow::Result<Option<i64>> {
-        match self.bucket.head_object(key).await {
-            Ok((h, 200..=299)) => {
-                Ok(Some(h.content_length.ok_or_else(|| {
-                    anyhow::anyhow!("missing content length")
-                })?))
+        within(20, async {
+            match self.bucket.head_object(key).await {
+                Ok((h, 200..=299)) => {
+                    Ok(Some(h.content_length.ok_or_else(|| {
+                        anyhow::anyhow!("missing content length")
+                    })?))
+                }
+                Ok((_, 404)) | Err(s3::error::S3Error::HttpFailWithBody(404, _)) => Ok(None),
+                Ok((_, code)) => anyhow::bail!("object storage HTTP {code}"),
+                Err(e) => Err(e.into()),
             }
-            Ok((_, 404)) | Err(s3::error::S3Error::HttpFailWithBody(404, _)) => Ok(None),
-            Ok((_, code)) => anyhow::bail!("object storage HTTP {code}"),
-            Err(e) => Err(e.into()),
-        }
+        })
+        .await
     }
     async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()> {
-        success(self.bucket.put_object(key, &bytes).await?.status_code())
+        // At most 25 MB, from /v1/convert.
+        within(120, async {
+            success(self.bucket.put_object(key, &bytes).await?.status_code())
+        })
+        .await
     }
     async fn check(&self) -> anyhow::Result<()> {
-        let (_, code) = self
-            .bucket
-            .list_page("readiness/".into(), None, None, None, Some(1))
-            .await?;
-        success(code)
+        within(10, async {
+            let (_, code) = self
+                .bucket
+                .list_page("readiness/".into(), None, None, None, Some(1))
+                .await?;
+            success(code)
+        })
+        .await
     }
     async fn open(&self, key: &str) -> anyhow::Result<ByteStream> {
         use futures_util::StreamExt as _;
-        let response = self.bucket.get_object_stream(key).await?;
+        // Only the response headers are bounded here; the body streams to the
+        // client (at most 25 MB inline) under the client's own timeout.
+        let response = within(20, async { Ok(self.bucket.get_object_stream(key).await?) }).await?;
         success(response.status_code)?;
         Ok(Box::pin(
             response
@@ -145,7 +172,11 @@ impl Storage for S3Storage {
         ))
     }
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()> {
-        success(self.bucket.copy_object_internal(from, to).await?)
+        // A server-side copy of up to 2 GB.
+        within(300, async {
+            success(self.bucket.copy_object_internal(from, to).await?)
+        })
+        .await
     }
     async fn download(&self, key: &str, path: &Path) -> anyhow::Result<()> {
         let mut file = tokio::fs::File::create(path).await?;
@@ -159,7 +190,10 @@ impl Storage for S3Storage {
         success(r.status_code())
     }
     async fn delete(&self, key: &str) -> anyhow::Result<()> {
-        success(self.bucket.delete_object(key).await?.status_code())
+        within(20, async {
+            success(self.bucket.delete_object(key).await?.status_code())
+        })
+        .await
     }
     async fn delete_prefix(&self, prefix: &str) -> anyhow::Result<()> {
         for page in self.bucket.list(prefix.to_owned(), None).await? {

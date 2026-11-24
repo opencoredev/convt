@@ -270,24 +270,28 @@ export class Conversion {
   private async stream(index: number, path: string): Promise<void> {
     const { Readable } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
-    const { chmod, link, open, rm } = await import("node:fs/promises");
+    const { link, mkdtemp, open, rm } = await import("node:fs/promises");
     const { createReadStream } = await import("node:fs");
     const { dirname, join } = await import("node:path");
     const response = await this.fetchOutput(index, 30 * 60_000);
-    // Download into a private temporary file beside the target first, so an
-    // interrupted download never touches the target and nobody else can read
-    // the bytes meanwhile.
-    const partial = join(
-      dirname(path),
-      `.convt-${globalThis.crypto.randomUUID().slice(0, 8)}.part`,
-    );
-    const handle = await open(partial, "wx", 0o600);
+    // Download into a private staging directory beside the target (mkdtemp makes
+    // it owner-only), so an interrupted download never touches the target and
+    // nobody else can read the bytes meanwhile. The staged file is created with
+    // the ordinary mode for a new file, so the umask and any default ACL the
+    // directory passes down apply exactly as for any other new file there.
+    const staging = await mkdtemp(join(dirname(path), ".convt-"));
+    const partial = join(staging, "part");
     try {
-      // `response.body` is checked in fetchOutput.
-      await pipeline(Readable.fromWeb(response.body as never), handle.createWriteStream());
+      const handle = await open(partial, "wx", 0o666);
+      try {
+        // `response.body` is checked in fetchOutput.
+        await pipeline(Readable.fromWeb(response.body as never), handle.createWriteStream());
+      } finally {
+        await handle.close().catch(() => {});
+      }
       // Decide only now whether the target exists, so a file created meanwhile
       // is never replaced. A new target appears atomically through a hard link
-      // that fails if the name is taken, with the usual mode for a new file.
+      // that fails if the name is taken.
       const created = await link(partial, path).then(
         () => true,
         (error: NodeJS.ErrnoException) => {
@@ -295,10 +299,7 @@ export class Conversion {
           throw error;
         },
       );
-      if (created) {
-        // Still private until here; now the usual mode for a new file.
-        await chmod(path, 0o666 & ~process.umask());
-      } else {
+      if (!created) {
         // An existing file is written in place: opening it truncates it but
         // keeps its inode, owner, mode and ACLs, which a rename would replace.
         const target = await open(path, "w");
@@ -309,8 +310,7 @@ export class Conversion {
         }
       }
     } finally {
-      await handle.close().catch(() => {});
-      await rm(partial, { force: true });
+      await rm(staging, { recursive: true, force: true });
     }
   }
   async save(path: string): Promise<void> {
@@ -414,6 +414,21 @@ export class Convt {
       // Once anything was sent, a failure outside the API's own answers leaves a
       // keyed create's outcome unknown; keep the key on it.
       if (dispatched && !(error instanceof ConvtError)) throw unknown(error);
+      // A ConvtError raised after dispatch (say, by a credential callback on a
+      // retry) still concerns a create that may have landed: add the key.
+      if (
+        dispatched &&
+        error instanceof ConvtError &&
+        !error.idempotencyKey &&
+        method === "POST" &&
+        idempotencyKey !== undefined
+      )
+        throw new ConvtError(error.code, error.message, {
+          status: error.status,
+          requestId: error.requestId,
+          idempotencyKey,
+          cause: error,
+        });
       throw error;
     }
   }

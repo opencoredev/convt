@@ -652,9 +652,10 @@ async fn convert(
         _ => {}
     }
     // Every output must exist before convt reports success with links to it.
+    let mut sizes = Vec::with_capacity(job.output_keys.0.len());
     for key in &job.output_keys.0 {
         match s.storage.head(key).await {
-            Ok(Some(_)) => {}
+            Ok(Some(size)) => sizes.push(size),
             Ok(None) => return Ok(finish(billed_error(output_missing(), job), &id, replayed)),
             Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
         }
@@ -673,13 +674,7 @@ async fn convert(
         return Ok(finish(response, &id, replayed));
     }
     let key = job.output_keys.0[0].clone();
-    let length = match s.storage.head(&key).await {
-        Ok(Some(length)) => length,
-        // A succeeded job whose output is gone: answer with the job, not a
-        // redirect to a storage 404 that carries none of convt's context.
-        Ok(None) => return Ok(finish(billed_error(output_missing(), job), &id, replayed)),
-        Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
-    };
+    let length = sizes[0];
     // Bytes sent through this service cost egress on every delivery, so only a
     // small result's first delivery streams from here. A large result, and every
     // replay, is a redirect to its signed storage URL (follow it: curl -L).

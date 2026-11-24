@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { Convt, Conversion } from "../src/index";
+import { Convt, Conversion, ConvtError } from "../src/index";
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -567,5 +567,24 @@ test("a gateway error whose body cannot be read still reports the key", async ()
   const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 1 })
     .convertUrl("https://cdn.example.com/a.svg", { to: "png" })
     .catch((e) => e);
+  expect(error.idempotencyKey).toBeTruthy();
+});
+test("a ConvtError from the credential callback after a send keeps the key", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("busy", { status: 503 })) as typeof fetch;
+  const client = new Convt({
+    baseUrl: "https://api.test",
+    maxRetries: 2,
+    token: async () => {
+      calls++;
+      if (calls > 1) throw new ConvtError("token_failed", "Could not refresh the token.");
+      return "tok";
+    },
+  });
+  const error = await client
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png" })
+    .catch((e) => e);
+  expect(error.code).toBe("token_failed");
   expect(error.idempotencyKey).toBeTruthy();
 });

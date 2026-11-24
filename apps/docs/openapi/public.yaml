@@ -366,3 +366,9 @@ actions:
   - target: $.components.schemas.Error
     update:
       description: Every JSON error has this shape. `code` is stable; `message` is for people and may change.
+
+  # After the shared 502 text above: the convert route's 502 can concern a job
+  # that already succeeded and was billed.
+  - target: $.paths['/v1/convert'].post.responses['502']
+    update:
+      description: "`storage_unavailable`, or `output_missing` when the job succeeded but an output is not in storage. If the body names a job, it may already be billed: read it with `GET /v1/jobs/{id}` and fetch its outputs before converting again."
