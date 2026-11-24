@@ -371,4 +371,4 @@ actions:
   # that already succeeded and was billed.
   - target: $.paths['/v1/convert'].post.responses['502']
     update:
-      description: "`storage_unavailable`, or `output_missing` when the job succeeded but an output is not in storage. If the body names a job, it may already be billed: read it with `GET /v1/jobs/{id}` and fetch its outputs before converting again."
+      description: "`storage_unavailable`: storage did not answer; if the body names a succeeded job it was billed, so fetch its outputs with `GET /v1/jobs/{id}/download` instead of converting again. `output_missing`: the job succeeded and was billed but an output is gone from storage; fresh links will not help, so contact us with the job id."

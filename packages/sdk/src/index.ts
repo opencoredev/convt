@@ -224,7 +224,6 @@ export type ConvertOptions = {
 };
 export type Output = { name: string; url: string };
 export type CreateInput = {
-  input_format: Format;
   target_format: Format;
   options?: JobOptions;
   webhook_url?: string;
@@ -233,7 +232,15 @@ export type CreateInput = {
    * different bytes under that key is refused instead of converting them.
    */
   input_sha256?: string;
-} & ({ input_bytes: number; source_url?: never } | { source_url: string; input_bytes?: never });
+} & (
+  | { input_format: Format; input_bytes: number; source_url?: never }
+  | {
+      /** Optional when the URL's path ends in a known extension. */
+      input_format?: Format;
+      source_url: string;
+      input_bytes?: never;
+    }
+);
 export type Created = {
   job: Job;
   /** Null when the job needs no upload (`source_url`) or was already started. */

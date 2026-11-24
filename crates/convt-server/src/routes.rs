@@ -683,7 +683,12 @@ pub async fn expire(s: &CloudState) -> anyhow::Result<()> {
     .fetch_all(&s.pool)
     .await?;
     for id in ids {
-        s.storage.delete_prefix(&format!("{id}/")).await?;
+        // One stuck prefix must not hold up every other account's cleanup; it
+        // is retried on the next pass.
+        if let Err(error) = s.storage.delete_prefix(&format!("{id}/")).await {
+            tracing::warn!(job_id = id, %error, "expiry cleanup will retry this job");
+            continue;
+        }
         // Only successful cleanup releases the separate storage commitment.
         sqlx::query!(
             r#"update cloud_jobs set input_key=null where id=$1 and expires_at<=now()"#,

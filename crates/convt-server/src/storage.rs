@@ -196,7 +196,12 @@ impl Storage for S3Storage {
         .await
     }
     async fn delete_prefix(&self, prefix: &str) -> anyhow::Result<()> {
-        for page in self.bucket.list(prefix.to_owned(), None).await? {
+        // A job prefix holds at most a few hundred objects.
+        let pages = within(60, async {
+            Ok(self.bucket.list(prefix.to_owned(), None).await?)
+        })
+        .await?;
+        for page in pages {
             for object in page.contents {
                 self.delete(&object.key).await?;
             }

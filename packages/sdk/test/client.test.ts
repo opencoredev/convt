@@ -588,3 +588,12 @@ test("a ConvtError from the credential callback after a send keeps the key", asy
   expect(error.code).toBe("token_failed");
   expect(error.idempotencyKey).toBeTruthy();
 });
+test("a remote create may leave the input format to the URL", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    Response.json({ job, upload_url: null, upload_expires_in: null })) as typeof fetch;
+  const created = await new Convt({ apiKey: "test", baseUrl: "https://api.test" }).create({
+    source_url: "https://cdn.example.com/a.png",
+    target_format: "webp",
+  });
+  expect(created.job.id).toBe(job.id);
+});
