@@ -11,17 +11,21 @@ actions:
     update:
       title: convt API
       description: |
-        The convt API converts files on convt's servers. A conversion is a **job**: you reserve it, upload the file to a signed URL, start it, poll until it finishes, then fetch signed download URLs for its outputs.
+        The convt API converts files on convt's servers. `POST /v1/convert` takes a file of up to 25 MB, or a `source_url`, and answers with the converted file in one request. For files up to 2 GB, a conversion is a **job**: you reserve it, upload the file to a signed URL, start it, poll until it finishes (or get a webhook), then fetch signed download URLs for its outputs.
+
+        Send an `Idempotency-Key` on creates so retries never reserve twice. Every response carries `X-Request-Id`. Authenticated responses on job routes also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a request refused for a missing or bad key does not.
 
         Every job route takes a `cvt_live_` API key as a Bearer token. Create keys in the [dashboard](https://convt.app/dashboard/api). Each successful job is billed once; failed and cancelled jobs are free.
-
-        Until `api.convt.app` resolves, use the first server listed in this spec. The paths, keys and responses are the same on both hosts.
 
   - target: $
     update:
       tags:
+        - name: Convert
+          description: One request in, the converted file out. Every route needs a `cvt_live_` key.
         - name: Jobs
           description: Reserve, upload, start, poll, cancel and download a conversion. Every route needs a `cvt_live_` key.
+        - name: Webhooks
+          description: The secret that signs job webhooks.
         - name: Formats
           description: The formats convt knows. Public, no key needed.
 
@@ -31,7 +35,7 @@ actions:
       tags: [Jobs]
       summary: Create a job
       description: |
-        Reserves one conversion and returns a signed `upload_url` that stays valid for 15 minutes (`upload_expires_in` is 900 seconds).
+        Reserves one conversion and returns a signed `upload_url`, valid for `upload_expires_in` seconds: 900 for a new job, less (or no URL) for an idempotent replay close to the job's 24-hour expiry.
 
         `input_bytes` must be the exact size of the file you will upload, from 1 byte to 2 GB. The upload signature binds `Content-Length`, so a different size fails at upload or at start.
 
@@ -79,10 +83,10 @@ actions:
             upload_expires_in: 900
   - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_url
     update:
-      description: Signed URL. Send the file bytes to it with `PUT`.
+      description: Signed URL. Send the file bytes to it with `PUT`. `null` for a `source_url` job, and for an idempotent replay of a job that was already started.
   - target: $.paths['/v1/jobs'].post.responses['200'].content['application/json'].schema.properties.upload_expires_in
     update:
-      description: Seconds until `upload_url` stops accepting uploads. Always 900.
+      description: "Seconds until `upload_url` stops accepting uploads: 900 for a new job, less for a replay close to the job's expiry, `null` when there is no `upload_url`."
   - target: $.paths['/v1/jobs'].post.responses['400']
     update:
       description: "`invalid_request` (the body is not JSON or misses a required field), `unsupported_format`, `invalid_options` or `file_too_large`."
@@ -101,6 +105,58 @@ actions:
             error:
               code: limit_reached
               message: Your allowance or spend cap has been reached.
+
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.source_url
+    update:
+      description: A public https URL convt downloads instead of an upload, up to 2 GB. Leave out `input_bytes`; the job is queued at once and needs no start. See [Remote files](https://convt.app/docs/guides/remote-files).
+  - target: $.paths['/v1/jobs'].post.requestBody.content['application/json'].schema.properties.webhook_url
+    update:
+      description: A public https URL that gets one signed POST when the job finishes. See [Webhooks](https://convt.app/docs/guides/webhooks).
+  - target: $.paths['/v1/jobs'].post.responses['409']
+    update:
+      description: "`idempotency_key_reused`: the `Idempotency-Key` was used for a different request in the last 24 hours."
+
+  # Convert
+  - target: $.paths['/v1/convert'].post
+    update:
+      tags: [Convert]
+      description: |
+        Converts a file in one request: reserve, upload, queue, wait and return the result, on the same pipeline, spend cap and billing as the jobs routes.
+
+        Send the file as a multipart `file` field (with `to`, and optionally `from` and `options`), as the raw body with `to` in the query, or send JSON with `source_url`. `to` and `from` take format ids or extensions; `from` is inferred from the file name, URL or `Content-Type` when left out.
+
+        When the job succeeds with one output of at most 25 MB, this is its first delivery, and `Accept` does not ask for JSON, the response is the file, named after yours in `Content-Disposition`, with the `Convt-Job-Id` header. A larger result, or a replay, answers `303` with the signed storage URL in `Location`: clients that follow it receive the stored file, whose headers come from storage, so read the job id from the `303` or its JSON body. With several outputs (a multi-page PDF to PNG) or `Accept: application/json`, it is JSON with signed URLs. When the job is still running after `wait` seconds, a request with `Accept: application/json` gets `202` and the job keeps running; a file request gets `409 still_running` if it sent an `Idempotency-Key` (the job keeps running) or `504 timeout` if not (the job is cancelled).
+
+        Without an `Idempotency-Key`, hanging up before the answer cancels the job; that is best effort, and a job that already succeeded is billed. With one, the job keeps running and a retry with the same key collects it.
+  - target: $.paths['/v1/convert'].post.responses['400']
+    update:
+      description: "`invalid_request`, `input_format_required`, `unsupported_format`, `invalid_options`, `invalid_source_url`, `invalid_idempotency_key` or an empty file (`file_too_large`)."
+  - target: $.paths['/v1/convert'].post.responses['409']
+    update:
+      description: "`cancelled` (the job was cancelled first), `still_running` (a file request with an `Idempotency-Key` that isn't done after `wait`; retry with the key) or `idempotency_key_reused`."
+  - target: $.paths['/v1/convert'].post.responses['413']
+    update:
+      description: "`file_too_large`: over 25 MB. Use `POST /v1/jobs` or `source_url`."
+  - target: $.paths['/v1/convert'].post.responses['503']
+    update:
+      description: "`server_busy`: too many uploads in progress. Retry after `Retry-After` seconds."
+  - target: $.paths['/v1/convert'].post.responses['504']
+    update:
+      description: "`timeout`: a file request without an `Idempotency-Key` did not finish within `wait`. The job was cancelled; not charged."
+  - target: $.paths['/v1/convert'].post.responses['422']
+    update:
+      description: "The conversion failed. `code` is the job's `error_code`, such as `conversion_failed` or `source_fetch_failed`. Not charged."
+
+  # Webhooks
+  - target: $.paths['/v1/webhooks/secret/rotate'].post
+    update:
+      tags: [Webhooks]
+      description: Replaces the account's webhook signing secret and returns the new one. Deliveries from then on are signed with it. API keys only.
+  - target: $.paths['/v1/webhooks/secret'].get
+    update:
+      tags: [Webhooks]
+      description: |
+        Returns the secret that signs your account's webhook deliveries in the `Convt-Signature` header, and its version. API keys only. Fetch it once and store it with your other secrets. See [Webhooks](https://convt.app/docs/guides/webhooks).
 
   # Read
   - target: $.paths['/v1/jobs/{id}'].get
@@ -136,7 +192,7 @@ actions:
 
         Calling start again is safe: a job that is no longer `created` is returned as it is. If the uploaded size does not match, the job is cancelled and the call fails with `size_mismatch`. Reserve a new job to try again.
 
-        If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` succeeded before you retry.
+        If nothing was uploaded, start fails with `409 upload_missing` and the job stays `created`. Upload, then call start again.
   - target: $.paths['/v1/jobs/{id}/start'].post.responses['200']
     update:
       description: The job, now `queued`, or unchanged if it was already started.
@@ -269,7 +325,7 @@ actions:
     update: { description: How many times a worker has picked up the job. Starts at 0. }
   - target: $.components.schemas.Job.properties.error_code
     update:
-      description: Why a `failed` job failed (`conversion_failed`, `expired_or_exhausted` or `worker_shutdown`), otherwise `null`.
+      description: Why a `failed` job failed (`conversion_failed`, `source_fetch_failed`, `expired_or_exhausted` or `expired`), otherwise `null`.
   - target: $.components.schemas.Job.properties.input_bytes
     update: { description: Size you reserved, in bytes. }
   - target: $.components.schemas.Job.properties.expires_at
@@ -310,3 +366,9 @@ actions:
   - target: $.components.schemas.Error
     update:
       description: Every JSON error has this shape. `code` is stable; `message` is for people and may change.
+
+  # After the shared 502 text above: the convert route's 502 can concern a job
+  # that already succeeded and was billed.
+  - target: $.paths['/v1/convert'].post.responses['502']
+    update:
+      description: "`storage_unavailable`: storage did not answer. If the body names a job, read it with `GET /v1/jobs/{id}` first: a succeeded job was billed, so fetch its outputs from `/download` instead of converting again; a job still `created`, `queued` or `running` can be collected by retrying the original request with its original `Idempotency-Key`. `output_missing`: the job succeeded and was billed but an output is gone from storage; fresh links will not help, so contact us with the job id."

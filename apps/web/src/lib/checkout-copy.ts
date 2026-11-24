@@ -13,16 +13,53 @@ export function checkoutOrigin(from: unknown): CheckoutOrigin {
 /**
  * The checkout success page's "what's next" panel. From the app the buyer already has
  * convt open, so it sends them back there; from the web it starts with the download.
+ * API billing has nothing to download: its next steps are a key and a first request.
  */
 export function checkoutAside({
   kind,
   os,
   origin,
 }: {
-  kind: "key" | "trial";
+  kind: "key" | "trial" | "api" | "confirming" | "unconfirmed" | "retry";
   os: Os | null;
   origin: CheckoutOrigin;
 }) {
+  if (kind === "retry")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "Nothing is active from this checkout",
+        "If you were charged, check your receipt email and your account first",
+        "If a card was declined, try another one",
+      ],
+    };
+  if (kind === "unconfirmed")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "Bought convt? Your key arrives by email and under Licenses",
+        "Added a card for the API? Billing shows on the API page",
+        "Either way, it appears once the payment is confirmed",
+      ],
+    };
+  if (kind === "confirming")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "We confirm the checkout with our payment provider",
+        "This page updates by itself in a few seconds",
+        "Keep this tab open until it does",
+      ],
+    };
+  if (kind === "api")
+    return {
+      title: "WHAT'S NEXT",
+      items: [
+        "Create an API key on the API page",
+        "Convert your first file with one curl command",
+        "Track spend against your cap on the same page",
+      ],
+    };
   if (origin === "app")
     return {
       title: "WHAT'S NEXT",
@@ -54,6 +91,25 @@ export function checkoutAside({
             "Find it again under Licenses",
           ],
   };
+}
+
+/**
+ * Which "what's next" panel a success-page state gets. While the product is unknown
+ * the panel stays neutral, so an API checkout never shows desktop download steps.
+ */
+export function checkoutAsideKind(view: {
+  state: string;
+  product?: string | null;
+}): "key" | "trial" | "api" | "confirming" | "unconfirmed" | "retry" {
+  // A checkout that did not go through has no next steps beyond trying again,
+  // whatever was being bought.
+  if (view.state === "failed") return "retry";
+  if (view.state === "api_enrolled" || view.state === "api_pending" || view.product === "api")
+    return "api";
+  if (view.state === "trial") return "trial";
+  if (view.state === "unconfirmed") return "unconfirmed";
+  if (view.state === "loading" || view.state === "pending") return "confirming";
+  return "key";
 }
 
 /** The download button: the visitor's build when the OS is known, otherwise the picker. */

@@ -1,6 +1,7 @@
 // Two one-time products (CNV-101): Desktop, and Desktop + Cloud, which takes the
 // brand ring the Pro card had. No billing toggle and no trial line: both are paid
-// once, and the price line says what "once" covers. The API card is unchanged.
+// once, and the price line says what "once" covers. The API card leads with its price and
+// links to /api.
 import { BUY_BUNDLE_URL, BUY_DESKTOP_URL, LAUNCHED, routes } from "#/lib/site";
 
 import { ButtonLink, ComingSoon, Container, cx } from "./ui";
@@ -221,18 +222,34 @@ function ApiCard({ available, launched }: { available: boolean; launched: boolea
             Convert files from your own code.
           </h3>
           <p className="text-[14px]/[21px] text-ink-2">
-            Same engines as the app. Pay per conversion, no plan needed.
+            Same engines as the app, one HTTP request per file up to 25 MB. No plan, no credits, and
+            failed conversions are free.
           </p>
         </div>
-        <div className="flex">
+        <p className="flex items-baseline gap-1.5">
+          <span className="text-[32px]/[38px] font-medium tracking-[-0.04em] text-ink tabular-nums">
+            $0.01
+          </span>
+          <span className="text-[14px]/[18px] text-ink-2">per conversion</span>
+        </p>
+        <div className="flex flex-wrap gap-2">
           {launched && available ? (
-            <ButtonLink
-              variant="secondary"
-              href={routes.apiDocs}
-              className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]"
-            >
-              Read the docs
-            </ButtonLink>
+            <>
+              <ButtonLink
+                variant="primary"
+                href={routes.api}
+                className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]"
+              >
+                See the API
+              </ButtonLink>
+              <ButtonLink
+                variant="secondary"
+                href={routes.apiDocs}
+                className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]"
+              >
+                Read the docs
+              </ButtonLink>
+            </>
           ) : (
             <ComingSoon className="h-9 rounded-[9px] px-3.5 text-[14px]/[18px]">
               API is not on sale yet

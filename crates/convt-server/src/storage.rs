@@ -2,11 +2,28 @@
 use async_trait::async_trait;
 use s3::{Bucket, Region, creds::Credentials};
 use std::path::Path;
+use std::pin::Pin;
+
+/// An object's bytes as they arrive from storage.
+pub type ByteStream =
+    Pin<Box<dyn futures_util::Stream<Item = std::io::Result<bytes::Bytes>> + Send>>;
+
 #[async_trait]
 pub trait Storage: Send + Sync {
-    async fn upload_url(&self, key: &str, bytes: i64) -> anyhow::Result<String>;
+    /// A PUT URL for exactly `bytes` bytes, valid for `seconds` (at most 900).
+    async fn upload_url(&self, key: &str, bytes: i64, seconds: u32) -> anyhow::Result<String>;
     async fn download_url(&self, key: &str, seconds: u32) -> anyhow::Result<String>;
     async fn size(&self, key: &str) -> anyhow::Result<i64>;
+    /// The object's size, or None when nothing is stored under `key`.
+    async fn head(&self, key: &str) -> anyhow::Result<Option<i64>>;
+    /// Stores a small object the API received in a request body.
+    async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()>;
+    /// Streams an object, for responses that return a converted file directly.
+    async fn open(&self, key: &str) -> anyhow::Result<ByteStream>;
+    /// Proves the configured bucket exists and these credentials can list it,
+    /// which expiry cleanup needs. A missing object is not enough: a missing
+    /// bucket answers 404 too.
+    async fn check(&self) -> anyhow::Result<()>;
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()>;
     async fn download(&self, key: &str, path: &Path) -> anyhow::Result<()>;
     async fn upload(&self, key: &str, path: &Path) -> anyhow::Result<()>;
@@ -36,7 +53,10 @@ impl S3Storage {
             Err(std::env::VarError::NotPresent) => parse_path_style(None)?,
             Err(_) => anyhow::bail!("S3_PATH_STYLE must be true or false"),
         };
-        let bucket = configured_bucket(&required("S3_BUCKET")?, region, credentials, path_style)?;
+        let mut bucket =
+            configured_bucket(&required("S3_BUCKET")?, region, credentials, path_style)?;
+        // The default 60 s can cut off a 2 GB transfer to or from the worker.
+        bucket.set_request_timeout(Some(std::time::Duration::from_secs(900)));
         Ok(Self { bucket })
     }
 }
@@ -62,13 +82,25 @@ fn configured_bucket(
     })
 }
 
+/// Bounds one storage call. The client's own timeout is long because worker
+/// transfers move up to 2 GB; metadata and small calls must answer quickly, or
+/// a stalled bucket would hold API requests (and their memory) for minutes.
+async fn within<T>(
+    seconds: u64,
+    call: impl std::future::Future<Output = anyhow::Result<T>>,
+) -> anyhow::Result<T> {
+    tokio::time::timeout(std::time::Duration::from_secs(seconds), call)
+        .await
+        .map_err(|_| anyhow::anyhow!("object storage did not answer within {seconds} s"))?
+}
+
 fn success(code: u16) -> anyhow::Result<()> {
     anyhow::ensure!((200..300).contains(&code), "object storage HTTP {code}");
     Ok(())
 }
 #[async_trait]
 impl Storage for S3Storage {
-    async fn upload_url(&self, key: &str, bytes: i64) -> anyhow::Result<String> {
+    async fn upload_url(&self, key: &str, bytes: i64, seconds: u32) -> anyhow::Result<String> {
         anyhow::ensure!(
             bytes > 0 && bytes <= crate::jobs::MAX_FILE_BYTES,
             "invalid upload size"
@@ -80,20 +112,71 @@ impl Storage for S3Storage {
         );
         Ok(self
             .bucket
-            .presign_put(key, 900, Some(headers), None)
+            .presign_put(key, seconds.clamp(1, 900), Some(headers), None)
             .await?)
     }
     async fn download_url(&self, key: &str, seconds: u32) -> anyhow::Result<String> {
         Ok(self.bucket.presign_get(key, seconds, None).await?)
     }
     async fn size(&self, key: &str) -> anyhow::Result<i64> {
-        let (h, c) = self.bucket.head_object(key).await?;
-        success(c)?;
-        h.content_length
-            .ok_or_else(|| anyhow::anyhow!("missing content length"))
+        within(20, async {
+            let (h, c) = self.bucket.head_object(key).await?;
+            success(c)?;
+            h.content_length
+                .ok_or_else(|| anyhow::anyhow!("missing content length"))
+        })
+        .await
+    }
+    async fn head(&self, key: &str) -> anyhow::Result<Option<i64>> {
+        within(20, async {
+            match self.bucket.head_object(key).await {
+                Ok((h, 200..=299)) => {
+                    Ok(Some(h.content_length.ok_or_else(|| {
+                        anyhow::anyhow!("missing content length")
+                    })?))
+                }
+                Ok((_, 404)) | Err(s3::error::S3Error::HttpFailWithBody(404, _)) => Ok(None),
+                Ok((_, code)) => anyhow::bail!("object storage HTTP {code}"),
+                Err(e) => Err(e.into()),
+            }
+        })
+        .await
+    }
+    async fn put(&self, key: &str, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        // At most 25 MB, from /v1/convert.
+        within(120, async {
+            success(self.bucket.put_object(key, &bytes).await?.status_code())
+        })
+        .await
+    }
+    async fn check(&self) -> anyhow::Result<()> {
+        within(10, async {
+            let (_, code) = self
+                .bucket
+                .list_page("readiness/".into(), None, None, None, Some(1))
+                .await?;
+            success(code)
+        })
+        .await
+    }
+    async fn open(&self, key: &str) -> anyhow::Result<ByteStream> {
+        use futures_util::StreamExt as _;
+        // Only the response headers are bounded here; the body streams to the
+        // client (at most 25 MB inline) under the client's own timeout.
+        let response = within(20, async { Ok(self.bucket.get_object_stream(key).await?) }).await?;
+        success(response.status_code)?;
+        Ok(Box::pin(
+            response
+                .bytes
+                .map(|chunk| chunk.map_err(std::io::Error::other)),
+        ))
     }
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()> {
-        success(self.bucket.copy_object_internal(from, to).await?)
+        // A server-side copy of up to 2 GB.
+        within(300, async {
+            success(self.bucket.copy_object_internal(from, to).await?)
+        })
+        .await
     }
     async fn download(&self, key: &str, path: &Path) -> anyhow::Result<()> {
         let mut file = tokio::fs::File::create(path).await?;
@@ -107,10 +190,18 @@ impl Storage for S3Storage {
         success(r.status_code())
     }
     async fn delete(&self, key: &str) -> anyhow::Result<()> {
-        success(self.bucket.delete_object(key).await?.status_code())
+        within(20, async {
+            success(self.bucket.delete_object(key).await?.status_code())
+        })
+        .await
     }
     async fn delete_prefix(&self, prefix: &str) -> anyhow::Result<()> {
-        for page in self.bucket.list(prefix.to_owned(), None).await? {
+        // A job prefix holds at most a few hundred objects.
+        let pages = within(60, async {
+            Ok(self.bucket.list(prefix.to_owned(), None).await?)
+        })
+        .await?;
+        for page in pages {
             for object in page.contents {
                 self.delete(&object.key).await?;
             }
@@ -150,8 +241,8 @@ mod tests {
             )
             .unwrap();
             let storage = S3Storage { bucket };
-            let url =
-                reqwest::Url::parse(&storage.upload_url("job/input", 1).await.unwrap()).unwrap();
+            let url = reqwest::Url::parse(&storage.upload_url("job/input", 1, 900).await.unwrap())
+                .unwrap();
             assert_eq!(url.host_str(), Some(host));
             assert_eq!(url.port(), Some(9443));
             assert_eq!(url.path(), path);
@@ -164,7 +255,8 @@ mod tests {
             );
             assert_eq!(query.get("X-Amz-Expires").unwrap(), "900");
             let other =
-                reqwest::Url::parse(&storage.upload_url("job/input", 2).await.unwrap()).unwrap();
+                reqwest::Url::parse(&storage.upload_url("job/input", 2, 900).await.unwrap())
+                    .unwrap();
             let other_query = other
                 .query_pairs()
                 .collect::<std::collections::HashMap<_, _>>();
@@ -173,7 +265,7 @@ mod tests {
                 other_query.get("X-Amz-Signature")
             );
             for bytes in [0, -1, crate::jobs::MAX_FILE_BYTES + 1] {
-                assert!(storage.upload_url("job/input", bytes).await.is_err());
+                assert!(storage.upload_url("job/input", bytes, 900).await.is_err());
             }
         }
     }
@@ -184,13 +276,40 @@ mod integration_tests {
     use super::*;
 
     #[tokio::test]
+    async fn s3_head_put_and_stream_round_trip() {
+        if std::env::var("CONVT_TEST_STORAGE").as_deref() != Ok("1") {
+            return;
+        }
+        use futures_util::StreamExt as _;
+        let storage = S3Storage::from_env().unwrap();
+        let key = format!("roundtrip-{}/input", crate::ids::new_id("t"));
+        assert_eq!(storage.head(&key).await.unwrap(), None);
+        let bytes: Vec<u8> = (0..300_000_u32).map(|i| (i % 251) as u8).collect();
+        storage
+            .put(&key, bytes::Bytes::from(bytes.clone()))
+            .await
+            .unwrap();
+        assert_eq!(storage.head(&key).await.unwrap(), Some(bytes.len() as i64));
+        let mut stream = storage.open(&key).await.unwrap();
+        let mut read = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            read.extend_from_slice(&chunk.unwrap());
+        }
+        assert_eq!(read, bytes);
+        assert!(storage.open(&format!("{key}-missing")).await.is_err());
+        storage.check().await.unwrap();
+        storage.delete_prefix(&key).await.unwrap();
+        assert_eq!(storage.head(&key).await.unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn s3_rejects_uploads_larger_than_signed_reservation() {
         if std::env::var("CONVT_TEST_STORAGE").as_deref() != Ok("1") {
             return;
         }
         let storage = S3Storage::from_env().unwrap();
         let key = format!("security-test-{}/input", crate::ids::new_id("upload"));
-        let url = storage.upload_url(&key, 1).await.unwrap();
+        let url = storage.upload_url(&key, 1, 900).await.unwrap();
         let client = reqwest::Client::new();
         let exact = client.put(&url).body(vec![1_u8]).send().await.unwrap();
         assert!(exact.status().is_success());

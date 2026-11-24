@@ -90,3 +90,29 @@ test("a final answer stops polling", async () => {
   expect(calls).toBe(3);
   expect(states).toEqual(["pending", "pending", "failed"]);
 });
+
+test("when every call fails, giving up promises nothing product-specific", async () => {
+  const states: string[] = [];
+  const stop = pollCheckout({
+    timing: { pollMs: 5, giveUpMs: 40, callTimeoutMs: 10 },
+    onState: (s) => states.push(s.state),
+    fetch: () => Promise.reject(new Error("network down")),
+  });
+  await wait(120);
+  stop();
+  expect(states).toEqual(["unconfirmed"]);
+});
+
+test("an API checkout that stays pending gives up with the API state, not email", async () => {
+  const states: string[] = [];
+  const apiPending: CheckoutView = { state: "pending", product: "api", allowTrial: false };
+  const stop = pollCheckout({
+    timing: { pollMs: 5, giveUpMs: 40, callTimeoutMs: 10 },
+    onState: (s) => states.push(s.state),
+    fetch: () => Promise.resolve(apiPending),
+  });
+  await wait(120);
+  stop();
+  expect(states.at(-1)).toBe("api_pending");
+  expect(states).not.toContain("email");
+});

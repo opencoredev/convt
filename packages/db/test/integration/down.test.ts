@@ -22,6 +22,8 @@ test("0008 reverses with a Desktop + Cloud order, its cloud year and usage on it
   await db.execute(sql`
     insert into usage_events (id, user_id, subscription_id, job_id, kind, quantity, amount_cents, occurred_at)
     values ('use_down', ${fixtureId("usr", "bundle")}, ${cloudYear}, 'job_down', 'pro_bytes', 1, 0, now())`);
+  // 0009 comes off first; it never touches these rows.
+  expect(await rollbackOne(client)).toBe("0009_api_dx");
   expect(await rollbackOne(client)).toBe("0008_prepaid_cloud");
   const [row] = (
     await db.execute<{ provider_subscription_id: string }>(

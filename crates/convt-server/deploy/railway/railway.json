@@ -9,7 +9,7 @@
     "restartPolicyType": "ALWAYS",
     "sleepApplication": false,
     "drainingSeconds": 30,
-    "healthcheckPath": "/health",
+    "healthcheckPath": "/ready",
     "healthcheckTimeout": 120
   }
 }

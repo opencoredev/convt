@@ -1,0 +1,139 @@
+---
+title: Webhooks
+description: Get a signed POST when a job finishes instead of polling, and verify it.
+---
+
+Add `webhook_url` when you create a job and convt POSTs an event to it once the job is `succeeded`, `failed` or `cancelled`. Your server does not have to poll.
+
+```bash
+curl -fsS {{api}}/v1/jobs \
+  -H "Authorization: Bearer $CONVT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"source_url":"https://cdn.example.com/talk.mov","target_format":"mp4","webhook_url":"https://example.com/hooks/convt"}'
+```
+
+`webhook_url` must be a public `https` URL. convt refuses private, loopback and link-local addresses, never follows redirects, and checks the address again on every delivery.
+
+## The event
+
+```json
+{
+  "id": "evt_01k6z7v4q8m3x2a9b5c0d1e2f3",
+  "type": "job.succeeded",
+  "created_at": "2026-11-23T12:00:04Z",
+  "data": {
+    "job": {
+      "id": "job_01k6z7v4q8m3x2a9b5c0d1e2f3",
+      "status": "succeeded",
+      "target_format": "mp4",
+      "...": "..."
+    },
+    "outputs": [{ "name": "input.mp4", "url": "https://...X-Amz-Signature=..." }],
+    "expires_in": 300
+  }
+}
+```
+
+`type` is `job.succeeded`, `job.failed` or `job.cancelled`. `data.job` is the job as `GET /v1/jobs/{id}` shows it, minus `source_url`: a presigned input link is a credential, so events never carry it. For a succeeded job, `outputs` holds signed URLs valid for `expires_in` seconds; after that, call `GET /v1/jobs/{id}/download` for fresh ones.
+
+Headers on every delivery:
+
+| Header                   | Value                                              |
+| ------------------------ | -------------------------------------------------- |
+| `Convt-Signature`        | `t=<unix seconds>,v1=<hex HMAC-SHA256>`            |
+| `Convt-Event-Id`         | Same as `id`. Stable across retries: dedupe on it. |
+| `Convt-Event-Type`       | Same as `type`.                                    |
+| `Convt-Delivery-Attempt` | `1` for the first try, then `2`, `3` and so on.    |
+
+## Delivery and retries
+
+Answer with any `2xx` within 10 seconds. Anything else, a timeout or a refused connection counts as a failure and convt tries again after 10 s, 30 s, 2 min, 10 min, 30 min, 1 h and 1 h: 8 attempts in all over about 2 h 45 min. Delivery is at least once, so the same event can arrive twice.
+
+## Verify the signature
+
+Get your account's signing secret once with an API key and keep it with your other secrets:
+
+```bash
+curl -fsS {{api}}/v1/webhooks/secret -H "Authorization: Bearer $CONVT_API_KEY"
+# {"secret":"whsec_...","version":1}
+```
+
+The signature is an HMAC-SHA256, keyed with that secret, of the timestamp, a `.`, and the raw request body. Compute it over the body exactly as received, before parsing JSON, and refuse old timestamps so a captured event can't be replayed.
+
+<Tabs syncKey="client" param="client">
+<Tab title="JavaScript SDK">
+
+```ts
+import { verifyWebhook } from "@convt/sdk";
+
+export async function POST(request: Request) {
+  const event = await verifyWebhook({
+    body: await request.text(),
+    signature: request.headers.get("convt-signature"),
+    secret: process.env.CONVT_WEBHOOK_SECRET!,
+  });
+  if (event.type === "job.succeeded") {
+    // event.data.outputs[0].url
+  }
+  return new Response(null, { status: 204 });
+}
+```
+
+</Tab>
+<Tab title="Python">
+
+```python
+import hashlib, hmac, time
+
+def verify(body: bytes, header: str, secret: str, tolerance: int = 300) -> None:
+    parts = dict(p.split("=", 1) for p in header.split(","))
+    t = int(parts["t"])
+    if abs(time.time() - t) > tolerance:
+        raise ValueError("stale webhook")
+    expected = hmac.new(secret.encode(), f"{t}.".encode() + body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, parts["v1"]):
+        raise ValueError("bad signature")
+```
+
+</Tab>
+<Tab title="Go">
+
+```go
+func verify(body []byte, header, secret string) error {
+	var t, v1 string
+	for _, part := range strings.Split(header, ",") {
+		k, v, _ := strings.Cut(part, "=")
+		switch k {
+		case "t":
+			t = v
+		case "v1":
+			v1 = v
+		}
+	}
+	ts, err := strconv.ParseInt(t, 10, 64)
+	if err != nil || math.Abs(float64(time.Now().Unix()-ts)) > 300 {
+		return errors.New("stale or malformed webhook")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(t + "."))
+	mac.Write(body)
+	if !hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(v1)) {
+		return errors.New("bad signature")
+	}
+	return nil
+}
+```
+
+</Tab>
+</Tabs>
+
+## Rotate the secret
+
+The secret is the same for every job on your account. If it leaks, rotate it:
+
+```bash
+curl -fsS -X POST {{api}}/v1/webhooks/secret/rotate -H "Authorization: Bearer $CONVT_API_KEY"
+# {"secret":"whsec_...","version":2}
+```
+
+Deliveries sent from then on use the new secret, and the old one stops verifying. To switch without dropping events, accept both secrets in your receiver for a few minutes, then remove the old one.

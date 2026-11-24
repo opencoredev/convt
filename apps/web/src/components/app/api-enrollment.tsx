@@ -169,10 +169,13 @@ export function ApiEnrollmentCard({
           </p>
         </>
       ) : state === "pending" ? (
-        <p className="text-[13px]/5 text-ink-2">
-          We're waiting for the payment provider to confirm your card. This page updates when it
-          does; API keys work after that.
-        </p>
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-[13px]/5 text-ink-2">
+            We're waiting for the payment provider to confirm your card, usually within a minute.
+            Reload this page to check; API keys work once it's confirmed.
+          </p>
+          <SecondaryButton onClick={() => window.location.reload()}>Reload</SecondaryButton>
+        </div>
       ) : state === "payment_failed" ? (
         <>
           <p className="text-[13px]/5 text-ink-2">
@@ -211,7 +214,18 @@ export function ApiEnrollmentCard({
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <SecondaryButton onClick={() => setEditing(true)}>Change cap</SecondaryButton>
+              <SecondaryButton
+                disabled={busy}
+                onClick={() => {
+                  // Start from the cap in force, which may have changed since this
+                  // card first rendered (for example once enrollment completed).
+                  if (enrollment.spendCapCents !== null)
+                    setCap(String(enrollment.spendCapCents / 100));
+                  setEditing(true);
+                }}
+              >
+                Change cap
+              </SecondaryButton>
               {enrollment.endsOn ? (
                 <TextButton disabled={busy} onClick={() => setEnding(false)}>
                   Keep API billing

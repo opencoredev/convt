@@ -117,6 +117,83 @@ pub async fn reap(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Why a `source_url` download failed. Jobs that fail with it report
+/// `source_fetch_failed` instead of `conversion_failed`.
+#[derive(Debug)]
+pub struct SourceError(pub String);
+impl std::fmt::Display for SourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "source download failed: {}", self.0)
+    }
+}
+impl std::error::Error for SourceError {}
+
+/// Puts the job's input at `path`: the sealed upload from storage, or the
+/// `source_url` download, checked against the public-address guard and the 2 GB
+/// limit while it streams.
+pub async fn fetch_input(storage: &dyn Storage, job: &Job, path: &Path) -> anyhow::Result<()> {
+    let Some(url) = job.source_url.as_deref() else {
+        storage
+            .download(
+                job.input_key
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("missing input"))?,
+                path,
+            )
+            .await?;
+        anyhow::ensure!(
+            tokio::fs::metadata(path).await?.len() == job.input_bytes.unwrap_or(0) as u64,
+            "input size changed"
+        );
+        return Ok(());
+    };
+    fetch_source(url, path, convt_server::net_guard::Policy::from_env()).await
+}
+
+pub async fn fetch_source(
+    url: &str,
+    path: &Path,
+    policy: convt_server::net_guard::Policy,
+) -> anyhow::Result<()> {
+    use convt_server::net_guard;
+    use tokio::io::AsyncWriteExt as _;
+    let fail = |message: String| anyhow::Error::new(SourceError(message));
+    let parsed = net_guard::check(url, policy).map_err(|e| fail(format!("URL {e}")))?;
+    let client = net_guard::client_for(&parsed, policy, Duration::from_secs(480))
+        .await
+        .map_err(|e| fail(format!("URL {e}")))?;
+    let mut response = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|e| fail(format!("request failed: {}", e.without_url())))?;
+    if !response.status().is_success() {
+        return Err(fail(format!("HTTP {}", response.status())));
+    }
+    let limit = convt_server::jobs::MAX_FILE_BYTES as u64;
+    if response.content_length().is_some_and(|n| n > limit) {
+        return Err(fail("larger than 2 GB".into()));
+    }
+    let mut file = tokio::fs::File::create(path).await?;
+    let mut total = 0_u64;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| fail(format!("download interrupted: {}", e.without_url())))?
+    {
+        total += chunk.len() as u64;
+        if total > limit {
+            return Err(fail("larger than 2 GB".into()));
+        }
+        file.write_all(&chunk).await?;
+    }
+    file.flush().await?;
+    if total == 0 {
+        return Err(fail("empty response".into()));
+    }
+    Ok(())
+}
+
 pub async fn convert(
     pool: &PgPool,
     storage: &dyn Storage,
@@ -126,18 +203,7 @@ pub async fn convert(
 ) -> anyhow::Result<Vec<String>> {
     let work = tempfile::tempdir()?;
     let input = work.path().join(format!("input.{}", job.input_format));
-    storage
-        .download(
-            job.input_key
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("missing input"))?,
-            &input,
-        )
-        .await?;
-    anyhow::ensure!(
-        tokio::fs::metadata(&input).await?.len() == job.input_bytes.unwrap_or(0) as u64,
-        "input size changed"
-    );
+    fetch_input(storage, job, &input).await?;
     let runtime = std::env::var("CONVT_SANDBOX_RUNTIME").unwrap_or_else(|_| "runc".into());
     let mount = format!(
         "type=bind,src={},dst=/input.{},readonly",
@@ -364,44 +430,96 @@ pub async fn run_job_backend(
         let mut heartbeat = tokio::time::interval(Duration::from_secs(5));
         let timeout = tokio::time::sleep(Duration::from_secs(600));
         tokio::pin!(timeout);
+        // On SIGTERM the conversion gets a short grace period to finish; after
+        // that the attempt goes back to the queue for another worker.
+        let grace = tokio::time::sleep(Duration::from_secs(30 * 86_400));
+        tokio::pin!(grace);
         loop {
             tokio::select! {
                 result=&mut conversion=>break result,
-                _=heartbeat.tick()=>{match jobs::renew(pool,job).await { Ok(true) => {}, Ok(false) => break Err(anyhow::anyhow!("cancelled or lease lost")), Err(error) => break Err(error.into()) }},
+                _=heartbeat.tick()=>{match tokio::time::timeout(Duration::from_secs(2), jobs::renew(pool,job)).await { Ok(Ok(true)) => {}, Ok(Ok(false)) => break Err(anyhow::anyhow!("cancelled or lease lost")), Ok(Err(error)) => break Err(error.into()), Err(_) => {tracing::warn!(job_id=job.id,"lease renewal timed out; retrying")} }},
                 _=&mut timeout=>break Err(anyhow::anyhow!("wall-clock limit")),
-                _=wait_for_shutdown(shutdown)=>{stopping=true;break Err(anyhow::anyhow!("worker shutdown"));}
+                _=wait_for_shutdown(shutdown), if !stopping=>{
+                    stopping=true;
+                    grace.as_mut().reset(tokio::time::Instant::now()+SHUTDOWN_GRACE);
+                    tracing::info!(job_id=job.id,"shutdown: letting the conversion finish");
+                }
+                _=&mut grace=>break Err(anyhow::anyhow!("worker shutdown")),
             }
         }
     };
-    sandbox.stop(&name).await?;
-    match result {
+    let handoff = stopping && matches!(&result, Err(e) if e.to_string() == "worker shutdown");
+    if handoff {
+        // Hand the job back before any cleanup: if the platform kills this process
+        // during cleanup, the job is already queued for another worker instead of
+        // waiting out its lease and losing an attempt.
+        // Bounded too: if Postgres is slow, the lease lapses and lease recovery
+        // takes over (at the cost of one attempt) rather than the stop timeout
+        // killing the process mid-query.
+        match tokio::time::timeout(Duration::from_secs(3), jobs::requeue(pool, job)).await {
+            Ok(Ok(requeued)) => tracing::info!(
+                job_id = job.id,
+                requeued,
+                "shutdown: handed the job back to the queue"
+            ),
+            Ok(Err(error)) => {
+                tracing::warn!(job_id = job.id, %error, "shutdown requeue failed; lease recovery will retry the job")
+            }
+            Err(_) => tracing::warn!(
+                job_id = job.id,
+                "shutdown requeue timed out; lease recovery will retry the job"
+            ),
+        }
+        let cleanup = async {
+            sandbox.stop(&name).await?;
+            storage
+                .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
+                .await
+        };
+        // The attempt's prefix is unique to it and expiry removes the job's whole
+        // prefix, so a cut-short cleanup leaks nothing lasting.
+        match tokio::time::timeout(Duration::from_secs(4), cleanup).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => tracing::warn!(job_id = job.id, %error, "shutdown cleanup failed"),
+            Err(_) => tracing::warn!(job_id = job.id, "shutdown cleanup timed out"),
+        }
+        return Ok(true);
+    }
+    let error = match result {
         Ok(keys) => {
-            if !jobs::finish(pool, job, &keys, None).await? {
+            // Settle first: the outputs are already stored, and a sandbox cleanup
+            // error must not leave a finished conversion to time out and run again.
+            let settled = jobs::finish(pool, job, &keys, None).await?;
+            if let Err(error) = sandbox.stop(&name).await {
+                tracing::warn!(job_id = job.id, %error, "sandbox cleanup failed after success");
+            }
+            if !settled {
                 for key in keys {
                     storage.delete(&key).await?;
                 }
             }
+            return Ok(stopping);
         }
-        Err(e) => {
-            tracing::warn!(job_id=job.id,error=%e,"conversion failed");
-            jobs::finish(
-                pool,
-                job,
-                &[],
-                Some(if stopping {
-                    "worker_shutdown"
-                } else {
-                    "conversion_failed"
-                }),
-            )
-            .await?;
-            storage
-                .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
-                .await?;
-        }
-    }
+        Err(error) => error,
+    };
+    sandbox.stop(&name).await?;
+    tracing::warn!(job_id=job.id,error=%error,"conversion failed");
+    let code = if error.downcast_ref::<SourceError>().is_some() {
+        "source_fetch_failed"
+    } else {
+        "conversion_failed"
+    };
+    jobs::finish(pool, job, &[], Some(code)).await?;
+    storage
+        .delete_prefix(&format!("{}/attempt-{}/", job.id, job.attempt))
+        .await?;
     Ok(stopping)
 }
+
+/// How long a running conversion may keep going after SIGTERM. Keep the
+/// container's stop timeout above it (`docker stop -t 30`, or `drainingSeconds`
+/// on Railway) so the requeue lands before the process is killed.
+pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(20);
 
 fn extract_outputs(archive: &Path, output: &Path) -> anyhow::Result<()> {
     let mut archive = tar::Archive::new(std::fs::File::open(archive)?);
@@ -454,18 +572,7 @@ async fn convert_process(
 ) -> anyhow::Result<Vec<String>> {
     let work = tempfile::tempdir()?;
     let input = work.path().join(format!("input.{}", job.input_format));
-    storage
-        .download(
-            job.input_key
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("missing input"))?,
-            &input,
-        )
-        .await?;
-    anyhow::ensure!(
-        tokio::fs::metadata(&input).await?.len() == job.input_bytes.unwrap_or(0) as u64,
-        "input size changed"
-    );
+    fetch_input(storage, job, &input).await?;
     let mut root = sandbox.prepare(&input, &job.input_format)?;
     root.options = job.options.0.clone();
     let active = sandbox.start(name, root, &job.target_format).await?;
@@ -516,6 +623,48 @@ async fn convert_process(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Serves one canned HTTP response per connection on a loopback port.
+    async fn serve(response: &'static [u8]) -> String {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buffer = [0_u8; 4096];
+                let _ = socket.read(&mut buffer).await;
+                let _ = socket.write_all(response).await;
+            }
+        });
+        format!("http://{address}/files/photo.png")
+    }
+
+    #[tokio::test]
+    async fn source_urls_download_with_the_guard_and_report_their_own_error() {
+        let lax = convt_server::net_guard::Policy {
+            allow_private: true,
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.png");
+        let ok =
+            serve(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello").await;
+        fetch_source(&ok, &path, lax).await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+        for response in [
+            &b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"[..],
+            &b"HTTP/1.1 302 Found\r\nLocation: http://169.254.169.254/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"[..],
+            &b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"[..],
+        ] {
+            let url = serve(response).await;
+            let error = fetch_source(&url, &path, lax).await.unwrap_err();
+            assert!(error.downcast_ref::<SourceError>().is_some(), "{error}");
+        }
+        // The production policy refuses loopback before connecting.
+        let error = fetch_source(&ok, &path, Default::default())
+            .await
+            .unwrap_err();
+        assert!(error.downcast_ref::<SourceError>().is_some(), "{error}");
+    }
     #[tokio::test]
     async fn shutdown_stays_latched_across_unrelated_waits() {
         let (sender, mut receiver) = tokio::sync::watch::channel(false);

@@ -1,6 +1,7 @@
 import {
   Convt,
   ConvtCancellationError,
+  ConvtError,
   formats,
   Conversion,
   type Format,
@@ -101,7 +102,14 @@ function Converter() {
     } catch (e) {
       setStage("failed");
       if (e instanceof ConvtCancellationError) setPendingCancel(e.jobId);
-      setError(e instanceof Error ? e.message : "Conversion failed. Try again.");
+      setError(
+        e instanceof ConvtError && e.code === "create_outcome_unknown"
+          ? // The SDK's own key never reaches the page; the job, if any, has no file.
+            "We couldn't confirm the conversion started. If it did, it never got your file and won't run, but it holds part of your allowance until shortly after it expires, 24 hours after it was made. Convert again if your allowance has room."
+          : e instanceof Error
+            ? e.message
+            : "Conversion failed. Try again.",
+      );
       await router.invalidate();
     }
   }

@@ -20,10 +20,11 @@ const KEY: &str = "cvt_live_0123456789abcdefghjkmnpqrstvwxyz";
 #[derive(Default)]
 struct MemoryStorage {
     objects: Mutex<BTreeMap<String, i64>>,
+    data: Mutex<BTreeMap<String, Vec<u8>>>,
 }
 #[async_trait]
 impl Storage for MemoryStorage {
-    async fn upload_url(&self, key: &str, _bytes: i64) -> anyhow::Result<String> {
+    async fn upload_url(&self, key: &str, _bytes: i64, _seconds: u32) -> anyhow::Result<String> {
         Ok(format!("https://upload.test/{key}"))
     }
     async fn download_url(&self, key: &str, _seconds: u32) -> anyhow::Result<String> {
@@ -36,6 +37,32 @@ impl Storage for MemoryStorage {
             .get(key)
             .copied()
             .ok_or_else(|| anyhow::anyhow!("not uploaded"))
+    }
+    async fn check(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn head(&self, key: &str) -> anyhow::Result<Option<i64>> {
+        Ok(self.objects.lock().unwrap().get(key).copied())
+    }
+    async fn put(&self, key: &str, bytes: axum::body::Bytes) -> anyhow::Result<()> {
+        self.objects
+            .lock()
+            .unwrap()
+            .insert(key.into(), bytes.len() as i64);
+        self.data.lock().unwrap().insert(key.into(), bytes.to_vec());
+        Ok(())
+    }
+    async fn open(&self, key: &str) -> anyhow::Result<crate::storage::ByteStream> {
+        let bytes = self
+            .data
+            .lock()
+            .unwrap()
+            .get(key)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("missing"))?;
+        Ok(Box::pin(futures_util::stream::once(async move {
+            Ok(axum::body::Bytes::from(bytes))
+        })))
     }
     async fn seal(&self, from: &str, to: &str) -> anyhow::Result<()> {
         let bytes = self.size(from).await?;
@@ -79,8 +106,11 @@ fn data(bytes: i64) -> CreateJob {
     CreateJob {
         input_format: "svg".into(),
         target_format: "png".into(),
-        input_bytes: bytes,
+        input_bytes: Some(bytes),
         options: Default::default(),
+        source_url: None,
+        webhook_url: None,
+        input_sha256: None,
     }
 }
 async fn key(pool: &sqlx::PgPool) {
@@ -132,6 +162,8 @@ async fn cross_account_read_download_cancel_and_start_are_denied() {
         pool: db.server.clone(),
         storage: Arc::new(MemoryStorage::default()),
         web_secret: "s".repeat(32),
+        webhook_secret: None,
+        source_urls: true,
     };
     for (suffix, method) in [
         ("", "GET"),
@@ -386,6 +418,8 @@ async fn actual_size_mismatch_releases_reservation_and_expiry_fences_completion(
         pool: db.server.clone(),
         storage: storage.clone(),
         web_secret: "s".repeat(32),
+        webhook_secret: None,
+        source_urls: true,
     };
     assert_eq!(
         call(&state, &format!("/v1/jobs/{}/start", job.id), "POST")
@@ -586,6 +620,8 @@ async fn cancelled_upload_urls_remain_in_the_storage_budget_until_expiry() {
         pool: db.server.clone(),
         storage: Arc::new(MemoryStorage::default()),
         web_secret: "s".repeat(32),
+        webhook_secret: None,
+        source_urls: true,
     };
     routes::expire(&state).await.unwrap();
     assert!(
@@ -629,6 +665,8 @@ async fn malformed_job_requests_get_json_errors() {
         pool: db.server.clone(),
         storage: Arc::new(MemoryStorage::default()),
         web_secret: "s".repeat(32),
+        webhook_secret: None,
+        source_urls: true,
     };
     let with = |options: &str| {
         format!(
@@ -748,5 +786,1061 @@ async fn options_are_stored_returned_and_claimed() {
         .await
         .unwrap();
     assert_eq!(plain.options.0, convt_core::Options::default());
+    db.drop().await;
+}
+
+// ---- Developer-experience routes: idempotency, /v1/convert, headers, webhooks ----
+
+fn state_with(db: &crate::testing::TestDb, storage: Arc<MemoryStorage>) -> CloudState {
+    CloudState {
+        pool: db.server.clone(),
+        storage,
+        web_secret: "s".repeat(32),
+        webhook_secret: Some("w".repeat(32)),
+        source_urls: true,
+    }
+}
+
+async fn send(
+    state: &CloudState,
+    request: Request<Body>,
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let r = crate::service(Some(routes::router(state.clone())))
+        .oneshot(request)
+        .await
+        .unwrap();
+    let status = r.status();
+    let headers = r.headers().clone();
+    let body = to_bytes(r.into_body(), 50_000_000).await.unwrap().to_vec();
+    (status, headers, body)
+}
+
+/// A web credential as the site Worker mints them (see tokens.rs).
+fn web_token(secret: &str, user: &str) -> String {
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use hmac::{Hmac, Mac};
+    let claims = serde_json::json!({"sub": user, "exp": chrono::Utc::now().timestamp() + 120, "aud": "convt-cloud-web"});
+    let body = URL_SAFE_NO_PAD.encode(claims.to_string());
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(body.as_bytes());
+    format!(
+        "cvt_web_{body}.{}",
+        hex::encode(mac.finalize().into_bytes())
+    )
+}
+
+fn json(body: &[u8]) -> serde_json::Value {
+    serde_json::from_slice(body)
+        .unwrap_or_else(|_| serde_json::json!({"raw": String::from_utf8_lossy(body)}))
+}
+
+/// Plays a worker: claims the next job and finishes it with one output.
+async fn work_one(pool: &sqlx::PgPool, storage: &MemoryStorage, bytes: &[u8]) -> String {
+    for _ in 0..100 {
+        if let Some(job) = jobs::claim(pool, "test-worker").await.unwrap() {
+            let key = format!(
+                "{}/attempt-{}/input.{}",
+                job.id, job.attempt, job.target_format
+            );
+            storage
+                .put(&key, axum::body::Bytes::copy_from_slice(bytes))
+                .await
+                .unwrap();
+            assert!(jobs::finish(pool, &job, &[key], None).await.unwrap());
+            return job.id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("no job was queued");
+}
+
+fn authed(method: &str, uri: &str) -> axum::http::request::Builder {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", format!("Bearer {KEY}"))
+}
+
+#[tokio::test]
+async fn idempotency_key_replays_without_a_second_reservation() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let body = r#"{"input_format":"png","target_format":"webp","input_bytes":10}"#;
+    let create = |key: &'static str, body: &'static str| {
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .header("idempotency-key", key)
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let (status, headers, first) = send(&state, create("order-42", body)).await;
+    assert_eq!(status, StatusCode::OK, "{}", json(&first));
+    assert!(headers.get("idempotent-replayed").is_none());
+    assert_eq!(headers["x-ratelimit-limit"], "120");
+    assert!(headers.contains_key("x-ratelimit-remaining"));
+    assert!(
+        headers["x-request-id"]
+            .to_str()
+            .unwrap()
+            .starts_with("req_")
+    );
+    let (status, headers, second) = send(&state, create("order-42", body)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["idempotent-replayed"], "true");
+    assert_eq!(json(&first)["job"]["id"], json(&second)["job"]["id"]);
+    assert!(json(&second)["upload_url"].is_string());
+    let reserved: i64 = sqlx::query_scalar(
+        "select count(*) from cloud_jobs where user_id='usr_a' and reservation='open'",
+    )
+    .fetch_one(&db.owner)
+    .await
+    .unwrap();
+    assert_eq!(reserved, 1);
+    let (status, _, conflict) = send(
+        &state,
+        create(
+            "order-42",
+            r#"{"input_format":"png","target_format":"jpeg","input_bytes":10}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(&conflict)["error"]["code"], "idempotency_key_reused");
+    let (status, _, bad) = send(
+        &state,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .header("idempotency-key", "")
+            .body(Body::from(body))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&bad)["error"]["code"], "invalid_idempotency_key");
+    // An expired job frees its key for a new request.
+    sqlx::query("update cloud_jobs set expires_at=now()-interval '1 second'")
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (status, headers, third) = send(&state, create("order-42", body)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(headers.get("idempotent-replayed").is_none());
+    assert_ne!(json(&first)["job"]["id"], json(&third)["job"]["id"]);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn start_without_an_upload_says_so() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let job = jobs::create(&db.server, &who("usr_a", true), &data(10))
+        .await
+        .unwrap();
+    let (status, _, body) = send(
+        &state,
+        authed("POST", &format!("/v1/jobs/{}/start", job.id))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(&body)["error"]["code"], "upload_missing");
+    assert_eq!(
+        jobs::owned(&db.server, &who("usr_a", true), &job.id)
+            .await
+            .unwrap()
+            .status,
+        "created"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn convert_returns_the_file_in_one_request() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let storage = Arc::new(MemoryStorage::default());
+    let state = state_with(&db, storage.clone());
+    let worker = {
+        let pool = db.server.clone();
+        let storage = storage.clone();
+        tokio::spawn(async move { work_one(&pool, &storage, b"RIFF-webp-bytes").await })
+    };
+    let boundary = "XyZ";
+    let form = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"holiday photo.png\"\r\nContent-Type: image/png\r\n\r\nPNG-fake\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"to\"\r\n\r\nwebp\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"options\"\r\n\r\n{{\"quality\":70}}\r\n--{boundary}--\r\n"
+    );
+    let (status, headers, body) = send(
+        &state,
+        authed("POST", "/v1/convert")
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(form))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", json(&body));
+    assert_eq!(body, b"RIFF-webp-bytes");
+    assert_eq!(headers["content-type"], "image/webp");
+    assert_eq!(
+        headers["content-disposition"],
+        "attachment; filename=\"holiday photo.webp\""
+    );
+    let id = worker.await.unwrap();
+    assert_eq!(headers["convt-job-id"], id.as_str());
+    let job = jobs::owned(&db.server, &who("usr_a", true), &id)
+        .await
+        .unwrap();
+    assert_eq!(job.options.0.quality, Some(70));
+    assert_eq!(job.input_format, "png");
+    assert_eq!(job.reservation, "settled");
+    let billed: i64 = sqlx::query_scalar("select count(*) from usage_events where job_id=$1")
+        .bind(&id)
+        .fetch_one(&db.owner)
+        .await
+        .unwrap();
+    assert_eq!(billed, 1);
+
+    // A raw body with query parameters, asking for JSON.
+    let worker = {
+        let pool = db.server.clone();
+        let storage = storage.clone();
+        tokio::spawn(async move { work_one(&pool, &storage, b"jpeg").await })
+    };
+    let (status, _, body) = send(
+        &state,
+        authed("POST", "/v1/convert?to=jpg&from=png")
+            .header("accept", "application/json")
+            .body(Body::from("raw-png"))
+            .unwrap(),
+    )
+    .await;
+    worker.await.unwrap();
+    assert_eq!(status, StatusCode::OK, "{}", json(&body));
+    let body = json(&body);
+    assert_eq!(body["job"]["status"], "succeeded");
+    assert_eq!(body["job"]["target_format"], "jpeg");
+    assert_eq!(body["outputs"].as_array().unwrap().len(), 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn convert_validates_and_can_return_early() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    for (uri, body, code) in [
+        ("/v1/convert?from=png", "x", "invalid_request"),
+        ("/v1/convert?to=webp", "x", "input_format_required"),
+        ("/v1/convert?to=nope&from=png", "x", "unsupported_format"),
+        (
+            "/v1/convert?to=webp&from=png&wait=301",
+            "x",
+            "invalid_request",
+        ),
+        ("/v1/convert?to=webp&from=png", "", "file_too_large"),
+        (
+            "/v1/convert?to=webp&from=png&options=%7B%22quality%22%3A900%7D",
+            "x",
+            "invalid_options",
+        ),
+    ] {
+        let (status, headers, response) =
+            send(&state, authed("POST", uri).body(Body::from(body)).unwrap()).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "{uri}: {}",
+            json(&response)
+        );
+        assert_eq!(json(&response)["error"]["code"], code, "{uri}");
+        assert!(headers.contains_key("x-request-id"));
+    }
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .body(Body::from(vec![0_u8; crate::convert::MAX_INLINE_BYTES + 1]))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(json(&response)["error"]["code"], "file_too_large");
+    // A file request without a key that can't finish in time is cancelled.
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::GATEWAY_TIMEOUT);
+    assert_eq!(json(&response)["error"]["code"], "timeout");
+    assert_eq!(json(&response)["job"]["status"], "cancelled");
+    // With a key it keeps running and says so without a 2xx, so curl -f writes nothing.
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .header("idempotency-key", "slow-1")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(&response)["error"]["code"], "still_running");
+    assert_eq!(json(&response)["job"]["status"], "queued");
+    // A JSON caller gets 202 and the job keeps running.
+    let (status, headers, response) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .header("accept", "application/json")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let job = &json(&response)["job"];
+    assert_eq!(job["status"], "queued");
+    assert_eq!(
+        headers["location"],
+        format!("/v1/jobs/{}", job["id"].as_str().unwrap()).as_str()
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn hanging_up_on_convert_cancels_the_job_unless_a_key_was_sent() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    for with_key in [false, true] {
+        let mut request = authed("POST", "/v1/convert?to=webp&from=png");
+        if with_key {
+            request = request.header("idempotency-key", "retry-me");
+        }
+        let app = crate::service(Some(routes::router(state.clone())));
+        let request = request.body(Body::from("png")).unwrap();
+        // The client gives up after 300 ms; no worker ever picks the job up.
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(300), app.oneshot(request))
+                .await
+                .is_err()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let status: String = sqlx::query_scalar(
+            "select status from cloud_jobs where user_id='usr_a' order by created_at desc limit 1",
+        )
+        .fetch_one(&db.owner)
+        .await
+        .unwrap();
+        assert_eq!(status, if with_key { "queued" } else { "cancelled" });
+    }
+    db.drop().await;
+}
+
+/// The same hang-up through a real socket: axum::serve and Hyper, not a
+/// dropped future, decide that the client is gone.
+#[tokio::test]
+async fn closing_the_socket_on_convert_cancels_the_job() {
+    use tokio::io::AsyncWriteExt;
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let app = crate::service(Some(routes::router(state.clone())));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await });
+    let mut socket = tokio::net::TcpStream::connect(addr).await.unwrap();
+    socket
+        .write_all(
+            format!(
+                "POST /v1/convert?to=webp&from=png HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {KEY}\r\ncontent-length: 3\r\n\r\npng"
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    // Wait until the job exists and the handler is waiting on it, then hang up.
+    let mut queued = false;
+    for _ in 0..50 {
+        let status: Option<String> =
+            sqlx::query_scalar("select status from cloud_jobs where user_id='usr_a' limit 1")
+                .fetch_optional(&db.owner)
+                .await
+                .unwrap();
+        if status.as_deref() == Some("queued") {
+            queued = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(queued, "the job was never queued");
+    drop(socket);
+    let mut status = String::new();
+    for _ in 0..100 {
+        status = sqlx::query_scalar("select status from cloud_jobs where user_id='usr_a' limit 1")
+            .fetch_one(&db.owner)
+            .await
+            .unwrap();
+        if status == "cancelled" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    server.abort();
+    assert_eq!(status, "cancelled");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn urls_are_checked_and_webhooks_need_the_server_secret() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let mut state = state_with(&db, Arc::new(MemoryStorage::default()));
+    for (body, code) in [
+        (
+            r#"{"target_format":"webp","source_url":"https://169.254.169.254/latest/x.png"}"#,
+            "invalid_source_url",
+        ),
+        (
+            r#"{"target_format":"webp","source_url":"http://example.com/x.png"}"#,
+            "invalid_source_url",
+        ),
+        (
+            r#"{"input_format":"png","target_format":"webp","input_bytes":4,"source_url":"https://example.com/x.png"}"#,
+            "invalid_request",
+        ),
+        (
+            r#"{"input_format":"png","target_format":"webp","input_bytes":4,"webhook_url":"https://10.1.2.3/hook"}"#,
+            "invalid_webhook_url",
+        ),
+    ] {
+        let (status, _, response) = send(
+            &state,
+            authed("POST", "/v1/jobs")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(json(&response)["error"]["code"], code, "{body}");
+    }
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"target_format":"webp","source_url":"https://cdn.example.com/a/b/photo.PNG?sig=1"}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", json(&response));
+    let response = json(&response);
+    assert_eq!(response["job"]["status"], "queued");
+    assert_eq!(response["job"]["input_format"], "png");
+    assert!(response["upload_url"].is_null());
+    let (status, headers, secret) = send(
+        &state,
+        authed("GET", "/v1/webhooks/secret")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["cache-control"], "no-store");
+    assert_eq!(
+        json(&secret)["secret"],
+        crate::webhooks::account_secret(&"w".repeat(32), "usr_a", 1).as_str()
+    );
+    let (status, _, rotated) = send(
+        &state,
+        authed("POST", "/v1/webhooks/secret/rotate")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&rotated)["version"], 2);
+    assert_ne!(json(&rotated)["secret"], json(&secret)["secret"]);
+    // The browser converter's five-minute credential can't read the secret.
+    let web = web_token(&state.web_secret, "usr_a");
+    let (status, _, refused) = send(
+        &state,
+        Request::get("/v1/webhooks/secret")
+            .header("authorization", format!("Bearer {web}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(json(&refused)["error"]["code"], "api_key_required");
+    // A server that hasn't switched source_url on refuses it.
+    let mut off = state.clone();
+    off.source_urls = false;
+    let (status, _, refused) = send(
+        &off,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"target_format":"webp","source_url":"https://cdn.example.com/a.png"}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&refused)["error"]["code"], "source_url_unavailable");
+    // An undecodable job id is a JSON 404, not plain text.
+    let (status, headers, missing) = send(
+        &state,
+        authed("GET", "/v1/jobs/%FF%FE")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(headers["content-type"], "application/json");
+    assert_eq!(json(&missing)["error"]["code"], "not_found");
+    state.webhook_secret = None;
+    let (status, _, response) = send(
+        &state,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"input_format":"png","target_format":"webp","input_bytes":4,"webhook_url":"https://example.com/hook"}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&response)["error"]["code"], "webhooks_unavailable");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn finished_jobs_deliver_one_signed_webhook() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let storage = Arc::new(MemoryStorage::default());
+    // A receiver that fails the first delivery and accepts the second.
+    let received = Arc::new(Mutex::new(Vec::<(axum::http::HeaderMap, Vec<u8>)>::new()));
+    let receiver = {
+        let received = received.clone();
+        axum::Router::new().route(
+            "/hook",
+            axum::routing::post(
+                move |headers: axum::http::HeaderMap, body: axum::body::Bytes| {
+                    let received = received.clone();
+                    async move {
+                        let mut seen = received.lock().unwrap();
+                        seen.push((headers, body.to_vec()));
+                        if seen.len() == 1 {
+                            StatusCode::INTERNAL_SERVER_ERROR
+                        } else {
+                            StatusCode::NO_CONTENT
+                        }
+                    }
+                },
+            ),
+        )
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move { axum::serve(listener, receiver).await.unwrap() });
+    let hook = format!("http://127.0.0.1:{port}/hook");
+    // Creation checks the URL strictly; this test inserts it past that check.
+    let job = jobs::create(&db.server, &who("usr_a", true), &data(10))
+        .await
+        .unwrap();
+    sqlx::query("update cloud_jobs set webhook_url=$2, status='queued' where id=$1")
+        .bind(&job.id)
+        .bind(&hook)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let lax = crate::net_guard::Policy {
+        allow_private: true,
+    };
+    let master = "w".repeat(32);
+    // Nothing is due while the job runs.
+    assert_eq!(
+        crate::webhooks::deliver_due(&db.server, storage.as_ref(), &master, lax)
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(received.lock().unwrap().is_empty());
+    work_one(&db.server, &storage, b"out").await;
+    assert_eq!(
+        crate::webhooks::deliver_due(&db.server, storage.as_ref(), &master, lax)
+            .await
+            .unwrap(),
+        0
+    );
+    // The failure scheduled a retry ten seconds out; bring it forward.
+    sqlx::query("update cloud_jobs set webhook_next_at=now() where id=$1")
+        .bind(&job.id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    assert_eq!(
+        crate::webhooks::deliver_due(&db.server, storage.as_ref(), &master, lax)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        crate::webhooks::deliver_due(&db.server, storage.as_ref(), &master, lax)
+            .await
+            .unwrap(),
+        0
+    );
+    let seen = received.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    let (headers, body) = &seen[1];
+    let signature = headers["convt-signature"].to_str().unwrap();
+    let t: i64 = signature
+        .strip_prefix("t=")
+        .unwrap()
+        .split(',')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        signature,
+        crate::webhooks::signature(
+            &crate::webhooks::account_secret(&master, "usr_a", 1),
+            t,
+            body
+        )
+    );
+    assert_eq!(headers["convt-event-type"], "job.succeeded");
+    assert_eq!(headers["convt-delivery-attempt"], "2");
+    let event: serde_json::Value = serde_json::from_slice(body).unwrap();
+    assert_eq!(event["type"], "job.succeeded");
+    assert_eq!(event["data"]["job"]["id"], job.id.as_str());
+    assert_eq!(event["data"]["outputs"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        headers["convt-event-id"].to_str().unwrap(),
+        event["id"].as_str().unwrap()
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn expiry_keeps_finished_statuses_and_skips_settled_rows() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let who = who("usr_a", true);
+    let cancelled = jobs::create(&db.server, &who, &data(10)).await.unwrap();
+    jobs::cancel(&db.server, &who, &cancelled.id).await.unwrap();
+    let open = jobs::create(&db.server, &who, &data(10)).await.unwrap();
+    sqlx::query("update cloud_jobs set expires_at=now()-interval '1 second'")
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    routes::expire(&state).await.unwrap();
+    let rows: Vec<(String, String, String)> =
+        sqlx::query_as("select id, status, reservation from cloud_jobs order by created_at")
+            .fetch_all(&db.owner)
+            .await
+            .unwrap();
+    assert_eq!(
+        rows[0],
+        (cancelled.id.clone(), "cancelled".into(), "released".into())
+    );
+    assert_eq!(
+        rows[1],
+        (open.id.clone(), "failed".into(), "released".into())
+    );
+    // A second pass rewrites nothing: no row still holds anything.
+    let touched = sqlx::query("update cloud_jobs set updated_at=updated_at where expires_at<=now() and (reservation='open' or status not in ('succeeded','failed','cancelled'))")
+        .execute(&db.owner)
+        .await
+        .unwrap()
+        .rows_affected();
+    assert_eq!(touched, 0);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_worker_shutdown_requeues_without_spending_an_attempt() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let job = jobs::create(&db.server, &who("usr_a", true), &data(10))
+        .await
+        .unwrap();
+    sqlx::query("update cloud_jobs set status='queued' where id=$1")
+        .bind(&job.id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let first = jobs::claim(&db.server, "w1").await.unwrap().unwrap();
+    assert!(jobs::requeue(&db.server, &first).await.unwrap());
+    // The old attempt is fenced off.
+    assert!(
+        !jobs::finish(&db.server, &first, &["x".into()], None)
+            .await
+            .unwrap()
+    );
+    let second = jobs::claim(&db.server, "w2").await.unwrap().unwrap();
+    assert_eq!(second.id, job.id);
+    assert_eq!(second.attempt, 2);
+    assert_eq!(second.max_attempts, 4);
+    assert!(
+        jobs::finish(&db.server, &second, &["x".into()], None)
+            .await
+            .unwrap()
+    );
+    db.drop().await;
+}
+
+#[test]
+fn job_views_never_show_url_secrets() {
+    assert_eq!(
+        routes::redact_url("https://bucket.s3.amazonaws.com/a/photo.png?X-Amz-Signature=abc"),
+        "https://bucket.s3.amazonaws.com/…"
+    );
+    assert_eq!(
+        routes::redact_url("https://hooks.example.com/t0ken-in-path/convt"),
+        "https://hooks.example.com/…"
+    );
+    assert_eq!(
+        routes::redact_url("https://user:pw@example.com"),
+        "https://example.com"
+    );
+}
+
+#[tokio::test]
+async fn web_credentials_cannot_read_api_jobs() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let (status, _, created) = send(
+        &state,
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"target_format":"webp","source_url":"https://cdn.example.com/a.png?sig=secret"}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let created = json(&created);
+    assert_eq!(created["job"]["source_url"], "https://cdn.example.com/…");
+    let id = created["job"]["id"].as_str().unwrap();
+    let web = web_token(&state.web_secret, "usr_a");
+    for (method, path) in [
+        ("GET", format!("/v1/jobs/{id}")),
+        ("POST", format!("/v1/jobs/{id}/cancel")),
+    ] {
+        let (status, _, _) = send(
+            &state,
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("authorization", format!("Bearer {web}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn keyed_replays_recover_jobs_even_with_a_feature_switched_off() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let body = r#"{"target_format":"webp","source_url":"https://cdn.example.com/a.png"}"#;
+    let create = |state: &CloudState, key: &'static str| {
+        let state = state.clone();
+        async move {
+            send(
+                &state,
+                authed("POST", "/v1/jobs")
+                    .header("content-type", "application/json")
+                    .header("idempotency-key", key)
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+        }
+    };
+    let (status, _, first) = create(&state, "remote-1").await;
+    assert_eq!(status, StatusCode::OK);
+    let mut off = state.clone();
+    off.source_urls = false;
+    let (status, headers, replay) = create(&off, "remote-1").await;
+    assert_eq!(status, StatusCode::OK, "{}", json(&replay));
+    assert_eq!(headers["idempotent-replayed"], "true");
+    assert_eq!(json(&replay)["job"]["id"], json(&first)["job"]["id"]);
+    let (status, _, refused) = create(&off, "remote-2").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&refused)["error"]["code"], "source_url_unavailable");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn upload_urls_never_outlive_their_job_and_expiry_drops_customer_urls() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let body = r#"{"input_format":"png","target_format":"webp","input_bytes":4,"webhook_url":"https://hooks.example.com/secret-path"}"#;
+    let request = || {
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .header("idempotency-key", "late-1")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let (_, _, first) = send(&state, request()).await;
+    assert_eq!(json(&first)["upload_expires_in"], 900);
+    let id = json(&first)["job"]["id"].as_str().unwrap().to_owned();
+    sqlx::query("update cloud_jobs set expires_at=now()+interval '5 minutes' where id=$1")
+        .bind(&id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (_, _, replay) = send(&state, request()).await;
+    let ttl = json(&replay)["upload_expires_in"].as_i64().unwrap();
+    assert!((60..=240).contains(&ttl), "{ttl}");
+    sqlx::query("update cloud_jobs set expires_at=now()+interval '90 seconds' where id=$1")
+        .bind(&id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (_, _, late) = send(&state, request()).await;
+    assert!(json(&late)["upload_url"].is_null());
+    // Expired with its webhook delivered: both customer URLs are cleared.
+    sqlx::query("update cloud_jobs set expires_at=now()-interval '1 second', source_url='https://cdn.example.com/x?sig=1', webhook_delivered_at=now() where id=$1")
+        .bind(&id)
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    routes::expire(&state).await.unwrap();
+    let (source, webhook): (Option<String>, Option<String>) =
+        sqlx::query_as("select source_url, webhook_url from cloud_jobs where id=$1")
+            .bind(&id)
+            .fetch_one(&db.owner)
+            .await
+            .unwrap();
+    assert_eq!((source, webhook), (None, None));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_keyed_upload_with_different_bytes_is_refused_and_metadata_is_capped() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let state = state_with(&db, Arc::new(MemoryStorage::default()));
+    let create = |hash: &str| {
+        authed("POST", "/v1/jobs")
+            .header("content-type", "application/json")
+            .header("idempotency-key", "same-size")
+            .body(Body::from(format!(
+                r#"{{"input_format":"png","target_format":"webp","input_bytes":7,"input_sha256":"{hash}"}}"#
+            )))
+            .unwrap()
+    };
+    let (status, _, _) = send(&state, create(&"a".repeat(64))).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, conflict) = send(&state, create(&"b".repeat(64))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json(&conflict)["error"]["code"], "idempotency_key_reused");
+    let (status, _, bad) = send(&state, create("not-a-hash")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&bad)["error"]["code"], "invalid_request");
+    let boundary = "B";
+    let form = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"options\"\r\n\r\n{}\r\n--{boundary}--\r\n",
+        "x".repeat(17 * 1024)
+    );
+    let (status, _, refused) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(form))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        json(&refused)["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("16 KB")
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn errors_after_a_job_exists_name_it() {
+    use axum::response::IntoResponse as _;
+    let response = routes::ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "internal",
+        "Request failed.",
+    )
+    .with_job_id("job_abc")
+    .into_response();
+    assert_eq!(response.headers()["convt-job-id"], "job_abc");
+    assert_eq!(response.headers()["location"], "/v1/jobs/job_abc");
+    let body = json(&to_bytes(response.into_body(), 10_000).await.unwrap());
+    assert_eq!(body["job_id"], "job_abc");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("GET /v1/jobs/job_abc")
+    );
+}
+
+#[tokio::test]
+async fn a_replayed_conversion_redirects_to_storage_instead_of_streaming_again() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let storage = Arc::new(MemoryStorage::default());
+    let state = state_with(&db, storage.clone());
+    let request = || {
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .header("idempotency-key", "replay-1")
+            .body(Body::from("png-bytes"))
+            .unwrap()
+    };
+    let worker = {
+        let pool = db.server.clone();
+        let storage = storage.clone();
+        tokio::spawn(async move { work_one(&pool, &storage, b"webp").await })
+    };
+    let (status, _, body) = send(&state, request()).await;
+    worker.await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, b"webp");
+    let (status, headers, body) = send(&state, request()).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(
+        headers["location"]
+            .to_str()
+            .unwrap()
+            .starts_with("https://download.test/")
+    );
+    assert_eq!(headers["idempotent-replayed"], "true");
+    assert_eq!(json(&body)["job"]["status"], "succeeded");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn trailing_json_is_refused_and_a_missing_output_keeps_the_job() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let storage = Arc::new(MemoryStorage::default());
+    let state = state_with(&db, storage.clone());
+    let (status, _, body) = send(
+        &state,
+        authed("POST", "/v1/convert?wait=0")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"source_url":"https://cdn.example.com/a.png","to":"webp"}{"x":1}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&body)["error"]["code"], "invalid_request");
+    let queued: i64 = sqlx::query_scalar("select count(*) from cloud_jobs")
+        .fetch_one(&db.owner)
+        .await
+        .unwrap();
+    assert_eq!(queued, 0);
+    // A worker that reports an output the bucket no longer has.
+    let worker = {
+        let pool = db.server.clone();
+        tokio::spawn(async move {
+            for _ in 0..100 {
+                if let Some(job) = jobs::claim(&pool, "w").await.unwrap() {
+                    let key = format!("{}/attempt-1/input.webp", job.id);
+                    assert!(jobs::finish(&pool, &job, &[key], None).await.unwrap());
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+    };
+    let (status, headers, body) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    worker.await.unwrap();
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(json(&body)["error"]["code"], "output_missing");
+    assert_eq!(json(&body)["job"]["status"], "succeeded");
+    assert!(headers.contains_key("convt-job-id"));
+    // The JSON form refuses to hand out a dead link too.
+    let (status, _, _) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .header("accept", "application/json")
+            .header("idempotency-key", "json-missing")
+            .body(Body::from("png2"))
+            .unwrap(),
+    )
+    .await;
+    // No worker this time, so the job is still queued; finish it by hand with an
+    // output that was never stored.
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let job_id: String =
+        sqlx::query_scalar("select id from cloud_jobs where idempotency_key='json-missing'")
+            .fetch_one(&db.owner)
+            .await
+            .unwrap();
+    sqlx::query("update cloud_jobs set status='succeeded', reservation='settled', output_keys=$2 where id=$1")
+        .bind(&job_id)
+        .bind(serde_json::json!([format!("{job_id}/attempt-1/gone.webp")]))
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (status, _, body) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .header("accept", "application/json")
+            .header("idempotency-key", "json-missing")
+            .body(Body::from("png2"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(json(&body)["error"]["code"], "output_missing");
     db.drop().await;
 }

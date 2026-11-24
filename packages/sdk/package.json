@@ -1,27 +1,70 @@
 {
   "name": "@convt/sdk",
   "version": "0.1.0",
+  "description": "TypeScript client for the convt cloud file conversion API: images, video, audio, documents and PDFs at $0.01 per conversion.",
+  "keywords": [
+    "api",
+    "convert",
+    "docx",
+    "file conversion",
+    "heic",
+    "image",
+    "pdf",
+    "sdk",
+    "video",
+    "webp"
+  ],
+  "homepage": "https://convt.app/docs",
+  "bugs": {
+    "url": "https://github.com/opencoredev/convt/issues"
+  },
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opencoredev/convt.git",
+    "directory": "packages/sdk"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "bun": "./src/index.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./formats": {
       "types": "./dist/formats.d.ts",
       "bun": "./src/formats.ts",
-      "import": "./dist/formats.js"
-    }
+      "import": "./dist/formats.js",
+      "default": "./dist/formats.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check-types": "tsc --noEmit",
     "test": "bun test",
-    "generate": "bun scripts/generate.ts"
+    "generate": "bun scripts/generate.ts",
+    "prepack": "bun run build && cp ../../LICENSE LICENSE",
+    "postpack": "rm -f LICENSE"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
     "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=20.3"
   }
 }

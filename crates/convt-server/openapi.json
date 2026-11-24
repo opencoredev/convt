@@ -3,12 +3,12 @@
   "info": {
     "title": "convt API",
     "version": "0.1.0",
-    "description": "Paid conversions. Upload directly using PUT to upload_url, then POST start. Poll status and download every output. Upload exactly input_bytes; the PUT signature binds Content-Length. Inputs and outputs expire after 24 hours. Each account may retain at most 100 job prefixes and 50 GB of declared input storage; cancellations retain this commitment until expiry cleanup succeeds. API price: 1 cent per successful job, pending launch price approval. 120 requests per minute per key. No webhooks."
+    "description": "Paid conversions at 1 cent per successful job; failed and cancelled jobs are free. POST /v1/convert takes a file of up to 25 MB (or a source_url) and answers with the converted file in one request. For larger files, reserve a job with POST /v1/jobs, PUT exactly input_bytes to upload_url (the signature binds Content-Length), then POST start, poll and download every output. Send an Idempotency-Key on creates so retries never reserve twice. Jobs and their files expire after 24 hours. Each account may retain at most 100 job prefixes and 50 GB of declared input storage. 120 requests per minute per key; every response carries an X-Request-Id, and authenticated responses carry X-RateLimit-* headers. Jobs created with webhook_url get one signed POST when they finish."
   },
   "servers": [
     {
-      "url": "https://convt-api-production.up.railway.app",
-      "description": "Interim host. https://api.convt.app is the intended canonical host and will replace this once its DNS is live."
+      "url": "https://api.convt.app",
+      "description": "Production"
     }
   ],
   "paths": {
@@ -33,14 +33,31 @@
                       "$ref": "#/components/schemas/Job"
                     },
                     "upload_url": {
-                      "type": "string",
+                      "type": ["string", "null"],
                       "format": "uri"
                     },
                     "upload_expires_in": {
-                      "type": "integer"
+                      "type": ["integer", "null"]
                     }
                   }
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
               }
             }
           },
@@ -52,6 +69,20 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "401": {
@@ -61,6 +92,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
               }
             }
           },
@@ -72,6 +108,11 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
             }
           },
           "404": {
@@ -81,6 +122,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -92,6 +147,23 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
             }
           },
           "502": {
@@ -101,6 +173,44 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "409": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           }
@@ -112,10 +222,11 @@
               "schema": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["input_format", "target_format", "input_bytes"],
+                "required": ["target_format"],
                 "properties": {
                   "input_format": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Required unless source_url ends in a known extension."
                   },
                   "target_format": {
                     "type": "string"
@@ -123,16 +234,53 @@
                   "input_bytes": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 2000000000
+                    "maximum": 2000000000,
+                    "description": "Exact upload size. Required unless source_url is set."
                   },
                   "options": {
                     "$ref": "#/components/schemas/Options"
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048
+                  },
+                  "input_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$",
+                    "description": "Hex SHA-256 of the file you will upload. Not checked against the upload; it joins the Idempotency-Key fingerprint so a retry with different bytes is refused."
                   }
-                }
+                },
+                "oneOf": [
+                  {
+                    "title": "Upload",
+                    "required": ["input_format", "target_format", "input_bytes"],
+                    "not": {
+                      "required": ["source_url"]
+                    }
+                  },
+                  {
+                    "title": "Remote file",
+                    "required": ["target_format", "source_url"],
+                    "not": {
+                      "required": ["input_bytes"]
+                    }
+                  }
+                ]
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ]
       }
     },
     "/v1/jobs/{id}": {
@@ -153,6 +301,20 @@
                   "$ref": "#/components/schemas/Job"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "400": {
@@ -162,6 +324,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -173,6 +349,11 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
             }
           },
           "403": {
@@ -182,6 +363,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
               }
             }
           },
@@ -193,6 +379,20 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "429": {
@@ -203,6 +403,23 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
             }
           },
           "502": {
@@ -212,6 +429,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           }
@@ -246,6 +477,20 @@
                   "$ref": "#/components/schemas/Job"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "400": {
@@ -255,6 +500,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -266,6 +525,11 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
             }
           },
           "403": {
@@ -275,6 +539,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
               }
             }
           },
@@ -286,6 +555,20 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "429": {
@@ -296,6 +579,23 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
             }
           },
           "502": {
@@ -305,6 +605,44 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "409": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           }
@@ -339,6 +677,20 @@
                   "$ref": "#/components/schemas/Job"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "400": {
@@ -348,6 +700,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -359,6 +725,11 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
             }
           },
           "403": {
@@ -368,6 +739,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
               }
             }
           },
@@ -379,6 +755,20 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "429": {
@@ -389,6 +779,23 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
             }
           },
           "502": {
@@ -398,6 +805,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           }
@@ -452,6 +873,20 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "400": {
@@ -461,6 +896,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           },
@@ -472,6 +921,11 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
             }
           },
           "403": {
@@ -481,6 +935,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
               }
             }
           },
@@ -492,6 +951,20 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
             }
           },
           "429": {
@@ -502,6 +975,23 @@
                   "$ref": "#/components/schemas/Error"
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
             }
           },
           "502": {
@@ -511,6 +1001,20 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
               }
             }
           }
@@ -562,6 +1066,894 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/convert": {
+      "post": {
+        "summary": "Convert a file in one request",
+        "operationId": "convertFile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Target format id or extension. Required here or as a form field.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Input format id or extension. Inferred from the file name, source_url or Content-Type when left out.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "query",
+            "required": false,
+            "description": "Name of a raw-body upload, used to infer `from` and name the result.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "options",
+            "in": "query",
+            "required": false,
+            "description": "Conversion settings as URL-encoded JSON, such as `{\"quality\":80}`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Seconds to wait for the result, 0 to 300. Default 120. When it runs out: `202` if you sent `Accept: application/json` (the job keeps running), `409 still_running` for a file request with an `Idempotency-Key` (the job keeps running), or `504 timeout` for a file request without one (the job is cancelled).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 300,
+              "default": 120
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Up to 25 MB."
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "type": "string",
+                    "description": "JSON-encoded Options."
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["source_url"],
+                "properties": {
+                  "source_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/Options"
+                  }
+                }
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "The raw file, up to 25 MB. Pass `to` (and `from` or `filename`) in the query."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The converted file, when the job produced one output of at most 25 MB, this is its first delivery, and `Accept` does not ask for JSON. With several outputs or `Accept: application/json`, JSON with signed URLs.",
+            "headers": {
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"<your file name>.<target extension>\"`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "$ref": "#/components/schemas/Job"
+                    },
+                    "outputs": {
+                      "$ref": "#/components/schemas/Outputs/properties/outputs"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "401": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          },
+          "403": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          },
+          "404": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "409": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "job": {
+                          "$ref": "#/components/schemas/Job"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
+            }
+          },
+          "413": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "422": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "job": {
+                          "$ref": "#/components/schemas/Job"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
+            }
+          },
+          "502": {
+            "description": "`storage_unavailable`, or `output_missing` when the job succeeded but an output is not in storage. Either way, if the job already succeeded and was billed, the body includes the `job` and `Location` points at its download route; do not convert again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "job": {
+                          "$ref": "#/components/schemas/Job"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "Where to recover the job: `/v1/jobs/{id}` (409) or `/v1/jobs/{id}/download` (502 after success).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Sent only with `Accept: application/json`: the job is still running after `wait` seconds. It keeps running and is billed if it succeeds; poll `Location`.",
+            "headers": {
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "$ref": "#/components/schemas/Job"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
+            }
+          },
+          "504": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "job": {
+                          "$ref": "#/components/schemas/Job"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "`request_timeout`: the upload took longer than 2 minutes. Use `POST /v1/jobs` for slow or large uploads.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal`. If the job already exists, the body has `job_id` and `Convt-Job-Id` and `Location` name it: check it before retrying, because it may still finish and be billed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "Location": {
+                "description": "`/v1/jobs/{id}`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "A result over 25 MB, or a replay of a finished request: `Location` is the signed storage URL of the only output (valid for `expires_in` seconds). Follow it; the body is the same JSON as with `Accept: application/json`.",
+            "headers": {
+              "Location": {
+                "description": "Signed URL of the output.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Convt-Job-Id": {
+                "$ref": "#/components/headers/Convt-Job-Id"
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "$ref": "#/components/schemas/Job"
+                    },
+                    "outputs": {
+                      "$ref": "#/components/schemas/Outputs/properties/outputs"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks/secret": {
+      "get": {
+        "summary": "Get the webhook signing secret",
+        "operationId": "getWebhookSecret",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The account's signing secret.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "400": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "401": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          },
+          "403": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          },
+          "429": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks/secret/rotate": {
+      "post": {
+        "summary": "Rotate the webhook signing secret",
+        "operationId": "rotateWebhookSecret",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The account's signing secret.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "400": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            }
+          },
+          "401": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          },
+          "403": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            }
+          },
+          "429": {
+            "description": "Request refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              }
             }
           }
         }
@@ -609,22 +2001,47 @@
           "expires_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_url": {
+            "type": "string",
+            "description": "The origin of the `source_url` you sent, such as `https://bucket.s3.amazonaws.com/\u2026`. The full URL is never returned."
+          },
+          "webhook_url": {
+            "type": "string",
+            "description": "The origin of the `webhook_url` you sent. The full URL is never returned."
           }
         }
       },
       "Error": {
         "type": "object",
+        "required": ["error"],
         "properties": {
           "error": {
             "type": "object",
+            "required": ["code", "message"],
             "properties": {
               "code": {
                 "type": "string"
               },
               "message": {
                 "type": "string"
+              },
+              "request_id": {
+                "type": ["string", "null"]
               }
             }
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job",
+            "description": "The job the failed request created or touched, when there is one."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "The job the failed request created, when the full job could not be read. Check it with GET /v1/jobs/{id} before retrying."
           }
         }
       },
@@ -695,6 +2112,87 @@
             "maximum": 120,
             "description": "Frames per second for video and GIF output."
           }
+        }
+      },
+      "Outputs": {
+        "type": "object",
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            }
+          },
+          "expires_in": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "headers": {
+      "X-Request-Id": {
+        "description": "Identifies this request. Quote it when you contact support. A plain id you send (up to 128 letters, digits, `-`, `_`, `.`) is echoed back.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "X-RateLimit-Limit": {
+        "description": "Requests allowed per minute for this key.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "X-RateLimit-Remaining": {
+        "description": "Requests left in the current minute.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "X-RateLimit-Reset": {
+        "description": "Seconds until the current minute's window resets.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "Retry-After": {
+        "description": "Seconds to wait before retrying.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "Idempotent-Replayed": {
+        "description": "`true` when an Idempotency-Key matched an earlier request and no new job was reserved.",
+        "schema": {
+          "type": "string",
+          "enum": ["true"]
+        }
+      },
+      "Convt-Job-Id": {
+        "description": "The job that served this conversion.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Any string of 1 to 255 visible ASCII characters, such as a UUID. Retrying with the same key and the same request returns the original job instead of reserving a new one, for 24 hours. The same key with a different request fails with `409 idempotency_key_reused`.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
         }
       }
     }

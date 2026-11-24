@@ -8,6 +8,7 @@ import { openActivationLink } from "#/lib/activate";
 import { links } from "#/lib/config";
 import {
   checkoutAside,
+  checkoutAsideKind,
   checkoutOrigin,
   downloadAction,
   type CheckoutOrigin,
@@ -43,6 +44,8 @@ type State =
   | CheckoutView
   | { state: "loading" }
   | { state: "email" }
+  | { state: "api_pending" }
+  | { state: "unconfirmed" }
   | { state: "error"; reason: string };
 
 const errors: Record<string, string> = {
@@ -75,7 +78,14 @@ function SuccessPage() {
 
   return (
     <AuthLayout
-      aside={checkoutAside({ kind: state.state === "trial" ? "trial" : "key", os, origin })}
+      aside={checkoutAside({
+        kind: checkoutAsideKind({
+          state: state.state,
+          product: "product" in state ? state.product : null,
+        }),
+        os,
+        origin,
+      })}
     >
       <div aria-live="polite" className="flex flex-col gap-6">
         <Body state={state} os={os} origin={origin} />
@@ -137,7 +147,31 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
             Your card is saved and your spend cap is set. Conversions are billed at the end of each
             month.
           </p>
-          <Actions primary={{ href: "/dashboard/api", label: "Go to API" }} />
+          <Actions primary={{ href: "/dashboard/api", label: "Go to API keys" }} />
+        </>
+      );
+    case "unconfirmed":
+      return (
+        <>
+          <Heading eyebrow="CHECKOUT">We couldn't confirm this checkout yet</Heading>
+          <p className={lead}>
+            Nothing is lost if you paid. A license purchase arrives by email and appears under
+            Licenses, and API billing turns on by itself on the API page, as soon as the payment
+            provider confirms it.
+          </p>
+          <Actions primary={{ href: "/dashboard", label: "Go to your account" }} />
+        </>
+      );
+    case "api_pending":
+      return (
+        <>
+          <Heading eyebrow="CONVT API">Your card is still being confirmed</Heading>
+          <p className={lead}>
+            API billing turns on as soon as the payment provider confirms your card, usually within
+            a minute. Open the API page then to create keys; reload it if it still shows the card as
+            pending.
+          </p>
+          <Actions primary={{ href: "/dashboard/api", label: "Go to API billing" }} />
         </>
       );
     case "email":
@@ -166,8 +200,11 @@ function Body({ state, os, origin }: { state: State; os: Os | null; origin: Chec
     case "failed":
       return (
         <>
-          <Heading eyebrow="CHECKOUT">This checkout didn't complete</Heading>
-          <p className={lead}>Nothing was charged. You can start again whenever you're ready.</p>
+          <Heading eyebrow="CHECKOUT">Nothing is active from this checkout</Heading>
+          <p className={lead}>
+            If you were charged, your receipt email and your account have the details; check them
+            before you buy again.
+          </p>
           <Actions primary={{ href: links.pricing, label: "See pricing" }} />
         </>
       );

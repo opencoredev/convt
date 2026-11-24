@@ -34,11 +34,11 @@ function downloads(html: string) {
 }
 
 test("header links are the launched set, never Coming soon", () => {
-  expect(headerLinks.map((l) => l.label)).toEqual(["Download", "Formats", "Pricing", "API docs"]);
+  expect(headerLinks.map((l) => l.label)).toEqual(["Download", "Formats", "Pricing", "API"]);
   const html = renderToStaticMarkup(<Nav account={null} path="/" />);
   expect(html).toContain("Formats");
   expect(html).toContain("Pricing");
-  expect(html).toContain("API docs");
+  expect(html).toContain('href="/api"');
   expect(html).toContain("Sign in");
   expect(html).not.toContain("Coming soon");
   expect(html).toContain("pointer-events-none absolute inset-0");

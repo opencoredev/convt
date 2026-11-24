@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count, ceil(extract(epoch from expires_at-now()))::bigint as \"reset!\" from otp_send_limits where key=$1 and expires_at>now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "otp_send_limits",
+            "name": "count"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reset!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "8bfb1afb9babcfcb05a4f866a6d60857dea08d1ea9d3177517799ffcc93766bb"
+}

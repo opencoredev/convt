@@ -94,7 +94,7 @@ Use `crates/convt-worker/examples/replica_acceptance/` inside a gate-approved im
 
 For browser checks, follow the remote-preview workflow and use `agent-browser` session `convt-p9` with profile `~/.agent-browser/profiles/convt-p9`. Configure the API URL, shared token secret and reachable storage endpoint in the local web Worker. The dashboard converter is `/dashboard/api/convert`; keys, usage and spend cap are on `/dashboard/api`.
 
-The canonical contract is `/openapi.json`; the web copy is `apps/web/src/generated/openapi.json`. Regenerate it with `bun packages/sdk/scripts/generate-openapi.ts`. SDK types come from `convt formats --json`; cloud target manifests come from the actual sandbox registry.
+The canonical contract is `/openapi.json`, served from `crates/convt-server/openapi.json`; the docs render it through `apps/docs/openapi/public.yaml`. SDK types come from `convt formats --json`; cloud target manifests come from the actual sandbox registry.
 
 ## Accounting and recovery
 

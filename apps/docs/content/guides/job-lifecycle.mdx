@@ -8,11 +8,13 @@ A job moves through a fixed set of statuses. Read `status` from any job response
 ```mermaid
 stateDiagram-v2
   [*] --> created: POST /v1/jobs
+  [*] --> queued: POST /v1/convert, or source_url
   created --> queued: POST /start
   queued --> running: a worker picks it up
   running --> succeeded
   running --> failed
   running --> running: worker lost, retried
+  running --> queued: worker redeployed, handed back
   created --> cancelled: POST /cancel
   queued --> cancelled: POST /cancel
   running --> cancelled: POST /cancel
@@ -44,7 +46,7 @@ When `status` is `failed`, `error_code` is one of:
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `conversion_failed`    | The converter could not convert this file, or hit the 10-minute limit. The file may be damaged or unsupported. |
 | `expired_or_exhausted` | All 3 attempts were used up because workers kept stopping mid-conversion.                                      |
-| `worker_shutdown`      | The worker shut down during the conversion. Create a new job.                                                  |
+| `source_fetch_failed`  | convt could not download `source_url`. See [Remote files](/guides/remote-files).                               |
 
 A failed job releases its reservation, so you are not charged. Create a new job to try again.
 

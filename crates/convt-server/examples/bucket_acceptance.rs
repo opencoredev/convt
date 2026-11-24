@@ -33,7 +33,7 @@ async fn check(storage: &S3Storage, prefix: &str, origin: &str) -> anyhow::Resul
     let client = Client::builder().timeout(Duration::from_secs(15)).build()?;
     let key = format!("{prefix}delete/input");
     let neighbor = format!("{prefix}keep/input");
-    let url = storage.upload_url(&key, 3).await?;
+    let url = storage.upload_url(&key, 3, 900).await?;
     for method in ["PUT", "GET"] {
         let preflight = client
             .request(reqwest::Method::OPTIONS, &url)
@@ -129,7 +129,7 @@ async fn check(storage: &S3Storage, prefix: &str, origin: &str) -> anyhow::Resul
     );
     println!("PASS download and upload URL expiry");
 
-    let neighbor_url = storage.upload_url(&neighbor, 1).await?;
+    let neighbor_url = storage.upload_url(&neighbor, 1, 900).await?;
     anyhow::ensure!(
         client
             .put(neighbor_url)

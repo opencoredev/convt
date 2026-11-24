@@ -6,7 +6,7 @@ import { apiBaseUrl } from "#/lib/config";
 
 import { cx } from "./ui";
 
-// Each example follows the jobs API. The SDK handles upload and polling.
+// The SDK handles upload and polling; cURL uses the one-request /v1/convert route.
 const samples = [
   {
     id: "node",
@@ -23,27 +23,31 @@ await out.save("report.pdf");`,
   {
     id: "curl",
     label: "cURL",
-    code: `# Create a reservation for a 104-byte SVG.
-job=$(curl -fsS ${apiBaseUrl}/v1/jobs \\
-  -H "Authorization: Bearer $CONVT_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"input_format":"svg","target_format":"png","input_bytes":104}')
-# PUT your file to upload_url, then POST /v1/jobs/{id}/start.
-# Poll GET /v1/jobs/{id}; on success, GET its /download URLs.
-# The SDK performs each of these steps for you.`,
+    code: `# One request: the response is the converted file.
+curl -fsSL ${apiBaseUrl}/v1/convert \\
+  -H "Authorization: Bearer $CONVT_API_KEY" \\
+  -F file=@report.docx -F to=pdf -o report.pdf`,
   },
   {
     id: "browser",
     label: "Browser",
-    code: `import { Convt } from "@convt/sdk";
+    code: `// Your server route: the browser posts the file here and the
+// API key never leaves the server. Every call is billed to you,
+// so only your signed-in users may use it.
+import { Convt } from "@convt/sdk";
 
-// Use a short-lived token issued by your server.
-const convt = new Convt({
-  token: () => fetchToken(),
-  baseUrl: "${apiBaseUrl}",
-});
-const out = await convt.convert(file, { to: "pdf" });
-const blob = await out.blob();`,
+const convt = new Convt();
+
+export async function POST(request: Request) {
+  const user = await getSignedInUser(request); // your own auth
+  if (!user) return new Response("sign in first", { status: 401 });
+  const size = Number(request.headers.get("content-length"));
+  if (!size || size > 25_000_000) return new Response("too large", { status: 413 });
+  const file = (await request.formData()).get("file");
+  if (!(file instanceof File)) return new Response("file required", { status: 400 });
+  const out = await convt.convert(file, { to: "pdf" });
+  return Response.json({ url: out.outputs[0].url });
+}`,
   },
   {
     id: "cli",

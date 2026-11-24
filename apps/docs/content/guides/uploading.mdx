@@ -59,7 +59,9 @@ convt copies the upload to a sealed location, checks its size again, and queues 
 
 If the uploaded file's size differs from `input_bytes`, start fails with `400 size_mismatch` and cancels the job. Reserve a new job to try again.
 
-If nothing was uploaded, start fails with `502 storage_unavailable` and the job stays `created`. Check that your `PUT` returned a `2xx` status before calling start, and cancel the job if you give up on it.
+If nothing was uploaded, start fails with `409 upload_missing` and the job stays `created`. Check that your `PUT` returned a `2xx` status before calling start, and cancel the job if you give up on it.
+
+Files up to 25 MB can skip this step: [`POST /v1/convert`](/quick-start) takes the file in the request. Files already online can skip it too, with [`source_url`](/guides/remote-files).
 
 Start is safe to repeat. If the job already left `created`, the call returns it unchanged.
 

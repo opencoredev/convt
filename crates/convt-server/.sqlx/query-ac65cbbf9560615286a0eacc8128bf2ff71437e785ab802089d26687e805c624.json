@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, request_hash from cloud_jobs where user_id=$1 and idempotency_key=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "request_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "request_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "ac65cbbf9560615286a0eacc8128bf2ff71437e785ab802089d26687e805c624"
+}

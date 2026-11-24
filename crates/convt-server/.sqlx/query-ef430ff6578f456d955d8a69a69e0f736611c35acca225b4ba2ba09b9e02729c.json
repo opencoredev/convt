@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as \"options: _\",input_key,input_bytes,output_keys as \"output_keys: _\",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at from cloud_jobs where id=$1 and user_id=$2 and expires_at>now()",
+  "query": "insert into cloud_jobs (id,user_id,source,api_key_id,subscription_id,quota_period_start,input_format,target_format,options,input_key,input_bytes,reserved_bytes,reserved_cents,expires_at,status,queued_at,source_url,webhook_url,idempotency_key,request_hash) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now()+interval '24 hours',$14,case when $14='queued' then now() end,$15,$16,$17,$18) returning id,user_id,source,api_key_id,subscription_id,quota_period_start,status,input_format,target_format,options as \"options: _\",input_key,input_bytes,output_keys as \"output_keys: _\",attempt,max_attempts,lease_owner,lease_expires_at,reserved_bytes,reserved_cents,reservation,error_code,expires_at,created_at,source_url,webhook_url",
   "describe": {
     "columns": [
       {
@@ -255,10 +255,48 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 23,
+        "name": "source_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "source_url"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "webhook_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "webhook_url"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
         "Text",
         "Text"
       ]
@@ -286,8 +324,10 @@
       false,
       true,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "38aa72a8283493ab4d0fe727aedce93548953d430177ef7044b69d7b7dba6094"
+  "hash": "ef430ff6578f456d955d8a69a69e0f736611c35acca225b4ba2ba09b9e02729c"
 }

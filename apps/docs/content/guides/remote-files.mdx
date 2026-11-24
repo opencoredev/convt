@@ -1,0 +1,43 @@
+---
+title: Remote files
+description: Convert a file that is already online, such as a presigned S3 or R2 URL, without downloading and re-uploading it.
+---
+
+When the file already sits in object storage or behind a CDN, pass its URL as `source_url`. convt's worker downloads it, so nothing goes through your server.
+
+```bash
+curl -fsSL {{api}}/v1/convert \
+  -H "Authorization: Bearer $CONVT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"source_url":"https://my-bucket.s3.amazonaws.com/photo.heic?X-Amz-Signature=...","to":"jpg"}' \
+  -o photo.jpg
+```
+
+For long conversions, create a job instead and get a [webhook](/guides/webhooks) when it finishes:
+
+```bash
+curl -fsS {{api}}/v1/jobs \
+  -H "Authorization: Bearer $CONVT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"source_url":"https://cdn.example.com/talk.mov","target_format":"mp4","webhook_url":"https://example.com/hooks/convt"}'
+```
+
+A `source_url` job is queued at once: there is no upload and no start call, and its `upload_url` is `null`.
+
+With the SDK:
+
+```ts
+const out = await convt.convertUrl("https://cdn.example.com/talk.mov", { to: "mp4" });
+```
+
+## Rules
+
+- The URL must be public `https`, up to 2,048 characters, without a user name or password. Presigned URLs work; give them at least 15 minutes so a busy queue does not outlive them.
+- convt refuses private, loopback, link-local and cloud metadata addresses, both when you create the job and again when the worker connects. It does not follow redirects, so link to the file itself.
+- The input format comes from the URL path's extension (`.heic`, `.mov`). Pass `input_format` (or `from` on `/v1/convert`) when the path has none.
+- The file may be up to 2 GB, on both routes. The download counts toward the job's 10-minute limit.
+- `source_url` needs an API key; the browser converter's web credentials can't use it.
+
+If `source_url` is not switched on for the server yet, creating the job fails with `400 source_url_unavailable`; upload the file instead.
+
+If the download fails (an HTTP error, an empty body, a file over 2 GB, a refused address), the job fails with `error_code: "source_fetch_failed"` and you are not charged.

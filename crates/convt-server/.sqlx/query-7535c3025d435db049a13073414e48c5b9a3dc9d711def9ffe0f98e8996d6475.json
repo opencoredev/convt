@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update cloud_jobs set source_url=null, webhook_url=case when webhook_delivered_at is not null or webhook_attempts>=$1 or expires_at<=now()-interval '6 hours' then null else webhook_url end, updated_at=now() where expires_at<=now() and (source_url is not null or (webhook_url is not null and (webhook_delivered_at is not null or webhook_attempts>=$1 or expires_at<=now()-interval '6 hours')))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7535c3025d435db049a13073414e48c5b9a3dc9d711def9ffe0f98e8996d6475"
+}

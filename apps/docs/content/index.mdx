@@ -9,7 +9,11 @@ Use the API when the conversion has to happen in your own product or pipeline. I
 
 ## How a conversion works
 
-Every conversion is a **job**. The API never receives your file in a request body. Your code uploads it straight to storage through a signed URL, which keeps large files off the API and lets uploads go up to 2 GB.
+Every conversion is a **job**. There are three ways to give convt the file:
+
+- **One request.** `POST /v1/convert` takes a file of up to 25 MB and answers with the converted file. The [Quick start](/quick-start) is a one-line `curl`.
+- **A URL.** Send `source_url` and convt downloads the file itself, up to 2 GB. See [Remote files](/guides/remote-files).
+- **A direct upload.** For files up to 2 GB, your code uploads straight to storage through a signed URL, which keeps large files off the API. The rest of this section shows that flow.
 
 ```mermaid
 sequenceDiagram
@@ -34,7 +38,7 @@ sequenceDiagram
 4. **Poll** the job until its status is `succeeded`, `failed` or `cancelled`.
 5. **Download** the outputs from the signed URLs the API returns.
 
-The [Quick start](/quick-start) runs all five steps in Node, cURL, a browser app and the CLI.
+[Uploading](/guides/uploading) and the [Node script example](/examples/node-script) run all five steps. Add a [webhook](/guides/webhooks) to skip the polling.
 
 ## What you need
 
@@ -43,13 +47,11 @@ The [Quick start](/quick-start) runs all five steps in Node, cURL, a browser app
 
 ## Pricing
 
-Each job that succeeds costs 1 cent. Failed and cancelled jobs cost nothing. Creating a job reserves 1 cent against your spend cap until it finishes, so the API refuses new jobs with `limit_reached` once your used and reserved spend reaches the cap.
+Each job that succeeds costs 1 cent ($0.01). Failed and cancelled jobs cost nothing. There is no monthly fee and no plan to pick. Creating a job reserves 1 cent against your spend cap until it finishes, so the API refuses new jobs with `limit_reached` once your used and reserved spend reaches the cap.
 
 ## Base URL
 
-:::warning[Interim host]
-`api.convt.app` does not resolve yet. Until it does, send requests to `{{api}}`. Paths, keys and responses are identical, and only the host will change. See [Base URL](/reference/base-url).
-:::
+Send every request to `{{api}}`. All routes are versioned under `/v1`. See [Base URL](/reference/base-url).
 
 ## Next steps
 

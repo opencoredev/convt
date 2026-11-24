@@ -1,6 +1,6 @@
 import { defineConfig } from "blume";
 import { openapi } from "blume/reference";
-import { apiBase, finalApi } from "./api-host.ts";
+import { apiBase } from "./api-host.ts";
 
 export default defineConfig({
   title: "convt docs",
@@ -11,7 +11,6 @@ export default defineConfig({
   lastModified: "git",
   variables: {
     api: apiBase,
-    "final-api": finalApi,
   },
   theme: {
     accent: { light: "#17834d", dark: "#3fcb84" },

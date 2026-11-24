@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.options as \"options: _\",j.input_key,j.input_bytes,j.output_keys as \"output_keys: _\",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at",
+  "query": "with candidate as (select id from cloud_jobs where expires_at>now() and attempt<max_attempts and (status='queued' or (status='running' and lease_expires_at<=now())) order by queued_at for update skip locked limit 1) update cloud_jobs j set status='running',attempt=attempt+1,lease_owner=$1,lease_expires_at=now()+interval '30 seconds',started_at=now(),updated_at=now() from candidate c where j.id=c.id returning j.id,j.user_id,j.source,j.api_key_id,j.subscription_id,j.quota_period_start,j.status,j.input_format,j.target_format,j.options as \"options: _\",j.input_key,j.input_bytes,j.output_keys as \"output_keys: _\",j.attempt,j.max_attempts,j.lease_owner,j.lease_expires_at,j.reserved_bytes,j.reserved_cents,j.reservation,j.error_code,j.expires_at,j.created_at,j.source_url,j.webhook_url",
   "describe": {
     "columns": [
       {
@@ -255,6 +255,28 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 23,
+        "name": "source_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "source_url"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "webhook_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cloud_jobs",
+            "name": "webhook_url"
+          }
+        }
       }
     ],
     "parameters": {
@@ -285,8 +307,10 @@
       false,
       true,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "c6d1e77288a6a2a87332937ed70fecbc9b206716978927b2f08fe2c80d896303"
+  "hash": "3521e498158ee9a54a1a16f0fb91bce5b40114567488ff2e61bc63d1cef50911"
 }
