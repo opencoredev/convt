@@ -201,7 +201,7 @@ async fn authenticate(
             key_id: Some(owner.key_id),
         }
     };
-    let bucket = format!("cloud:{}", who.key_id.as_ref().unwrap_or(&who.user_id));
+    let bucket = rate_bucket(&who);
     let window = sqlx::query!(r#"insert into otp_send_limits (key,window_start,count,expires_at) values ($1,now(),1,now()+interval '1 minute') on conflict (key) do update set count=case when otp_send_limits.expires_at<=now() then 1 else otp_send_limits.count+1 end, expires_at=case when otp_send_limits.expires_at<=now() then now()+interval '1 minute' else otp_send_limits.expires_at end returning count, ceil(extract(epoch from expires_at-now()))::bigint as "reset!""#, bucket).fetch_one(&state.pool).await?;
     let rate = RateWindow {
         remaining: (RATE_LIMIT - window.count).max(0),
@@ -238,6 +238,19 @@ fn rate_headers(error: ApiError, rate: RateWindow) -> ApiError {
         )
 }
 
+fn rate_bucket(who: &Principal) -> String {
+    format!("cloud:{}", who.key_id.as_ref().unwrap_or(&who.user_id))
+}
+
+/// Requests left and seconds to reset in the bucket's live window, without
+/// counting a request. No live window means a full one.
+async fn current_window(pool: &PgPool, bucket: &str) -> (i32, u64) {
+    match sqlx::query!(r#"select count, ceil(extract(epoch from expires_at-now()))::bigint as "reset!" from otp_send_limits where key=$1 and expires_at>now()"#, bucket).fetch_optional(pool).await {
+        Ok(Some(window)) => ((RATE_LIMIT - window.count).max(0), window.reset.max(1) as u64),
+        _ => (RATE_LIMIT, 60),
+    }
+}
+
 /// Authenticates every jobs route once, counts it against the key's minute, and
 /// puts the rate-limit headers on whatever the route answers.
 async fn auth(State(s): State<CloudState>, mut request: Request, next: Next) -> Response {
@@ -245,15 +258,17 @@ async fn auth(State(s): State<CloudState>, mut request: Request, next: Next) -> 
         Ok(found) => found,
         Err(error) => return error.into_response(),
     };
+    let bucket = rate_bucket(&who);
     request.extensions_mut().insert(who);
     let mut response = next.run(request).await;
-    let headers = response.headers_mut();
-    headers.insert("x-ratelimit-limit", HeaderValue::from(RATE_LIMIT));
-    // A window that ended during a long wait has a fresh one waiting: say so.
+    // A window that ended during a long wait (other requests may have opened a
+    // new one meanwhile): report the window as it is now.
     let (remaining, reset) = match rate.reset_seconds() {
-        0 => (RATE_LIMIT, 60),
+        0 => current_window(&s.pool, &bucket).await,
         reset => (rate.remaining, reset),
     };
+    let headers = response.headers_mut();
+    headers.insert("x-ratelimit-limit", HeaderValue::from(RATE_LIMIT));
     headers.insert("x-ratelimit-remaining", HeaderValue::from(remaining));
     headers.insert("x-ratelimit-reset", HeaderValue::from(reset));
     response

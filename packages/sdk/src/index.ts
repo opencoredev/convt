@@ -271,16 +271,16 @@ export class Conversion {
     const { Readable } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
     const { chmod, open, rename, rm, stat } = await import("node:fs/promises");
+    const { createReadStream } = await import("node:fs");
     const { dirname, join } = await import("node:path");
     const response = await this.fetchOutput(index, 30 * 60_000);
-    // Keep the mode of a file being replaced, else the usual mode for a new file.
-    const mode = await stat(path).then(
-      (existing) => existing.mode & 0o777,
-      () => 0o666 & ~process.umask(),
+    const existing = await stat(path).then(
+      () => true,
+      () => false,
     );
-    // Write a private temporary file beside the target and rename it into place
-    // once complete, so an interrupted download never replaces an existing file
-    // with a partial one, and nobody else can read the bytes meanwhile.
+    // Download into a private temporary file beside the target first, so an
+    // interrupted download never touches an existing file and nobody else can
+    // read the bytes meanwhile.
     const partial = join(
       dirname(path),
       `.convt-${globalThis.crypto.randomUUID().slice(0, 8)}.part`,
@@ -289,8 +289,21 @@ export class Conversion {
     try {
       // `response.body` is checked in fetchOutput.
       await pipeline(Readable.fromWeb(response.body as never), handle.createWriteStream());
-      await chmod(partial, mode);
-      await rename(partial, path);
+      if (existing) {
+        // Write into the existing file in place: opening it truncates it but
+        // keeps its owner, mode and ACLs, which a rename (or copyFile, which
+        // applies the source's mode) would replace.
+        const target = await open(path, "w");
+        try {
+          await pipeline(createReadStream(partial), target.createWriteStream());
+        } finally {
+          await target.close().catch(() => {});
+        }
+        await rm(partial, { force: true });
+      } else {
+        await chmod(partial, 0o666 & ~process.umask());
+        await rename(partial, path);
+      }
     } catch (error) {
       await rm(partial, { force: true });
       throw error;

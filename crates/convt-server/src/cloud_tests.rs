@@ -1701,3 +1701,56 @@ async fn a_replayed_conversion_redirects_to_storage_instead_of_streaming_again()
     assert_eq!(json(&body)["job"]["status"], "succeeded");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn trailing_json_is_refused_and_a_missing_output_keeps_the_job() {
+    let Some(db) = test_db().await else { return };
+    setup(&db.owner, "usr_a", "api", 100).await;
+    key(&db.owner).await;
+    let storage = Arc::new(MemoryStorage::default());
+    let state = state_with(&db, storage.clone());
+    let (status, _, body) = send(
+        &state,
+        authed("POST", "/v1/convert?wait=0")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"source_url":"https://cdn.example.com/a.png","to":"webp"}{"x":1}"#,
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json(&body)["error"]["code"], "invalid_request");
+    let queued: i64 = sqlx::query_scalar("select count(*) from cloud_jobs")
+        .fetch_one(&db.owner)
+        .await
+        .unwrap();
+    assert_eq!(queued, 0);
+    // A worker that reports an output the bucket no longer has.
+    let worker = {
+        let pool = db.server.clone();
+        tokio::spawn(async move {
+            for _ in 0..100 {
+                if let Some(job) = jobs::claim(&pool, "w").await.unwrap() {
+                    let key = format!("{}/attempt-1/input.webp", job.id);
+                    assert!(jobs::finish(&pool, &job, &[key], None).await.unwrap());
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+    };
+    let (status, headers, body) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .body(Body::from("png"))
+            .unwrap(),
+    )
+    .await;
+    worker.await.unwrap();
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(json(&body)["error"]["code"], "output_missing");
+    assert_eq!(json(&body)["job"]["status"], "succeeded");
+    assert!(headers.contains_key("convt-job-id"));
+    db.drop().await;
+}

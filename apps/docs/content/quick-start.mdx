@@ -86,19 +86,31 @@ import (
 func main() {
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
-	form.WriteField("to", "webp")
-	part, _ := form.CreateFormFile("file", "photo.png")
+	if err := form.WriteField("to", "webp"); err != nil {
+		log.Fatal(err)
+	}
+	part, err := form.CreateFormFile("file", "photo.png")
+	if err != nil {
+		log.Fatal(err)
+	}
 	in, err := os.Open("photo.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-	io.Copy(part, in)
-	form.Close()
+	if _, err := io.Copy(part, in); err != nil {
+		log.Fatal(err)
+	}
+	if err := form.Close(); err != nil {
+		log.Fatal(err)
+	}
 
-	req, _ := http.NewRequest("POST", "{{api}}/v1/convert", &body)
+	req, err := http.NewRequest("POST", "{{api}}/v1/convert", &body)
+	if err != nil {
+		log.Fatal(err)
+	}
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("CONVT_API_KEY"))
 	req.Header.Set("Content-Type", form.FormDataContentType())
-	res, err := http.DefaultClient.Do(req)
+	res, err := http.DefaultClient.Do(req) // follows the 303 for large results
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -108,8 +120,22 @@ func main() {
 		msg, _ := io.ReadAll(res.Body)
 		log.Fatalf("%s: %s", res.Status, msg)
 	}
-	out, _ := os.Create("photo.webp")
-	io.Copy(out, res.Body)
+	// Write to a temporary file and rename it only after the whole body arrived,
+	// so a dropped connection never leaves a truncated photo.webp behind.
+	out, err := os.CreateTemp(".", ".photo-*.part")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Remove(out.Name())
+	if _, err := io.Copy(out, res.Body); err != nil {
+		log.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.Rename(out.Name(), "photo.webp"); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 

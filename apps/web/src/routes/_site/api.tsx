@@ -261,8 +261,9 @@ function ApiPage() {
           <div className="flex flex-col gap-3 text-[16px]/[26px] text-pretty text-ink-2">
             <p>
               The response to <Code>POST /v1/convert</Code> is the converted file, named after
-              yours. The headers name the job, the request and your remaining rate limit, so a
-              failure in production is one id away from an answer.
+              yours, when it is up to 25 MB; larger results redirect to a signed download link. The
+              headers name the job, the request and your remaining rate limit, so a failure in
+              production is one id away from an answer.
             </p>
             <p>
               Long video? Create a job with a <Code>webhook_url</Code> instead, and convt tells your

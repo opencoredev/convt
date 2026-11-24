@@ -51,6 +51,7 @@ Branch on `code`. `message` may change. `request_id` matches the `X-Request-Id` 
 | `429`  | `rate_limited`            | Any job route                | More than 120 requests in a minute for this key. Wait `Retry-After` seconds.                                                       |
 | `500`  | `internal`                | Any job route                | An unexpected server error. Retry with backoff.                                                                                    |
 | `502`  | `storage_unavailable`     | Any job route                | Object storage did not answer. Retry with backoff.                                                                                 |
+| `502`  | `output_missing`          | Convert                      | The conversion succeeded and was billed but its output is not in storage. Contact us with the job id; do not convert again.        |
 | `503`  | `server_busy`             | Convert                      | Too many uploads in progress on this server. Wait `Retry-After` seconds and retry.                                                 |
 | `504`  | `timeout`                 | Convert                      | You asked for the file without an `Idempotency-Key` and it wasn't done after `wait`. The job was cancelled; not charged.           |
 

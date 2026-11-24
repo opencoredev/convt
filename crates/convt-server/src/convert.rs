@@ -242,13 +242,20 @@ async fn read_body(request: Request, s: &CloudState) -> Result<Parsed, ApiError>
                         "A JSON body must be under 16 KB. Send files as multipart or a raw body.",
                     )
                 })?;
-            let body: JsonBody = serde_path_to_error::deserialize(
-                &mut serde_json::Deserializer::from_slice(&bytes),
-            )
-            .map_err(|e| {
+            let mut reader = serde_json::Deserializer::from_slice(&bytes);
+            let body: JsonBody = serde_path_to_error::deserialize(&mut reader)
+                .map_err(|e| {
+                    ApiError::bad(
+                        "invalid_request",
+                        &format!("{e}. A JSON body takes source_url, to, from and options; send files as multipart or a raw body."),
+                    )
+                })?;
+            // One JSON value only: anything after it is a malformed request, not
+            // a second thing to ignore.
+            reader.end().map_err(|_| {
                 ApiError::bad(
                     "invalid_request",
-                    &format!("{e}. A JSON body takes source_url, to, from and options; send files as multipart or a raw body."),
+                    "The body has content after its JSON object. Send exactly one object.",
                 )
             })?;
             parsed.to = body.to;
@@ -659,13 +666,23 @@ async fn convert(
     }
     let key = job.output_keys.0[0].clone();
     let length = match s.storage.head(&key).await {
-        Ok(length) => length,
+        Ok(Some(length)) => length,
+        // A succeeded job whose output is gone: answer with the job, not a
+        // redirect to a storage 404 that carries none of convt's context.
+        Ok(None) => {
+            let error = ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "output_missing",
+                "The conversion succeeded and was billed, but its output is not in storage. Contact us with the job id; do not convert again.",
+            );
+            return Ok(finish(billed_error(error, job), &id, replayed));
+        }
         Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
     };
     // Bytes sent through this service cost egress on every delivery, so only a
     // small result's first delivery streams from here. A large result, and every
     // replay, is a redirect to its signed storage URL (follow it: curl -L).
-    if replayed || length.is_none_or(|n| n > MAX_INLINE_OUTPUT_BYTES) {
+    if replayed || length > MAX_INLINE_OUTPUT_BYTES {
         let (outputs, ttl) = match routes::output_links(&s, &job).await {
             Ok(links) => links,
             Err(error) => return Ok(finish(billed_error(error, job), &id, replayed)),
@@ -699,9 +716,7 @@ async fn convert(
         header::CONTENT_TYPE,
         HeaderValue::from_str(mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
-    if let Some(length) = length {
-        h.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
-    }
+    h.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
     if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{name}\"")) {
         h.insert(header::CONTENT_DISPOSITION, value);
     }
