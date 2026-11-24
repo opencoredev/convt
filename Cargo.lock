@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "convt-app"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64 0.23.1",
  "convt-core",
@@ -1521,7 +1521,7 @@ dependencies = [
 
 [[package]]
 name = "convt-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "convt-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "tempfile",
@@ -1550,7 +1550,7 @@ dependencies = [
 
 [[package]]
 name = "convt-engines"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -1584,7 +1584,7 @@ dependencies = [
 
 [[package]]
 name = "convt-ffi"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "convt-core",
  "convt-engines",
@@ -1598,7 +1598,7 @@ dependencies = [
 
 [[package]]
 name = "convt-license"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek",
@@ -1615,7 +1615,7 @@ dependencies = [
 
 [[package]]
 name = "convt-server"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1643,7 +1643,7 @@ dependencies = [
 
 [[package]]
 name = "convt-shell"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1653,7 +1653,7 @@ dependencies = [
 
 [[package]]
 name = "convt-update"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64 0.23.1",
  "convt-license",
@@ -1667,7 +1667,7 @@ dependencies = [
 
 [[package]]
 name = "convt-worker"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "convt-core",
