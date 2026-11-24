@@ -67,7 +67,12 @@ const rows: [string, string, string, string][] = [
     "Mac only (macOS 26, Apple silicon)",
     "Video, audio, images, PDF pages to images",
   ],
-  ["VidCoder 12.23", "Free, open source", "Windows only", "Video, with HandBrake's engine"],
+  [
+    "VidCoder 12.23",
+    "Free, open source",
+    "Windows only",
+    "Video to MP4 or MKV, with HandBrake's engine",
+  ],
   [
     "FFmpeg 9.1",
     "Free, open source",
@@ -91,14 +96,14 @@ const tools: Tool[] = [
   {
     name: "convt",
     href: "/",
-    bestFor: "Turning any kind of file into another format with a right-click or one command.",
+    bestFor: "Converting video, audio, images and documents with a right-click or one command.",
     price: "$39 once for Desktop, with every future desktop update. No free tier.",
     platforms: "macOS 13 or later on Apple silicon, Windows x86_64, Linux x86_64.",
     converts: (
       <>
         MP4, MOV, WebM, MKV, AVI and GIF; MP3, WAV, FLAC, AAC, M4A, OGG and Opus; a dozen image
-        formats; PDF pages to images; Word, Excel and PowerPoint to PDF.{" "}
-        <TextLink href={routes.formats}>Every format</TextLink>.
+        formats; PDF pages to images; Word, Excel and PowerPoint to PDF (with LibreOffice, or the
+        document pack on Windows). <TextLink href={routes.formats}>Every format</TextLink>.
       </>
     ),
     batch: (
@@ -108,7 +113,7 @@ const tools: Tool[] = [
       </>
     ),
     shortfalls:
-      "Version 0.5.0 always re-encodes video, keeps one audio track, drops subtitles and can't shrink an MP4 into a smaller MP4. No filters, device presets or chapters.",
+      "Version 0.5.0 always re-encodes video, picks at most one audio track for you and can't shrink an MP4 into a smaller MP4. No filters, device presets, or track and chapter controls.",
   },
   {
     name: "Shutter Encoder",
@@ -118,9 +123,8 @@ const tools: Tool[] = [
     platforms: "Windows 7 to 11 (64-bit), macOS 11.3 or later on Apple silicon, Linux.",
     converts:
       "Video, audio (WAV, FLAC, MP3, AAC, Opus) and images (JPEG, JPEG XL). ProRes and DNxHR, plus DVD and Blu-ray tools.",
-    batch: "A render queue and presets.",
-    shortfalls:
-      "No document conversion and no command-line tool. Its long list of functions takes some learning.",
+    batch: "A render queue and presets, and command-line options since version 20.5.",
+    shortfalls: "No document conversion. Its long list of functions takes some learning.",
   },
   {
     name: "Permute",
@@ -140,7 +144,7 @@ const tools: Tool[] = [
     bestFor: "Windows users who like HandBrake's output but want a simpler queue.",
     price: "Free. GPL-2.0.",
     platforms: "Windows 10 and 11, 64-bit only.",
-    converts: "Video, using HandBrake as its encoding engine, so the same containers.",
+    converts: "Video to MP4 or MKV, using HandBrake as its encoding engine.",
     batch: "Batch encoding with several encodes at once, and a watched folder.",
     shortfalls: "Same limits as HandBrake (no audio-only files, no remux), and no Mac build.",
   },
@@ -274,38 +278,43 @@ function HandbrakeAlternative() {
                 <li>
                   <strong className="font-semibold">You want a fast container change.</strong> Its
                   own docs say video is &quot;always converted&quot;, so an MKV to MP4 takes as long
-                  as a full encode. A request for remuxing in April 2026 got{" "}
+                  as a full encode. When someone asked for remuxing in April 2026, the reply was
+                  that video passthrough is{" "}
                   <TextLink href="https://github.com/HandBrake/HandBrake/issues/7826">
-                    &quot;not something we want in HandBrake&quot;
+                    outside the project&apos;s scope
                   </TextLink>
                   .
                 </li>
                 <li>
                   <strong className="font-semibold">You convert photos or documents too.</strong>{" "}
-                  HandBrake reads video only. Point its batch scan at a folder with HEIC photos and
-                  it{" "}
+                  HandBrake converts video only. In one report, a batch scan of a folder with HEIC
+                  photos{" "}
                   <TextLink href="https://github.com/HandBrake/HandBrake/discussions/7657">
-                    imports them as one-second videos
-                  </TextLink>
-                  .
+                    added them as one-second videos
+                  </TextLink>{" "}
+                  until the user excluded the extension in the scan settings.
                 </li>
                 <li>
-                  <strong className="font-semibold">Folders trip you up.</strong> This is the
-                  complaint we found most in the past year: several files dropped at once{" "}
-                  <TextLink href="https://github.com/HandBrake/HandBrake/discussions/7463">
-                    queue only the first
+                  <strong className="font-semibold">You batch a lot of files.</strong> HandBrake
+                  scans many files into a list, then each one has to be{" "}
+                  <TextLink href="https://handbrake.fr/docs/en/latest/advanced/queue.html">
+                    added to the queue
                   </TextLink>
-                  , a folder of 88 clips{" "}
+                  , a step users miss: dropping several files{" "}
+                  <TextLink href="https://github.com/HandBrake/HandBrake/discussions/7463">
+                    encoded only the first
+                  </TextLink>{" "}
+                  for one, and a folder of 88 clips{" "}
                   <TextLink href="https://github.com/HandBrake/HandBrake/discussions/8236">
                     gave one output
-                  </TextLink>
-                  , and{" "}
+                  </TextLink>{" "}
+                  for another. A{" "}
                   <TextLink href="https://github.com/HandBrake/HandBrake/issues/8089">
                     batch scan of ISO files
                   </TextLink>{" "}
-                  isn&apos;t supported. Subfolder scanning does exist, under Preferences, but{" "}
+                  isn&apos;t supported. Subfolder scanning exists, under Preferences, though{" "}
                   <TextLink href="https://github.com/HandBrake/HandBrake/issues/8240">
-                    people miss it
+                    one user asked for it before finding it
                   </TextLink>
                   .
                 </li>
@@ -339,8 +348,10 @@ function HandbrakeAlternative() {
                   can&apos;t.
                 </li>
                 <li>
-                  It keeps every audio and subtitle track you pick, with audio passthrough for AC-3,
-                  DTS, TrueHD, FLAC and more. convt 0.5.0 keeps one audio track and no subtitles.
+                  You choose which audio and subtitle tracks to keep, with audio passthrough for
+                  AC-3, DTS, TrueHD, FLAC and more (which subtitles survive depends on the
+                  container: MP4 can&apos;t hold Blu-ray picture subtitles). convt 0.5.0 picks at
+                  most one audio track and has no track controls.
                 </li>
                 <li>
                   Filters (deinterlace, denoise, crop), device presets, chapters, and hardware
@@ -358,8 +369,8 @@ function HandbrakeAlternative() {
           >
             <Prose>
               <p>
-                The jobs HandBrake turns down are one command each. Pull the sound out of a video as
-                an MP3, convert a MOV, and cap its height at 720 pixels:
+                An MP3 from a video, which HandBrake won&apos;t make, is one command. So are a MOV
+                to MP4 and a 720-pixel copy, with no preset to pick:
               </p>
             </Prose>
             <Commands
@@ -390,11 +401,13 @@ videos/a.MOV -> mp4/a.mp4
             </Output>
             <Prose>
               <p>
-                convt makes H.264 video at CRF 20 with AAC audio at 192 kbit/s, and runs videos one
-                at a time. For an MKV with several languages or subtitles, the{" "}
+                For MP4, convt makes H.264 video at CRF 20 with AAC audio at 192 kbit/s by default;{" "}
+                <Code>--video-codec hevc</Code>, <Code>-q</Code> and <Code>--audio-bitrate</Code>{" "}
+                change that. In a batch it converts one video at a time. For an MKV with several
+                languages or subtitles, the{" "}
                 <TextLink href={guidePath("mkv-to-mp4-mac")}>MKV to MP4 guide</TextLink> shows an
-                FFmpeg command that keeps every track. More examples, including images and
-                documents, are on the{" "}
+                FFmpeg command that keeps every audio track and text subtitles. More examples,
+                including images and documents, are on the{" "}
                 <TextLink href={commandLineConverter.path}>command-line page</TextLink> and in the{" "}
                 <TextLink href={guidePath("mp4-flac-wav-to-mp3-mac")}>MP3 on Mac guide</TextLink>.
               </p>
@@ -406,7 +419,7 @@ videos/a.MOV -> mp4/a.mp4
             <aside className="flex flex-col gap-5 rounded-2xl bg-panel p-6 shadow-[inset_0_0_0_1px_var(--line)] sm:flex-row sm:items-center sm:justify-between sm:gap-8">
               <div className="flex flex-col gap-1.5 text-[14px]/[22px] text-ink-2">
                 <p className="text-[16px]/6 font-semibold text-ink">
-                  One app for every kind of file
+                  convt for Mac, Windows and Linux
                 </p>
                 <p>
                   Video, audio, images and documents, from Finder or Terminal. $39 once. Local
@@ -430,7 +443,7 @@ videos/a.MOV -> mp4/a.mp4
               <Question q="Is there a free HandBrake alternative?">
                 Yes. Shutter Encoder and FFmpeg are free on Mac, Windows and Linux, and VidCoder is
                 free on Windows. convt isn&apos;t free: the source is open (AGPL-3.0), but the
-                signed app is $39 once.
+                signed app is $39 once, after a 7-day trial.
               </Question>
               <Question q="Can HandBrake convert video to MP3?">
                 No. It only writes MP4, MKV and WebM, and its developers have said audio-only output
@@ -438,8 +451,9 @@ videos/a.MOV -> mp4/a.mp4
               </Question>
               <Question q="What's the simplest HandBrake alternative on a Mac?">
                 For a few files, Permute or convt&apos;s Finder menu: pick the files, pick a format.
-                Permute is Mac only and needs macOS 26; convt runs on macOS 13 or later and also
-                does documents.
+                Permute is Mac only: version 4 needs macOS 26 on Apple silicon, and the same
+                purchase includes Permute 3 for macOS 11 to 15. convt runs on macOS 13 or later on
+                Apple silicon and also does documents.
               </Question>
               <Question q="Does convt upload my videos?">
                 Not for local conversions, which is everything on this page. The only uploads are

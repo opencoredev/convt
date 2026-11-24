@@ -95,7 +95,7 @@ export const sitemapPages = [
   { path: routes.changelog, lastmod: "2026-10-26" },
   { path: routes.contact, lastmod: "2026-10-30" },
   { path: routes.brand, lastmod: "2026-10-23" },
-  { path: routes.macFileConverter, lastmod: "2026-11-12", listsGuides: "cards" },
+  { path: routes.macFileConverter, lastmod: "2026-11-24", listsGuides: "cards" },
   { path: routes.commandLineConverter, lastmod: "2026-11-03", listsGuides: "cards" },
   { path: routes.handbrakeAlternative, lastmod: "2026-11-24" },
   { path: routes.api, lastmod: "2026-11-23" },

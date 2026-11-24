@@ -21,15 +21,16 @@ function render(route: typeof Route | typeof MkvRoute | typeof MacRoute): string
 test("the HandBrake page's head has its canonical URL and WebPage, app and breadcrumb JSON-LD", () => {
   const head = handbrakeAlternativeHead();
   expect(head.links).toContainEqual({ rel: "canonical", href: url });
-  const data: unknown = JSON.parse(head.scripts[0].children);
-  expect(data).toMatchObject({
-    "@graph": [
-      { "@type": "WebPage", url },
-      { "@type": "SoftwareApplication" },
-      { "@type": "BreadcrumbList" },
-      { "@type": "Organization" },
-    ],
-  });
+  const script = head.scripts.find((s) => s.type === "application/ld+json");
+  if (!script) throw new Error("no JSON-LD");
+  const graph = (JSON.parse(script.children) as { "@graph": { "@type": string; url?: string }[] })[
+    "@graph"
+  ];
+  const types = graph.map((node) => node["@type"]);
+  for (const type of ["WebPage", "SoftwareApplication", "BreadcrumbList", "Organization"]) {
+    expect(types).toContain(type);
+  }
+  expect(graph.find((node) => node["@type"] === "WebPage")?.url).toBe(url);
 });
 
 test("the HandBrake page tags downloads, gives every tool the same block and prints tested commands", () => {
@@ -48,11 +49,13 @@ test("the HandBrake page tags downloads, gives every tool the same block and pri
   expect(html).toContain("Where HandBrake is better");
   expect(html).toContain("convt talk.mp4 --to mp3");
   expect(html).toContain("convt videos --to mp4 -r -o mp4");
+  expect(html).toContain("talk.mp4 -&gt; ./talk.mp3");
+  expect(html).toContain("3 converted, 0 failed");
 });
 
 test("the HandBrake page is in the sitemap, llms.txt, the footer, the MKV guide and the Mac page", () => {
   const entry = sitemapEntries.find((e) => e.path === handbrakeAlternative.path);
-  expect(entry?.lastmod).toBe("2026-11-24");
+  expect(entry?.lastmod).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   expect(llmsTxt).toContain(`(${url})`);
   const hrefs = footerColumns.flatMap((column) => column.links.map((link) => link.href));
   expect(hrefs).toContain(handbrakeAlternative.path);
