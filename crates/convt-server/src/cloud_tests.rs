@@ -1752,5 +1752,40 @@ async fn trailing_json_is_refused_and_a_missing_output_keeps_the_job() {
     assert_eq!(json(&body)["error"]["code"], "output_missing");
     assert_eq!(json(&body)["job"]["status"], "succeeded");
     assert!(headers.contains_key("convt-job-id"));
+    // The JSON form refuses to hand out a dead link too.
+    let (status, _, _) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png&wait=0")
+            .header("accept", "application/json")
+            .header("idempotency-key", "json-missing")
+            .body(Body::from("png2"))
+            .unwrap(),
+    )
+    .await;
+    // No worker this time, so the job is still queued; finish it by hand with an
+    // output that was never stored.
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let job_id: String =
+        sqlx::query_scalar("select id from cloud_jobs where idempotency_key='json-missing'")
+            .fetch_one(&db.owner)
+            .await
+            .unwrap();
+    sqlx::query("update cloud_jobs set status='succeeded', reservation='settled', output_keys=$2 where id=$1")
+        .bind(&job_id)
+        .bind(serde_json::json!([format!("{job_id}/attempt-1/gone.webp")]))
+        .execute(&db.owner)
+        .await
+        .unwrap();
+    let (status, _, body) = send(
+        &state,
+        authed("POST", "/v1/convert?to=webp&from=png")
+            .header("accept", "application/json")
+            .header("idempotency-key", "json-missing")
+            .body(Body::from("png2"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(json(&body)["error"]["code"], "output_missing");
     db.drop().await;
 }

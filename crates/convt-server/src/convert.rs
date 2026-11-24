@@ -651,6 +651,14 @@ async fn convert(
         }
         _ => {}
     }
+    // Every output must exist before convt reports success with links to it.
+    for key in &job.output_keys.0 {
+        match s.storage.head(key).await {
+            Ok(Some(_)) => {}
+            Ok(None) => return Ok(finish(billed_error(output_missing(), job), &id, replayed)),
+            Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
+        }
+    }
     if wants_json || job.output_keys.0.len() != 1 {
         let (outputs, ttl) = match routes::output_links(&s, &job).await {
             Ok(links) => links,
@@ -669,14 +677,7 @@ async fn convert(
         Ok(Some(length)) => length,
         // A succeeded job whose output is gone: answer with the job, not a
         // redirect to a storage 404 that carries none of convt's context.
-        Ok(None) => {
-            let error = ApiError::new(
-                StatusCode::BAD_GATEWAY,
-                "output_missing",
-                "The conversion succeeded and was billed, but its output is not in storage. Contact us with the job id; do not convert again.",
-            );
-            return Ok(finish(billed_error(error, job), &id, replayed));
-        }
+        Ok(None) => return Ok(finish(billed_error(output_missing(), job), &id, replayed)),
         Err(error) => return Ok(finish(billed_error(error.into(), job), &id, replayed)),
     };
     // Bytes sent through this service cost egress on every delivery, so only a
@@ -730,6 +731,14 @@ async fn convert(
             replayed,
         )
     }))
+}
+
+fn output_missing() -> ApiError {
+    ApiError::new(
+        StatusCode::BAD_GATEWAY,
+        "output_missing",
+        "The conversion succeeded and was billed, but its output is not in storage. Contact us with the job id; do not convert again.",
+    )
 }
 
 /// A storage error after the job succeeded: it was billed, so the answer must

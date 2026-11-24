@@ -260,10 +260,11 @@ function ApiPage() {
           </h2>
           <div className="flex flex-col gap-3 text-[16px]/[26px] text-pretty text-ink-2">
             <p>
-              The response to <Code>POST /v1/convert</Code> is the converted file, named after
-              yours, when it is up to 25 MB; larger results redirect to a signed download link. The
-              headers name the job, the request and your remaining rate limit, so a failure in
-              production is one id away from an answer.
+              The first answer to <Code>POST /v1/convert</Code> is the converted file, named after
+              yours, when it is one file of up to 25 MB. Larger results and repeat requests redirect
+              to a signed download link, and several outputs come back as JSON links. The headers
+              name the job, the request and your remaining rate limit, so a failure in production is
+              one id away from an answer.
             </p>
             <p>
               Long video? Create a job with a <Code>webhook_url</Code> instead, and convt tells your

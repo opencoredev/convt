@@ -520,3 +520,52 @@ test("save keeps a private file private and accepts long names", async () => {
   expect((await readdir(dir)).length).toBe(1);
   await rm(dir, { recursive: true });
 });
+test("a target created during the download is written in place, not replaced", async () => {
+  const { mkdtemp, readFile, rm, stat, writeFile, chmod } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "convt-sdk-"));
+  const target = join(dir, "out.png");
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response(
+      new ReadableStream({
+        async start(controller) {
+          controller.enqueue(new TextEncoder().encode("new-"));
+          await gate;
+          controller.enqueue(new TextEncoder().encode("bytes"));
+          controller.close();
+        },
+      }),
+    )) as typeof fetch;
+  const saving = new Conversion({ ...job, status: "succeeded" }, [
+    { name: "input.png", url: "https://objects.test/out" },
+  ]).save(target);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await writeFile(target, "someone else's");
+  await chmod(target, 0o600);
+  const before = await stat(target);
+  release();
+  await saving;
+  const after = await stat(target);
+  expect(after.ino).toBe(before.ino);
+  expect(after.mode & 0o777).toBe(0o600);
+  expect(await readFile(target, "utf8")).toBe("new-bytes");
+  await rm(dir, { recursive: true });
+});
+test("a gateway error whose body cannot be read still reports the key", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error("broken body"));
+        },
+      }),
+      { status: 502 },
+    )) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test", maxRetries: 1 })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png" })
+    .catch((e) => e);
+  expect(error.idempotencyKey).toBeTruthy();
+});

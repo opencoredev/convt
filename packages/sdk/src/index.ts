@@ -270,17 +270,13 @@ export class Conversion {
   private async stream(index: number, path: string): Promise<void> {
     const { Readable } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
-    const { chmod, open, rename, rm, stat } = await import("node:fs/promises");
+    const { chmod, link, open, rm } = await import("node:fs/promises");
     const { createReadStream } = await import("node:fs");
     const { dirname, join } = await import("node:path");
     const response = await this.fetchOutput(index, 30 * 60_000);
-    const existing = await stat(path).then(
-      () => true,
-      () => false,
-    );
     // Download into a private temporary file beside the target first, so an
-    // interrupted download never touches an existing file and nobody else can
-    // read the bytes meanwhile.
+    // interrupted download never touches the target and nobody else can read
+    // the bytes meanwhile.
     const partial = join(
       dirname(path),
       `.convt-${globalThis.crypto.randomUUID().slice(0, 8)}.part`,
@@ -289,26 +285,32 @@ export class Conversion {
     try {
       // `response.body` is checked in fetchOutput.
       await pipeline(Readable.fromWeb(response.body as never), handle.createWriteStream());
-      if (existing) {
-        // Write into the existing file in place: opening it truncates it but
-        // keeps its owner, mode and ACLs, which a rename (or copyFile, which
-        // applies the source's mode) would replace.
+      // Decide only now whether the target exists, so a file created meanwhile
+      // is never replaced. A new target appears atomically through a hard link
+      // that fails if the name is taken, with the usual mode for a new file.
+      const created = await link(partial, path).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "EEXIST") return false;
+          throw error;
+        },
+      );
+      if (created) {
+        // Still private until here; now the usual mode for a new file.
+        await chmod(path, 0o666 & ~process.umask());
+      } else {
+        // An existing file is written in place: opening it truncates it but
+        // keeps its inode, owner, mode and ACLs, which a rename would replace.
         const target = await open(path, "w");
         try {
           await pipeline(createReadStream(partial), target.createWriteStream());
         } finally {
           await target.close().catch(() => {});
         }
-        await rm(partial, { force: true });
-      } else {
-        await chmod(partial, 0o666 & ~process.umask());
-        await rename(partial, path);
       }
-    } catch (error) {
-      await rm(partial, { force: true });
-      throw error;
     } finally {
       await handle.close().catch(() => {});
+      await rm(partial, { force: true });
     }
   }
   async save(path: string): Promise<void> {
@@ -409,9 +411,9 @@ export class Convt {
         onDispatch: () => (dispatched = true),
       });
     } catch (error) {
-      // After the first send, any abort (in backoff, a credential refresh or a
-      // read) leaves a keyed create's outcome unknown.
-      if (dispatched && signal.aborted && !(error instanceof ConvtError)) throw unknown(error);
+      // Once anything was sent, a failure outside the API's own answers leaves a
+      // keyed create's outcome unknown; keep the key on it.
+      if (dispatched && !(error instanceof ConvtError)) throw unknown(error);
       throw error;
     }
   }
@@ -487,7 +489,7 @@ export class Convt {
         RETRYABLE_STATUS.has(response.status)
       ) {
         const after = Number(response.headers.get("retry-after"));
-        await response.body?.cancel();
+        await response.body?.cancel().catch(() => {});
         await again(
           Number.isFinite(after) && after > 0 ? Math.min(after, 60) * 1000 : 500 * 2 ** attempt,
         );

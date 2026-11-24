@@ -1472,7 +1472,7 @@
             }
           },
           "502": {
-            "description": "`storage_unavailable`. If the job already succeeded and was billed, the body includes the `job` and `Location` points at its download route; do not convert again.",
+            "description": "`storage_unavailable`, or `output_missing` when the job succeeded but an output is not in storage. Either way, if the job already succeeded and was billed, the body includes the `job` and `Location` points at its download route; do not convert again.",
             "content": {
               "application/json": {
                 "schema": {

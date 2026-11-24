@@ -75,6 +75,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
@@ -84,58 +86,62 @@ import (
 )
 
 func main() {
+	if err := convert("photo.png", "webp", "photo.webp"); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func convert(input, to, output string) error {
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
-	if err := form.WriteField("to", "webp"); err != nil {
-		log.Fatal(err)
+	if err := form.WriteField("to", to); err != nil {
+		return err
 	}
-	part, err := form.CreateFormFile("file", "photo.png")
+	part, err := form.CreateFormFile("file", input)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	in, err := os.Open("photo.png")
+	in, err := os.Open(input)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	defer in.Close()
 	if _, err := io.Copy(part, in); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := form.Close(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	req, err := http.NewRequest("POST", "{{api}}/v1/convert", &body)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("CONVT_API_KEY"))
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	res, err := http.DefaultClient.Do(req) // follows the 303 for large results
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer res.Body.Close()
 	// 200 with a non-JSON body is the file; anything else is JSON describing the job.
 	if res.StatusCode != http.StatusOK || strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
 		msg, _ := io.ReadAll(res.Body)
-		log.Fatalf("%s: %s", res.Status, msg)
+		return fmt.Errorf("%s: %s", res.Status, msg)
 	}
 	// Write to a temporary file and rename it only after the whole body arrived,
-	// so a dropped connection never leaves a truncated photo.webp behind.
-	out, err := os.CreateTemp(".", ".photo-*.part")
+	// so a dropped connection never leaves a truncated or stray file behind.
+	out, err := os.CreateTemp(".", ".convt-*.part")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	defer os.Remove(out.Name())
-	if _, err := io.Copy(out, res.Body); err != nil {
-		log.Fatal(err)
+	_, copyErr := io.Copy(out, res.Body)
+	closeErr := out.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		os.Remove(out.Name())
+		return err
 	}
-	if err := out.Close(); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.Rename(out.Name(), "photo.webp"); err != nil {
-		log.Fatal(err)
-	}
+	return os.Rename(out.Name(), output)
 }
 ```
 
