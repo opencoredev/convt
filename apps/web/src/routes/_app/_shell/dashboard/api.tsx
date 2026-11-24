@@ -46,25 +46,36 @@ function ApiPage() {
   // The enrollment card promises to update once the card is confirmed: check again
   // every few seconds while it waits.
   const pending = api.enrollment.state === "pending";
-  // Ask quietly and reload the page data only once the state changes, so a
-  // failed check is simply tried again instead of replacing the page with an error.
+  // Ask quietly every few seconds; reload the whole page only once enrollment has
+  // finished. A failed or slow check is just tried again, and an answer arriving
+  // after the visitor left is ignored. "none" is not finished: Polar can confirm
+  // the checkout before its subscription is readable, so keep waiting then.
   useEffect(() => {
     if (!pending) return;
+    let cancelled = false;
     let checking = false;
     const timer = setInterval(async () => {
-      if (checking) return;
+      if (checking || cancelled) return;
       checking = true;
       try {
-        const next = await getApiOverview();
-        if (next.enrollment.state !== "pending") await router.invalidate();
+        const next = await Promise.race([
+          getApiOverview(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+        ]);
+        const state = next?.enrollment.state;
+        if (!cancelled && state && state !== "pending" && state !== "none")
+          window.location.reload();
       } catch {
         // Transient; the next tick asks again.
       } finally {
         checking = false;
       }
     }, 5000);
-    return () => clearInterval(timer);
-  }, [pending, router]);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pending]);
   async function create() {
     setBusy(true);
     setError("");
