@@ -369,14 +369,80 @@ test("with the caller's own key, a failed upload leaves the shared job alone", a
   expect(calls.some((u) => u.endsWith("/cancel"))).toBe(false);
 });
 test("a deadline during retry backoff still reports the create's key", async () => {
-  globalThis.fetch = (async (_input: string | URL | Request) =>
-    new Response("busy", { status: 503, headers: { "retry-after": "10" } })) as typeof fetch;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    throw new TypeError("connection reset");
+  }) as unknown as typeof fetch;
   const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
     .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 100 })
     .catch((e) => e);
-  // The server refused the only attempt, and a 10 s wait cannot fit in 100 ms.
-  expect(error.code).toBe("unavailable");
+  expect(error.code).toBe("create_outcome_unknown");
   expect(error.idempotencyKey).toBeTruthy();
+});
+test("a refused create whose Retry-After cannot fit the deadline is reported as refused", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "10" } },
+    )) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 100 })
+    .catch((e) => e);
+  expect(error.code).toBe("rate_limited");
+  expect(error.idempotencyKey).toBeTruthy();
+});
+test("a first gateway timeout with a long Retry-After leaves a keyed create unknown", async () => {
+  globalThis.fetch = (async (_input: string | URL | Request) =>
+    new Response("gateway timeout", {
+      status: 504,
+      headers: { "retry-after": "90" },
+    })) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", {
+      to: "png",
+      idempotencyKey: "order-5",
+      timeoutMs: 1000,
+    })
+    .catch((e) => e);
+  expect(error.code).toBe("create_outcome_unknown");
+  expect(error.idempotencyKey).toBe("order-5");
+});
+test("two refusals in a row stay refusals", async () => {
+  let creates = 0;
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    creates++;
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": creates === 1 ? "0" : "999" } },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .create(
+      { input_format: "png", target_format: "webp", input_bytes: 1 },
+      { idempotencyKey: "k-3" },
+    )
+    .catch((e) => e);
+  expect(creates).toBe(2);
+  expect(error.code).toBe("rate_limited");
+});
+test("the wait budget counts time spent waiting on the answer", async () => {
+  let polls = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/v1/jobs")) return Response.json({ job, upload_url: null });
+    if (url.endsWith("/cancel")) return Response.json({ ...job, status: "cancelled" });
+    polls++;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return Response.json(
+      { error: { code: "rate_limited", message: "slow down" } },
+      { status: 429, headers: { "retry-after": "1", "x-request-id": "req_9" } },
+    );
+  }) as typeof fetch;
+  const error = await new Convt({ apiKey: "test", baseUrl: "https://api.test" })
+    .convertUrl("https://cdn.example.com/a.svg", { to: "png", timeoutMs: 1200 })
+    .catch((e) => e);
+  expect(polls).toBe(1);
+  expect(error.code).toBe("rate_limited");
+  expect(error.requestId).toBe("req_9");
 });
 test("with the caller's own key, a deadline stops waiting without cancelling", async () => {
   const calls: string[] = [];

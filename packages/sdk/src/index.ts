@@ -177,7 +177,7 @@ async function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): P
       .finally(() => signal.removeEventListener("abort", abort));
   });
 }
-/** When each conversion's own signal times out, for the retry wait budget. */
+/** When each conversion's signal times out (performance.now()), for retry waits. */
 const conversionDeadlines = new WeakMap<AbortSignal, number>();
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -439,15 +439,12 @@ export class Convt {
   }): Promise<T> {
     // A call without the caller's signal gets the SDK's own 30-second deadline.
     const signal = given ?? AbortSignal.timeout(30_000);
-    // How long a Retry-After may be waited out before it is reported instead:
-    // what is left of a conversion's deadline, else a minute for a caller's own
-    // signal (it may never fire), else what fits in the SDK's 30 seconds.
-    const conversionEnd = given && conversionDeadlines.get(given);
-    const waitBudgetMs = conversionEnd
-      ? Math.max(0, conversionEnd - Date.now())
-      : given
-        ? 60_000
-        : 20_000;
+    // How long a Retry-After may still be waited out before it is reported
+    // instead, asked again before each wait: what is left of a conversion's
+    // deadline or of the SDK's 30 seconds, else a minute for a caller's own
+    // signal (it may never fire).
+    const end = given ? conversionDeadlines.get(given) : performance.now() + 30_000;
+    const waitBudgetMs = () => (end === undefined ? 60_000 : Math.max(0, end - performance.now()));
     if (idempotencyKey !== undefined && !/^[\x21-\x7e]{1,255}$/.test(idempotencyKey))
       throw new ConvtError(
         "invalid_idempotency_key",
@@ -527,7 +524,7 @@ export class Convt {
     signal: AbortSignal;
     idempotencyKey?: string;
     retryable: boolean;
-    waitBudgetMs: number;
+    waitBudgetMs: () => number;
     fail: (
       code: string,
       message: string,
@@ -538,6 +535,9 @@ export class Convt {
     unknown: (cause: unknown) => unknown;
     onDispatch: () => void;
   }): Promise<T> {
+    // Whether an attempt so far could have created the job: its answer was
+    // lost, unreadable, or came from a gateway rather than the API refusing.
+    let mayHaveLanded = false;
     for (let attempt = 0; ; attempt++) {
       const credential = this.credential;
       const key =
@@ -563,6 +563,7 @@ export class Convt {
         });
       } catch (error) {
         if (signal.aborted) throw unknown(error);
+        mayHaveLanded = true;
         if (retryable && attempt < this.maxRetries) {
           await again(250 * 2 ** attempt);
           continue;
@@ -583,15 +584,17 @@ export class Convt {
         RETRYABLE_STATUS.has(response.status)
       ) {
         const after = Number(response.headers.get("retry-after"));
+        // Only a 429, or a 503 carrying the API's own request id, is the API
+        // refusing; a 502, 504 or bare 503 may hide a create that landed.
+        if (!(response.status === 429 || (response.status === 503 && requestId)))
+          mayHaveLanded = true;
         // A wait past the call's budget would only end in a timeout or a stall:
         // report the rate limit instead, with how long to wait. Timers also
         // overflow past about 24.8 days and would fire at once.
-        if (Number.isFinite(after) && after * 1000 > Math.min(waitBudgetMs, 2_147_483_647)) {
+        if (Number.isFinite(after) && after * 1000 > Math.min(waitBudgetMs(), 2_147_483_647)) {
           await response.body?.cancel().catch(() => {});
           const message = `The API asked to wait ${after} seconds before retrying.`;
-          // An earlier attempt of a keyed create may have landed (its answer was
-          // lost or a gateway error), so its outcome is unknown, not refused.
-          if (attempt > 0 && method === "POST" && idempotencyKey !== undefined)
+          if (mayHaveLanded && method === "POST" && idempotencyKey !== undefined)
             throw unknown(new Error(message));
           throw fail(
             response.status === 429 ? "rate_limited" : "unavailable",
@@ -609,6 +612,7 @@ export class Convt {
         value = await response.json();
       } catch (error) {
         if (signal.aborted) throw unknown(signal.reason ?? error);
+        mayHaveLanded = true;
         // The body broke off or was not JSON. For a create that already reserved a
         // job, retrying under the same key returns that job rather than a new one.
         if (retryable && attempt < this.maxRetries) {
@@ -744,7 +748,7 @@ export class Convt {
     const timeoutMs = options.timeoutMs ?? 660_000;
     const deadline = AbortSignal.timeout(timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-    conversionDeadlines.set(signal, Date.now() + timeoutMs);
+    conversionDeadlines.set(signal, performance.now() + timeoutMs);
     // A caller's own key can be shared with another call (a retry still running),
     // so this call cancels the job only when the key is its own or the caller
     // aborted. Otherwise errors carry the job id, to resume or cancel explicitly.
