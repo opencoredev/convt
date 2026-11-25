@@ -34,7 +34,7 @@ A `POST /v1/convert` that waits for its result counts as one request, however lo
 | Conversion time per attempt                         | 10 minutes                                                                              |
 | Attempts per job                                    | 3                                                                                       |
 
-Every job holds one of those slots until it expires, so the default allows about 1,000 conversions per rolling 24 hours. [Tell us](https://convt.app/contact) if you need more; the limit is service-wide and rises with demand. The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
+Every job holds one of those slots until it expires, so the hosted API allows up to 1,000 conversions per account per rolling 24 hours. [Tell us](https://convt.app/contact) if you need more; the limit is service-wide and rises with demand. The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
 
 ## Lifetimes
 
