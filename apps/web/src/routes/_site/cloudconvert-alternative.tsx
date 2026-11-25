@@ -499,7 +499,7 @@ Photos/2026/b.png -> webp/2026/b.webp
               <Question q="Is there a free CloudConvert alternative?">
                 Yes. VERT is free in any browser and File Converter is free on Windows. Convertio
                 and FreeConvert have free tiers but upload your files. convt isn&apos;t free: the
-                source is open (AGPL-3.0), but the signed app is $39 once, after a 7-day trial.
+                source is open (AGPL-3.0), but the signed app is $39 once.
               </Question>
               <Question q="Is CloudConvert safe to use?">
                 It says each conversion runs in an isolated container and its company holds ISO
