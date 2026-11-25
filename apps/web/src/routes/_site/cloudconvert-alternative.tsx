@@ -56,7 +56,7 @@ const rows: [string, string, string, string][] = [
     "CloudConvert",
     "Free for 10 conversion credits a day; 1,000 credits for $17, or $9 a month",
     "Any browser, plus an API",
-    "Uploaded to its servers",
+    "Processed on its servers",
   ],
   [
     "convt Desktop 0.5.0",
@@ -75,13 +75,13 @@ const rows: [string, string, string, string][] = [
     "Convertio",
     "Free for 10 credits a day; paid from $6.99 a month, billed yearly",
     "Any browser, plus an API",
-    "Uploaded to its servers",
+    "Processed on its servers",
   ],
   [
     "FreeConvert",
     "Free for 20 conversion minutes a day; paid from $12.99 a month",
     "Any browser, plus an API",
-    "Uploaded to its servers",
+    "Processed on its servers",
   ],
 ];
 
