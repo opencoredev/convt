@@ -551,8 +551,8 @@ function CostMeter() {
         </output>
       </div>
       <p className="text-[13px]/5 text-ink-2">
-        No monthly fee and no minimum. Billed once a month. Each account can currently run 100
-        conversions per rolling 24 hours, about 3,000 a month. Need more? Tell us; the limit rises
+        No monthly fee and no minimum. Billed once a month. Each account can currently run 1,000
+        conversions per rolling 24 hours, about 30,000 a month. Need more? Tell us; the limit rises
         with demand.
       </p>
     </div>
