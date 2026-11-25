@@ -551,7 +551,7 @@ function CostMeter() {
         </output>
       </div>
       <p className="text-[13px]/5 text-ink-2">
-        No monthly fee and no minimum. Billed once a month. There is no daily cap on paid
+        No monthly fee and no minimum. Billed once a month. There is no daily quota on paid
         conversions: you set a spend cap, and each key gets 120 requests a minute.
       </p>
     </div>

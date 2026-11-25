@@ -67,4 +67,4 @@ Start is safe to repeat. If the job already left `created`, the call returns it 
 
 ## Storage limits
 
-Uploads count toward a per-account budget of 50 GB of declared input until they expire 24 hours after creation. A self-hosted server also caps unexpired jobs per account, at 100 by default. Cancelling a job does not free its space sooner. When you hit the limit, new jobs fail with `403 storage_limit_reached`. See [Limits](/reference/limits).
+Every job counts toward the account's storage limits, 50 GB of declared input and a stored-job cap (100,000 on the hosted API, 100 by default when self-hosted), until its files are cleaned up after it expires 24 hours after creation. Cancelling a job does not free its space sooner. When you hit the limit, new jobs fail with `403 storage_limit_reached`. See [Limits](/reference/limits).
