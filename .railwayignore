@@ -1,0 +1,4 @@
+# `railway up` honors .gitignore, which ignores /vendor/* even though
+# vendor/gpui-pre-macos is tracked; convt-server's build needs it (Cargo.toml [patch]).
+!/vendor/gpui-pre-macos/
+!/vendor/gpui-pre-macos/**
