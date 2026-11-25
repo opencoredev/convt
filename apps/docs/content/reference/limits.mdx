@@ -28,13 +28,13 @@ A `POST /v1/convert` that waits for its result counts as one request, however lo
 | Input file size, body of `POST /v1/convert`         | 1 byte to 25,000,000 bytes (25 MB)                                                      |
 | Result streamed back by `POST /v1/convert`          | Up to 25 MB on the first answer; larger results and replays redirect (`303`) to storage |
 | Wait for a `POST /v1/convert` result                | 120 seconds by default, at most 300                                                     |
-| Jobs from the last 24 hours, per account            | 1,000 for every account at the moment                                                   |
+| Jobs from the last 24 hours, per account            | No practical cap on the hosted API; self-hosted servers default to 100                  |
 | Declared input bytes across those jobs, per account | 50 GB                                                                                   |
 | Outputs per job                                     | 256 files, 4 GB in total                                                                |
 | Conversion time per attempt                         | 10 minutes                                                                              |
 | Attempts per job                                    | 3                                                                                       |
 
-Every job holds one of those slots until it expires, so the hosted API allows up to 1,000 conversions per account per rolling 24 hours. [Tell us](https://convt.app/contact) if you need more; the limit is service-wide and rises with demand. The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
+Paid API usage has no practical daily cap on the hosted API. What bounds it is the rate limit, your spend cap and the 50 GB of declared input across unexpired jobs. A self-hosted convt-server counts unexpired jobs per account and stops at 100 unless `CONVT_MAX_STORED_JOBS` raises it. The storage limits count every job created in the last 24 hours, including cancelled and failed ones, until the job's files are deleted at expiry.
 
 ## Lifetimes
 

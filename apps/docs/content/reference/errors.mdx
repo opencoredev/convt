@@ -38,7 +38,7 @@ Branch on `code`. `message` may change. `request_id` matches the `X-Request-Id` 
 | `403`  | `api_key_required`        | Webhook secret               | The webhook secret can only be read or rotated with an API key, not a browser converter credential.                                |
 | `403`  | `not_enrolled`            | Create                       | The account has no active API subscription. Subscribe on the [dashboard](https://convt.app/dashboard/api).                         |
 | `403`  | `limit_reached`           | Create                       | Used plus reserved spend has reached your spend cap. Raise the cap or wait for the next billing period.                            |
-| `403`  | `storage_limit_reached`   | Create                       | Your unexpired uploads hit 1,000 jobs or 50 GB. Wait for older jobs to expire.                                                     |
+| `403`  | `storage_limit_reached`   | Create                       | Your unexpired uploads hit the 50 GB declared-input budget, or a self-hosted server's job cap. Wait for older jobs to expire.      |
 | `404`  | `not_found`               | Get, start, cancel, download | The job does not exist, belongs to another account, or has expired. Also any unknown route.                                        |
 | `405`  | `method_not_allowed`      | Any route                    | The route exists but not with that method.                                                                                         |
 | `408`  | `request_timeout`         | Convert                      | The upload took longer than 2 minutes. Use the jobs routes for slow or large uploads.                                              |
