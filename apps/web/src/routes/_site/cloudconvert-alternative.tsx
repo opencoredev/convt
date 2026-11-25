@@ -122,7 +122,7 @@ const tools: Tool[] = [
       </>
     ),
     shortfalls:
-      "No free tier. Converting from a phone or browser needs Desktop + Cloud and uploads the file. Far fewer formats than CloudConvert: no ebooks, archives, CAD drawings or camera RAW files in 0.5.0.",
+      "No free tier. Converting from a phone or browser needs Desktop + Cloud (or an existing Pro subscription) and uploads the file. Far fewer formats than CloudConvert: no ebooks, archives, CAD drawings or camera RAW files in 0.5.0.",
   },
   {
     name: "VERT",
@@ -171,7 +171,7 @@ const tools: Tool[] = [
         </TextLink>
         . Paid web plans start at $6.99 a month billed yearly ($11.99 month to month) for 1,000
         credits, per its <TextLink href="https://convertio.co/pricing/">pricing page</TextLink>. The
-        API is priced separately.
+        API has <TextLink href="https://convertio.co/api/pricing/">its own pricing</TextLink>.
       </>
     ),
     platforms: "Any browser, plus an API.",
@@ -219,8 +219,9 @@ function CloudconvertAlternative() {
             whole folders often enough that daily limits and credits get in the way.
           </p>
           <p>
-            CloudConvert uploads every file it converts. Below: the offline options, when switching
-            makes sense, five alternatives in the same format, and where CloudConvert still wins.
+            CloudConvert converts every file on its servers. Below: the offline options, when
+            switching makes sense, five alternatives in the same format, and where CloudConvert
+            still wins.
           </p>
         </div>
         <p className="text-[13px]/5 text-ink-2">
@@ -330,9 +331,9 @@ function CloudconvertAlternative() {
                   </strong>{" "}
                   CloudConvert converts on its servers. It says each conversion runs in an isolated
                   container, and its privacy policy says files are deleted when you press delete, or
-                  automatically within 24 hours. Every file is still uploaded first, which an NDA
-                  that bans third-party processing, or a company rule that keeps files on the
-                  device, rules out.
+                  automatically within 24 hours. Your local files still have to leave your computer,
+                  which an NDA that bans third-party processing, or a company rule that keeps files
+                  on the device, rules out.
                 </li>
                 <li>
                   <strong className="font-semibold">You keep hitting the free limits.</strong> Free
@@ -397,12 +398,14 @@ function CloudconvertAlternative() {
                 <li>
                   It works free from any device with a browser, phones and Chromebooks included.
                   convt&apos;s local conversions need a Mac with Apple silicon, or a Windows or
-                  Linux PC; converting from a phone or browser needs Desktop + Cloud.
+                  Linux PC; converting from a phone or browser needs Desktop + Cloud or an existing
+                  Pro subscription.
                 </li>
                 <li>
                   Its API imports from and exports to your own storage, such as Amazon S3, and the
-                  company behind it holds ISO 27001 certification and signs data processing
-                  agreements.
+                  company behind it holds ISO 27001 certification and{" "}
+                  <TextLink href={ccSecurity}>offers a data processing agreement</TextLink> on
+                  request.
                 </li>
               </ul>
             </Prose>
@@ -415,9 +418,9 @@ function CloudconvertAlternative() {
           >
             <Prose>
               <p>
-                The job a web converter handles worst is a folder of folders. In convt it&apos;s one
-                command: every file, subfolders included, into a separate <Code>webp</Code> folder
-                with the same layout, nothing uploaded:
+                A folder of folders is one command in convt: every file it can convert, subfolders
+                included, goes into a separate <Code>webp</Code> folder with the same layout, and
+                nothing is uploaded:
               </p>
             </Prose>
             <Commands label="Terminal" commands={["convt Photos --to webp -r -o webp"]} />
@@ -429,7 +432,7 @@ Photos/2026/b.png -> webp/2026/b.webp
             <Prose>
               <p>
                 The same pattern converts video, audio, PDFs and Word, Excel and PowerPoint files
-                (those need LibreOffice on a Mac or Linux, or the document pack on Windows). One
+                (those need LibreOffice; on Windows, convt can install it as its document pack). One
                 example for each kind of file is on the{" "}
                 <TextLink href={commandLineConverter.path}>command-line page</TextLink>, and the{" "}
                 <TextLink href={guidePath("batch-heic-to-jpg-windows")}>
@@ -512,7 +515,8 @@ Photos/2026/b.png -> webp/2026/b.webp
               <Question q="Does convt upload my files?">
                 Not for local conversions in the desktop app or the <Code>convt</Code> command. The
                 only uploads are cloud conversions, which you pick per job or start from a phone or
-                browser and which need Desktop + Cloud, and API requests.
+                browser and which need Desktop + Cloud or an existing Pro subscription, and API
+                requests.
               </Question>
             </dl>
           </GuideSection>

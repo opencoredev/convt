@@ -66,7 +66,7 @@ export const cloudconvertAlternative = {
   heading: "CloudConvert alternatives, including offline ones",
   footerLabel: "CloudConvert alternatives",
   description:
-    "CloudConvert uploads every file and allows 10 free conversion credits a day. convt, VERT, File Converter, Convertio and FreeConvert compared on price and privacy.",
+    "CloudConvert converts on its servers and allows 10 free conversion credits a day. convt, VERT, File Converter, Convertio and FreeConvert compared on price and privacy.",
   summary:
     "When to keep CloudConvert and when to switch, the offline options, a comparison of convt, VERT, File Converter, Convertio and FreeConvert (price, platforms, where your files go), where CloudConvert is better, and convt's per-file cloud API.",
   campaign: "cloudconvert-alternative",
