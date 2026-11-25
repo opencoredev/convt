@@ -358,7 +358,9 @@ iPhone/IMG_0002.HEIC -> jpg/IMG_0002.jpg
             <dd className="text-[16px]/[26px] text-ink-2">
               Not built into Windows. Photos converts one photo at a time. Free third-party tools
               exist, and many online converters do batches too, but most of them upload your photos
-              to their servers.
+              to their servers. The{" "}
+              <TextLink href={routes.cloudconvertAlternative}>CloudConvert alternatives</TextLink>{" "}
+              page compares online converters with ones that run on your PC.
             </dd>
           </div>
           <div className="flex flex-col gap-1.5">

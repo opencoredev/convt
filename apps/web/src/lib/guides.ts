@@ -48,7 +48,7 @@ export const guides = [
       "The HEIF and HEVC extensions and Photos for single photos, then whole folders with subfolders in the convt CLI. Notes that convt 0.5.0 drops EXIF on this route.",
     category: "images",
     published: "2026-10-29",
-    updated: "2026-11-23",
+    updated: "2026-11-25",
   },
   {
     slug: "mov-to-mp4-mac",

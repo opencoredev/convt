@@ -60,6 +60,19 @@ export const handbrakeAlternative = {
   operatingSystem: "macOS (Apple silicon), Windows (x86_64), Linux (x86_64)",
 } as const satisfies LandingPage;
 
+export const cloudconvertAlternative = {
+  path: routes.cloudconvertAlternative,
+  title: "CloudConvert alternatives, including offline ones (2026) · convt",
+  heading: "CloudConvert alternatives, including offline ones",
+  footerLabel: "CloudConvert alternatives",
+  description:
+    "CloudConvert uploads every file and allows 10 free conversions a day. convt, VERT, File Converter, Convertio and FreeConvert compared on price and privacy.",
+  summary:
+    "When to keep CloudConvert and when to switch, the offline options, a comparison of convt, VERT, File Converter, Convertio and FreeConvert (price, platforms, where your files go), where CloudConvert is better, and convt's per-file cloud API.",
+  campaign: "cloudconvert-alternative",
+  operatingSystem: "macOS (Apple silicon), Windows (x86_64), Linux (x86_64)",
+} as const satisfies LandingPage;
+
 /** The download page with a landing page's campaign tags. */
 const landingDownloadUrl = (page: LandingPage) =>
   `${routes.download}?utm_source=convt_guides&utm_medium=organic&utm_campaign=${page.campaign}`;
@@ -67,6 +80,7 @@ const landingDownloadUrl = (page: LandingPage) =>
 export const macFileConverterDownloadUrl = landingDownloadUrl(macFileConverter);
 export const commandLineConverterDownloadUrl = landingDownloadUrl(commandLineConverter);
 export const handbrakeAlternativeDownloadUrl = landingDownloadUrl(handbrakeAlternative);
+export const cloudconvertAlternativeDownloadUrl = landingDownloadUrl(cloudconvertAlternative);
 
 /** Head tags for a landing page: SEO and Open Graph, plus WebPage, app and breadcrumb JSON-LD. */
 function landingPageHead(page: LandingPage) {
@@ -125,3 +139,6 @@ export const commandLineConverterHead = () => landingPageHead(commandLineConvert
 
 /** Head tags for /handbrake-alternative. */
 export const handbrakeAlternativeHead = () => landingPageHead(handbrakeAlternative);
+
+/** Head tags for /cloudconvert-alternative. */
+export const cloudconvertAlternativeHead = () => landingPageHead(cloudconvertAlternative);

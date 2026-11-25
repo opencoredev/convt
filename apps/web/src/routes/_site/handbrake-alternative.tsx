@@ -339,7 +339,10 @@ function HandbrakeAlternative() {
               <p>
                 Each block has the same fields, so you can compare them line by line. If you only
                 use a Mac, the <TextLink href={macFileConverter.path}>Mac file converter</TextLink>{" "}
-                page also covers what Finder, Preview and QuickTime convert for free.
+                page also covers what Finder, Preview and QuickTime convert for free. If you&apos;re
+                moving off an online converter instead, see the{" "}
+                <TextLink href={routes.cloudconvertAlternative}>CloudConvert alternatives</TextLink>
+                .
               </p>
             </Prose>
             {tools.map((tool) => (

@@ -22,6 +22,7 @@ import { Route as AppShellRouteImport } from './routes/_app/_shell'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as SiteApiRouteImport } from './routes/_site/api'
 import { Route as SiteChangelogRouteImport } from './routes/_site/changelog'
+import { Route as SiteCloudconvertAlternativeRouteImport } from './routes/_site/cloudconvert-alternative'
 import { Route as SiteCommandLineFileConverterRouteImport } from './routes/_site/command-line-file-converter'
 import { Route as SiteContactRouteImport } from './routes/_site/contact'
 import { Route as SiteDownloadRouteImport } from './routes/_site/download'
@@ -125,6 +126,12 @@ const SiteChangelogRoute = SiteChangelogRouteImport.update({
   path: '/changelog',
   getParentRoute: () => SiteRoute,
 } as any)
+const SiteCloudconvertAlternativeRoute =
+  SiteCloudconvertAlternativeRouteImport.update({
+    id: '/cloudconvert-alternative',
+    path: '/cloudconvert-alternative',
+    getParentRoute: () => SiteRoute,
+  } as any)
 const SiteCommandLineFileConverterRoute =
   SiteCommandLineFileConverterRouteImport.update({
     id: '/command-line-file-converter',
@@ -340,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/device': typeof AppDeviceRoute
   '/api': typeof SiteApiRoute
   '/changelog': typeof SiteChangelogRoute
+  '/cloudconvert-alternative': typeof SiteCloudconvertAlternativeRoute
   '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
@@ -391,6 +399,7 @@ export interface FileRoutesByTo {
   '/device': typeof AppDeviceRoute
   '/api': typeof SiteApiRoute
   '/changelog': typeof SiteChangelogRoute
+  '/cloudconvert-alternative': typeof SiteCloudconvertAlternativeRoute
   '/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/contact': typeof SiteContactRoute
   '/download': typeof SiteDownloadRoute
@@ -446,6 +455,7 @@ export interface FileRoutesById {
   '/_app/device': typeof AppDeviceRoute
   '/_site/api': typeof SiteApiRoute
   '/_site/changelog': typeof SiteChangelogRoute
+  '/_site/cloudconvert-alternative': typeof SiteCloudconvertAlternativeRoute
   '/_site/command-line-file-converter': typeof SiteCommandLineFileConverterRoute
   '/_site/contact': typeof SiteContactRoute
   '/_site/download': typeof SiteDownloadRoute
@@ -499,6 +509,7 @@ export interface FileRouteTypes {
     | '/device'
     | '/api'
     | '/changelog'
+    | '/cloudconvert-alternative'
     | '/command-line-file-converter'
     | '/contact'
     | '/download'
@@ -550,6 +561,7 @@ export interface FileRouteTypes {
     | '/device'
     | '/api'
     | '/changelog'
+    | '/cloudconvert-alternative'
     | '/command-line-file-converter'
     | '/contact'
     | '/download'
@@ -604,6 +616,7 @@ export interface FileRouteTypes {
     | '/_app/device'
     | '/_site/api'
     | '/_site/changelog'
+    | '/_site/cloudconvert-alternative'
     | '/_site/command-line-file-converter'
     | '/_site/contact'
     | '/_site/download'
@@ -758,6 +771,13 @@ declare module '@tanstack/react-router' {
       path: '/changelog'
       fullPath: '/changelog'
       preLoaderRoute: typeof SiteChangelogRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/cloudconvert-alternative': {
+      id: '/_site/cloudconvert-alternative'
+      path: '/cloudconvert-alternative'
+      fullPath: '/cloudconvert-alternative'
+      preLoaderRoute: typeof SiteCloudconvertAlternativeRouteImport
       parentRoute: typeof SiteRoute
     }
     '/_site/command-line-file-converter': {
@@ -1085,6 +1105,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 interface SiteRouteChildren {
   SiteApiRoute: typeof SiteApiRoute
   SiteChangelogRoute: typeof SiteChangelogRoute
+  SiteCloudconvertAlternativeRoute: typeof SiteCloudconvertAlternativeRoute
   SiteCommandLineFileConverterRoute: typeof SiteCommandLineFileConverterRoute
   SiteContactRoute: typeof SiteContactRoute
   SiteDownloadRoute: typeof SiteDownloadRoute
@@ -1107,6 +1128,7 @@ interface SiteRouteChildren {
 const SiteRouteChildren: SiteRouteChildren = {
   SiteApiRoute: SiteApiRoute,
   SiteChangelogRoute: SiteChangelogRoute,
+  SiteCloudconvertAlternativeRoute: SiteCloudconvertAlternativeRoute,
   SiteCommandLineFileConverterRoute: SiteCommandLineFileConverterRoute,
   SiteContactRoute: SiteContactRoute,
   SiteDownloadRoute: SiteDownloadRoute,
