@@ -5,7 +5,7 @@ import base64
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
 import gzip
@@ -45,6 +45,14 @@ def cache_path(item):
     return path
 
 
+def check_member(member):
+    name = PurePosixPath(member.name)
+    if name.is_absolute() or '..' in name.parts:
+        raise ValueError('Unsafe archive member path: ' + member.name)
+    if member.ischr() or member.isblk() or member.isfifo():
+        raise ValueError('Unsupported archive member type: ' + member.name)
+
+
 def canonicalize(source, output, *, sort_members=False, drop_members=()):
     # Codeload/Gitiles can reshuffle member order between regenerations. Sorting
     # makes the locked digest stable when sort_members is requested.
@@ -59,9 +67,13 @@ def canonicalize(source, output, *, sort_members=False, drop_members=()):
             with tarfile.open(source, 'r:gz') as archive:
                 members = [member for member in archive.getmembers() if not dropped(member)]
                 for member in members:
+                    check_member(member)
+                for member in members:
                     if not member.isfile():
                         continue
-                    dest = root / member.name
+                    dest = (root / member.name).resolve()
+                    if not dest.is_relative_to(root.resolve()):
+                        raise ValueError('Archive member escapes extraction root: ' + member.name)
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     with archive.extractfile(member) as src, dest.open('wb') as stream:
                         shutil.copyfileobj(src, stream)
@@ -88,6 +100,7 @@ def canonicalize(source, output, *, sort_members=False, drop_members=()):
         for member in archive:
             if dropped(member):
                 continue
+            check_member(member)
             member.uid = member.gid = 0
             member.uname = member.gname = ''
             member.mtime = 0
