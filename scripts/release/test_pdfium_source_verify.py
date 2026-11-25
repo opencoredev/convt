@@ -55,7 +55,9 @@ class Canonicalize(unittest.TestCase):
                 self.assertEqual(list(self.outside.iterdir()), [])
 
     def test_refuses_parent_directory_member(self):
-        self.assert_refused(('../outside/escaped', b'x'), ('pkg/../../outside/escaped', b'x'))
+        for name in ('../outside/escaped', 'pkg/../../outside/escaped'):
+            with self.subTest(name=name):
+                self.assert_refused((name, b'x'))
 
     def test_refuses_absolute_member(self):
         self.assert_refused((str(self.outside / 'absolute'), b'x'))
