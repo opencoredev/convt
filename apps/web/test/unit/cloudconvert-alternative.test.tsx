@@ -18,18 +18,29 @@ function render(route: typeof Route | typeof HeicRoute | typeof HandbrakeRoute):
   return renderToStaticMarkup(<Page />);
 }
 
-test("the CloudConvert page's head has its canonical URL and WebPage, app and breadcrumb JSON-LD", () => {
+test("the CloudConvert page's head has its canonical URL and WebPage, tool list and breadcrumb JSON-LD", () => {
   const head = cloudconvertAlternativeHead();
   expect(head.links).toContainEqual({ rel: "canonical", href: url });
   const script = head.scripts.find((s) => s.type === "application/ld+json");
   if (!script) throw new Error("no JSON-LD");
-  const graph = (JSON.parse(script.children) as { "@graph": { "@type": string; url?: string }[] })[
-    "@graph"
-  ];
+  const graph = (
+    JSON.parse(script.children) as {
+      "@graph": { "@type": string; url?: string; itemListElement?: { name: string }[] }[];
+    }
+  )["@graph"];
   const types = graph.map((node) => node["@type"]);
-  for (const type of ["WebPage", "SoftwareApplication", "BreadcrumbList", "Organization"]) {
+  for (const type of ["WebPage", "ItemList", "BreadcrumbList", "Organization"]) {
     expect(types).toContain(type);
   }
+  expect(types).not.toContain("SoftwareApplication");
+  const list = graph.find((node) => node["@type"] === "ItemList")?.itemListElement ?? [];
+  expect(list.map((item) => item.name)).toEqual([
+    "convt",
+    "VERT",
+    "File Converter",
+    "Convertio",
+    "FreeConvert",
+  ]);
   expect(graph.find((node) => node["@type"] === "WebPage")?.url).toBe(url);
 });
 
@@ -49,7 +60,7 @@ test("the CloudConvert page tags downloads, gives every tool the same block and 
   }
   expect(html).toContain("Where CloudConvert is better");
   expect(html).toContain("Is there an offline alternative to CloudConvert?");
-  expect(html).toContain("convt report.docx --to pdf");
+  expect(html).toContain("convt Photos --to webp -r -o webp");
   expect(html).toContain("2 converted, 0 failed");
   expect(html).toContain('href="/api"');
 });

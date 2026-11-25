@@ -66,7 +66,7 @@ export const cloudconvertAlternative = {
   heading: "CloudConvert alternatives, including offline ones",
   footerLabel: "CloudConvert alternatives",
   description:
-    "CloudConvert uploads every file and allows 10 free conversions a day. convt, VERT, File Converter, Convertio and FreeConvert compared on price and privacy.",
+    "CloudConvert uploads every file and allows 10 free conversion credits a day. convt, VERT, File Converter, Convertio and FreeConvert compared on price and privacy.",
   summary:
     "When to keep CloudConvert and when to switch, the offline options, a comparison of convt, VERT, File Converter, Convertio and FreeConvert (price, platforms, where your files go), where CloudConvert is better, and convt's per-file cloud API.",
   campaign: "cloudconvert-alternative",
@@ -140,5 +140,68 @@ export const commandLineConverterHead = () => landingPageHead(commandLineConvert
 /** Head tags for /handbrake-alternative. */
 export const handbrakeAlternativeHead = () => landingPageHead(handbrakeAlternative);
 
+/**
+ * Head tags for a comparison page: SEO and Open Graph, plus WebPage, breadcrumb and an ItemList
+ * of the tools the page compares, in page order, instead of the single-app graph above.
+ */
+function comparisonPageHead(page: LandingPage, items: readonly { name: string; url: string }[]) {
+  const url = `${SITE_ORIGIN}${page.path}`;
+  const tags = seo({ title: page.title, description: page.description, path: page.path });
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${url}#webpage`,
+        url,
+        name: page.title,
+        description: page.description,
+        inLanguage: "en",
+        isPartOf: { "@id": `${SITE_ORIGIN}/#website` },
+        mainEntity: { "@id": `${url}#tools` },
+      },
+      {
+        "@type": "ItemList",
+        "@id": `${url}#tools`,
+        name: page.heading,
+        itemListElement: items.map((item, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: item.name,
+          url: item.url,
+        })),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: SITE_NAME, item: `${SITE_ORIGIN}/` },
+          { "@type": "ListItem", position: 2, name: page.heading, item: url },
+        ],
+      },
+      {
+        "@type": "Organization",
+        "@id": `${SITE_ORIGIN}/#organization`,
+        name: SITE_NAME,
+        url: `${SITE_ORIGIN}/`,
+        logo: `${SITE_ORIGIN}/apple-touch-icon.png`,
+      },
+    ],
+  };
+  return {
+    ...tags,
+    scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
+  };
+}
+
+/** The tools /cloudconvert-alternative compares, in the order of its blocks. */
+export const cloudconvertAlternativeTools = [
+  { name: "convt", url: `${SITE_ORIGIN}/` },
+  { name: "VERT", url: "https://vert.sh/" },
+  { name: "File Converter", url: "https://file-converter.io/" },
+  { name: "Convertio", url: "https://convertio.co/" },
+  { name: "FreeConvert", url: "https://www.freeconvert.com/" },
+] as const;
+
 /** Head tags for /cloudconvert-alternative. */
-export const cloudconvertAlternativeHead = () => landingPageHead(cloudconvertAlternative);
+export const cloudconvertAlternativeHead = () =>
+  comparisonPageHead(cloudconvertAlternative, cloudconvertAlternativeTools);

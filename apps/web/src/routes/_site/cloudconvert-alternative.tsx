@@ -38,6 +38,7 @@ const downloadUrl = cloudconvertAlternativeDownloadUrl;
 
 const ccPricing = "https://cloudconvert.com/pricing";
 const ccSecurity = "https://cloudconvert.com/security";
+const ccPrivacy = "https://cloudconvert.com/privacy";
 
 const sections = [
   { id: "compare", title: "Side by side" },
@@ -53,22 +54,27 @@ const sections = [
 const rows: [string, string, string, string][] = [
   [
     "CloudConvert",
-    "Free for 10 conversions a day; 1,000 credits for $17, or $9 a month",
+    "Free for 10 conversion credits a day; 1,000 credits for $17, or $9 a month",
     "Any browser, plus an API",
     "Uploaded to its servers",
   ],
-  ["convt 0.5.0", "$39 once", "Mac (Apple silicon), Windows, Linux", "Stay on your computer"],
+  [
+    "convt Desktop 0.5.0",
+    "$39 once",
+    "Mac (Apple silicon), Windows, Linux",
+    "Local conversions stay on your computer",
+  ],
   [
     "VERT",
     "Free, open source",
     "Any browser",
-    "Stay in your browser; some video goes to VERT's server",
+    "Converted in your browser tab; some video goes to VERT's server",
   ],
   ["File Converter 2.2", "Free, open source", "Windows only", "Stay on your computer"],
   [
     "Convertio",
-    "Free tier; paid from $6.99 a month, billed yearly",
-    "Any browser",
+    "Free for 10 credits a day; paid from $6.99 a month, billed yearly",
+    "Any browser, plus an API",
     "Uploaded to its servers",
   ],
   [
@@ -101,10 +107,11 @@ const tools: Tool[] = [
     platforms: "macOS 13 or later on Apple silicon, Windows x86_64, Linux x86_64.",
     files: (
       <>
-        Local conversions run on your computer and never upload. Cloud jobs, which you pick per job
-        with Desktop + Cloud, do upload. It converts MP4, MOV, WebM, MKV and other video, seven
-        audio formats, a dozen image formats, PDFs and Office documents.{" "}
-        <TextLink href={routes.formats}>Every format</TextLink>.
+        Local conversions never leave your computer. Desktop + Cloud adds cloud conversions, from
+        the app or from a phone or browser, and those upload the file. Version 0.5.0 converts MP4,
+        MOV, WebM, MKV and other video, seven audio formats, a dozen image formats, PDFs and Office
+        documents; the <TextLink href={routes.formats}>current format list</TextLink> may include
+        newer ones.
       </>
     ),
     batch: (
@@ -115,7 +122,7 @@ const tools: Tool[] = [
       </>
     ),
     shortfalls:
-      "No free tier, no browser or phone version, and far fewer formats than CloudConvert: no ebooks, archives, CAD drawings or camera RAW files in 0.5.0.",
+      "No free tier. Converting from a phone or browser needs Desktop + Cloud and uploads the file. Far fewer formats than CloudConvert: no ebooks, archives, CAD drawings or camera RAW files in 0.5.0.",
   },
   {
     name: "VERT",
@@ -158,16 +165,19 @@ const tools: Tool[] = [
     bestFor: "People who want a browser converter that feels like CloudConvert.",
     price: (
       <>
-        A free tier, then from $6.99 a month billed yearly ($11.99 month to month) for 1,000 credits
-        and files up to 1 GB, per its{" "}
-        <TextLink href="https://convertio.co/pricing/">pricing page</TextLink>.
+        Free for 10 credits per 24 hours, files up to 1 GB and 10 conversions at once, per its{" "}
+        <TextLink href="https://support.convertio.co/hc/en-us/articles/360004386774-Free-tier-limit-for-file-conversions">
+          help center
+        </TextLink>
+        . Paid web plans start at $6.99 a month billed yearly ($11.99 month to month) for 1,000
+        credits, per its <TextLink href="https://convertio.co/pricing/">pricing page</TextLink>. The
+        API is priced separately.
       </>
     ),
-    platforms: "Any browser.",
+    platforms: "Any browser, plus an API.",
     files: "Uploaded to its servers over SSL. It says output files are bound to your IP address.",
     batch: "Up to 50 conversions at once on the cheapest paid plan.",
-    shortfalls:
-      "Every file leaves your computer, and its pricing page doesn't list the free tier's limits.",
+    shortfalls: "Every file leaves your computer, and the free tier stops at 10 credits a day.",
   },
   {
     name: "FreeConvert",
@@ -175,9 +185,9 @@ const tools: Tool[] = [
     bestFor: "A browser converter with a bigger free allowance for quick jobs.",
     price: (
       <>
-        20 conversion minutes a day free, then from $12.99 a month for 1,500 minutes and files up to
-        1.5 GB, per its <TextLink href="https://www.freeconvert.com/pricing">pricing page</TextLink>
-        .
+        20 conversion minutes a day free, at most 5 per file, then from $12.99 a month for 1,500
+        minutes and files up to 1.5 GB, per its{" "}
+        <TextLink href="https://www.freeconvert.com/pricing">pricing page</TextLink>.
       </>
     ),
     platforms: "Any browser, plus an API.",
@@ -287,15 +297,15 @@ function CloudconvertAlternative() {
           <GuideSection id="offline" title="Is there an offline alternative to CloudConvert?">
             <Prose>
               <p>
-                Yes. convt and File Converter convert files on your own computer, and VERT converts
-                most files inside your browser tab. Convertio and FreeConvert upload your files,
-                like CloudConvert.
+                Yes. convt Desktop (Mac, Windows and Linux) and File Converter (Windows) are apps
+                that convert files on your own computer, so local conversions never leave it.
+                Convertio and FreeConvert upload your files, like CloudConvert.
               </p>
               <p>
                 convt runs on Mac, Windows and Linux and handles video, audio, images, PDFs and
                 Office documents from one app and one command. File Converter is free but Windows
-                only. VERT needs no install, but on its official site some video conversions run on
-                VERT&apos;s server.
+                only. VERT sits in between: a website that converts most files inside your browser
+                tab, though on its official site some video conversions run on VERT&apos;s server.
               </p>
             </Prose>
           </GuideSection>
@@ -305,8 +315,9 @@ function CloudconvertAlternative() {
             title="When should you switch from CloudConvert?"
             source={
               <Checked how="docs">
-                From CloudConvert&apos;s <TextLink href={ccPricing}>pricing page</TextLink> and{" "}
-                <TextLink href={ccSecurity}>security page</TextLink> on {CHECKED}.
+                From CloudConvert&apos;s <TextLink href={ccPricing}>pricing page</TextLink>,{" "}
+                <TextLink href={ccSecurity}>security page</TextLink> and{" "}
+                <TextLink href={ccPrivacy}>privacy policy</TextLink> on {CHECKED}.
               </Checked>
             }
           >
@@ -318,14 +329,15 @@ function CloudconvertAlternative() {
                     The files can&apos;t leave your computer.
                   </strong>{" "}
                   CloudConvert converts on its servers. It says each conversion runs in an isolated
-                  container and files are deleted right after processing, but every file is still
-                  uploaded first. Client work under an NDA, or files your company keeps on the
-                  device, rule that out.
+                  container, and its privacy policy says files are deleted when you press delete, or
+                  automatically within 24 hours. Every file is still uploaded first, which an NDA
+                  that bans third-party processing, or a company rule that keeps files on the
+                  device, rules out.
                 </li>
                 <li>
                   <strong className="font-semibold">You keep hitting the free limits.</strong> Free
                   accounts get 10 conversion credits a day, files up to 1 GB and 5 minutes of
-                  processing per conversion.
+                  processing per conversion, with 5 conversions running at once.
                 </li>
                 <li>
                   <strong className="font-semibold">
@@ -366,16 +378,16 @@ function CloudconvertAlternative() {
             title="Where CloudConvert is better"
             source={
               <Checked how="docs">
-                From <TextLink href="https://cloudconvert.com/">cloudconvert.com</TextLink> and its
-                security page on {CHECKED}.
+                From <TextLink href="https://cloudconvert.com/">cloudconvert.com</TextLink>, its
+                pricing page and its security page on {CHECKED}.
               </Checked>
             }
           >
             <Prose>
               <ul className="flex list-disc flex-col gap-2 pl-5">
                 <li>
-                  It has a free tier: 10 conversions a day with nothing to install. convt has no
-                  free tier.
+                  It has a free tier: 10 conversion credits a day with nothing to install. convt has
+                  no free tier.
                 </li>
                 <li>
                   It lists 213 formats in 11 categories, including camera RAW, CAD drawings,
@@ -383,8 +395,9 @@ function CloudconvertAlternative() {
                   documents.
                 </li>
                 <li>
-                  It works from any device with a browser, phones and Chromebooks included. convt
-                  needs a Mac with Apple silicon, or a Windows or Linux PC.
+                  It works free from any device with a browser, phones and Chromebooks included.
+                  convt&apos;s local conversions need a Mac with Apple silicon, or a Windows or
+                  Linux PC; converting from a phone or browser needs Desktop + Cloud.
                 </li>
                 <li>
                   Its API imports from and exports to your own storage, such as Amazon S3, and the
@@ -402,31 +415,9 @@ function CloudconvertAlternative() {
           >
             <Prose>
               <p>
-                A photo, a video, a recording, a Word file and a PDF, each one command, on your
-                computer:
-              </p>
-            </Prose>
-            <Commands
-              label="Terminal"
-              commands={[
-                "convt photo.png --to webp",
-                "convt clip.mov --to mp4 --video-height 720",
-                "convt memo.wav --to mp3",
-                "convt report.docx --to pdf",
-                "convt notes.pdf --to png --pages 1 --dpi 150",
-              ]}
-            />
-            <Output label="Output, convt 0.5.0">
-              {`photo.png -> ./photo.webp
-clip.mov -> ./clip.mp4
-memo.wav -> ./memo.mp3
-report.docx -> ./report.pdf
-notes.pdf -> ./notes.png`}
-            </Output>
-            <Prose>
-              <p>
-                A whole folder, subfolders included, into a separate <Code>webp</Code> folder with
-                the same layout:
+                The job a web converter handles worst is a folder of folders. In convt it&apos;s one
+                command: every file, subfolders included, into a separate <Code>webp</Code> folder
+                with the same layout, nothing uploaded:
               </p>
             </Prose>
             <Commands label="Terminal" commands={["convt Photos --to webp -r -o webp"]} />
@@ -437,8 +428,9 @@ Photos/2026/b.png -> webp/2026/b.webp
             </Output>
             <Prose>
               <p>
-                Word, Excel and PowerPoint files need LibreOffice on a Mac or Linux, or the document
-                pack on Windows. More examples are on the{" "}
+                The same pattern converts video, audio, PDFs and Word, Excel and PowerPoint files
+                (those need LibreOffice on a Mac or Linux, or the document pack on Windows). One
+                example for each kind of file is on the{" "}
                 <TextLink href={commandLineConverter.path}>command-line page</TextLink>, and the{" "}
                 <TextLink href={guidePath("batch-heic-to-jpg-windows")}>
                   batch HEIC to JPG guide
@@ -507,9 +499,10 @@ Photos/2026/b.png -> webp/2026/b.webp
                 source is open (AGPL-3.0), but the signed app is $39 once, after a 7-day trial.
               </Question>
               <Question q="Is CloudConvert safe to use?">
-                It says each conversion runs in an isolated container, files are deleted after
-                processing, and its company holds ISO 27001 certification. Your files still leave
-                your computer, so for files that mustn&apos;t, use a converter that runs locally.
+                It says each conversion runs in an isolated container and its company holds ISO
+                27001 certification; its privacy policy says files are deleted automatically within
+                24 hours, or at once when you press delete. Your files still leave your computer, so
+                for files that mustn&apos;t, use a converter that runs locally.
               </Question>
               <Question q="Is there a CloudConvert alternative for Mac?">
                 convt runs on macOS 13 or later on Apple silicon, with a Convert with convt menu in
@@ -517,9 +510,9 @@ Photos/2026/b.png -> webp/2026/b.webp
                 other browser. File Converter is Windows only.
               </Question>
               <Question q="Does convt upload my files?">
-                Not for local conversions, which is everything on this page except the API. The only
-                uploads are cloud jobs, which you pick per job and which need a cloud plan such as
-                Desktop + Cloud, and API requests.
+                Not for local conversions in the desktop app or the <Code>convt</Code> command. The
+                only uploads are cloud conversions, which you pick per job or start from a phone or
+                browser and which need Desktop + Cloud, and API requests.
               </Question>
             </dl>
           </GuideSection>
