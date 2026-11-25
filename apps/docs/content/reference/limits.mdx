@@ -34,7 +34,7 @@ A `POST /v1/convert` that waits for its result counts as one request, however lo
 | Conversion time per attempt                   | 10 minutes                                                                              |
 | Attempts per job                              | 3                                                                                       |
 
-There is no separate daily quota, so paid API usage has no practical daily cap on the hosted API. What bounds it is the rate limit, your spend cap and the two storage limits above. A job counts as stored, whatever its status (cancelled and failed included), until its files are cleaned up after it expires 24 hours after creation. The hosted API allows 100,000 stored jobs per account; a self-hosted convt-server stops at 100 unless `CONVT_MAX_STORED_JOBS` raises it.
+There is no separate daily quota. What bounds usage is the rate limit, your spend cap and the two storage limits above. Each job holds a stored-job slot for at least 24 hours, so the hosted cap allows about 100,000 conversions per account per rolling 24 hours. A job counts as stored, whatever its status (cancelled and failed included), until its files are cleaned up after it expires 24 hours after creation. The hosted API allows 100,000 stored jobs per account; a self-hosted convt-server stops at 100 unless `CONVT_MAX_STORED_JOBS` overrides it.
 
 ## Lifetimes
 
