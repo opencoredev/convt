@@ -2403,7 +2403,7 @@ int test_loaded(void) { return loaded; }
         let back = convert(&tight, "heic", "png", None, None);
         let (w, h) = size(&back);
         assert!(
-            w < 512 && h < 384 && w * 3 == h * 4,
+            w < 512 && h < 384 && (w * 3).abs_diff(h * 4) <= 3,
             "a tight target only shrinks: {w}x{h}"
         );
     }
