@@ -110,8 +110,7 @@ const DEFAULT_OPTION = "";
 const CUSTOM_BACKGROUND = "custom";
 
 type Discovery = { files: string[]; binary: string; recursive: boolean; reload: number } & (
-  | { status: "ready"; inspection: FileInspection }
-  | { status: "error"; message: string }
+  { status: "ready"; inspection: FileInspection } | { status: "error"; message: string }
 );
 
 function Converter({
