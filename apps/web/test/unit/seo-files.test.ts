@@ -12,7 +12,12 @@ import { SITE_ORIGIN, guidesIndexLastmod, routes, sitemapPages } from "#/lib/sit
 
 describe("sitemap pages", () => {
   test("every lastmod is a real past calendar day", () => {
-    for (const { path, lastmod } of sitemapEntries) {
+    const sources = [
+      ...sitemapPages,
+      { path: routes.guides, lastmod: guidesIndexLastmod },
+      ...sitemapEntries,
+    ];
+    for (const { path, lastmod } of sources) {
       expect(lastmod, path).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       const day = new Date(`${lastmod}T00:00:00Z`);
       expect(day.toISOString().slice(0, 10), path).toBe(lastmod);
