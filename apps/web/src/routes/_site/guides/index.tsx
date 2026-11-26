@@ -44,16 +44,17 @@ function GuidesPage() {
         </p>
         <ul className="flex flex-col divide-y divide-divider border-y border-line">
           {comparisonPages.map((page) => (
-            <li key={page.path}>
+            <li key={page.path} className="flex flex-col gap-1.5 py-5">
               <a
                 href={page.path}
-                className={cx("group flex flex-col gap-1.5 rounded-sm py-5", focusRing)}
+                className={cx(
+                  "rounded-sm text-[18px]/6 font-semibold tracking-[-0.01em] hover:text-green",
+                  focusRing,
+                )}
               >
-                <span className="text-[18px]/6 font-semibold tracking-[-0.01em] group-hover:text-green">
-                  {page.heading}
-                </span>
-                <span className="text-[15px]/[23px] text-ink-2">{page.description}</span>
+                {page.heading}
               </a>
+              <p className="text-[15px]/[23px] text-ink-2">{page.description}</p>
             </li>
           ))}
         </ul>
