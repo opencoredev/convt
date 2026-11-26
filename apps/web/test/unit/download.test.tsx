@@ -90,7 +90,7 @@ test("the Homebrew install names the cask in full, so Homebrew trusts it without
     "brew install --cask opencoredev/convt/convt",
   ];
   expect(homebrewCommands).toEqual(install);
-  const readme = readFileSync(new URL("../../../../README.md", import.meta.url), "utf8");
+  const readme = readFileSync(new URL("../../../../README.md", import.meta.url), "utf8").replaceAll("\r\n", "\n");
   expect(readme).toContain(install.join("\n"));
   expect(readme).not.toContain("brew install --cask convt\n");
 });
