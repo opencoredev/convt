@@ -138,10 +138,16 @@ fn tiff_pages(mut r: impl std::io::Read + std::io::Seek) -> Option<u32> {
 
 /// Scales `img` down so its longest edge is at most `max`. Never scales up.
 pub(crate) fn fit(img: DynamicImage, max: Option<u32>) -> DynamicImage {
-    match max {
-        Some(m) if img.width() > m || img.height() > m => img.resize(m, m, FilterType::Lanczos3),
-        _ => img,
+    match shrink_limit(max, img.width(), img.height()) {
+        Some(m) => img.resize(m, m, FilterType::Lanczos3),
+        None => img,
     }
+}
+
+/// The longest edge to scale a `width` x `height` image to so it fits
+/// `max`, or `None` when it already fits: `max_size` never scales up.
+pub(crate) fn shrink_limit(max: Option<u32>, width: u32, height: u32) -> Option<u32> {
+    max.filter(|&m| width > m || height > m)
 }
 
 /// Applies `options.background` for output in `to`: a chosen color flattens
@@ -3423,5 +3429,21 @@ pub(crate) mod tests {
             let r = encode(img.clone(), to, &Options::default(), Path::new("/dev/full"));
             assert!(r.is_err(), "{to}");
         }
+    }
+
+    #[test]
+    fn max_size_only_ever_shrinks() {
+        assert_eq!(shrink_limit(None, 4000, 3000), None);
+        assert_eq!(shrink_limit(Some(512), 64, 48), None);
+        assert_eq!(shrink_limit(Some(64), 64, 48), None);
+        assert_eq!(shrink_limit(Some(64), 48, 64), None);
+        assert_eq!(shrink_limit(Some(32), 64, 48), Some(32));
+        assert_eq!(shrink_limit(Some(32), 48, 64), Some(32));
+        assert_eq!(shrink_limit(Some(50), 48, 64), Some(50));
+        let small = DynamicImage::new_rgb8(64, 48);
+        let kept = fit(small.clone(), Some(512));
+        assert_eq!((kept.width(), kept.height()), (64, 48));
+        let shrunk = fit(small, Some(32));
+        assert_eq!((shrunk.width(), shrunk.height()), (32, 24));
     }
 }

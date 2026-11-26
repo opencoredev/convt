@@ -1209,6 +1209,23 @@ impl Engine for ImageIoEngine {
         ctx.indeterminate();
         let output = ctx.artifact(out_dir, 0);
         let format = ctx.step.to.id;
+        // `sips -Z` also scales smaller images up, so pass it only a limit
+        // the source exceeds.
+        let max_size = match ctx.options.max_size {
+            None => None,
+            Some(_) => {
+                let mut cmd = std::process::Command::new(sips);
+                cmd.args(["-g", "pixelWidth", "-g", "pixelHeight"])
+                    .arg(input);
+                let mut lines = Vec::new();
+                crate::run_tool("imageio", cmd, ctx, |line| lines.push(line.to_string()))?;
+                let (w, h) = sips_dimensions(&lines).ok_or_else(|| Error::EngineFailed {
+                    engine: "imageio",
+                    message: "sips did not report the image's size".into(),
+                })?;
+                crate::image::shrink_limit(ctx.options.max_size, w, h)
+            }
+        };
         // sips knows nothing of a chosen background color: flatten the PNG
         // before it encodes HEIC, and the PNG it decodes afterwards.
         let flattened = out_dir.join("flattened.png");
@@ -1246,13 +1263,13 @@ impl Engine for ImageIoEngine {
         let quality = ctx.options.quality.unwrap_or(90);
         let ran = match ctx.options.target_size.filter(|_| format == "heic") {
             // PNG output meets the size in background_png, below.
-            None => sips_at(quality, ctx.options.max_size).map(|_| ()),
+            None => sips_at(quality, max_size).map(|_| ()),
             Some(target) => image::image_dimensions(input)
                 .map_err(failed)
                 .and_then(|(w, h)| {
-                    let longest = ctx.options.max_size.map_or(w.max(h), |m| m.min(w.max(h)));
+                    let longest = max_size.unwrap_or(w.max(h));
                     crate::image::fit_target(target, "heic", Some(quality), longest, |q, edge| {
-                        sips_at(q, edge.or(ctx.options.max_size))
+                        sips_at(q, edge.or(max_size))
                     })
                 }),
         };
@@ -1269,6 +1286,23 @@ impl Engine for ImageIoEngine {
         }
         Ok(vec![output])
     }
+}
+
+/// Reads the size `sips -g pixelWidth -g pixelHeight` prints after the
+/// file's path.
+#[cfg(any(test, target_os = "macos"))]
+fn sips_dimensions(lines: &[String]) -> Option<(u32, u32)> {
+    let value = |key: &str| {
+        lines.iter().rev().find_map(|line| {
+            line.trim()
+                .strip_prefix(key)?
+                .strip_prefix(':')?
+                .trim()
+                .parse()
+                .ok()
+        })
+    };
+    Some((value("pixelWidth")?, value("pixelHeight")?))
 }
 
 /// Finishes the PNG `sips` wrote at `output` from `input` (format `from`):
@@ -2265,5 +2299,84 @@ int test_loaded(void) { return loaded; }
             .convert(&Ctx::new(step, &o, &|_| {}, &cancel), &src, dir.path())
             .unwrap_err();
         assert_eq!(err.kind(), "engine_failed");
+    }
+
+    #[test]
+    fn reads_the_size_sips_prints() {
+        let lines = |text: &str| text.lines().map(String::from).collect::<Vec<_>>();
+        assert_eq!(
+            sips_dimensions(&lines(
+                "/tmp/photo.heic\n  pixelWidth: 64\n  pixelHeight: 48\n"
+            )),
+            Some((64, 48))
+        );
+        assert_eq!(
+            sips_dimensions(&lines(
+                "/tmp/pixelWidth: 9.heic\n  pixelWidth: 48\n  pixelHeight: 64"
+            )),
+            Some((48, 64))
+        );
+        assert_eq!(
+            sips_dimensions(&lines("/tmp/photo.heic\n  pixelWidth: 64")),
+            None
+        );
+        assert_eq!(sips_dimensions(&lines("Error: file not found")), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn imageio_max_size_only_shrinks() {
+        let engine = ImageIoEngine::new();
+        if engine.unavailable_reason().is_some() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let convert = |input: &Path, from: &str, to: &str, max_size: Option<u32>| {
+            let out = tempfile::tempdir_in(dir.path()).unwrap();
+            let options = Options {
+                max_size,
+                ..Options::default()
+            };
+            let cancel = Cancel::new();
+            let step = Step {
+                from: format_by_id(from).unwrap(),
+                to: format_by_id(to).unwrap(),
+            };
+            let files = engine
+                .convert(
+                    &Ctx::new(step, &options, &|_| {}, &cancel),
+                    input,
+                    out.path(),
+                )
+                .unwrap();
+            let kept = dir.path().join(format!(
+                "{}-{}-{}.{to}",
+                input.file_stem().unwrap().to_string_lossy(),
+                from,
+                max_size.unwrap_or(0)
+            ));
+            std::fs::rename(&files[0], &kept).unwrap();
+            kept
+        };
+        let png = dir.path().join("small.png");
+        image::RgbImage::new(64, 48).save(&png).unwrap();
+        let avif = dir.path().join("small.avif");
+        image::RgbImage::new(64, 48).save(&avif).unwrap();
+        let heic = convert(&png, "png", "heic", None);
+        let size = |path: &Path| image::image_dimensions(path).unwrap();
+        for (max_size, expected) in [
+            (None, (64, 48)),
+            (Some(512), (64, 48)),
+            (Some(64), (64, 48)),
+            (Some(32), (32, 24)),
+        ] {
+            let decoded = convert(&heic, "heic", "png", max_size);
+            assert_eq!(size(&decoded), expected, "HEIC to PNG at {max_size:?}");
+            let decoded = convert(&avif, "avif", "png", max_size);
+            assert_eq!(size(&decoded), expected, "AVIF to PNG at {max_size:?}");
+            let encoded = convert(&png, "png", "heic", max_size);
+            let back = convert(&encoded, "heic", "png", None);
+            assert_eq!(size(&back), expected, "PNG to HEIC at {max_size:?}");
+        }
     }
 }
