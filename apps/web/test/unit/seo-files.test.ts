@@ -8,7 +8,7 @@ import {
   guidesPublishedLastmod,
   sitemapEntries,
 } from "#/lib/sitemap";
-import { SITE_ORIGIN, routes, sitemapPages } from "#/lib/site";
+import { SITE_ORIGIN, guidesIndexLastmod, routes, sitemapPages } from "#/lib/site";
 
 describe("sitemap pages", () => {
   test("every lastmod is a real past calendar day", () => {
@@ -52,7 +52,9 @@ describe("sitemap pages", () => {
       expect((entry?.lastmod ?? "") >= guidesLastmod, path).toBe(true);
     }
     const index = sitemapEntries.find((e) => e.path === routes.guides);
-    expect(index?.lastmod).toBe(guidesLastmod);
+    expect(index?.lastmod).toBe(
+      guidesIndexLastmod > guidesLastmod ? guidesIndexLastmod : guidesLastmod,
+    );
   });
 
   test("body-only guide edits do not move listing pages, and description edits do not move /formats", () => {
@@ -83,6 +85,17 @@ describe("sitemap pages", () => {
     expect(byPath.get(routes.commandLineConverter)).toBe("2026-11-20");
     expect(byPath.get(guidePath("heic-to-jpg-mac"))).toBe("2026-11-28");
     expect(byPath.get(guidePath("mov-to-mp4-mac"))).toBe("2026-11-25");
+  });
+
+  test("/guides takes its own lastmod when that is newer than every guide listing", () => {
+    const list: Parameters<typeof buildSitemapEntries>[1] = [
+      { slug: "heic-to-jpg-mac", published: "2026-11-10", updated: "2026-11-12" },
+    ];
+    const dated = (index: string) =>
+      buildSitemapEntries([], list, index).find((e) => e.path === routes.guides)?.lastmod;
+    expect(dated("2026-11-26")).toBe("2026-11-26");
+    expect(dated("2026-11-01")).toBe("2026-11-10");
+    expect(dated("")).toBe("2026-11-10");
   });
 
   test("lists every fixed page, /guides and each guide once", () => {

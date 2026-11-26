@@ -1,5 +1,5 @@
 import { guidePath, guides, type ListedGuide } from "#/lib/guides";
-import { routes, sitemapPages } from "#/lib/site";
+import { guidesIndexLastmod, routes, sitemapPages } from "#/lib/site";
 
 export type SitemapEntry = { path: string; lastmod: string };
 
@@ -44,6 +44,7 @@ export const guidesLastmod: string = newestListing(guides);
 export function buildSitemapEntries(
   pages: readonly SitemapPageInput[],
   list: readonly SitemapGuideInput[],
+  indexLastmod = "",
 ): SitemapEntry[] {
   const published = newestPublished(list);
   const listing = newestListing(list);
@@ -57,10 +58,14 @@ export function buildSitemapEntries(
       }
       return { path: page.path, lastmod: page.lastmod };
     }),
-    { path: routes.guides, lastmod: listing },
+    { path: routes.guides, lastmod: later(indexLastmod, listing) },
     ...list.map((guide) => ({ path: guidePath(guide.slug), lastmod: guide.updated })),
   ];
 }
 
 /** Every URL in /sitemap.xml with its `lastmod`. */
-export const sitemapEntries: readonly SitemapEntry[] = buildSitemapEntries(sitemapPages, guides);
+export const sitemapEntries: readonly SitemapEntry[] = buildSitemapEntries(
+  sitemapPages,
+  guides,
+  guidesIndexLastmod,
+);

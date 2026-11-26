@@ -73,6 +73,9 @@ export const cloudconvertAlternative = {
   operatingSystem: "macOS (Apple silicon), Windows (x86_64), Linux (x86_64)",
 } as const satisfies LandingPage;
 
+/** Comparison pages, in the order /guides lists them. */
+export const comparisonPages = [handbrakeAlternative, cloudconvertAlternative] as const;
+
 /** The download page with a landing page's campaign tags. */
 const landingDownloadUrl = (page: LandingPage) =>
   `${routes.download}?utm_source=convt_guides&utm_medium=organic&utm_campaign=${page.campaign}`;
