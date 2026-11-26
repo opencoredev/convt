@@ -2331,10 +2331,11 @@ int test_loaded(void) { return loaded; }
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let convert = |input: &Path, from: &str, to: &str, max_size: Option<u32>| {
+        let convert = |input: &Path, from: &str, to: &str, max_size: Option<u32>, target_size| {
             let out = tempfile::tempdir_in(dir.path()).unwrap();
             let options = Options {
                 max_size,
+                target_size,
                 ..Options::default()
             };
             let cancel = Cancel::new();
@@ -2350,10 +2351,11 @@ int test_loaded(void) { return loaded; }
                 )
                 .unwrap();
             let kept = dir.path().join(format!(
-                "{}-{}-{}.{to}",
+                "{}-{}-{}-{}.{to}",
                 input.file_stem().unwrap().to_string_lossy(),
                 from,
-                max_size.unwrap_or(0)
+                max_size.unwrap_or(0),
+                target_size.unwrap_or(0)
             ));
             std::fs::rename(&files[0], &kept).unwrap();
             kept
@@ -2362,7 +2364,7 @@ int test_loaded(void) { return loaded; }
         image::RgbImage::new(64, 48).save(&png).unwrap();
         let avif = dir.path().join("small.avif");
         image::RgbImage::new(64, 48).save(&avif).unwrap();
-        let heic = convert(&png, "png", "heic", None);
+        let heic = convert(&png, "png", "heic", None, None);
         let size = |path: &Path| image::image_dimensions(path).unwrap();
         for (max_size, expected) in [
             (None, (64, 48)),
@@ -2370,13 +2372,39 @@ int test_loaded(void) { return loaded; }
             (Some(64), (64, 48)),
             (Some(32), (32, 24)),
         ] {
-            let decoded = convert(&heic, "heic", "png", max_size);
+            let decoded = convert(&heic, "heic", "png", max_size, None);
             assert_eq!(size(&decoded), expected, "HEIC to PNG at {max_size:?}");
-            let decoded = convert(&avif, "avif", "png", max_size);
+            let decoded = convert(&avif, "avif", "png", max_size, None);
             assert_eq!(size(&decoded), expected, "AVIF to PNG at {max_size:?}");
-            let encoded = convert(&png, "png", "heic", max_size);
-            let back = convert(&encoded, "heic", "png", None);
+            let encoded = convert(&png, "png", "heic", max_size, None);
+            let back = convert(&encoded, "heic", "png", None, None);
             assert_eq!(size(&back), expected, "PNG to HEIC at {max_size:?}");
+            let encoded = convert(&png, "png", "heic", max_size, Some(10_000));
+            let back = convert(&encoded, "heic", "png", None, None);
+            assert_eq!(
+                size(&back),
+                expected,
+                "PNG to HEIC within 10 KB at {max_size:?}"
+            );
         }
+        let noise = dir.path().join("noise.png");
+        image::RgbImage::from_fn(512, 384, |x, y| {
+            let n = (x.wrapping_mul(2_654_435_761) ^ y.wrapping_mul(40_503))
+                .wrapping_mul(2_246_822_519);
+            image::Rgb([(n >> 8) as u8, (n >> 16) as u8, (n >> 24) as u8])
+        })
+        .save(&noise)
+        .unwrap();
+        let roomy = convert(&noise, "png", "heic", Some(1024), Some(u64::MAX));
+        let back = convert(&roomy, "heic", "png", None, None);
+        assert_eq!(size(&back), (512, 384), "a roomy target keeps the size");
+        let tight = convert(&noise, "png", "heic", Some(1024), Some(20_000));
+        assert!(std::fs::metadata(&tight).unwrap().len() <= 20_000);
+        let back = convert(&tight, "heic", "png", None, None);
+        let (w, h) = size(&back);
+        assert!(
+            w < 512 && h < 384 && w * 3 == h * 4,
+            "a tight target only shrinks: {w}x{h}"
+        );
     }
 }
