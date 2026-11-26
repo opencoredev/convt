@@ -16,7 +16,7 @@ Install Convt from [convt.app/download](https://convt.app/download). On Apple si
 
 ```sh
 brew tap opencoredev/convt https://github.com/opencoredev/convt
-brew install --cask convt
+brew install --cask opencoredev/convt/convt
 ```
 
 The extension detects the macOS app in `/Applications` or `~/Applications`, the Windows installation in `%LOCALAPPDATA%\Programs\convt`, and executables on `PATH`. For a custom installation, set **Convt CLI Path** in the extension preferences to the executable's absolute path.

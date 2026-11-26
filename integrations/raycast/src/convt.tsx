@@ -35,7 +35,8 @@ import {
 import { getBinary, getJobs } from "./lib/preferences";
 
 const DOWNLOAD_URL = "https://convt.app/download";
-const INSTALL_COMMAND = "brew tap opencoredev/convt https://github.com/opencoredev/convt && brew install --cask convt";
+const INSTALL_COMMAND =
+  "brew tap opencoredev/convt https://github.com/opencoredev/convt && brew install --cask opencoredev/convt/convt";
 
 export default function Command() {
   const { data: binary, error, isLoading, revalidate } = usePromise(getBinary);

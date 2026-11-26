@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CommandBlock, homebrewCommands } from "../../src/components/app/command-block";
@@ -81,6 +82,20 @@ test("Homebrew has a plain heading and two one-line commands", () => {
   expect(renderToStaticMarkup(<DownloadStage os="macos" release={release} />)).not.toContain(
     "brew",
   );
+});
+
+test("the Homebrew install names the cask in full, so Homebrew trusts it without a brew trust step", () => {
+  const install: [string, string] = [
+    "brew tap opencoredev/convt https://github.com/opencoredev/convt",
+    "brew install --cask opencoredev/convt/convt",
+  ];
+  expect(homebrewCommands).toEqual(install);
+  const readme = readFileSync(new URL("../../../../README.md", import.meta.url), "utf8").replaceAll(
+    "\r\n",
+    "\n",
+  );
+  expect(readme).toContain(install.join("\n"));
+  expect(readme).not.toContain("brew install --cask convt\n");
 });
 
 test("no eyebrows or monospace in the stage and platform list", () => {
