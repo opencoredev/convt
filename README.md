@@ -22,7 +22,7 @@ macOS (Apple silicon) with Homebrew:
 
 ```bash
 brew tap opencoredev/convt https://github.com/opencoredev/convt
-brew install --cask convt
+brew install --cask opencoredev/convt/convt
 ```
 
 That installs the signed app and puts the `convt` CLI on your `PATH`. Download the app from [convt.app/download](https://convt.app/download) for a disk image, Windows MSI, or Linux packages. There is no Linux Homebrew formula yet; use the `.deb`, `.rpm` or AppImage. Packaged builds start a 7-day trial on the first conversion.

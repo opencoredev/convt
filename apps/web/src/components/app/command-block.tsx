@@ -93,5 +93,5 @@ export function CommandBlock({
 /** The Homebrew install, as the release workflow publishes the cask. */
 export const homebrewCommands: [string, string] = [
   "brew tap opencoredev/convt https://github.com/opencoredev/convt",
-  "brew install --cask convt",
+  "brew install --cask opencoredev/convt/convt",
 ];

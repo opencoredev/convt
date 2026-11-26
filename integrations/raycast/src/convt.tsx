@@ -35,7 +35,8 @@ import {
 import { getBinary, getJobs } from "./lib/preferences";
 
 const DOWNLOAD_URL = "https://convt.app/download";
-const INSTALL_COMMAND = "brew tap opencoredev/convt https://github.com/opencoredev/convt && brew install --cask convt";
+const INSTALL_COMMAND =
+  "brew tap opencoredev/convt https://github.com/opencoredev/convt && brew install --cask opencoredev/convt/convt";
 
 export default function Command() {
   const { data: binary, error, isLoading, revalidate } = usePromise(getBinary);
@@ -109,7 +110,8 @@ const DEFAULT_OPTION = "";
 const CUSTOM_BACKGROUND = "custom";
 
 type Discovery = { files: string[]; binary: string; recursive: boolean; reload: number } & (
-  { status: "ready"; inspection: FileInspection } | { status: "error"; message: string }
+  | { status: "ready"; inspection: FileInspection }
+  | { status: "error"; message: string }
 );
 
 function Converter({
