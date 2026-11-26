@@ -109,6 +109,12 @@ export const sitemapPages = [
   listsGuides?: "headings" | "cards";
 }[];
 
+/**
+ * The day /guides itself last changed beyond its guide cards (its intro and the Comparisons
+ * list). The sitemap dates /guides from the later of this and the newest guide listing.
+ */
+export const guidesIndexLastmod: IsoDate = "2026-11-26";
+
 /** The docs Worker's own sitemap, referenced from robots.txt. */
 export const DOCS_SITEMAP_URL = `${SITE_ORIGIN}/docs/sitemap.xml`;
 

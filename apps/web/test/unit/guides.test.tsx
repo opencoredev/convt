@@ -5,8 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { GuideArticle } from "#/components/site/guide";
 
 import { guideDownloadUrl, guideHead, guidePath, guides, relatedGuides } from "#/lib/guides";
+import { comparisonPages } from "#/lib/landing-pages";
 import { Route as BatchHeicToJpgWindows } from "../../src/routes/_site/guides/batch-heic-to-jpg-windows";
 import { Route as HeicToJpgMac } from "../../src/routes/_site/guides/heic-to-jpg-mac";
+import { Route as GuidesIndex } from "../../src/routes/_site/guides/index";
 import { Route as MkvToMp4Mac } from "../../src/routes/_site/guides/mkv-to-mp4-mac";
 import { Route as MovToMp4Mac } from "../../src/routes/_site/guides/mov-to-mp4-mac";
 import { Route as Mp4FlacWavToMp3Mac } from "../../src/routes/_site/guides/mp4-flac-wav-to-mp3-mac";
@@ -328,4 +330,16 @@ test("the MKV guide tags its download link and prints the tested remux, audio, r
   expect(html).toContain('href="/guides/mov-to-mp4-mac#smaller"');
   // A video guide: the MOV guide first, then the rest in catalog order.
   expect(relatedGuides(guides[7]).map((g) => g.slug)[0]).toBe("mov-to-mp4-mac");
+});
+
+test("/guides links every guide and every comparison page", () => {
+  const Page = GuidesIndex.options.component;
+  if (!Page) throw new Error("/guides has no component");
+  const html = renderToStaticMarkup(<Page />);
+  for (const guide of guides) expect(html).toContain(`href="${guidePath(guide.slug)}"`);
+  expect(comparisonPages.map((page) => page.path)).toEqual([
+    "/handbrake-alternative",
+    "/cloudconvert-alternative",
+  ]);
+  for (const page of comparisonPages) expect(html).toContain(`href="${page.path}"`);
 });

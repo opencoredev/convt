@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { cx, focusRing } from "#/components/app/ui";
 import { PageHeader, siteColumn } from "#/components/site/layout";
 import { guidePath, guides, guidesIndexHead } from "#/lib/guides";
+import { comparisonPages } from "#/lib/landing-pages";
 
 export const Route = createFileRoute("/_site/guides/")({
   head: guidesIndexHead,
@@ -33,6 +34,31 @@ function GuidesPage() {
           </li>
         ))}
       </ul>
+      <section aria-labelledby="comparisons" className="flex max-w-[720px] flex-col gap-4">
+        <h2 id="comparisons" className="text-[22px]/7 font-semibold tracking-[-0.015em]">
+          Comparisons
+        </h2>
+        <p className="text-[15px]/[23px] text-ink-2">
+          Choosing an app rather than following steps? These pages compare convt with the tools
+          people usually start from.
+        </p>
+        <ul className="flex flex-col divide-y divide-divider border-y border-line">
+          {comparisonPages.map((page) => (
+            <li key={page.path} className="flex flex-col gap-1.5 py-5">
+              <a
+                href={page.path}
+                className={cx(
+                  "rounded-sm text-[18px]/6 font-semibold tracking-[-0.01em] hover:text-green",
+                  focusRing,
+                )}
+              >
+                {page.heading}
+              </a>
+              <p className="text-[15px]/[23px] text-ink-2">{page.description}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }
