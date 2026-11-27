@@ -1,5 +1,11 @@
 # @convt/cli
 
+## 0.7.0
+
+### Patch Changes
+
+- [#187](https://github.com/opencoredev/convt/pull/187) [`c8e9b9e`](https://github.com/opencoredev/convt/commit/c8e9b9ee8cc2a09115f29d66c04d290a931f001a) Thanks [@leoisadev1](https://github.com/leoisadev1)! - On macOS, `--max-size` no longer enlarges HEIC and AVIF images, or HEIC output, that are already smaller than the limit.
+
 ## 0.6.0
 
 ### Minor Changes

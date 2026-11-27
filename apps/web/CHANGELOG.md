@@ -1,5 +1,15 @@
 # @convt/web
 
+## 0.7.0
+
+### Minor Changes
+
+- [#176](https://github.com/opencoredev/convt/pull/176) [`44f7a85`](https://github.com/opencoredev/convt/commit/44f7a8557542f18a23a8a355bd1df39afd920d5a) Thanks [@leoisadev1](https://github.com/leoisadev1)! - The convt API has its own page at convt.app/api, with the $0.01 price, a one-line curl example and a cost estimate. After adding a card for API billing, the confirmation page now points to creating an API key instead of downloading the desktop app.
+
+### Patch Changes
+
+- [#178](https://github.com/opencoredev/convt/pull/178) [`1db0714`](https://github.com/opencoredev/convt/commit/1db07146d51cbd1369f70eed6d4f913c2fa091df) Thanks [@leoisadev1](https://github.com/leoisadev1)! - Update dompurify to 3.5.0 (GHSA-hrxw-jjj6-2g2j).
+
 ## 0.6.0
 
 ### Minor Changes
