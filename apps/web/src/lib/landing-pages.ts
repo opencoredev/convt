@@ -36,11 +36,11 @@ export const macFileConverter = {
 
 export const commandLineConverter = {
   path: routes.commandLineConverter,
-  title: "Command-line file converter for images, video, audio and documents · convt",
+  title: "Command-line file converter for media and documents · convt",
   heading: "One command-line tool for every kind of file",
   footerLabel: "Command-line converter",
   description:
-    "convt is a command-line file converter for images, video, audio, PDFs and Office documents: one command for every kind of file, whole folders, presets and JSON progress, run locally.",
+    "One command converts images, video, audio, PDFs and Office files: whole folders, presets and JSON progress, run locally on Mac, Windows or Linux.",
   summary:
     "The convt command: one pattern for images, video, audio, PDFs and documents, folders, options, presets, JSON progress for scripts, the SKILL.md for AI agents, and how it compares with FFmpeg, ImageMagick, LibreOffice and Pandoc.",
   campaign: "command-line-file-converter",
