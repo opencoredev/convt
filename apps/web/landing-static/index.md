@@ -10,10 +10,10 @@ Right-click a file in Finder or your Linux file manager, pick a format, and conv
 
 ## Formats
 
-49 formats in one menu:
+51 formats in one menu:
 
 - **Images (14):** JPG, PNG, WebP, HEIC, AVIF, GIF, TIFF, BMP, ICO, TGA, PPM, QOI, EXR, SVG
-- **Video (5):** MP4, MOV, WebM, MKV, AVI
+- **Video (7):** MP4, MOV, WebM, MKV, AVI, MPEG, MPG4
 - **Audio (10):** MP3, WAV, FLAC, AAC, M4A, OGG, Opus, AIFF, CAF, M4R
 - **Documents (20):** PDF, DOCX, DOC, ODT, RTF, TXT, HTML, PPTX, PPT, ODP, XLSX, XLS, ODS, CSV, TSV, Markdown, JSON, YAML, SRT, VTT
 
