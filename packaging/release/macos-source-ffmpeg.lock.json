@@ -980,6 +980,10 @@
       {
         "name": "x264_0.164.3108+git31e19f9.orig.tar.gz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x264/x264_0.164.3108+git31e19f9.orig.tar.gz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/x264_0.164.3108%2Bgit31e19f9.orig.tar.gz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/universe/x/x264/x264_0.164.3108+git31e19f9.orig.tar.gz"
+        ],
         "sha256": "41606cb8e788a7f8c4514290646d4ba5c7bc68d9e1ccd1a73f446a90546913eb",
         "package": "x264",
         "version": "0.164.3108+git31e19f9",
@@ -996,6 +1000,10 @@
       {
         "name": "libvpx_1.14.0.orig.tar.xz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/main/libv/libvpx/libvpx_1.14.0.orig.tar.xz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/libvpx_1.14.0.orig.tar.xz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/main/libv/libvpx/libvpx_1.14.0.orig.tar.xz"
+        ],
         "sha256": "11150687870e4c94479abafe5d1ed38790e68dc7bbe08880fd5fb55138e4c6f3",
         "package": "libvpx",
         "version": "1.14.0",
@@ -1036,6 +1044,10 @@
       {
         "name": "opus_1.4.orig.tar.gz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/main/o/opus/opus_1.4.orig.tar.gz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/opus_1.4.orig.tar.gz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/main/o/opus/opus_1.4.orig.tar.gz"
+        ],
         "sha256": "c9b32b4253be5ae63d1ff16eea06b94b5f0f2951b7a02aceef58e3a3ce49c51f",
         "package": "opus",
         "version": "1.4",
@@ -1052,6 +1064,10 @@
       {
         "name": "lame_3.99.5+repack1.orig.tar.gz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/universe/l/lame/lame_3.99.5+repack1.orig.tar.gz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/lame_3.99.5%2Brepack1.orig.tar.gz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/universe/l/lame/lame_3.99.5+repack1.orig.tar.gz"
+        ],
         "sha256": "01c1a34dc5ced11a487f04514cb948d38f6f559daebc85ae23c1c8a6c8280c95",
         "package": "lame",
         "version": "3.99.5+repack1",
@@ -1072,6 +1088,10 @@
       {
         "name": "libogg_1.3.5.orig.tar.gz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/main/libo/libogg/libogg_1.3.5.orig.tar.gz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/libogg_1.3.5.orig.tar.gz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/main/libo/libogg/libogg_1.3.5.orig.tar.gz"
+        ],
         "sha256": "0eb4b4b9420a0f51db142ba3f9c64b333f826532dc0f48c6410ae51f4799b664",
         "package": "libogg",
         "version": "1.3.5",
@@ -1088,6 +1108,10 @@
       {
         "name": "libvorbis_1.3.7.orig.tar.gz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/main/libv/libvorbis/libvorbis_1.3.7.orig.tar.gz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/libvorbis_1.3.7.orig.tar.gz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/main/libv/libvorbis/libvorbis_1.3.7.orig.tar.gz"
+        ],
         "sha256": "0e982409a9c3fc82ee06e08205b1355e5c6aa4c36bca58146ef399621b0ce5ab",
         "package": "libvorbis",
         "version": "1.3.7",
@@ -1104,6 +1128,10 @@
       {
         "name": "x265_3.5.orig.tar.gz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/universe/x/x265/x265_3.5.orig.tar.gz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/x265_3.5.orig.tar.gz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/universe/x/x265/x265_3.5.orig.tar.gz"
+        ],
         "sha256": "e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8",
         "package": "x265",
         "version": "3.5-2build1",
@@ -1148,6 +1176,10 @@
       {
         "name": "dav1d_1.5.3.orig.tar.xz",
         "url": "https://archive.ubuntu.com/ubuntu/pool/universe/d/dav1d/dav1d_1.5.3.orig.tar.xz",
+        "mirrors": [
+          "https://launchpad.net/ubuntu/+archive/primary/+files/dav1d_1.5.3.orig.tar.xz",
+          "https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/pool/universe/d/dav1d/dav1d_1.5.3.orig.tar.xz"
+        ],
         "sha256": "732010aa5ef461fa93355ed2c6c5fedb48ddc4b74e697eaabe8907eaeb943011",
         "package": "dav1d",
         "version": "1.5.3",
