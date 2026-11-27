@@ -37,6 +37,10 @@ const downloadUrl = handbrakeAlternativeDownloadUrl;
 
 const handbrakeAbout = "https://handbrake.fr/docs/en/latest/introduction/about.html";
 const handbrakeFeatures = "https://handbrake.fr/features.php";
+const shutterEncoderRelease = "https://github.com/paulpacifico/shutter-encoder/releases/tag/20.5";
+const vidcoderRepo = "https://github.com/RandomEngy/VidCoder";
+const ffmpegLegal = "https://ffmpeg.org/legal.html";
+const ffmpegDownload = "https://ffmpeg.org/download.html";
 
 const sections = [
   { id: "compare", title: "Side by side" },
@@ -123,7 +127,12 @@ const tools: Tool[] = [
     platforms: "Windows 7 to 11 (64-bit), macOS 11.3 or later on Apple silicon, Linux.",
     converts:
       "Video, audio (WAV, FLAC, MP3, AAC, Opus) and images (JPEG, JPEG XL). ProRes and DNxHR, plus DVD and Blu-ray tools.",
-    batch: "A render queue and presets, and command-line options since version 20.5.",
+    batch: (
+      <>
+        A render queue and presets, and{" "}
+        <TextLink href={shutterEncoderRelease}>command-line options since version 20.5</TextLink>.
+      </>
+    ),
     shortfalls: "No document conversion. Its long list of functions takes some learning.",
   },
   {
@@ -142,7 +151,11 @@ const tools: Tool[] = [
     name: "VidCoder",
     href: "https://vidcoder.net/",
     bestFor: "Windows users who like HandBrake's output but want a simpler queue.",
-    price: "Free. GPL-2.0.",
+    price: (
+      <>
+        Free. <TextLink href={vidcoderRepo}>GPL-2.0</TextLink>.
+      </>
+    ),
     platforms: "Windows 10 and 11, 64-bit only.",
     converts: "Video to MP4 or MKV, using HandBrake as its encoding engine.",
     batch: "Batch encoding with several encodes at once, and a watched folder.",
@@ -152,11 +165,23 @@ const tools: Tool[] = [
     name: "FFmpeg",
     href: "https://ffmpeg.org/",
     bestFor: "People at ease in a terminal who want exact control, including remuxing.",
-    price: "Free. LGPL 2.1 or later; GPL when built with GPL parts.",
-    platforms: "Mac, Windows and Linux. ffmpeg.org ships source only; builds come from others.",
+    price: (
+      <>
+        Free.{" "}
+        <TextLink href={ffmpegLegal}>LGPL 2.1 or later; GPL when built with GPL parts</TextLink>.
+      </>
+    ),
+    platforms: (
+      <>
+        Mac, Windows and Linux.{" "}
+        <TextLink href={ffmpegDownload}>ffmpeg.org ships source only</TextLink>; builds come from
+        others.
+      </>
+    ),
     converts: "Almost any video or audio format, remux without re-encoding, frames to images.",
     batch: "Shell loops you write yourself.",
-    shortfalls: "No interface at all. Flags differ per codec, and a typo can leave an empty file.",
+    shortfalls:
+      "No built-in graphical interface. Flags differ per codec, and a typo can leave an empty file.",
   },
 ];
 
@@ -462,9 +487,10 @@ videos/a.MOV -> mp4/a.mp4
               </Question>
               <Question q="What's the simplest HandBrake alternative on a Mac?">
                 For a few files, Permute or convt&apos;s Finder menu: pick the files, pick a format.
-                Permute is Mac only: version 4 needs macOS 26 on Apple silicon, and the same
-                purchase includes Permute 3 for macOS 11 to 15. convt runs on macOS 13 or later on
-                Apple silicon and also does documents.
+                Permute is Mac only: version 4 needs macOS 26 on Apple silicon. Buying it from the
+                developer&apos;s site also gets you a Permute 3 code for macOS 11 to 15; the App
+                Store sells Permute 4 on its own. convt runs on macOS 13 or later on Apple silicon
+                and also does documents.
               </Question>
               <Question q="Does convt upload my videos?">
                 Not for local conversions, which is everything on this page. The only uploads are

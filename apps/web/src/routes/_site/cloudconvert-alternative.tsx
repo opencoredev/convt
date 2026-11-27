@@ -39,6 +39,7 @@ const downloadUrl = cloudconvertAlternativeDownloadUrl;
 const ccPricing = "https://cloudconvert.com/pricing";
 const ccSecurity = "https://cloudconvert.com/security";
 const ccPrivacy = "https://cloudconvert.com/privacy";
+const ccFormats = "https://cloudconvert.com/formats";
 
 const sections = [
   { id: "compare", title: "Side by side" },
@@ -391,9 +392,9 @@ function CloudconvertAlternative() {
                   no free tier.
                 </li>
                 <li>
-                  It lists 213 formats in 11 categories, including camera RAW, CAD drawings,
-                  archives and ebooks. convt 0.5.0 covers video, audio, images, PDFs and Office
-                  documents.
+                  It lists <TextLink href={ccFormats}>over 200 formats</TextLink> in 11 categories,
+                  including camera RAW, CAD drawings, archives and ebooks. convt 0.5.0 covers video,
+                  audio, images, PDFs and Office documents.
                 </li>
                 <li>
                   It works free from any device with a browser, phones and Chromebooks included.
