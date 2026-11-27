@@ -40,6 +40,8 @@ const ccPricing = "https://cloudconvert.com/pricing";
 const ccSecurity = "https://cloudconvert.com/security";
 const ccPrivacy = "https://cloudconvert.com/privacy";
 const ccFormats = "https://cloudconvert.com/formats";
+const ccS3Import = "https://cloudconvert.com/docs/import-export/import-files#s3";
+const ccS3Export = "https://cloudconvert.com/docs/import-export/export-files#s3";
 
 const sections = [
   { id: "compare", title: "Side by side" },
@@ -403,8 +405,9 @@ function CloudconvertAlternative() {
                   Pro subscription.
                 </li>
                 <li>
-                  Its API imports from and exports to your own storage, such as Amazon S3, and the
-                  company behind it holds ISO 27001 certification and{" "}
+                  Its API <TextLink href={ccS3Import}>imports from</TextLink> and{" "}
+                  <TextLink href={ccS3Export}>exports to</TextLink> your own storage, such as Amazon
+                  S3, and the company behind it holds ISO 27001 certification and{" "}
                   <TextLink href={ccSecurity}>offers a data processing agreement</TextLink> on
                   request.
                 </li>

@@ -36,7 +36,7 @@ export const macFileConverter = {
 
 export const commandLineConverter = {
   path: routes.commandLineConverter,
-  title: "Command-line file converter for any file type · convt",
+  title: "Command-line file converter for media and documents · convt",
   heading: "One command-line tool for every kind of file",
   footerLabel: "Command-line converter",
   description:

@@ -39,6 +39,7 @@ const handbrakeAbout = "https://handbrake.fr/docs/en/latest/introduction/about.h
 const handbrakeFeatures = "https://handbrake.fr/features.php";
 const shutterEncoderRelease = "https://github.com/paulpacifico/shutter-encoder/releases/tag/20.5";
 const vidcoderRepo = "https://github.com/RandomEngy/VidCoder";
+const vidcoderWebm = "https://github.com/RandomEngy/VidCoder/releases/tag/v5.13";
 const ffmpegLegal = "https://ffmpeg.org/legal.html";
 const ffmpegDownload = "https://ffmpeg.org/download.html";
 
@@ -75,7 +76,7 @@ const rows: [string, string, string, string][] = [
     "VidCoder 12.23",
     "Free, open source",
     "Windows only",
-    "Video to MP4 or MKV, with HandBrake's engine",
+    "Video to MP4, MKV or WebM, with HandBrake's engine",
   ],
   [
     "FFmpeg 9.1",
@@ -157,7 +158,12 @@ const tools: Tool[] = [
       </>
     ),
     platforms: "Windows 10 and 11, 64-bit only.",
-    converts: "Video to MP4 or MKV, using HandBrake as its encoding engine.",
+    converts: (
+      <>
+        Video to MP4, MKV or <TextLink href={vidcoderWebm}>WebM</TextLink>, using HandBrake as its
+        encoding engine.
+      </>
+    ),
     batch: "Batch encoding with several encodes at once, and a watched folder.",
     shortfalls: "Same limits as HandBrake (no audio-only files, no remux), and no Mac build.",
   },
