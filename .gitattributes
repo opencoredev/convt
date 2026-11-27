@@ -1,0 +1,14 @@
+# LF in every checkout, as .editorconfig asks. Git for Windows defaults to
+# core.autocrlf=true, which would otherwise check text out as CRLF: oxfmt then
+# fails on most files and shell scripts mounted into Linux containers break.
+* text=auto eol=lf
+
+*.avif binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.png binary
+*.ttf binary
+*.webp binary
+*.woff2 binary
+*.zip binary
