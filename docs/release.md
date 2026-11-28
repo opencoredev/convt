@@ -77,7 +77,9 @@ The three manual GitHub Actions workflows are written locally. They are not push
 
 ## The npm SDK
 
-`@convt/sdk` ships on its own version, outside the fixed product group. Add a changeset for it, merge the version PR, and `.github/workflows/publish-sdk.yml` runs on the `packages/sdk/package.json` change: it skips a version npm already has, otherwise runs the SDK tests and type check and publishes with provenance. It authenticates through npm trusted publishing, so the package's npm settings must list `opencoredev/convt` and `publish-sdk.yml` as its trusted publisher and the repository holds no npm token. Run the workflow by hand from Actions to retry a failed publish. To withdraw a bad version, `npm deprecate @convt/sdk@VERSION "reason"` and publish a fixed patch; `npm unpublish` works only within 72 hours.
+`@convt/sdk` ships on its own version, outside the fixed product group. Add a changeset for it and merge the version PR. `.github/workflows/publish-sdk.yml` runs on every push to main: it reads the versions npm has (and fails if that lookup fails), skips a version npm already has, and otherwise runs the SDK tests and type check and publishes with provenance. To retry a failed publish, run the workflow by hand from Actions on `main`.
+
+The workflow authenticates through npm trusted publishing, so the repository holds no npm token. That needs a one-time setup: 0.1.0 was published by hand from an npm login, because npm only accepts a trusted publisher for a package that exists. The package's trusted publisher is GitHub Actions with repository `opencoredev/convt`, workflow `publish-sdk.yml` and environment `npm`, with direct publishing allowed. The `npm` GitHub environment deploys only from `main`, so no other branch can publish. A bad version can be deprecated (`npm deprecate @convt/sdk@VERSION "reason"`), which warns installers but keeps it installable; publish a fixed patch after it. Removing a version follows [npm's unpublish policy](https://docs.npmjs.com/policies/unpublish/).
 
 ## Launch checklist
 

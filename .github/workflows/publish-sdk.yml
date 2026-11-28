@@ -2,8 +2,6 @@ name: Publish SDK
 on:
   push:
     branches: [main]
-    paths:
-      - packages/sdk/package.json
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,13 +11,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
+    if: github.ref == 'refs/heads/main'
     # npm trusted publishing only accepts GitHub-hosted runners.
     runs-on: ubuntu-24.04
+    # The environment only deploys from main, and npm trusts only this environment.
+    environment: npm
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Require main
-        run: test "$GITHUB_REF" = refs/heads/main
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -32,7 +31,15 @@ jobs:
         working-directory: packages/sdk
         run: |
           version=$(node -p 'require("./package.json").version')
-          if npm view "@convt/sdk@$version" version >/dev/null 2>&1; then
+          if versions=$(npm view @convt/sdk versions --json 2> "$RUNNER_TEMP/npm-view.err"); then
+            published=$(node -e 'const v = JSON.parse(process.argv[1]); console.log((Array.isArray(v) ? v : [v]).includes(process.argv[2]))' "$versions" "$version")
+          elif grep -q E404 "$RUNNER_TEMP/npm-view.err"; then
+            published=false
+          else
+            cat "$RUNNER_TEMP/npm-view.err" >&2
+            exit 1
+          fi
+          if [ "$published" = true ]; then
             echo "@convt/sdk@$version is already on npm."
             echo publish=false >> "$GITHUB_OUTPUT"
           else
