@@ -75,6 +75,10 @@ The uploader stages immutable version objects. It does not move a stable update 
 
 The three manual GitHub Actions workflows are written locally. They are not pushed or run. Linux produces two builds and compares them; macOS calls the Mac-owned arm64 bundle/sign/notarize recipes; Windows is optional and remains excluded until its native dependencies, source notices and installer signing gates pass. Successful authentication or signing alone does not bypass publication gates.
 
+## The npm SDK
+
+`@convt/sdk` ships on its own version, outside the fixed product group. Add a changeset for it, merge the version PR, and `.github/workflows/publish-sdk.yml` runs on the `packages/sdk/package.json` change: it skips a version npm already has, otherwise runs the SDK tests and type check and publishes with provenance. It authenticates through npm trusted publishing, so the package's npm settings must list `opencoredev/convt` and `publish-sdk.yml` as its trusted publisher and the repository holds no npm token. Run the workflow by hand from Actions to retry a failed publish. To withdraw a bad version, `npm deprecate @convt/sdk@VERSION "reason"` and publish a fixed patch; `npm unpublish` works only within 72 hours.
+
 ## Launch checklist
 
 - Confirm the workspace version, UTC epoch and embedded build date agree across platforms. Rebuild twice and compare unsigned hashes.

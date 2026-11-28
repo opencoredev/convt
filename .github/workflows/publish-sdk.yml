@@ -1,0 +1,49 @@
+name: Publish SDK
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/sdk/package.json
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+jobs:
+  publish:
+    # npm trusted publishing only accepts GitHub-hosted runners.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Skip a version npm already has
+        id: version
+        working-directory: packages/sdk
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if npm view "@convt/sdk@$version" version >/dev/null 2>&1; then
+            echo "@convt/sdk@$version is already on npm."
+            echo publish=false >> "$GITHUB_OUTPUT"
+          else
+            echo publish=true >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.publish == 'true'
+        run: bun install --frozen-lockfile
+      - if: steps.version.outputs.publish == 'true'
+        working-directory: packages/sdk
+        run: bun test && bun run check-types
+      - name: Publish with provenance
+        if: steps.version.outputs.publish == 'true'
+        working-directory: packages/sdk
+        run: npm publish --provenance --access public
