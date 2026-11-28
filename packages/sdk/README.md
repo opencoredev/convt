@@ -16,6 +16,8 @@ await out.save("report.pdf");
 
 Create an API key on the [dashboard](https://convt.app/dashboard/api). Keep it on your server; never ship it to a browser.
 
+The client also takes options: `new Convt({ apiKey, baseUrl, maxRetries })`. `baseUrl` defaults to `https://api.convt.app`; point it at a self-hosted convt-server or a mock in tests. `maxRetries` (default 2) bounds retries of rate limits and gateway errors.
+
 ## What it does
 
 - `convert(input, { to })` takes a file path (Node, Bun, Deno), a `Blob` or `File`, or bytes, up to 2 GB. It reserves a job, uploads straight to storage, starts it, polls and returns a `Conversion` with `save()`, `saveAll()`, `blob()` and signed `outputs`.
